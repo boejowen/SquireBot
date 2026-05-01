@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SquireBot Setup — Step 1: Connect Google</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         max-width: 640px; margin: 4em auto; padding: 0 1.5em; color: #222; }
+  h1 { margin-bottom: 0.2em; }
+  .subtitle { color: #666; margin-top: 0; }
+  .step-pill { display: inline-block; padding: 2px 10px; border-radius: 12px;
+               background: #e6f0ff; color: #003580; font-size: 0.8em; margin-bottom: 1em; }
+  .cta { display: inline-block; padding: 0.7em 1.4em; background: #1a73e8;
+         color: white; text-decoration: none; border-radius: 4px; font-weight: 600; }
+  .cta:hover { background: #1558b0; }
+  .err { background: #fdeded; color: #5f2120; border: 1px solid #f5c2c0;
+         padding: 0.6em 1em; border-radius: 4px; margin: 1em 0; }
+  details { margin-top: 2em; color: #555; font-size: 0.9em; }
+  textarea { width: 100%; min-height: 80px; font-family: monospace;
+             font-size: 0.85em; padding: 0.5em; box-sizing: border-box; }
+  button { padding: 0.5em 1em; background: #5f6368; color: white;
+           border: 0; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+  button:hover { background: #3c4043; }
+</style>
+</head>
+<body>
+<div class="step-pill">Step 1 of 4</div>
+<h1>Connect your Google account</h1>
+<p class="subtitle">SquireBot needs access to the SquireBot workbook your guild leader shared with you.</p>
+
+{{if .Error}}<div class="err">{{.Error}}</div>{{end}}
+
+<p>
+  <a id="connect" class="cta" href="{{.AuthURL}}">Connect Google</a>
+</p>
+<p style="color:#666; font-size:0.9em">
+  This opens Google's standard sign-in page. SquireBot will only see workbooks
+  shared with your account &mdash; not your entire Drive.
+</p>
+
+<details>
+  <summary>My browser didn't redirect back &mdash; let me paste the URL manually</summary>
+  <p style="color:#666; font-size:0.85em; margin-top:0.5em">
+    If you closed the consent tab too early, copy the URL Google sent you to
+    (it begins with <code>http://127.0.0.1:&hellip;/oauth/callback?</code>) and paste it below.
+    You have 60 seconds after the redirect for this fallback to work.
+  </p>
+  <form method="POST" action="/start_paste">
+    <textarea name="redirect_url" placeholder="http://127.0.0.1:NNNNN/oauth/callback?state=...&amp;code=..." required></textarea>
+    <p><button type="submit">Submit pasted URL</button></p>
+  </form>
+</details>
+
+<script>
+  // D-06: gentle auto-redirect after 800ms so a guildie who clicked Run from
+  // SmartScreen sees the page render briefly before the OAuth tab takes over.
+  setTimeout(function () {
+    var a = document.getElementById('connect');
+    if (a) { window.location.href = a.href; }
+  }, 800);
+</script>
+</body>
+</html>

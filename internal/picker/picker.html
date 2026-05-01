@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SquireBot — pick your guild workbook</title>
+  <style>
+    body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; padding: 2rem; max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 1.4rem; }
+    #status { color: #555; margin-top: 1rem; }
+    #status.error { color: #b00020; font-weight: 500; }
+    button { font-size: 1rem; padding: 0.5rem 1rem; }
+  </style>
+</head>
+<body>
+  <h1>SquireBot — pick your guild workbook</h1>
+  <p>Click below to open Google Drive Picker. Choose the SquireBot workbook your guild leader shared with you.</p>
+  <button id="open">Open picker</button>
+  <div id="status">Loading picker libraries…</div>
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client"></script>
+  <script>
+    const ACCESS_TOKEN = "{{.AccessToken}}";
+    const APP_ID       = "{{.AppID}}";
+    const API_KEY      = "{{.APIKey}}";
+
+    let pickerInited = false;
+    function onApiLoad() {
+      gapi.load('picker', { callback: () => {
+        pickerInited = true;
+        document.getElementById('status').textContent = "Ready. Click 'Open picker'.";
+      }});
+    }
+
+    function createPicker() {
+      if (!pickerInited) { document.getElementById('status').textContent = "Picker still loading…"; return; }
+      const view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
+          .setIncludeFolders(false)
+          .setMimeTypes('application/vnd.google-apps.spreadsheet')
+          .setOwnedByMe(false)
+          .setSelectFolderEnabled(false);
+      const sharedView = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
+          .setMimeTypes('application/vnd.google-apps.spreadsheet')
+          .setEnableDrives(true)
+          .setOwnedByMe(false);
+      const picker = new google.picker.PickerBuilder()
+          .setAppId(APP_ID)
+          .setOAuthToken(ACCESS_TOKEN)
+          .setDeveloperKey(API_KEY)
+          .addView(view)
+          .addView(sharedView)
+          .enableFeature(google.picker.Feature.NAV_HIDDEN)
+          .setTitle("Pick the SquireBot guild workbook")
+          .setCallback(pickerCallback)
+          .build();
+      picker.setVisible(true);
+    }
+
+    async function pickerCallback(data) {
+      const status = document.getElementById('status');
+      if (data.action === google.picker.Action.PICKED) {
+        const file = data.docs[0];
+        status.classList.remove('error');
+        status.textContent = "Validating workbook…";
+        try {
+          const resp = await fetch('/picker/result', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spreadsheetId: file.id, name: file.name }),
+          });
+          if (resp.ok) {
+            // Server returns the next-page URL in body or sets Location.
+            const next = resp.headers.get('Location') || '/eq-folder';
+            location.href = next;
+          } else {
+            const msg = await resp.text();
+            status.classList.add('error');
+            status.textContent = msg;
+          }
+        } catch (e) {
+          status.classList.add('error');
+          status.textContent = "Network error: " + e.message + " — retry?";
+        }
+      } else if (data.action === google.picker.Action.CANCEL) {
+        status.classList.add('error');
+        status.textContent = "No workbook picked. Click 'Open picker' to retry.";
+      }
+    }
+
+    document.getElementById('open').addEventListener('click', createPicker);
+    window.onload = onApiLoad;
+  </script>
+</body>
+</html>

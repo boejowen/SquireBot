@@ -1,1 +1,11 @@
 .planning/
+dist/
+*.exe
+squirebot.log
+squirebot.log.*
+.envrc
+.idea/
+.vscode/
+*.tmp
+coverage.out
+node_modules/

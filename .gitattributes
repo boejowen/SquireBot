@@ -1,0 +1,13 @@
+# Preserve byte-exact line endings for parser testdata.
+# The CP1252 sample file is byte-encoding-sensitive (0x92 curly apostrophe);
+# the 250-row sample is line-count-asserted in tests. Keeping these as binary
+# guarantees autocrlf does not rewrite LF -> CRLF on commit/checkout, which
+# would change file size and break wc -l / 185-byte assertions.
+internal/parse/testdata/* binary
+
+# Go source: enforce LF in repo to match `gofmt`/build expectations.
+*.go text eol=lf
+
+# Module files.
+go.mod text eol=lf
+go.sum text eol=lf

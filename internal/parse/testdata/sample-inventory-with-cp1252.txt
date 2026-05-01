@@ -1,0 +1,6 @@
+Location	Name	ID	Count	Slots
+General1	Brell’s Trinket	13128	1	0
+General2	Fungi Tunic	1001	1	0
+Bank1	Tashan’s Lance	2002	1	0
+Bank2	Cloth Cap	1002	5	0
+Charm	Bauble of True Sight	9999	1	0

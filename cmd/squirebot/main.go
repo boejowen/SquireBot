@@ -13,9 +13,8 @@ import (
 	"github.com/jbowen-mn/squirebot/internal/logging"
 )
 
-// Version is overridden at build time via -ldflags="-X main.Version=...".
-// Default value identifies an unstamped local build.
-var Version = "0.1.0-dev"
+// Version moved to build_constants.go in Plan 01-03 — that file is the
+// canonical home for every -ldflags-injected package-main variable.
 
 func main() {
 	log, logDir := logging.Setup()

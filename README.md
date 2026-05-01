@@ -20,21 +20,46 @@ Until then, build from source (see below).
 
 Prereqs: **Go 1.24+** on Windows, macOS, or Linux (the watcher cross-compiles).
 
+The OAuth client ID, Picker API key, and GCP project number are baked into
+the binary at link time via `-ldflags`. The values come from
+`.planning/phases/01-end-to-end-thin-slice/oauth-config.json` (gitignored,
+local-only — see `docs/oauth-setup.md` for how to provision a fresh one).
+
+### Linux / macOS / Git Bash (canonical, requires `jq`)
+
 ```bash
+eval $(jq -r '"-X main.OAuthClientID=" + .oauth_client_id +
+              " -X main.PickerAPIKey=" + .picker_api_key +
+              " -X main.GCPProjectNumber=" + .gcp_project_number' \
+      .planning/phases/01-end-to-end-thin-slice/oauth-config.json \
+      | xargs -I{} echo LDFLAGS_OAUTH=\"{}\")
 GOOS=windows GOARCH=amd64 \
-  go build -ldflags="-H=windowsgui -s -w" \
+  go build -ldflags="-H=windowsgui -s -w $LDFLAGS_OAUTH" \
   -o dist/squirebot.exe ./cmd/squirebot
+```
+
+### PowerShell fallback (no `jq` required)
+
+```powershell
+$cfg = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
+$ldflags = "-H=windowsgui -s -w " +
+           "-X main.OAuthClientID=$($cfg.oauth_client_id) " +
+           "-X main.PickerAPIKey=$($cfg.picker_api_key) " +
+           "-X main.GCPProjectNumber=$($cfg.gcp_project_number)"
+$env:GOOS = "windows"; $env:GOARCH = "amd64"
+go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
 ```
 
 `-H=windowsgui` suppresses the console window so a tray-only app does not
 flash a black box on startup; `-s -w` strips debug symbols (~30% smaller).
 
-For a stamped release build:
+For a stamped release build append `-X main.Version=v0.1.0` to the ldflags.
 
-```bash
-go build -ldflags="-H=windowsgui -s -w -X main.Version=v0.1.0" \
-  -o dist/squirebot.exe ./cmd/squirebot
-```
+> **Without the OAuth ldflags**, the binary still compiles and runs the
+> Phase 1 smoke entry point — but `auth.BuildConstants.Validate()` will
+> return `ErrMissingConstants` and Plan 07's wizard will refuse to start
+> the OAuth flow. This is intentional: a misbuilt binary should fail fast,
+> not hand Google a blank `client_id`.
 
 ## Forking / changing the module owner
 

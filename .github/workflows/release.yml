@@ -7,6 +7,13 @@ name: release
 # For Phase 1 the only requirement is a tag-driven build that uploads
 # squirebot.exe as a release artifact so the dev can smoke-install on a
 # clean Win11 VM.
+#
+# Plan 01-03 added the OAuth -ldflags step: oauth-config.json is gitignored
+# (it lives at .planning/phases/01-end-to-end-thin-slice/oauth-config.json
+# and is local-only per Plan 01-02 SUMMARY). For CI to build a working
+# binary it must therefore be supplied via repo Secrets — see the
+# OAUTH_CONFIG_JSON secret loaded below. Without it the build fails fast
+# with a clear pointer to docs/oauth-setup.md.
 
 on:
   push:
@@ -27,14 +34,40 @@ jobs:
           go-version: '1.24'
           check-latest: true
 
-      - name: Build (Phase 1 stub - no signing, no NSIS - those land in Plan 08 / Phase 2)
-        shell: bash
+      - name: Materialise oauth-config.json from secret
+        shell: pwsh
+        env:
+          OAUTH_CONFIG_JSON: ${{ secrets.OAUTH_CONFIG_JSON }}
         run: |
-          mkdir -p dist
-          go build \
-            -ldflags="-H=windowsgui -s -w -X main.Version=${{ github.ref_name }}" \
-            -o dist/squirebot.exe \
-            ./cmd/squirebot
+          if ([string]::IsNullOrWhiteSpace($env:OAUTH_CONFIG_JSON)) {
+            Write-Error "Secret OAUTH_CONFIG_JSON is empty. Populate it from .planning/phases/01-end-to-end-thin-slice/oauth-config.json. See docs/oauth-setup.md for the runbook."
+            exit 1
+          }
+          New-Item -ItemType Directory -Force -Path .planning/phases/01-end-to-end-thin-slice | Out-Null
+          $env:OAUTH_CONFIG_JSON | Out-File -Encoding utf8 -NoNewline .planning/phases/01-end-to-end-thin-slice/oauth-config.json
+
+      - name: Load OAuth constants from oauth-config.json
+        id: oauth
+        shell: pwsh
+        run: |
+          $cfg = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_id))    { Write-Error "oauth_client_id missing — see docs/oauth-setup.md"; exit 1 }
+          if ([string]::IsNullOrWhiteSpace($cfg.picker_api_key))     { Write-Error "picker_api_key missing — see docs/oauth-setup.md";  exit 1 }
+          if ([string]::IsNullOrWhiteSpace($cfg.gcp_project_number)) { Write-Error "gcp_project_number missing — see docs/oauth-setup.md"; exit 1 }
+          "OAUTH_CLIENT_ID=$($cfg.oauth_client_id)"       | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
+          "PICKER_API_KEY=$($cfg.picker_api_key)"         | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
+          "GCP_PROJECT_NUMBER=$($cfg.gcp_project_number)" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
+
+      - name: Build (Phase 1 stub - no signing, no NSIS - those land in Plan 08 / Phase 2)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $ldflags = "-H=windowsgui -s -w " +
+                     "-X main.Version=${{ github.ref_name }} " +
+                     "-X main.OAuthClientID=$env:OAUTH_CLIENT_ID " +
+                     "-X main.PickerAPIKey=$env:PICKER_API_KEY " +
+                     "-X main.GCPProjectNumber=$env:GCP_PROJECT_NUMBER"
+          go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
 
       - name: Upload squirebot.exe as build artifact
         uses: actions/upload-artifact@v4

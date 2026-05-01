@@ -33,10 +33,10 @@
 
     function createPicker() {
       if (!pickerInited) { document.getElementById('status').textContent = "Picker still loading…"; return; }
-      const view = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
+      const ownedView = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
           .setIncludeFolders(false)
           .setMimeTypes('application/vnd.google-apps.spreadsheet')
-          .setOwnedByMe(false)
+          .setOwnedByMe(true)
           .setSelectFolderEnabled(false);
       const sharedView = new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS)
           .setMimeTypes('application/vnd.google-apps.spreadsheet')
@@ -46,7 +46,7 @@
           .setAppId(APP_ID)
           .setOAuthToken(ACCESS_TOKEN)
           .setDeveloperKey(API_KEY)
-          .addView(view)
+          .addView(ownedView)
           .addView(sharedView)
           .enableFeature(google.picker.Feature.NAV_HIDDEN)
           .setTitle("Pick the SquireBot guild workbook")

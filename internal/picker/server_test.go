@@ -215,6 +215,20 @@ func TestHandlePicker_RendersTemplateWithAccessToken(t *testing.T) {
 	if !strings.Contains(body, "application/vnd.google-apps.spreadsheet") {
 		t.Error("body missing spreadsheet mime filter")
 	}
+	// Hotfix #3: Picker must show BOTH owned and shared spreadsheets via two
+	// DocsView instances. setOwnedByMe(true) covers the user's own copies of
+	// the SquireBot template (D-01: "Make a copy" path); setOwnedByMe(false)
+	// covers workbooks shared with them. Without both views, owned-but-not-
+	// recent files don't appear in the Picker.
+	if !strings.Contains(body, "setOwnedByMe(true)") {
+		t.Error("body missing setOwnedByMe(true) — owned-spreadsheets view absent")
+	}
+	if !strings.Contains(body, "setOwnedByMe(false)") {
+		t.Error("body missing setOwnedByMe(false) — shared-spreadsheets view absent")
+	}
+	if !strings.Contains(body, "DocsView") {
+		t.Error("body missing DocsView — must use DocsView (not bare ViewId.SPREADSHEETS) to filter views")
+	}
 }
 
 // ----- Test 2: POST /picker/result happy path -----

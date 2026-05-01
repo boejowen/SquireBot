@@ -16,9 +16,10 @@ import (
 // but never reach Google — every test below either inspects URL
 // strings or runs against an httptest fake.
 var fixedBC = BuildConstants{
-	OAuthClientID:    "262087828393-test.apps.googleusercontent.com",
-	PickerAPIKey:     "AIzaSyTESTPLACEHOLDERPLACEHOLDER0000000",
-	GCPProjectNumber: "262087828393",
+	OAuthClientID:     "262087828393-test.apps.googleusercontent.com",
+	OAuthClientSecret: "GOCSPX-test-secret-placeholder",
+	PickerAPIKey:      "AIzaSyTESTPLACEHOLDERPLACEHOLDER0000000",
+	GCPProjectNumber:  "262087828393",
 }
 
 // TestAuthURLContainsAllRequiredParams asserts the consent URL the
@@ -110,7 +111,7 @@ func TestAuthURLContainsAllRequiredParams(t *testing.T) {
 // refresh with `invalid_scope` and the watcher would silently fail
 // every Sheets write.
 func TestOAuthConfigForRefreshHasMatchingScopes(t *testing.T) {
-	cfg := OAuthConfigForRefresh(Config{OAuthClientID: "test"})
+	cfg := OAuthConfigForRefresh(Config{OAuthClientID: "test", OAuthClientSecret: "test-secret"})
 	want := []string{
 		"https://www.googleapis.com/auth/drive.file",
 		"openid",
@@ -129,6 +130,12 @@ func TestOAuthConfigForRefreshHasMatchingScopes(t *testing.T) {
 	}
 	if cfg.ClientID != "test" {
 		t.Errorf("ClientID = %q, want test", cfg.ClientID)
+	}
+	// Google's token endpoint requires client_secret as a parameter
+	// even for desktop PKCE flows. Refresh exchanges hit the same
+	// endpoint, so the refresh-only Config MUST surface it.
+	if cfg.ClientSecret != "test-secret" {
+		t.Errorf("ClientSecret = %q, want test-secret (Google's token endpoint requires it on refresh exchanges)", cfg.ClientSecret)
 	}
 }
 
@@ -220,9 +227,10 @@ func TestHandlePastedRedirectStateMismatch(t *testing.T) {
 // message rather than handing Google a blank client_id.
 func TestNewManagerValidatesBuildConstants(t *testing.T) {
 	cases := []BuildConstants{
-		{OAuthClientID: "", PickerAPIKey: "k", GCPProjectNumber: "1"},
-		{OAuthClientID: "id", PickerAPIKey: "", GCPProjectNumber: "1"},
-		{OAuthClientID: "id", PickerAPIKey: "k", GCPProjectNumber: ""},
+		{OAuthClientID: "", OAuthClientSecret: "s", PickerAPIKey: "k", GCPProjectNumber: "1"},
+		{OAuthClientID: "id", OAuthClientSecret: "", PickerAPIKey: "k", GCPProjectNumber: "1"},
+		{OAuthClientID: "id", OAuthClientSecret: "s", PickerAPIKey: "", GCPProjectNumber: "1"},
+		{OAuthClientID: "id", OAuthClientSecret: "s", PickerAPIKey: "k", GCPProjectNumber: ""},
 	}
 	for i, bc := range cases {
 		_, err := NewManager(&config.Config{Version: 1}, bc)

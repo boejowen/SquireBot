@@ -33,9 +33,10 @@ import (
 // can build a non-empty URL.
 func makeBuildConstants() auth.BuildConstants {
 	return auth.BuildConstants{
-		OAuthClientID:    "test-client.apps.googleusercontent.com",
-		PickerAPIKey:     "test-picker-key",
-		GCPProjectNumber: "1234567890",
+		OAuthClientID:     "test-client.apps.googleusercontent.com",
+		OAuthClientSecret: "GOCSPX-test-secret",
+		PickerAPIKey:      "test-picker-key",
+		GCPProjectNumber:  "1234567890",
 	}
 }
 

@@ -133,7 +133,10 @@ func buildTokenSourceFromWincred(ctx context.Context, cfg *config.Config, bc aut
 	if clientID == "" {
 		clientID = st.ClientID
 	}
-	oauthCfg := auth.OAuthConfigForRefresh(auth.Config{OAuthClientID: clientID})
+	oauthCfg := auth.OAuthConfigForRefresh(auth.Config{
+		OAuthClientID:     clientID,
+		OAuthClientSecret: bc.OAuthClientSecret, // Google requires client_secret on refresh exchanges for desktop apps
+	})
 	tok := &oauth2.Token{RefreshToken: st.RefreshToken}
 	ts := oauth2.ReuseTokenSource(tok, oauthCfg.TokenSource(ctx, tok))
 	// Defer-zero our local view of the refresh-token bytes so a later

@@ -14,7 +14,8 @@ package auth
 //     - tok.RefreshToken / tok.AccessToken / tok (the full Token struct)
 //     - the OAuth `code` query parameter
 //     - the PKCE `code_verifier` (m.codeVerifier)
-//     - the OAuth `client_secret` (we don't have one — desktop client uses PKCE)
+//     - the OAuth `client_secret` (bc.OAuthClientSecret — effectively
+//       public for desktop apps but still excluded from logs by policy)
 //
 //   Refresh-token bytes leave this file in exactly two ways:
 //     1. They are passed to store.StoreToken which writes them to wincred.
@@ -114,10 +115,14 @@ type OAuthResult struct {
 
 // Config is the minimal config view OAuthConfigForRefresh needs (so
 // callers don't have to import auth.BuildConstants for refresh-only
-// paths). Plan 07's runWatcher needs only the OAuth client ID to rebuild
-// a TokenSource from a wincred-stored refresh token.
+// paths). Plan 07's runWatcher needs the OAuth client ID and client
+// secret to rebuild a TokenSource from a wincred-stored refresh token —
+// Google's token endpoint requires the client_secret parameter even
+// for desktop PKCE flows (see docs/build-and-install.md "About the
+// client secret").
 type Config struct {
-	OAuthClientID string
+	OAuthClientID     string
+	OAuthClientSecret string
 }
 
 // NewManager constructs a Manager that owns its own listener — used by
@@ -185,11 +190,11 @@ func newManagerCore(cfg *config.Config, bc BuildConstants, listener net.Listener
 		return nil, fmt.Errorf("state: %w", err)
 	}
 	oc := &oauth2.Config{
-		ClientID:    bc.OAuthClientID,
-		// ClientSecret deliberately empty — desktop client uses PKCE per RESEARCH.md §4.1
-		RedirectURL: fmt.Sprintf("http://127.0.0.1:%d/oauth/callback", port),
-		Endpoint:    google.Endpoint,
-		Scopes:      append([]string(nil), scopeSet...),
+		ClientID:     bc.OAuthClientID,
+		ClientSecret: bc.OAuthClientSecret, // Google's token endpoint requires this even with PKCE — see docs/build-and-install.md "About the client secret"
+		RedirectURL:  fmt.Sprintf("http://127.0.0.1:%d/oauth/callback", port),
+		Endpoint:     google.Endpoint,
+		Scopes:       append([]string(nil), scopeSet...),
 	}
 	return &Manager{
 		cfg:                   oc,
@@ -276,9 +281,10 @@ func (m *Manager) HandlePastedRedirect(ctx context.Context, raw string) error {
 // so refresh succeeds.
 func OAuthConfigForRefresh(cfg Config) *oauth2.Config {
 	return &oauth2.Config{
-		ClientID: cfg.OAuthClientID,
-		Endpoint: google.Endpoint,
-		Scopes:   append([]string(nil), scopeSet...),
+		ClientID:     cfg.OAuthClientID,
+		ClientSecret: cfg.OAuthClientSecret, // Google's token endpoint requires this even for refresh exchanges on desktop PKCE clients
+		Endpoint:     google.Endpoint,
+		Scopes:       append([]string(nil), scopeSet...),
 	}
 }
 

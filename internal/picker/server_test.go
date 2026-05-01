@@ -143,9 +143,10 @@ func newPickerFixture(t *testing.T, ts oauth2.TokenSource, stub *pickerStubHandl
 
 	cfg := &config.Config{Version: 1, LogLevel: "info"}
 	bc := auth.BuildConstants{
-		OAuthClientID:    "client-id-stub",
-		PickerAPIKey:     "picker-key-stub",
-		GCPProjectNumber: "1234567890",
+		OAuthClientID:     "client-id-stub",
+		OAuthClientSecret: "GOCSPX-test-secret",
+		PickerAPIKey:      "picker-key-stub",
+		GCPProjectNumber:  "1234567890",
 	}
 
 	psrv := NewServer(sc, ts, cfg, bc)

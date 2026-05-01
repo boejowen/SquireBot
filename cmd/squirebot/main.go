@@ -31,9 +31,10 @@ func main() {
 	}
 
 	bc := auth.BuildConstants{
-		OAuthClientID:    OAuthClientID,
-		PickerAPIKey:     PickerAPIKey,
-		GCPProjectNumber: GCPProjectNumber,
+		OAuthClientID:     OAuthClientID,
+		OAuthClientSecret: OAuthClientSecret,
+		PickerAPIKey:      PickerAPIKey,
+		GCPProjectNumber:  GCPProjectNumber,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

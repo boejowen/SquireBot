@@ -21,9 +21,17 @@ package auth
 //     1. They are passed to store.StoreToken which writes them to wincred.
 //     2. They are passed to oauth2.ReuseTokenSource which holds them in
 //        memory only for the lifetime of the TokenSource.
-//   After StoreToken returns, the local *oauth2.Token's RefreshToken
-//   and AccessToken fields are deliberately zeroed via a defer'd closure
-//   so a subsequent panic / log.Printf("%+v", tok) cannot leak them.
+//   We deliberately do NOT zero the local *oauth2.Token's RefreshToken
+//   / AccessToken fields after StoreToken returns. A previous version
+//   of this file did so via a defer'd closure for T-03-03 hygiene, but
+//   that was both ineffective (Go strings are immutable; the underlying
+//   bytes can't actually be scrubbed — GC reclaims when no references
+//   remain) AND a correctness bug: oauth2.ReuseTokenSource holds the
+//   *Token POINTER, not a copy, so the defer mutated the cached token
+//   inside the TokenSource and every later refresh call saw an empty
+//   AccessToken/RefreshToken. The real T-03-03 defences are unchanged:
+//   wincred (DPAPI) for at-rest, never log token bytes, never write to
+//   disk outside wincred. Do NOT reintroduce the defer-zero pattern.
 //
 // LISTENER LIFECYCLE:
 //
@@ -423,7 +431,7 @@ func (m *Manager) handleStartPaste(w http.ResponseWriter, r *http.Request) {
 // PKCE verifier as proof of possession), look up the canonical email,
 // store the refresh token in wincred, persist the email to config,
 // and signal DoneChan with the live TokenSource.
-func (m *Manager) exchangeAndStore(ctx context.Context, code string) (retErr error) {
+func (m *Manager) exchangeAndStore(ctx context.Context, code string) error {
 	tok, err := m.cfg.Exchange(ctx, code,
 		oauth2.SetAuthURLParam("code_verifier", m.codeVerifier),
 	)
@@ -432,13 +440,12 @@ func (m *Manager) exchangeAndStore(ctx context.Context, code string) (retErr err
 		m.signalDone(OAuthResult{Err: fmt.Errorf("exchange: %w", err)})
 		return fmt.Errorf("exchange: %w", err)
 	}
-	// Defer-zero the token bytes so a later panic / log.Printf cannot leak
-	// them. ReuseTokenSource holds its own copy internally; this only
-	// zeroes our local pointer's view.
-	defer func() {
-		tok.RefreshToken = ""
-		tok.AccessToken = ""
-	}()
+	// NOTE: Do not "defer-zero" tok.RefreshToken / tok.AccessToken here.
+	// oauth2.ReuseTokenSource (below) holds the *Token POINTER, not a
+	// copy — a defer running after this function returns would mutate
+	// the cached token inside the TokenSource and break every later
+	// refresh. See the package-level SECURITY / LOGGING POLICY comment
+	// for the full rationale.
 
 	if tok.RefreshToken == "" {
 		err := errors.New("oauth: no refresh_token in response (consent screen may not be in Production mode — see docs/oauth-setup.md)")
@@ -447,7 +454,18 @@ func (m *Manager) exchangeAndStore(ctx context.Context, code string) (retErr err
 		return err
 	}
 
-	ts := oauth2.ReuseTokenSource(tok, m.cfg.TokenSource(ctx, tok))
+	// Build the TokenSource with context.Background() — NOT the request
+	// ctx. The ctx passed in here is the OAuth-callback HTTP request
+	// context (r.Context() from handleCallback), which gets canceled
+	// the moment the callback handler writes its redirect response.
+	// The TokenSource lives for the entire process lifetime — it is
+	// used by the Drive Picker, the Plan 07 wizard, and every Sheets
+	// API call the watcher makes (ValidateWorkbook, WriteInventory,
+	// UpsertCharOwner, ...) — and must NOT inherit the request's
+	// lifetime. Using ctx here previously caused every post-callback
+	// token refresh to fail with `Post "https://oauth2.googleapis.com/
+	// token": context canceled`.
+	ts := oauth2.ReuseTokenSource(tok, m.cfg.TokenSource(context.Background(), tok))
 
 	email, err := GetUserEmail(ctx, ts)
 	if err != nil {

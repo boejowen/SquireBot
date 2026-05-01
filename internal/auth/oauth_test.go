@@ -1,12 +1,18 @@
 package auth
 
 import (
+	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"golang.org/x/oauth2"
 
 	"github.com/jbowen-mn/squirebot/internal/config"
 )
@@ -258,4 +264,129 @@ func newLoopbackListener(t *testing.T) net.Listener {
 		t.Fatalf("loopback listen: %v", err)
 	}
 	return l
+}
+
+// TestTokenSourceSurvivesRequestContextCancel is the regression test
+// for hotfix #2.
+//
+// Bug: exchangeAndStore previously built its long-lived TokenSource as
+//
+//	ts := oauth2.ReuseTokenSource(tok, m.cfg.TokenSource(ctx, tok))
+//
+// where ctx was the OAuth-callback HTTP request context (r.Context()
+// from handleCallback). That context gets canceled the moment the
+// callback handler writes its redirect response. The TokenSource is
+// then handed to the picker, the wizard, and the watcher's Sheets
+// client — all of whom call ts.Token() AFTER the redirect has fired.
+// Every one of those calls failed with:
+//
+//	Post "https://oauth2.googleapis.com/token": context canceled
+//
+// The fix is to build the TokenSource with context.Background() so its
+// lifetime is process-scoped, not request-scoped.
+//
+// This test asserts the property directly without going through the
+// full OAuth + wincred + userinfo flow: it stands up a fake Google
+// token endpoint, mirrors the exact ReuseTokenSource(tok,
+// cfg.TokenSource(BG, tok)) pattern from exchangeAndStore, cancels a
+// request-shaped context that is unrelated to the TokenSource's
+// build-time ctx, and asserts ts.Token() still succeeds.
+//
+// As a negative control it also exercises the buggy pattern
+// (cfg.TokenSource(reqCtx, tok)) and asserts it DOES fail — that way
+// if some future Go runtime / oauth2 library change makes the
+// ctx-canceled path stop propagating, this test will catch the
+// silent loss of coverage.
+func TestTokenSourceSurvivesRequestContextCancel(t *testing.T) {
+	// Fake Google token endpoint. Counts hits so we can prove a refresh
+	// actually happened (vs. the test passing because no refresh was
+	// attempted).
+	var hits int32
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		// Issue a fresh access token with a long expiry so the test
+		// doesn't loop refreshes.
+		fmt.Fprintf(w, `{"access_token":"new-access-%d","token_type":"Bearer","expires_in":3600,"refresh_token":"refresh-keep"}`, atomic.LoadInt32(&hits))
+	}))
+	t.Cleanup(tokenSrv.Close)
+
+	mkCfg := func() *oauth2.Config {
+		return &oauth2.Config{
+			ClientID:     "test-client",
+			ClientSecret: "test-secret",
+			Endpoint: oauth2.Endpoint{
+				TokenURL:  tokenSrv.URL,
+				AuthStyle: oauth2.AuthStyleInParams,
+			},
+		}
+	}
+	// Already-expired access token forces ts.Token() to hit the token
+	// endpoint (i.e. exercise the ctx that was passed to TokenSource).
+	mkExpiredTok := func() *oauth2.Token {
+		return &oauth2.Token{
+			AccessToken:  "stale-access",
+			RefreshToken: "refresh-keep",
+			Expiry:       time.Now().Add(-1 * time.Hour),
+		}
+	}
+
+	t.Run("background_ctx_survives_request_cancel", func(t *testing.T) {
+		atomic.StoreInt32(&hits, 0)
+		cfg := mkCfg()
+
+		// Simulate the OAuth-callback handler's request ctx: a child of
+		// Background that we will cancel BEFORE calling ts.Token(),
+		// modelling the post-redirect cancellation.
+		reqCtx, reqCancel := context.WithCancel(context.Background())
+
+		// FIXED pattern: TokenSource bound to Background, not reqCtx.
+		// (Mirrors exchangeAndStore after hotfix #2.)
+		ts := oauth2.ReuseTokenSource(mkExpiredTok(), cfg.TokenSource(context.Background(), mkExpiredTok()))
+
+		// Tear down the request context, exactly like handleCallback's
+		// http.Redirect causes the request to end.
+		reqCancel()
+
+		fresh, err := ts.Token()
+		if err != nil {
+			t.Fatalf("ts.Token() after request-ctx cancel: want success, got %v", err)
+		}
+		if fresh.AccessToken == "" || fresh.AccessToken == "stale-access" {
+			t.Fatalf("ts.Token() did not refresh: AccessToken=%q", fresh.AccessToken)
+		}
+		if got := atomic.LoadInt32(&hits); got != 1 {
+			t.Fatalf("token endpoint hits = %d, want 1 (test must actually exercise refresh, not short-circuit)", got)
+		}
+		// The reqCtx is observably canceled — proves the assertion above
+		// is non-trivial (i.e. the TokenSource actually had a real
+		// chance to inherit a canceled ctx and didn't).
+		if reqCtx.Err() == nil {
+			t.Fatalf("test setup bug: reqCtx should be canceled by now")
+		}
+	})
+
+	t.Run("buggy_pattern_with_request_ctx_does_fail", func(t *testing.T) {
+		// Negative control: re-create the pre-hotfix-#2 bug locally and
+		// assert that ts.Token() DOES fail with context canceled. If
+		// this stops failing, the positive case above is no longer
+		// proving anything and someone needs to look at why.
+		atomic.StoreInt32(&hits, 0)
+		cfg := mkCfg()
+		reqCtx, reqCancel := context.WithCancel(context.Background())
+
+		// BUGGY pattern: TokenSource bound to reqCtx (matches the
+		// pre-hotfix-#2 line in exchangeAndStore).
+		ts := oauth2.ReuseTokenSource(mkExpiredTok(), cfg.TokenSource(reqCtx, mkExpiredTok()))
+
+		reqCancel()
+
+		_, err := ts.Token()
+		if err == nil {
+			t.Fatalf("buggy pattern: expected ts.Token() to fail after reqCtx cancel, got nil err (positive case is no longer load-bearing)")
+		}
+		if !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("buggy pattern: expected 'context canceled' error, got %v", err)
+		}
+	})
 }

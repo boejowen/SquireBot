@@ -1,27 +1,38 @@
 name: release
 
-# Phase 1 stub (D-12). Phase 2 will replace this with a full goreleaser
-# pipeline that adds NSIS packaging (Plan 08), code-signing (Phase 2 research
-# flag), and the latest.json manifest the auto-updater consumes (OPS-04).
+# Phase 1 release pipeline (Plan 08).
 #
-# For Phase 1 the only requirement is a tag-driven build that uploads
-# squirebot.exe as a release artifact so the dev can smoke-install on a
-# clean Win11 VM.
+# What this does:
+#   1. Materialises oauth-config.json from the OAUTH_CONFIG_JSON repo
+#      secret. The local file is gitignored so CI must rebuild it.
+#   2. Refuses to build if consent_screen_status != "PRODUCTION" --
+#      AUTH-03 enforcement at the CI layer (Pitfall #1: Testing-mode
+#      refresh tokens silently expire after 7 days, so a non-Production
+#      release is always a bug).
+#   3. Builds dist/squirebot.exe with -ldflags injecting the four
+#      build-time vars (OAuthClientID, PickerAPIKey, GCPProjectNumber,
+#      Version).
+#   4. Installs NSIS (verifies version >= 3.10) and runs makensis to
+#      produce dist/SquireBot-Setup-<version>.exe.
+#   5. Computes SHA-256 of the installer, writes dist/latest.json --
+#      the manifest Phase 2's auto-updater (OPS-04) will consume.
+#   6. Uploads both artifacts. On tag push, also creates a GitHub Release.
 #
-# Plan 01-03 added the OAuth -ldflags step: oauth-config.json is gitignored
-# (it lives at .planning/phases/01-end-to-end-thin-slice/oauth-config.json
-# and is local-only per Plan 01-02 SUMMARY). For CI to build a working
-# binary it must therefore be supplied via repo Secrets — see the
-# OAUTH_CONFIG_JSON secret loaded below. Without it the build fails fast
-# with a clear pointer to docs/oauth-setup.md.
+# Phase 1 ships unsigned (D-13). Phase 2 will add a code-signing step
+# between the makensis step and the Compute SHA-256 step.
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g., 0.1.0) -- omit the leading 'v'."
+        required: true
 
 permissions:
-  contents: write
+  contents: write   # required by softprops/action-gh-release
 
 jobs:
   release:
@@ -46,32 +57,141 @@ jobs:
           New-Item -ItemType Directory -Force -Path .planning/phases/01-end-to-end-thin-slice | Out-Null
           $env:OAUTH_CONFIG_JSON | Out-File -Encoding utf8 -NoNewline .planning/phases/01-end-to-end-thin-slice/oauth-config.json
 
-      - name: Load OAuth constants from oauth-config.json
+      - name: Install NSIS (>= 3.10)
+        shell: pwsh
+        run: |
+          # `windows-latest` ships with chocolatey preinstalled. Try a pinned
+          # 3.10 install first; fall back to whatever version choco serves.
+          choco install nsis --no-progress --version=3.10 -y `
+            ; if ($LASTEXITCODE -ne 0) { choco install nsis --no-progress -y }
+
+      - name: Verify NSIS version
+        shell: pwsh
+        run: |
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (-not (Test-Path $makensis)) {
+            $makensis = "C:\Program Files\NSIS\makensis.exe"
+          }
+          if (-not (Test-Path $makensis)) {
+            Write-Error "makensis.exe not found in either Program Files location after choco install nsis"
+            exit 1
+          }
+          $v = & $makensis /VERSION
+          Write-Host "NSIS version: $v"
+          if (-not ($v -match 'v3\.(1[0-9]|[2-9][0-9])')) {
+            Write-Error "NSIS version $v is < 3.10 -- aborting (RESEARCH.md section 1 minimum requirement)"
+            exit 1
+          }
+          "MAKENSIS=$makensis" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
+
+      - name: Compute version
+        id: ver
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -match '^refs/tags/v(.+)$') {
+            $version = $Matches[1]
+          } else {
+            $version = "${{ github.event.inputs.version }}"
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            Write-Error "Could not derive version from tag or workflow_dispatch input"
+            exit 1
+          }
+          "version=$version" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          Write-Host "Building version: $version"
+
+      - name: Load OAuth constants from oauth-config.json (AUTH-03 gate)
         id: oauth
         shell: pwsh
         run: |
           $cfg = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
-          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_id))    { Write-Error "oauth_client_id missing — see docs/oauth-setup.md"; exit 1 }
-          if ([string]::IsNullOrWhiteSpace($cfg.picker_api_key))     { Write-Error "picker_api_key missing — see docs/oauth-setup.md";  exit 1 }
-          if ([string]::IsNullOrWhiteSpace($cfg.gcp_project_number)) { Write-Error "gcp_project_number missing — see docs/oauth-setup.md"; exit 1 }
-          "OAUTH_CLIENT_ID=$($cfg.oauth_client_id)"       | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
-          "PICKER_API_KEY=$($cfg.picker_api_key)"         | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
-          "GCP_PROJECT_NUMBER=$($cfg.gcp_project_number)" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_ENV
+          # AUTH-03 / Pitfall #1: Testing-mode refresh tokens silently expire
+          # after 7 days. Refuse to ship a release built against a non-
+          # Production consent screen.
+          if ($cfg.consent_screen_status -ne "PRODUCTION") {
+            Write-Error "oauth-config.json consent_screen_status is '$($cfg.consent_screen_status)' -- must be 'PRODUCTION' before release per AUTH-03 / Plan 02. Update the OAUTH_CONFIG_JSON secret after flipping the consent screen."
+            exit 1
+          }
+          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_id))    { Write-Error "oauth_client_id missing -- see docs/oauth-setup.md";    exit 1 }
+          if ([string]::IsNullOrWhiteSpace($cfg.picker_api_key))     { Write-Error "picker_api_key missing -- see docs/oauth-setup.md";    exit 1 }
+          if ([string]::IsNullOrWhiteSpace($cfg.gcp_project_number)) { Write-Error "gcp_project_number missing -- see docs/oauth-setup.md"; exit 1 }
+          "client_id=$($cfg.oauth_client_id)"      | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "api_key=$($cfg.picker_api_key)"         | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "project_num=$($cfg.gcp_project_number)" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
 
-      - name: Build (Phase 1 stub - no signing, no NSIS - those land in Plan 08 / Phase 2)
+      - name: Build squirebot.exe
         shell: pwsh
+        env:
+          GOOS: windows
+          GOARCH: amd64
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $ldflags = "-H=windowsgui -s -w " +
-                     "-X main.Version=${{ github.ref_name }} " +
-                     "-X main.OAuthClientID=$env:OAUTH_CLIENT_ID " +
-                     "-X main.PickerAPIKey=$env:PICKER_API_KEY " +
-                     "-X main.GCPProjectNumber=$env:GCP_PROJECT_NUMBER"
+                     "-X main.OAuthClientID=${{ steps.oauth.outputs.client_id }} " +
+                     "-X main.PickerAPIKey=${{ steps.oauth.outputs.api_key }} " +
+                     "-X main.GCPProjectNumber=${{ steps.oauth.outputs.project_num }} " +
+                     "-X main.Version=${{ steps.ver.outputs.version }}"
           go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
+          Get-Item dist/squirebot.exe | Select-Object Name, Length
 
-      - name: Upload squirebot.exe as build artifact
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          & $env:MAKENSIS /V2 /DAPPVERSION=${{ steps.ver.outputs.version }} installer/squirebot.nsi
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "makensis exited $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+          Get-Item dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe | Select-Object Name, Length
+
+      - name: Compute SHA-256 of installer
+        id: hash
+        shell: pwsh
+        run: |
+          $path = "dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe"
+          $h = (Get-FileHash $path -Algorithm SHA256).Hash.ToLower()
+          Write-Host "SHA-256: $h"
+          "sha256=$h" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+
+      - name: Write latest.json (Phase 2 auto-updater manifest)
+        shell: pwsh
+        run: |
+          $manifest = @{
+            version           = "${{ steps.ver.outputs.version }}"
+            installer_url     = "https://github.com/${{ github.repository }}/releases/download/v${{ steps.ver.outputs.version }}/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe"
+            installer_sha256  = "${{ steps.hash.outputs.sha256 }}"
+            released_at       = (Get-Date).ToUniversalTime().ToString("o")
+            phase             = 1
+            signed            = $false
+          }
+          $manifest | ConvertTo-Json -Depth 4 | Out-File -Encoding utf8 -NoNewline dist/latest.json
+          Get-Content dist/latest.json
+
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: squirebot-exe
-          path: dist/squirebot.exe
+          name: squirebot-installer
+          path: |
+            dist/SquireBot-Setup-*.exe
+            dist/latest.json
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/SquireBot-Setup-*.exe
+            dist/latest.json
+          body: |
+            SquireBot ${{ steps.ver.outputs.version }} -- Phase 1 unsigned release.
+
+            **Install:** download `SquireBot-Setup-${{ steps.ver.outputs.version }}.exe`,
+            double-click, walk through the SmartScreen "More info -> Run anyway"
+            wall (D-13: Phase 1 ships unsigned). NSIS wizard installs to
+            `%LOCALAPPDATA%\Programs\SquireBot\` with no UAC prompt.
+
+            See [docs/build-and-install.md](https://github.com/${{ github.repository }}/blob/main/docs/build-and-install.md)
+            for the full local-build + smoke instructions.
+
+            SHA-256: `${{ steps.hash.outputs.sha256 }}`

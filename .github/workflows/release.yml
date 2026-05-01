@@ -9,9 +9,11 @@ name: release
 #      AUTH-03 enforcement at the CI layer (Pitfall #1: Testing-mode
 #      refresh tokens silently expire after 7 days, so a non-Production
 #      release is always a bug).
-#   3. Builds dist/squirebot.exe with -ldflags injecting the four
-#      build-time vars (OAuthClientID, PickerAPIKey, GCPProjectNumber,
-#      Version).
+#   3. Builds dist/squirebot.exe with -ldflags injecting the five
+#      build-time vars (OAuthClientID, OAuthClientSecret, PickerAPIKey,
+#      GCPProjectNumber, Version). OAuthClientSecret is required by
+#      Google's token endpoint even for desktop PKCE flows -- see
+#      docs/build-and-install.md "About the client secret".
 #   4. Installs NSIS (verifies version >= 3.10) and runs makensis to
 #      produce dist/SquireBot-Setup-<version>.exe.
 #   5. Computes SHA-256 of the installer, writes dist/latest.json --
@@ -112,12 +114,14 @@ jobs:
             Write-Error "oauth-config.json consent_screen_status is '$($cfg.consent_screen_status)' -- must be 'PRODUCTION' before release per AUTH-03 / Plan 02. Update the OAUTH_CONFIG_JSON secret after flipping the consent screen."
             exit 1
           }
-          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_id))    { Write-Error "oauth_client_id missing -- see docs/oauth-setup.md";    exit 1 }
-          if ([string]::IsNullOrWhiteSpace($cfg.picker_api_key))     { Write-Error "picker_api_key missing -- see docs/oauth-setup.md";    exit 1 }
-          if ([string]::IsNullOrWhiteSpace($cfg.gcp_project_number)) { Write-Error "gcp_project_number missing -- see docs/oauth-setup.md"; exit 1 }
-          "client_id=$($cfg.oauth_client_id)"      | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-          "api_key=$($cfg.picker_api_key)"         | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-          "project_num=$($cfg.gcp_project_number)" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_id))     { Write-Error "oauth_client_id missing -- see docs/oauth-setup.md";     exit 1 }
+          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_secret)) { Write-Error "oauth_client_secret missing -- Google's token endpoint requires this for desktop PKCE clients; see docs/build-and-install.md 'About the client secret'"; exit 1 }
+          if ([string]::IsNullOrWhiteSpace($cfg.picker_api_key))      { Write-Error "picker_api_key missing -- see docs/oauth-setup.md";     exit 1 }
+          if ([string]::IsNullOrWhiteSpace($cfg.gcp_project_number))  { Write-Error "gcp_project_number missing -- see docs/oauth-setup.md"; exit 1 }
+          "client_id=$($cfg.oauth_client_id)"          | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "client_secret=$($cfg.oauth_client_secret)"  | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "api_key=$($cfg.picker_api_key)"             | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "project_num=$($cfg.gcp_project_number)"     | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
 
       - name: Build squirebot.exe
         shell: pwsh
@@ -128,6 +132,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $ldflags = "-H=windowsgui -s -w " +
                      "-X main.OAuthClientID=${{ steps.oauth.outputs.client_id }} " +
+                     "-X main.OAuthClientSecret=${{ steps.oauth.outputs.client_secret }} " +
                      "-X main.PickerAPIKey=${{ steps.oauth.outputs.api_key }} " +
                      "-X main.GCPProjectNumber=${{ steps.oauth.outputs.project_num }} " +
                      "-X main.Version=${{ steps.ver.outputs.version }}"

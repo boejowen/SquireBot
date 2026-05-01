@@ -20,15 +20,19 @@ Until then, build from source (see below).
 
 Prereqs: **Go 1.24+** on Windows, macOS, or Linux (the watcher cross-compiles).
 
-The OAuth client ID, Picker API key, and GCP project number are baked into
-the binary at link time via `-ldflags`. The values come from
-`.planning/phases/01-end-to-end-thin-slice/oauth-config.json` (gitignored,
-local-only — see `docs/oauth-setup.md` for how to provision a fresh one).
+The OAuth client ID, OAuth client secret, Picker API key, and GCP project
+number are baked into the binary at link time via `-ldflags`. The values
+come from `.planning/phases/01-end-to-end-thin-slice/oauth-config.json`
+(gitignored, local-only — see `docs/oauth-setup.md` for how to provision
+a fresh one). The client secret is effectively public for desktop apps
+(per Google's docs) but Google's token endpoint still requires it as a
+parameter even with PKCE — see `docs/build-and-install.md` for details.
 
 ### Linux / macOS / Git Bash (canonical, requires `jq`)
 
 ```bash
 eval $(jq -r '"-X main.OAuthClientID=" + .oauth_client_id +
+              " -X main.OAuthClientSecret=" + .oauth_client_secret +
               " -X main.PickerAPIKey=" + .picker_api_key +
               " -X main.GCPProjectNumber=" + .gcp_project_number' \
       .planning/phases/01-end-to-end-thin-slice/oauth-config.json \
@@ -44,6 +48,7 @@ GOOS=windows GOARCH=amd64 \
 $cfg = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
 $ldflags = "-H=windowsgui -s -w " +
            "-X main.OAuthClientID=$($cfg.oauth_client_id) " +
+           "-X main.OAuthClientSecret=$($cfg.oauth_client_secret) " +
            "-X main.PickerAPIKey=$($cfg.picker_api_key) " +
            "-X main.GCPProjectNumber=$($cfg.gcp_project_number)"
 $env:GOOS = "windows"; $env:GOARCH = "amd64"

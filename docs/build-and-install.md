@@ -46,14 +46,16 @@ auto-install. If `makensis` is not on PATH, the local build will fail fast.
 
 ```bash
 # From repo root.
-OAUTH_CLIENT_ID=$(jq -r '.oauth_client_id'    .planning/phases/01-end-to-end-thin-slice/oauth-config.json)
-PICKER_API_KEY=$(jq -r  '.picker_api_key'     .planning/phases/01-end-to-end-thin-slice/oauth-config.json)
-GCP_PROJECT_NUMBER=$(jq -r '.gcp_project_number' .planning/phases/01-end-to-end-thin-slice/oauth-config.json)
+OAUTH_CLIENT_ID=$(jq -r     '.oauth_client_id'      .planning/phases/01-end-to-end-thin-slice/oauth-config.json)
+OAUTH_CLIENT_SECRET=$(jq -r '.oauth_client_secret'  .planning/phases/01-end-to-end-thin-slice/oauth-config.json)
+PICKER_API_KEY=$(jq -r      '.picker_api_key'       .planning/phases/01-end-to-end-thin-slice/oauth-config.json)
+GCP_PROJECT_NUMBER=$(jq -r  '.gcp_project_number'   .planning/phases/01-end-to-end-thin-slice/oauth-config.json)
 VERSION="0.1.0"
 
 GOOS=windows GOARCH=amd64 go build \
   -ldflags="-H=windowsgui -s -w \
             -X main.OAuthClientID=${OAUTH_CLIENT_ID} \
+            -X main.OAuthClientSecret=${OAUTH_CLIENT_SECRET} \
             -X main.PickerAPIKey=${PICKER_API_KEY} \
             -X main.GCPProjectNumber=${GCP_PROJECT_NUMBER} \
             -X main.Version=${VERSION}" \
@@ -68,11 +70,12 @@ under ~17 MiB.
 
 ```powershell
 # From repo root.
-$cfg                = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
-$OAUTH_CLIENT_ID    = $cfg.oauth_client_id
-$PICKER_API_KEY     = $cfg.picker_api_key
-$GCP_PROJECT_NUMBER = $cfg.gcp_project_number
-$VERSION            = "0.1.0"
+$cfg                  = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
+$OAUTH_CLIENT_ID      = $cfg.oauth_client_id
+$OAUTH_CLIENT_SECRET  = $cfg.oauth_client_secret
+$PICKER_API_KEY       = $cfg.picker_api_key
+$GCP_PROJECT_NUMBER   = $cfg.gcp_project_number
+$VERSION              = "0.1.0"
 
 if ($cfg.consent_screen_status -ne "PRODUCTION") {
     Write-Error "oauth-config.json consent_screen_status is '$($cfg.consent_screen_status)' -- must be 'PRODUCTION' before building a release. See docs/oauth-setup.md."
@@ -84,11 +87,25 @@ $env:GOOS   = "windows"
 $env:GOARCH = "amd64"
 go build -ldflags="-H=windowsgui -s -w `
   -X main.OAuthClientID=$OAUTH_CLIENT_ID `
+  -X main.OAuthClientSecret=$OAUTH_CLIENT_SECRET `
   -X main.PickerAPIKey=$PICKER_API_KEY `
   -X main.GCPProjectNumber=$GCP_PROJECT_NUMBER `
   -X main.Version=$VERSION" `
   -o dist/squirebot.exe ./cmd/squirebot
 ```
+
+### About the client secret
+
+> Despite the name, `oauth_client_secret` is effectively public for desktop
+> apps -- it ships in every binary on GitHub Releases. Google still
+> requires it as a token-endpoint parameter even with PKCE in use; per
+> Google's docs, "When a client runs on a device, the client_secret is no
+> longer truly confidential." We treat it the same way as
+> `picker_api_key`: bake it in via `-ldflags`, do not persist to disk
+> anywhere else, and rely on the API restrictions (Picker API only,
+> `drive.file` scope only) to bound blast radius. Do NOT add this value
+> to the watcher's wincred entry, the on-disk `config.json`, or any log
+> line.
 
 ### Verification
 
@@ -235,7 +252,8 @@ which case Phase 2 code signing is the right long-term fix.
 | Installer shows UAC prompt | `RequestExecutionLevel user` removed or filename heuristic still fired | re-add the directive; verify `grep -n 'RequestExecutionLevel user' installer/squirebot.nsi` finds line |
 | Installer writes to `Program Files` | `InstallDir` typo | confirm `$LOCALAPPDATA\Programs\${APPNAME}` literal in `.nsi` |
 | Tray icon never appears post-install | binary built without `-H=windowsgui`, console window stole focus | rebuild with the documented ldflags |
-| Browser does not auto-open | binary missing OAuthClientID ldflag, falls into ErrMissingConstants and refuses to start the OAuth flow | rebuild; verify `dist/squirebot.exe` size is ~17 MB not <10 MB |
+| Browser does not auto-open | binary missing one of the four OAuth ldflags (OAuthClientID / OAuthClientSecret / PickerAPIKey / GCPProjectNumber), falls into ErrMissingConstants and refuses to start the OAuth flow | rebuild; verify `dist/squirebot.exe` size is ~17 MB not <10 MB |
+| `oauth2: invalid_request: client_secret is missing` on token exchange | binary missing the `OAuthClientSecret` ldflag specifically (Google's token endpoint requires it even for desktop PKCE clients) | rebuild with `-X main.OAuthClientSecret=$($cfg.oauth_client_secret)` per the build commands above |
 | `inv:<Char>` tab does not appear within 30 s | watcher write contract failure | `Get-Content $env:LOCALAPPDATA\SquireBot\squirebot.log -Tail 50` for the slog.Error |
 | `cmdkey /list` shows no SquireBot entry after OAuth | `auth.StoreToken` failed silently | check log for `wincred write failed` |
 

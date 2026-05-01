@@ -1,0 +1,44 @@
+name: release
+
+# Phase 1 stub (D-12). Phase 2 will replace this with a full goreleaser
+# pipeline that adds NSIS packaging (Plan 08), code-signing (Phase 2 research
+# flag), and the latest.json manifest the auto-updater consumes (OPS-04).
+#
+# For Phase 1 the only requirement is a tag-driven build that uploads
+# squirebot.exe as a release artifact so the dev can smoke-install on a
+# clean Win11 VM.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: Build (Phase 1 stub - no signing, no NSIS - those land in Plan 08 / Phase 2)
+        shell: bash
+        run: |
+          mkdir -p dist
+          go build \
+            -ldflags="-H=windowsgui -s -w -X main.Version=${{ github.ref_name }}" \
+            -o dist/squirebot.exe \
+            ./cmd/squirebot
+
+      - name: Upload squirebot.exe as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: squirebot-exe
+          path: dist/squirebot.exe
+          if-no-files-found: error

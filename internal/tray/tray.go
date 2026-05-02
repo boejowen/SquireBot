@@ -41,6 +41,7 @@ const (
 	LabelOpenLogFolder   = "Open log folder"
 	LabelChangeWorkbook  = "Change Workbook…"
 	LabelContinueSetup   = "Continue setup…"
+	LabelReauthorize     = "Reauthorize…" // Plan 02-04 (AUTH-05): hidden until ErrPermanentAuth/IsRevokedRefreshToken trips authSuspended
 	LabelQuit            = "Quit"
 )
 
@@ -55,6 +56,7 @@ func MenuPlan() []MenuItem {
 		{Label: LabelOpenLogFolder, Tooltip: `Open %LOCALAPPDATA%\SquireBot in Explorer`},
 		{Label: LabelChangeWorkbook, Tooltip: "Pick a different SquireBot workbook (re-runs Picker)"},
 		{Label: LabelContinueSetup, Tooltip: "Resume the SquireBot wizard"},
+		{Label: LabelReauthorize, Tooltip: "Refresh token died. Click to re-sign-in to Google."},
 		{Label: LabelQuit, Tooltip: "Exit SquireBot"},
 	}
 }
@@ -76,6 +78,7 @@ type Config struct {
 	SpreadsheetID    string // initial; can be empty (wizard not yet run)
 	OnContinueSetup  func() // wizard re-entry trigger (D-07)
 	OnChangeWorkbook func() // D-04: re-run picker on existing token
+	OnReauthorize    func() // Plan 02-04 (AUTH-05): re-run OAuth loopback flow on refresh-token death
 	OnQuit           func() // app shutdown trigger
 }
 
@@ -95,10 +98,12 @@ type Controller struct {
 	mLogs           *systray.MenuItem
 	mChangeWorkbook *systray.MenuItem // D-04
 	mContinueSetup  *systray.MenuItem // D-07 (hidden by default)
+	mReauthorize    *systray.MenuItem // Plan 02-04 (AUTH-05) — hidden by default
 	mQuit           *systray.MenuItem
 
 	onContinueSetup  func()
 	onChangeWorkbook func()
+	onReauthorize    func()
 	onQuit           func()
 }
 
@@ -112,6 +117,7 @@ func NewController(c Config) *Controller {
 		spreadsheetID:    c.SpreadsheetID,
 		onContinueSetup:  c.OnContinueSetup,
 		onChangeWorkbook: c.OnChangeWorkbook,
+		onReauthorize:    c.OnReauthorize,
 		onQuit:           c.OnQuit,
 	}
 }
@@ -136,8 +142,10 @@ func (t *Controller) OnReady() {
 	t.mChangeWorkbook = systray.AddMenuItem(plan[2].Label, plan[2].Tooltip) // Change Workbook… (D-04)
 	t.mContinueSetup = systray.AddMenuItem(plan[3].Label, plan[3].Tooltip)  // Continue setup… (D-07)
 	t.mContinueSetup.Hide()                                                 // D-07: shown only when wizard is incomplete
+	t.mReauthorize = systray.AddMenuItem(plan[4].Label, plan[4].Tooltip)    // Reauthorize… (Plan 02-04 / AUTH-05)
+	t.mReauthorize.Hide()                                                   // surfaced only when authSuspended is true
 	systray.AddSeparator()
-	t.mQuit = systray.AddMenuItem(plan[4].Label, plan[4].Tooltip) // Quit
+	t.mQuit = systray.AddMenuItem(plan[5].Label, plan[5].Tooltip) // Quit
 
 	go t.loop()
 }
@@ -187,6 +195,14 @@ func (t *Controller) loop() {
 			slog.Info("Continue setup clicked")
 			if t.onContinueSetup != nil {
 				t.onContinueSetup()
+			}
+		case _, ok := <-t.mReauthorize.ClickedCh:
+			if !ok {
+				return
+			}
+			slog.Info("Reauthorize clicked")
+			if t.onReauthorize != nil {
+				t.onReauthorize()
 			}
 		case _, ok := <-t.mQuit.ClickedCh:
 			if !ok {
@@ -240,6 +256,24 @@ func (t *Controller) ShowContinueSetup() {
 func (t *Controller) HideContinueSetup() {
 	if t.mContinueSetup != nil {
 		t.mContinueSetup.Hide()
+	}
+}
+
+// ShowReauthorize makes the Reauthorize… item visible. Plan 02-04
+// (AUTH-05): the watcher calls this after observing
+// sheet.ErrPermanentAuth or auth.IsRevokedRefreshToken — the click
+// re-runs the OAuth loopback flow against the existing email.
+func (t *Controller) ShowReauthorize() {
+	if t.mReauthorize != nil {
+		t.mReauthorize.Show()
+	}
+}
+
+// HideReauthorize hides the Reauthorize… item. Called after a
+// successful re-auth restores the live TokenSource.
+func (t *Controller) HideReauthorize() {
+	if t.mReauthorize != nil {
+		t.mReauthorize.Hide()
 	}
 }
 

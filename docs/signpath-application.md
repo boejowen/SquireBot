@@ -28,7 +28,7 @@ No watcher code changes. The auto-updater (Plan 02-06's `internal/update`) is si
 ## Eligibility checklist
 
 - [x] **Public OSS GitHub repo** — <https://github.com/boejowen/SquireBot>
-- [ ] **OSI-approved license** — `LICENSE` file is currently **MISSING from repo root**. SignPath requires an OSI-approved license. Add MIT or Apache-2.0 (conventional Go choices) BEFORE filing the application. Suggested: MIT — short, permissive, matches the project's "small tool for a small group" ethos.
+- [x] **OSI-approved license** — `LICENSE` (MIT) committed at repo root in `fa7e9b4` on 2026-05-02.
 - [x] **MFA on GitHub account** — confirm at <https://github.com/settings/security>
 - [x] **Active project** — Phase 1 shipped 2026-05-02 (`phase1-complete` tag); Phase 2 in progress
 - [x] **Single-project sponsorship** — no prior SignPath sponsorship for this user / org
@@ -66,8 +66,6 @@ boejowen
 ```
 MIT
 ```
-
-(If filing while LICENSE is still missing, list "MIT (in progress — being added before approval review")")
 
 ### Build / release process description
 

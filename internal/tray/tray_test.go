@@ -66,10 +66,14 @@ func TestHealthConstants(t *testing.T) {
 
 // TestMenuPlan_ContextMandatoryItems guards CONTEXT.md's four mandatory
 // menu items (Status / Open Workbook / Open log folder / Quit) plus
-// the D-04 / D-07 additions, in the exact order OnReady builds them.
+// the D-04 / D-07 / AUTH-05 additions, in the exact order OnReady builds them.
 //
 // Hotfix #4 motivation: the live binary was observed missing
 // "Open log folder" — this test now fails-loud if anyone removes it.
+//
+// Plan 02-04 (AUTH-05): Reauthorize lands at index 4, between Continue
+// setup… and Quit. Hidden by default; surfaced when ErrPermanentAuth /
+// IsRevokedRefreshToken trips the watcher's authSuspended flag.
 func TestMenuPlan_ContextMandatoryItems(t *testing.T) {
 	plan := MenuPlan()
 
@@ -78,7 +82,8 @@ func TestMenuPlan_ContextMandatoryItems(t *testing.T) {
 		LabelOpenLogFolder,  // 1 — CONTEXT.md mandatory, hotfix #4
 		LabelChangeWorkbook, // 2 — D-04
 		LabelContinueSetup,  // 3 — D-07
-		LabelQuit,           // 4
+		LabelReauthorize,    // 4 — Plan 02-04 (AUTH-05)
+		LabelQuit,           // 5
 	}
 
 	if len(plan) != len(wantOrder) {
@@ -92,6 +97,57 @@ func TestMenuPlan_ContextMandatoryItems(t *testing.T) {
 			t.Errorf("MenuPlan[%d] (%q) has empty tooltip", i, plan[i].Label)
 		}
 	}
+}
+
+// TestMenuPlan_ReauthorizePosition (Plan 02-04) pins Reauthorize between
+// Continue setup… and Quit so the AUTH-05 click handler is adjacent to
+// the other setup/recovery items.
+func TestMenuPlan_ReauthorizePosition(t *testing.T) {
+	plan := MenuPlan()
+	idxContinue, idxReauth, idxQuit := -1, -1, -1
+	for i, item := range plan {
+		switch item.Label {
+		case LabelContinueSetup:
+			idxContinue = i
+		case LabelReauthorize:
+			idxReauth = i
+		case LabelQuit:
+			idxQuit = i
+		}
+	}
+	if idxReauth == -1 {
+		t.Fatal(`"Reauthorize…" missing from MenuPlan (AUTH-05)`)
+	}
+	if !(idxContinue < idxReauth && idxReauth < idxQuit) {
+		t.Errorf("expected Continue setup… (%d) < Reauthorize… (%d) < Quit (%d)",
+			idxContinue, idxReauth, idxQuit)
+	}
+}
+
+// TestOnReauthorizeCallback_Wired (Plan 02-04) verifies the
+// OnReauthorize closure is propagated from Config into the Controller's
+// internal callback field. Live menu-click semantics are validated by
+// Plan 08's smoke checkpoint.
+func TestOnReauthorizeCallback_Wired(t *testing.T) {
+	calls := 0
+	c := NewController(Config{
+		OnReauthorize: func() { calls++ },
+	})
+	if c.onReauthorize == nil {
+		t.Fatal("Controller.onReauthorize not wired from Config.OnReauthorize")
+	}
+	c.onReauthorize()
+	if calls != 1 {
+		t.Errorf("calls = %d, want 1", calls)
+	}
+}
+
+// TestShowHideReauthorize_SafeBeforeOnReady — same contract as the other
+// mutators: must not panic when the underlying systray menu item is nil.
+func TestShowHideReauthorize_SafeBeforeOnReady(t *testing.T) {
+	c := NewController(Config{})
+	c.ShowReauthorize()
+	c.HideReauthorize()
 }
 
 // TestMenuPlan_OpenLogFolder_Position pins the position of the
@@ -128,6 +184,7 @@ func TestLabelConstants_Stable(t *testing.T) {
 		"LabelOpenLogFolder":  LabelOpenLogFolder,
 		"LabelChangeWorkbook": LabelChangeWorkbook,
 		"LabelContinueSetup":  LabelContinueSetup,
+		"LabelReauthorize":    LabelReauthorize,
 		"LabelQuit":           LabelQuit,
 	}
 	want := map[string]string{
@@ -135,6 +192,7 @@ func TestLabelConstants_Stable(t *testing.T) {
 		"LabelOpenLogFolder":  "Open log folder",
 		"LabelChangeWorkbook": "Change Workbook…",
 		"LabelContinueSetup":  "Continue setup…",
+		"LabelReauthorize":    "Reauthorize…",
 		"LabelQuit":           "Quit",
 	}
 	for name, got := range cases {

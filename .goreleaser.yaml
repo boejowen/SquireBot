@@ -1,0 +1,55 @@
+# Used by developers for local snapshot builds: 'goreleaser build --snapshot --clean'.
+# CI does NOT run goreleaser; see .github/workflows/release.yml for the canonical
+# release pipeline (workflow does explicit go build + makensis + manifest steps).
+#
+# USAGE:
+#   - CI (.github/workflows/release.yml): does NOT invoke goreleaser. The
+#     workflow does explicit go build + makensis + manifest steps and
+#     uploads via softprops/action-gh-release.
+#   - Local dev: `goreleaser build --snapshot --clean` produces dist/ for
+#     reproducible local builds matching the CI output.
+#
+# Pitfall F: this file is hand-authored. Do NOT regenerate it from scratch
+# via the goreleaser scaffolding command -- doing so against the existing
+# .github/workflows/release.yml would clobber the AUTH-03 PRODUCTION
+# consent-screen gate.
+#
+# Inputs (env vars from the developer's local shell):
+#   OAUTH_CLIENT_ID
+#   OAUTH_CLIENT_SECRET
+#   PICKER_API_KEY
+#   GCP_PROJECT_NUMBER
+#
+# The release/signs/archives/changelog blocks are intentionally absent.
+# CI does not invoke goreleaser, so those blocks would be dead config and
+# invite maintenance confusion. SignPath OSS code-signing (Plan 02-09) will
+# land in the workflow YAML, NOT here.
+
+version: 2
+
+project_name: squirebot
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: squirebot
+    main: ./cmd/squirebot
+    binary: squirebot
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+    ldflags:
+      - -H=windowsgui
+      - -s
+      - -w
+      - -X main.OAuthClientID={{ .Env.OAUTH_CLIENT_ID }}
+      - -X main.OAuthClientSecret={{ .Env.OAUTH_CLIENT_SECRET }}
+      - -X main.PickerAPIKey={{ .Env.PICKER_API_KEY }}
+      - -X main.GCPProjectNumber={{ .Env.GCP_PROJECT_NUMBER }}
+      - -X main.Version={{ .Version }}
+    # goreleaser strips the "v" prefix from {{ .Version }} automatically.

@@ -23,6 +23,36 @@ import (
 )
 
 func main() {
+	// Plan 02-07 (INST-04 / CONTEXT.md Q3): --uninstall-wipe-credentials.
+	// Invoked by the NSIS uninstaller when the user answered "Yes" to the
+	// "Also delete saved configuration and Google account credentials?"
+	// prompt. We read config.GoogleEmail, delete the wincred entry under
+	// SquireBot:<email>, and exit. The NSIS script runs this BEFORE
+	// deleting squirebot.exe so the binary is still on disk to invoke.
+	//
+	// Runs FIRST (before update.Apply) — auto-update has no business
+	// firing during an uninstall. We always exit 0, even on partial
+	// state (no email in config, config load failure, wincred delete
+	// failure) — the uninstaller must not block on a guildie who never
+	// completed the wizard but ran the installer.
+	if len(os.Args) >= 2 && os.Args[1] == "--uninstall-wipe-credentials" {
+		cfg, err := config.Load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config load failed: %v\n", err)
+			os.Exit(0)
+		}
+		if cfg.GoogleEmail == "" {
+			fmt.Fprintln(os.Stderr, "no email in config; nothing to wipe")
+			os.Exit(0)
+		}
+		if err := auth.DeleteToken(cfg.GoogleEmail); err != nil {
+			fmt.Fprintf(os.Stderr, "wincred delete failed for %s: %v\n", cfg.GoogleEmail, err)
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "wincred entry removed for %s\n", cfg.GoogleEmail)
+		os.Exit(0)
+	}
+
 	// Plan 02-06 (OPS-04) startup-swap: BEFORE any other goroutine,
 	// before logging.Setup, before config.Load, check for a staged
 	// update adjacent to the running binary. If <exepath>.new + the

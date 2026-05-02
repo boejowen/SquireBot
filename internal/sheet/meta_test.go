@@ -1,12 +1,17 @@
 package sheet
 
-// Tests for ValidateWorkbook (Plan 01-05 Task 1) + EnsureSheet.
-// Use httptest.NewServer + option.WithEndpoint to point the Sheets v4 client
-// at a stub server that returns canned JSON for the four endpoints we touch:
+// Tests for ValidateWorkbook (Plan 02-01 Task 1 — three-state refactor) +
+// EnsureSheet. Use httptest.NewServer + option.WithEndpoint to point the
+// Sheets v4 client at a stub server that returns canned JSON for the
+// endpoints we touch:
+//
 //   GET /v4/spreadsheets/{id}                       — list sheets
 //   GET /v4/spreadsheets/{id}/values/{range}        — read _meta cells
-//   PUT /v4/spreadsheets/{id}/values/{range}        — bootstrap write
 //   POST /v4/spreadsheets/{id}:batchUpdate          — addSheet
+//
+// Plan 02-01 Task 1: bootstrapMeta is DELETED from the sheet package; the
+// ScaffoldSchemaV1 routine in internal/scaffold owns all _meta row writes
+// now. ValidateWorkbook only reads.
 //
 // No real GCP calls — see RESEARCH.md §2.6 + the Plan 05 test strategy note.
 
@@ -26,12 +31,11 @@ import (
 
 // fakeSheetsHandler captures requests against an in-memory model of the
 // stub spreadsheet "SHEET1". metaValues is the response body for the
-// values.get on _meta!A1:B2; sheetsList is the addSheet starting state.
+// values.get on _meta!A1:B20.
 type fakeSheetsHandler struct {
 	t              *testing.T
-	metaValues     [][]any   // empty slice (or nil) means "no values"
+	metaValues     [][]any // empty slice (or nil) means "no values"
 	sheetsList     []sheetInfo
-	bootstrapWrote *sheets.ValueRange
 	addSheetReqs   []string
 	getCalls       int
 	valuesGetCalls int
@@ -57,25 +61,23 @@ func (h *fakeSheetsHandler) handler() http.HandlerFunc {
 			}
 			_ = json.NewEncoder(w).Encode(out)
 
-		// GET /v4/spreadsheets/SHEET1/values/_meta!A1:B2
+		// GET /v4/spreadsheets/SHEET1/values/_meta!A1:B20
 		case r.Method == "GET" && strings.Contains(path, "/values/"):
 			h.valuesGetCalls++
-			body := map[string]any{"range": "_meta!A1:B2", "majorDimension": "ROWS"}
+			body := map[string]any{"range": "_meta!A1:B20", "majorDimension": "ROWS"}
 			if len(h.metaValues) > 0 {
 				body["values"] = h.metaValues
 			}
 			_ = json.NewEncoder(w).Encode(body)
 
-		// PUT /v4/spreadsheets/SHEET1/values/_meta!A1:B2
+		// PUT /v4/spreadsheets/SHEET1/values/{range} — should NEVER be hit
+		// from ValidateWorkbook in the new design (bootstrapMeta deleted).
 		case r.Method == "PUT" && strings.Contains(path, "/values/"):
 			h.valuesPutCalls++
-			var vr sheets.ValueRange
-			_ = json.NewDecoder(r.Body).Decode(&vr)
-			h.bootstrapWrote = &vr
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"updatedRange": "_meta!A1:B2",
-				"updatedRows":  2,
-				"updatedCells": 4,
+				"updatedRange": "_meta!A1:B20",
+				"updatedRows":  0,
+				"updatedCells": 0,
 			})
 
 		// POST /v4/spreadsheets/SHEET1:batchUpdate
@@ -83,7 +85,6 @@ func (h *fakeSheetsHandler) handler() http.HandlerFunc {
 			var req sheets.BatchUpdateSpreadsheetRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
 			h.batchUpdates = append(h.batchUpdates, &req)
-			// If any requests are AddSheet, mint a new sheetId and reply with it.
 			replies := make([]map[string]any, 0, len(req.Requests))
 			for _, rq := range req.Requests {
 				if rq.AddSheet != nil {
@@ -141,61 +142,80 @@ func newTestClient(t *testing.T, h *fakeSheetsHandler) (*Client, *httptest.Serve
 	return c, srv
 }
 
-// ----- ValidateWorkbook tests -----
+// ----- ValidateWorkbook three-state tests (Plan 02-01 Task 1) -----
 
-func TestValidateWorkbook_Bootstrap(t *testing.T) {
-	// _meta tab exists; A1:B2 is empty → BOOTSTRAP path runs.
+// Test 1 (per <behavior>): _meta tab absent → caller must EnsureSheet,
+// then read returns zero rows → WorkbookStateEmpty, no error.
+func TestValidateWorkbook_EmptyNoMetaTab(t *testing.T) {
 	h := &fakeSheetsHandler{
 		t:          t,
-		sheetsList: []sheetInfo{{Title: "_meta", SheetID: 12345}},
-		metaValues: nil, // empty
+		sheetsList: []sheetInfo{}, // _meta missing — EnsureSheet will create it
+		metaValues: nil,           // newly-created tab has no rows
 	}
 	c, srv := newTestClient(t, h)
 	defer srv.Close()
 
-	if err := c.ValidateWorkbook(context.Background()); err != nil {
-		t.Fatalf("ValidateWorkbook: %v", err)
+	state, err := c.ValidateWorkbook(context.Background())
+	if err != nil {
+		t.Fatalf("ValidateWorkbook: unexpected error %v", err)
 	}
-	if h.bootstrapWrote == nil {
-		t.Fatal("expected bootstrap PUT to _meta!A1:B2 — none captured")
+	if state != WorkbookStateEmpty {
+		t.Errorf("state = %v, want WorkbookStateEmpty", state)
 	}
-	if got := h.valuesPutCalls; got != 1 {
-		t.Errorf("valuesPutCalls = %d, want 1", got)
-	}
-	// Verify the body shape: 2 rows, [canonical_id, squirebot-v1-workbook-2026], [schema_version, "1"]
-	if len(h.bootstrapWrote.Values) != 2 {
-		t.Fatalf("bootstrap rows = %d, want 2", len(h.bootstrapWrote.Values))
-	}
-	r0 := h.bootstrapWrote.Values[0]
-	if len(r0) != 2 || r0[0] != "canonical_id" || r0[1] != CanonicalID {
-		t.Errorf("row 0 = %v, want [canonical_id, %s]", r0, CanonicalID)
-	}
-	r1 := h.bootstrapWrote.Values[1]
-	if len(r1) != 2 || r1[0] != "schema_version" || r1[1] != "1" {
-		t.Errorf("row 1 = %v, want [schema_version, 1]", r1)
+	// CRITICAL: must NOT auto-bootstrap (bootstrapMeta is deleted).
+	if h.valuesPutCalls != 0 {
+		t.Errorf("ValidateWorkbook wrote %d values.update calls; must be 0 (scaffold owns _meta writes now)", h.valuesPutCalls)
 	}
 }
 
-func TestValidateWorkbook_Healthy(t *testing.T) {
+// Test 2: _meta tab exists but contains zero rows → Empty.
+func TestValidateWorkbook_EmptyMetaTabZeroRows(t *testing.T) {
+	h := &fakeSheetsHandler{
+		t:          t,
+		sheetsList: []sheetInfo{{Title: "_meta", SheetID: 12345}},
+		metaValues: nil, // tab exists, no rows
+	}
+	c, srv := newTestClient(t, h)
+	defer srv.Close()
+
+	state, err := c.ValidateWorkbook(context.Background())
+	if err != nil {
+		t.Fatalf("ValidateWorkbook: unexpected error %v", err)
+	}
+	if state != WorkbookStateEmpty {
+		t.Errorf("state = %v, want WorkbookStateEmpty", state)
+	}
+	if h.valuesPutCalls != 0 {
+		t.Errorf("valuesPutCalls = %d, want 0", h.valuesPutCalls)
+	}
+}
+
+// Test 3: canonical_id matches and schema_version=1 → Matches.
+func TestValidateWorkbook_MatchesHealthy(t *testing.T) {
 	h := &fakeSheetsHandler{
 		t:          t,
 		sheetsList: []sheetInfo{{Title: "_meta", SheetID: 12345}},
 		metaValues: [][]any{
-			{"canonical_id", CanonicalID},
 			{"schema_version", "1"},
+			{"canonical_id", CanonicalID},
 		},
 	}
 	c, srv := newTestClient(t, h)
 	defer srv.Close()
 
-	if err := c.ValidateWorkbook(context.Background()); err != nil {
-		t.Fatalf("ValidateWorkbook: %v", err)
+	state, err := c.ValidateWorkbook(context.Background())
+	if err != nil {
+		t.Fatalf("ValidateWorkbook: unexpected error %v", err)
+	}
+	if state != WorkbookStateMatches {
+		t.Errorf("state = %v, want WorkbookStateMatches", state)
 	}
 	if h.valuesPutCalls != 0 {
-		t.Errorf("expected zero PUTs (healthy path), got %d", h.valuesPutCalls)
+		t.Errorf("valuesPutCalls = %d, want 0 (healthy path)", h.valuesPutCalls)
 	}
 }
 
+// Test 4: canonical_id mismatches → Wrong, ErrWrongWorkbook.
 func TestValidateWorkbook_WrongCanonicalID(t *testing.T) {
 	h := &fakeSheetsHandler{
 		t:          t,
@@ -208,21 +228,26 @@ func TestValidateWorkbook_WrongCanonicalID(t *testing.T) {
 	c, srv := newTestClient(t, h)
 	defer srv.Close()
 
-	err := c.ValidateWorkbook(context.Background())
+	state, err := c.ValidateWorkbook(context.Background())
+	if state != WorkbookStateWrong {
+		t.Errorf("state = %v, want WorkbookStateWrong", state)
+	}
 	if err == nil {
 		t.Fatal("expected ErrWrongWorkbook, got nil")
 	}
 	if !errors.Is(err, ErrWrongWorkbook) {
-		t.Errorf("err = %v; want ErrWrongWorkbook (errors.Is)", err)
+		t.Errorf("err = %v; want ErrWrongWorkbook", err)
 	}
-	// Verbatim D-03 message must be present in the error text.
 	const verbatim = "This doesn't look like a SquireBot workbook. Pick the one shared by your guild leader."
 	if !strings.Contains(err.Error(), verbatim) {
 		t.Errorf("error text missing D-03 verbatim message:\ngot:  %q\nwant contains: %q", err.Error(), verbatim)
 	}
 }
 
-func TestValidateWorkbook_SchemaTooNew(t *testing.T) {
+// Test 5: canonical_id matches but schema_version > max → Matches state
+// (the workbook IS ours), but with ErrSchemaTooNew error so caller refuses
+// to write.
+func TestValidateWorkbook_MatchesSchemaTooNew(t *testing.T) {
 	h := &fakeSheetsHandler{
 		t:          t,
 		sheetsList: []sheetInfo{{Title: "_meta", SheetID: 12345}},
@@ -234,16 +259,43 @@ func TestValidateWorkbook_SchemaTooNew(t *testing.T) {
 	c, srv := newTestClient(t, h)
 	defer srv.Close()
 
-	err := c.ValidateWorkbook(context.Background())
+	state, err := c.ValidateWorkbook(context.Background())
+	if state != WorkbookStateMatches {
+		t.Errorf("state = %v, want WorkbookStateMatches (schema-too-new is still our workbook)", state)
+	}
 	if err == nil {
 		t.Fatal("expected ErrSchemaTooNew, got nil")
 	}
 	if !errors.Is(err, ErrSchemaTooNew) {
-		t.Errorf("err = %v; want ErrSchemaTooNew (errors.Is)", err)
+		t.Errorf("err = %v; want ErrSchemaTooNew", err)
 	}
 }
 
-// ----- EnsureSheet tests -----
+// Test 6 (Pitfall C defensive): _meta tab has rows but no canonical_id
+// row → Wrong (refuse rather than scaffold over user data).
+func TestValidateWorkbook_MetaWithoutCanonicalIDIsWrong(t *testing.T) {
+	h := &fakeSheetsHandler{
+		t:          t,
+		sheetsList: []sheetInfo{{Title: "_meta", SheetID: 12345}},
+		metaValues: [][]any{
+			// _meta tab has unrelated content but no canonical_id row.
+			{"some_other_key", "some_value"},
+			{"another_key", "another_value"},
+		},
+	}
+	c, srv := newTestClient(t, h)
+	defer srv.Close()
+
+	state, err := c.ValidateWorkbook(context.Background())
+	if state != WorkbookStateWrong {
+		t.Errorf("state = %v, want WorkbookStateWrong (Pitfall C — _meta with rows but no canonical_id is suspect)", state)
+	}
+	if !errors.Is(err, ErrWrongWorkbook) {
+		t.Errorf("err = %v; want ErrWrongWorkbook", err)
+	}
+}
+
+// ----- EnsureSheet tests (Phase 1 — preserved) -----
 
 func TestEnsureSheet_Existing(t *testing.T) {
 	h := &fakeSheetsHandler{
@@ -266,7 +318,6 @@ func TestEnsureSheet_Existing(t *testing.T) {
 	if len(h.addSheetReqs) != 0 {
 		t.Errorf("expected zero AddSheet requests, got %d", len(h.addSheetReqs))
 	}
-	// Cached: a second call must not hit the wire.
 	prevGet := h.getCalls
 	if _, err := c.EnsureSheet(context.Background(), "inv:Foo"); err != nil {
 		t.Fatal(err)
@@ -294,7 +345,6 @@ func TestEnsureSheet_Creates(t *testing.T) {
 	if len(h.addSheetReqs) != 1 || h.addSheetReqs[0] != "inv:Bar" {
 		t.Errorf("addSheetReqs = %v, want [inv:Bar]", h.addSheetReqs)
 	}
-	// Cached after creation.
 	prevBatch := len(h.batchUpdates)
 	if _, err := c.EnsureSheet(context.Background(), "inv:Bar"); err != nil {
 		t.Fatal(err)

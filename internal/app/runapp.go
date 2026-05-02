@@ -36,6 +36,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/config"
 	"github.com/boejowen/SquireBot/internal/parse"
 	"github.com/boejowen/SquireBot/internal/picker"
+	"github.com/boejowen/SquireBot/internal/scaffold"
 	"github.com/boejowen/SquireBot/internal/sheet"
 	"github.com/boejowen/SquireBot/internal/tray"
 	"github.com/boejowen/SquireBot/internal/watch"
@@ -159,7 +160,7 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	}
 	// Plan 02-01 Task 1: ValidateWorkbook returns one of three states.
 	// Wrong → refuse. SchemaTooNew (any state with that error) → refuse.
-	// Empty or Matches → proceed (Task 4 will wire ScaffoldSchemaV1 here).
+	// Empty or Matches → proceed to ScaffoldSchemaV1.
 	state, vErr := sc.ValidateWorkbook(ctx)
 	if errors.Is(vErr, sheet.ErrSchemaTooNew) {
 		return fmt.Errorf("validate workbook on startup: %w", vErr)
@@ -167,7 +168,15 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	if state == sheet.WorkbookStateWrong {
 		return fmt.Errorf("validate workbook on startup: %w", vErr)
 	}
-	// state is Empty or Matches — both proceed.
+	// state is Empty or Matches — both proceed to scaffold.
+
+	// Plan 02-01 Task 4: ScaffoldSchemaV1 brings the workbook to v1.
+	// Idempotent — no-op on second run. Fresh shared workbook (Empty)
+	// gets every dimension + view tab created with locked headers and
+	// 13 _meta KV rows including schema_version=1 + canonical_id.
+	if err := scaffold.ScaffoldSchemaV1(ctx, sc); err != nil {
+		return fmt.Errorf("scaffold schema v1: %w", err)
+	}
 
 	t.SetSpreadsheetID(cfg.SpreadsheetID)
 	t.SetIconHealth(tray.HealthGreen)

@@ -1,0 +1,49 @@
+9	Lifetap
+15	Lifespike
+30	Lifedraw
+49	Life Leech
+51	Siphon Life
+15	Fear
+22	Spook the Dead
+49	Invoke Fear
+22	Vampiric Embrace
+22	Grim Aura
+15	Endure Cold
+30	Endure Disease
+34	Shieldskin
+39	Resist Cold
+9	Siphon Strength
+30	Wave of Enfeeblement
+39	Shadow Vortex
+39	Shroud of Hate
+50	Shroud of Pain
+9	Disease Cloud
+15	Clinging Darkness
+22	Engulfing Darkness
+22	Ward Undead
+30	Heat Blood
+39	Expulse Undead
+39	Heart Flutter
+49	Dismiss Undead
+49	Dooming Darkness
+49	Word of Spirit
+53	Boil Blood
+9	Invisibility versus Undead
+9	Locate Corpse
+9	Sense the Dead
+15	Numb the Dead
+15	Shadow Step
+22	Dark Empathy
+22	Deadeye
+30	Feign Death
+30	Gather Shadows
+39	Cancel Magic
+49	Shadow Sight
+9	Leering Corpse
+15	Bone Walk
+22	Convoke Shadow
+30	Restless Bones
+39	Animate Dead
+49	Summon Dead
+29	Strengthen Death
+49	Breath of the Dead

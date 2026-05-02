@@ -268,6 +268,14 @@ jobs:
           # Auto-mark prerelease for any tag containing '-' (rc, beta, alpha, etc.)
           # so prereleases don't show up as "Latest" on the repo home page.
           prerelease: ${{ contains(steps.ver.outputs.version, '-') }}
+          # KNOWN BUG (2026-05-02): when re-tagging an existing release, this
+          # action replaces ASSETS but does NOT overwrite BODY. So the
+          # release body's hash lines drift from reality across re-tags.
+          # Workaround: post-publish `gh release edit --notes` to refresh body.
+          # Mitigation: latest.json is regenerated each run with current SHAs,
+          # so the auto-updater is unaffected -- only humans reading the release
+          # page see the stale text. Followup: switch to gh CLI commands for
+          # release create/edit, or set update_existing_release flag if added.
           files: |
             dist/SquireBot-Setup-*.exe
             dist/squirebot.exe

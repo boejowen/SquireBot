@@ -1,139 +1,106 @@
 # SquireBot
 
-A small Windows app that every member of a ~12-person Project 1999 (Classic
-EverQuest emulator) guild installs on their PC. It watches the EQ folder for
-the tab-separated text files produced by `/outputfile inventory` and
-`/outputfile spellbook` and pushes their contents into a single shared Google
-Sheet. The sheet is the real product — see `.planning/PROJECT.md` for the
-full vision.
+> Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.
 
-> **Phase 1 status:** repo skeleton only. The binary launches, writes one
-> structured log line, and exits. OAuth, Drive Picker, the file watcher, the
-> Sheets writer, and the tray UI all land in later Plans (03–07).
+A small Windows app that every member of a ~12-person Project 1999 (Classic EverQuest emulator) guild installs on their PC. SquireBot watches the EverQuest folder for tab-separated text files produced by the in-game `/outputfile inventory` and `/outputfile spellbook` commands and pushes their contents into a single shared Google Sheet. The sheet (Apps Script + TypeScript, landing in Phase 3) joins each guildie's data with the [P1999 wiki](https://wiki.project1999.com/) and the [PigParse REST API](https://pigparse.azurewebsites.net) to produce per-character inventory views, gear/spell progression checklists vs. Velious tiers, a shared bank with cross-character search, and item tooltips.
 
-## Install (will land in Plan 08)
+See [.planning/PROJECT.md](.planning/PROJECT.md) for the full project context.
 
-A signed NSIS installer will eventually be published to **GitHub Releases**.
-Until then, build from source (see below).
+## Install
 
-## Build from source
+1. Download `SquireBot-Setup-<version>.exe` from the [latest GitHub Release](https://github.com/boejowen/SquireBot/releases/latest).
+2. Walk through the SmartScreen "More info → Run anyway" prompt. **Don't skip this — your browser may show different prompts.** See [docs/smartscreen-walkthrough.md](docs/smartscreen-walkthrough.md) for browser-specific paths (Edge, Chrome, Firefox) and Defender-quarantine recovery. Total walkthrough time: under 30 seconds.
+3. The installer runs without admin rights (per-user only, installs to `%LOCALAPPDATA%\Programs\SquireBot\`).
+4. SquireBot launches automatically after install. Complete the wizard:
+   - Authorize Google (browser opens for OAuth — `drive.file` scope only; SquireBot only sees workbooks you explicitly pick).
+   - Pick the shared guild workbook in the Drive Picker.
+   - Confirm the EverQuest install folder (auto-detected from registry / common install paths / `eqgame.exe` heuristic).
+5. SquireBot now lives in the system tray, watching for `*-Inventory.txt` and `*-Spellbook.txt` files in the configured EQ folder.
 
-Prereqs: **Go 1.24+** on Windows, macOS, or Linux (the watcher cross-compiles).
+For local building from source, see [docs/build-and-install.md](docs/build-and-install.md). For the OAuth setup runbook (Cloud Console steps for forks), see [docs/oauth-setup.md](docs/oauth-setup.md).
 
-The OAuth client ID, OAuth client secret, Picker API key, and GCP project
-number are baked into the binary at link time via `-ldflags`. The values
-come from `.planning/phases/01-end-to-end-thin-slice/oauth-config.json`
-(gitignored, local-only — see `docs/oauth-setup.md` for how to provision
-a fresh one). The client secret is effectively public for desktop apps
-(per Google's docs) but Google's token endpoint still requires it as a
-parameter even with PKCE — see `docs/build-and-install.md` for details.
+## Tray menu
 
-### Linux / macOS / Git Bash (canonical, requires `jq`)
+Right-click the tray icon for these options:
 
-```bash
-eval $(jq -r '"-X main.OAuthClientID=" + .oauth_client_id +
-              " -X main.OAuthClientSecret=" + .oauth_client_secret +
-              " -X main.PickerAPIKey=" + .picker_api_key +
-              " -X main.GCPProjectNumber=" + .gcp_project_number' \
-      .planning/phases/01-end-to-end-thin-slice/oauth-config.json \
-      | xargs -I{} echo LDFLAGS_OAUTH=\"{}\")
-GOOS=windows GOARCH=amd64 \
-  go build -ldflags="-H=windowsgui -s -w $LDFLAGS_OAUTH" \
-  -o dist/squirebot.exe ./cmd/squirebot
-```
+| Item                     | Purpose                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| Status (top, disabled)   | Current state, e.g. "Last upload: Foo at 14:32"                                  |
+| Open Workbook            | Opens the configured Google Sheet in your browser                                |
+| Open log folder          | Opens `%LOCALAPPDATA%\SquireBot\` in Explorer (where `squirebot.log*` lives)     |
+| Check for updates        | Manually triggers an update check (auto-checks every 24h via `latest.json`)     |
+| Change Workbook…         | Re-runs the Drive Picker to switch to a different workbook                       |
+| Continue setup…          | (hidden unless setup is incomplete)                                              |
+| Reauthorize…             | (hidden unless your Google refresh token died — see "tray turned red" below)    |
+| Quit                     | Exit SquireBot                                                                   |
 
-### PowerShell fallback (no `jq` required)
+## Tray turned red — what now?
 
-```powershell
-$cfg = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
-$ldflags = "-H=windowsgui -s -w " +
-           "-X main.OAuthClientID=$($cfg.oauth_client_id) " +
-           "-X main.OAuthClientSecret=$($cfg.oauth_client_secret) " +
-           "-X main.PickerAPIKey=$($cfg.picker_api_key) " +
-           "-X main.GCPProjectNumber=$($cfg.gcp_project_number)"
-$env:GOOS = "windows"; $env:GOARCH = "amd64"
-go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
-```
+A red tray icon means one of three things:
 
-`-H=windowsgui` suppresses the console window so a tray-only app does not
-flash a black box on startup; `-s -w` strips debug symbols (~30% smaller).
+- **Setup needed** — wizard didn't finish (you closed the browser before granting consent, or skipped the workbook picker). Click **Continue setup…** in the tray menu to resume from where you left off.
+- **Refresh token died** — Google's refresh token has expired or been revoked (e.g., you changed your Google password, hit the Testing-mode 7-day expiry on a non-Production OAuth client, or manually revoked SquireBot at <https://myaccount.google.com/permissions>). Click **Reauthorize…** to redo OAuth. The watcher resumes immediately on success — see Plan 02-04 for the implementation details.
+- **Watcher error** — sheets API rejected a write, the workbook was deleted, or the schema doesn't match. See `%LOCALAPPDATA%\SquireBot\squirebot.log` for the structured error. Common causes: workbook deleted (re-pick via Change Workbook…), sheet schema mismatch (run a fresh install), persistent Sheets API failures (the watcher backs off with `2/4/8/16/32/60s` per WATCH-07 before surfacing).
 
-For a stamped release build append `-X main.Version=v0.1.0` to the ldflags.
+Most red-tray states are recoverable in under 30 seconds via the tray menu. If you're stuck, share the relevant lines from the log file with your guild leader.
 
-> **Without the OAuth ldflags**, the binary still compiles and runs the
-> Phase 1 smoke entry point — but `auth.BuildConstants.Validate()` will
-> return `ErrMissingConstants` and Plan 07's wizard will refuse to start
-> the OAuth flow. This is intentional: a misbuilt binary should fail fast,
-> not hand Google a blank `client_id`.
+## Auto-update
+
+SquireBot auto-updates daily via a `latest.json` manifest fetched from GitHub Releases. SHA-256 verification of the new binary happens before any swap, and the swap itself is **startup-only** (Windows file-locking forbids in-process replacement of a running `.exe`). The new binary lands at `<exepath>.new`; on next launch the swap completes before the main goroutine starts. Manual trigger: tray's **Check for updates**.
+
+## Uninstalling
+
+See [docs/build-and-install.md "Uninstalling"](docs/build-and-install.md#uninstalling) for the full uninstall flow including the "Also delete saved configuration and Google account credentials?" prompt (default = preserve, so re-installing later resumes without re-OAuth).
+
+## Where things live on a guildie's PC
+
+| Path                                                                          | Purpose                                                                              |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `%LOCALAPPDATA%\Programs\SquireBot\squirebot.exe`                             | The watcher binary                                                                   |
+| `%LOCALAPPDATA%\SquireBot\squirebot.log`                                      | Rotated log (5 MB × 3 backups, 28-day cap — OPS-03)                                  |
+| `%LOCALAPPDATA%\SquireBot\config.json`                                        | Non-secret settings (EQ folder, spreadsheet ID, cached email)                        |
+| Windows Credential Manager, target `SquireBot:<google-email>`                 | OAuth refresh token (DPAPI-protected via wincred — AUTH-04)                          |
+| `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\SquireBot`                | Autostart-on-logon entry (INST-04, no Task Scheduler / Service)                      |
+
+> **Refresh tokens NEVER live in `config.json`.** They are stored in Windows Credential Manager only — see AUTH-04 in [.planning/REQUIREMENTS.md](.planning/REQUIREMENTS.md) and the security comment on the `Config` struct in `internal/config/config.go`.
+
+## Project status
+
+Phase: **2 of 5** (Watcher Robustness + Schema Lock — in progress). Phase 1 shipped 2026-05-02 (tagged `phase1-complete`). See [.planning/ROADMAP.md](.planning/ROADMAP.md) for the full phased plan.
+
+## Code signing
+
+SquireBot ships **unsigned**. Code-signing certificates no longer grant instant SmartScreen reputation as of March 2024 (Microsoft removed EV's reputation perk), and a 12-user audience would never accumulate enough downloads to clear the reputation curve regardless of cert type. We've applied for free SignPath Foundation OSS code signing in parallel — see [docs/signpath-application.md](docs/signpath-application.md) for status. The unsigned + walkthrough path will remain the default until/unless SignPath approves.
 
 ## Forking / changing the module owner
 
-The default module path is `github.com/boejowen/SquireBot`. If you fork to
-your own account, rename in one shot:
+The default module path is `github.com/boejowen/SquireBot`. If you fork to your own account:
 
 ```bash
 go mod edit -module github.com/<your-owner>/squirebot
 # update the matching imports in cmd/squirebot/main.go and any new packages
 ```
 
-## Where things live on a guildie's PC
-
-| Path | Purpose |
-| ---- | ------- |
-| `%LOCALAPPDATA%\SquireBot\squirebot.log` | Rotated log (5 MB × 3 backups, 28-day cap — OPS-03) |
-| `%LOCALAPPDATA%\SquireBot\config.json` | Non-secret settings (EQ folder, spreadsheet ID, cached email) |
-| Windows Credential Manager, target `SquireBot:<google-email>` | OAuth refresh token (DPAPI-protected) |
-
-> **Refresh tokens NEVER live in `config.json`.** They are stored in
-> Windows Credential Manager only — see AUTH-04 in
-> `.planning/REQUIREMENTS.md` and the security comment on the `Config`
-> struct in `internal/config/config.go`.
-
-## SmartScreen walkthrough (placeholder — expanded in Phase 5)
-
-Phase 1 ships unsigned (D-13). When you double-click the `.exe` for the
-first time, Windows will show a blue "Windows protected your PC" screen.
-Click **More info → Run anyway**. Phase 2 adds a code-signing certificate
-that suppresses this prompt.
-
-## OAuth flow (placeholder — implemented in Plan 03)
-
-On first launch the app will open your default browser, prompt you to sign
-in to Google, and ask for permission to access **only the spreadsheets you
-explicitly select with this app** (`drive.file` scope — non-sensitive).
-You then pick the shared guild workbook from a Drive Picker dialog. Both
-steps happen exactly once per Google account per machine.
-
-## EQ folder picker (placeholder — implemented in Plan 04)
-
-The watcher tries to auto-detect your EverQuest install in this order:
-
-1. Previous SquireBot config (if any)
-2. Common install paths: `C:\P99`, `C:\Project1999`, `C:\Games\Project1999`
-3. Registry uninstall keys for "Project 1999" / "EverQuest"
-4. Recursive scan for a folder containing both `eqgame.exe` and
-   `eqclient.ini`
-
-If all four fail, you will be asked to point at the folder yourself.
-
-## "Tray turned red, what now?" (placeholder — Plan 07)
-
-The tray icon glows red whenever something needs your attention (setup
-incomplete, OAuth refresh failed, sheets API rejected a write, etc.).
-Right-click the tray icon and pick the highlighted action item.
-
-## Assets
-
-`assets/icon.ico` ships as a 1118-byte 16x16 magenta placeholder. Phase 5
-will replace it with real art.
+You'll also need to provision your own OAuth client + Picker API key — see [docs/oauth-setup.md](docs/oauth-setup.md).
 
 ## Repository layout
 
 ```
 cmd/squirebot/         entry point (main.go, icon.go)
-internal/logging/      slog + lumberjack rotator (OPS-03)
+internal/auth/         OAuth + wincred token storage
 internal/config/       JSON config persistence (no OAuth secrets)
+internal/logging/      slog + lumberjack rotator (OPS-03)
+internal/parse/        inventory / spellbook tab-separated parsers
+internal/sheet/        Sheets API client + atomic batchUpdate writer
+internal/tray/         system tray + wizard
+internal/watch/        fsnotify-driven file watcher
+installer/             NSIS installer source (squirebot.nsi)
 assets/                embedded resources (icon)
-.github/workflows/     GitHub Actions (release stub for now)
+docs/                  build / install / oauth / smartscreen / signpath docs
+.github/workflows/     GitHub Actions release pipeline
 .planning/             phase plans, research, state (gitignored)
 ```
+
+## License
+
+See [LICENSE](LICENSE).

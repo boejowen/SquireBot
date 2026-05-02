@@ -11,33 +11,51 @@ import (
 	"time"
 )
 
-// Helper: spin up Run in a goroutine watching tmpDir; return cancel + a channel
-// that buffers all onChange invocations and a counter for assertions.
+// Helper: spin up Run in a goroutine watching one or more folders; return
+// cancel + per-callback channels and counters for assertions.
 type harness struct {
 	cancel    context.CancelFunc
-	calls     chan string
-	count     *int64
+	invCalls  chan string
+	spbCalls  chan string
+	invCount  *int64
+	spbCount  *int64
 	runErrCh  chan error
 	t         *testing.T
 }
 
-func startWatcher(t *testing.T, dir string) *harness {
+func startWatcher(t *testing.T, folders ...string) *harness {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	calls := make(chan string, 16)
-	var count int64
-	onChange := func(p string) {
-		atomic.AddInt64(&count, 1)
+	invCalls := make(chan string, 16)
+	spbCalls := make(chan string, 16)
+	var invCount, spbCount int64
+	onInventory := func(p string) {
+		atomic.AddInt64(&invCount, 1)
 		select {
-		case calls <- p:
+		case invCalls <- p:
+		default:
+		}
+	}
+	onSpellbook := func(p string) {
+		atomic.AddInt64(&spbCount, 1)
+		select {
+		case spbCalls <- p:
 		default:
 		}
 	}
 	runErr := make(chan error, 1)
-	go func() { runErr <- Run(ctx, dir, onChange) }()
+	go func() { runErr <- Run(ctx, folders, onInventory, onSpellbook) }()
 	// Tiny grace period so fsnotify.Add registers before tests start writing.
 	time.Sleep(50 * time.Millisecond)
-	return &harness{cancel: cancel, calls: calls, count: &count, runErrCh: runErr, t: t}
+	return &harness{
+		cancel:   cancel,
+		invCalls: invCalls,
+		spbCalls: spbCalls,
+		invCount: &invCount,
+		spbCount: &spbCount,
+		runErrCh: runErr,
+		t:        t,
+	}
 }
 
 func (h *harness) stop() error {
@@ -51,8 +69,9 @@ func (h *harness) stop() error {
 	}
 }
 
-// Watcher Test 1: writing a *-Inventory.txt file triggers onChange within 800ms.
-func TestWatcher_InventoryWriteTriggers(t *testing.T) {
+// Test 1 (existing-coverage continuity): writing a *-Inventory.txt file fires
+// onInventory within 800ms; onSpellbook does NOT fire.
+func TestWatcher_InventoryWriteTriggersInventoryOnly(t *testing.T) {
 	dir := t.TempDir()
 	h := startWatcher(t, dir)
 	t.Cleanup(func() { _ = h.stop() })
@@ -63,39 +82,63 @@ func TestWatcher_InventoryWriteTriggers(t *testing.T) {
 	}
 
 	select {
-	case got := <-h.calls:
+	case got := <-h.invCalls:
 		if filepath.Base(got) != "Foo-Inventory.txt" {
 			t.Errorf("expected callback for Foo-Inventory.txt, got %q", got)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("onChange did not fire within 2s for Foo-Inventory.txt")
+		t.Fatal("onInventory did not fire within 2s for Foo-Inventory.txt")
+	}
+	// onSpellbook must NOT have fired.
+	if atomic.LoadInt64(h.spbCount) != 0 {
+		t.Errorf("expected 0 onSpellbook calls, got %d", atomic.LoadInt64(h.spbCount))
 	}
 }
 
-// Watcher Test 2: writing a *-Spellbook.txt file does NOT trigger onChange (Phase 1 scope).
-func TestWatcher_SpellbookFiltered(t *testing.T) {
+// Test 2 (Plan 02-02 dual-suffix): writing a *-Spellbook.txt fires onSpellbook;
+// onInventory does NOT fire.
+func TestWatcher_SpellbookWriteTriggersSpellbookOnly(t *testing.T) {
 	dir := t.TempDir()
 	h := startWatcher(t, dir)
 	t.Cleanup(func() { _ = h.stop() })
 
-	path := filepath.Join(dir, "Foo-Spellbook.txt")
-	if err := os.WriteFile(path, []byte("x"), 0644); err != nil {
+	path := filepath.Join(dir, "Bar-Spellbook.txt")
+	if err := os.WriteFile(path, []byte("9\tLifetap\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Wait long enough that any debounced emission would have fired (500ms + slop).
 	select {
-	case got := <-h.calls:
-		t.Fatalf("onChange fired for spellbook file (Phase 1 scope violation): %q", got)
-	case <-time.After(900 * time.Millisecond):
-		// expected silence
+	case got := <-h.spbCalls:
+		if filepath.Base(got) != "Bar-Spellbook.txt" {
+			t.Errorf("expected callback for Bar-Spellbook.txt, got %q", got)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("onSpellbook did not fire within 2s for Bar-Spellbook.txt")
 	}
-	if atomic.LoadInt64(h.count) != 0 {
-		t.Errorf("expected 0 onChange calls for spellbook write, got %d", atomic.LoadInt64(h.count))
+	if atomic.LoadInt64(h.invCount) != 0 {
+		t.Errorf("expected 0 onInventory calls, got %d", atomic.LoadInt64(h.invCount))
 	}
 }
 
-// Watcher Test 3: 5 rapid writes to the same Inventory file produce exactly one onChange.
+// Test 3: a non-matching suffix → neither callback fires.
+func TestWatcher_NonMatchingSuffixIgnored(t *testing.T) {
+	dir := t.TempDir()
+	h := startWatcher(t, dir)
+	t.Cleanup(func() { _ = h.stop() })
+
+	path := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(path, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Wait long enough that any debounced emission would have fired (500ms + slop).
+	time.Sleep(900 * time.Millisecond)
+	if atomic.LoadInt64(h.invCount) != 0 || atomic.LoadInt64(h.spbCount) != 0 {
+		t.Errorf("expected 0/0 calls for unrelated file, got inv=%d spb=%d",
+			atomic.LoadInt64(h.invCount), atomic.LoadInt64(h.spbCount))
+	}
+}
+
+// Test 4: 5 rapid writes to the same Inventory file produce exactly one onInventory.
 func TestWatcher_BurstCoalescesToOne(t *testing.T) {
 	dir := t.TempDir()
 	h := startWatcher(t, dir)
@@ -109,35 +152,34 @@ func TestWatcher_BurstCoalescesToOne(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	// Wait for debounce + slop.
 	select {
-	case got := <-h.calls:
+	case got := <-h.invCalls:
 		if filepath.Base(got) != "Bar-Inventory.txt" {
 			t.Errorf("expected callback for Bar-Inventory.txt, got %q", got)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("onChange did not fire after burst")
+		t.Fatal("onInventory did not fire after burst")
 	}
-
 	// Confirm no second emission within another debounce window.
 	select {
-	case extra := <-h.calls:
-		t.Fatalf("expected exactly one emission per burst, got an extra: %q (total=%d)", extra, atomic.LoadInt64(h.count))
+	case extra := <-h.invCalls:
+		t.Fatalf("expected exactly one emission per burst, got an extra: %q (total=%d)",
+			extra, atomic.LoadInt64(h.invCount))
 	case <-time.After(800 * time.Millisecond):
 		// expected silence
 	}
-	if got := atomic.LoadInt64(h.count); got != 1 {
-		t.Errorf("expected exactly 1 onChange call, got %d", got)
+	if got := atomic.LoadInt64(h.invCount); got != 1 {
+		t.Errorf("expected exactly 1 onInventory call, got %d", got)
 	}
 }
 
-// Watcher Test 4: cancelling ctx → Run returns ctx.Err().
+// Test 5: cancelling ctx → Run returns ctx.Err().
 func TestWatcher_CtxCancelExits(t *testing.T) {
 	dir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
 	noop := func(string) {}
-	go func() { runErr <- Run(ctx, dir, noop) }()
+	go func() { runErr <- Run(ctx, []string{dir}, noop, noop) }()
 	time.Sleep(50 * time.Millisecond)
 	cancel()
 	select {
@@ -150,6 +192,56 @@ func TestWatcher_CtxCancelExits(t *testing.T) {
 	}
 }
 
-// _ = sync.Once is unused here, but keep sync imported via WaitGroup if we add it.
-// (Avoid unused-import lint by using sync explicitly somewhere.)
+// Test 6 (Plan 02-02 multi-folder, WATCH-03): Run with two folders configured;
+// drop *-Inventory.txt into folder A AND *-Spellbook.txt into folder B; both
+// callbacks fire with the correct full path.
+func TestWatcher_MultiFolderDualSuffixDispatch(t *testing.T) {
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+	h := startWatcher(t, dirA, dirB)
+	t.Cleanup(func() { _ = h.stop() })
+
+	invPath := filepath.Join(dirA, "Slampeach-Inventory.txt")
+	spbPath := filepath.Join(dirB, "Slampeach-Spellbook.txt")
+	if err := os.WriteFile(invPath, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(spbPath, []byte("9\tLifetap\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	gotInv := false
+	gotSpb := false
+	deadline := time.After(2500 * time.Millisecond)
+	for !(gotInv && gotSpb) {
+		select {
+		case got := <-h.invCalls:
+			gotInv = true
+			if got != invPath {
+				t.Errorf("inventory callback path = %q, want %q", got, invPath)
+			}
+		case got := <-h.spbCalls:
+			gotSpb = true
+			if got != spbPath {
+				t.Errorf("spellbook callback path = %q, want %q", got, spbPath)
+			}
+		case <-deadline:
+			t.Fatalf("timeout waiting for both callbacks (gotInv=%v gotSpb=%v)", gotInv, gotSpb)
+		}
+	}
+}
+
+// Test 7 (Plan 02-02): empty eqFolders slice → Run returns an error before
+// touching fsnotify.
+func TestWatcher_NoFoldersConfigured(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	noop := func(string) {}
+	err := Run(ctx, nil, noop, noop)
+	if err == nil {
+		t.Fatal("expected error for nil folders, got nil")
+	}
+}
+
+// Keep sync imported (avoids unused-import lint if a future refactor drops it).
 var _ sync.Once

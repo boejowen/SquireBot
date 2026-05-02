@@ -101,6 +101,85 @@ func (c *Client) WriteInventory(ctx context.Context, charName string, header []s
 	return nil
 }
 
+// SpellbookHeader is the fixed 3-element header row Plan 02-02's wiring
+// passes to WriteSpellbook. The shape (Level, Name, _uploaded_at) is
+// schema-locked at schema_version=1 per 02-CONTEXT.md §Schema Lock —
+// extend-only (additional columns may be appended at the right edge in
+// later phases without bumping schema_version).
+var SpellbookHeader = []string{"Level", "Name", "_uploaded_at"}
+
+// WriteSpellbook replaces the entire spell:<charName> tab atomically via
+// a single spreadsheets.batchUpdate call carrying one UpdateCellsRequest.
+// Symmetric to WriteInventory; same Pitfall #8 enforcement (StringValue
+// cells, fields="userEnteredValue", per-character non-overlapping ranges).
+//
+// The Range covers spell:<charName>!A1:C600 (SpellTabMaxRows × SpellTabColumns).
+// Cells in the range NOT covered by `dataRows` are CLEARED as part of the
+// same request (per the values-update API contract — see WriteInventory's
+// docstring for the cited semantics). This is the "one-call atomic clear+write"
+// shape Plan 02-02 mandates for the hot path.
+//
+// Every cell is written as UserEnteredValue.StringValue — never NumberValue,
+// even for the integer Level column. Pitfall #8: numeric coercion in
+// consolidated views (Phase 4 spell_check) would trigger a recalc storm at
+// guild scale.
+//
+// dataRows is the parser's output (typically 2 columns: Level, Name).
+// WriteSpellbook pads short rows to 2 then appends `uploadedAt` as the 3rd
+// column. The parser already filters rows with fewer than 2 cells; padding
+// is defensive belt-and-braces.
+func (c *Client) WriteSpellbook(ctx context.Context, charName string, header []string, dataRows [][]string, uploadedAt string) error {
+	if c.spreadsheetID == "" {
+		return fmt.Errorf("WriteSpellbook: spreadsheetID not set")
+	}
+	tabName := "spell:" + charName
+	sheetID, err := c.EnsureSheet(ctx, tabName)
+	if err != nil {
+		return fmt.Errorf("ensure %s: %w", tabName, err)
+	}
+
+	rows := make([]*sheets.RowData, 0, len(dataRows)+1)
+	rows = append(rows, toRowData(header))
+	for _, dr := range dataRows {
+		// Pad to 2 cells (defensive — parser already filters <2) then
+		// append uploadedAt as the 3rd cell. Result is exactly 3 cells
+		// regardless of how short or long the input row is.
+		full := make([]string, 0, 3)
+		full = append(full, dr...)
+		for len(full) < 2 {
+			full = append(full, "")
+		}
+		// If the parser ever hands us >2 cells (it shouldn't, but be
+		// defensive), truncate to 2 before appending uploadedAt.
+		full = append(full[:2], uploadedAt)
+		rows = append(rows, toRowData(full))
+	}
+
+	req := &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: []*sheets.Request{{
+			UpdateCells: &sheets.UpdateCellsRequest{
+				Range: &sheets.GridRange{
+					SheetId:          sheetID,
+					StartRowIndex:    0,
+					EndRowIndex:      SpellTabMaxRows, // 600 — clears past N (atomic)
+					StartColumnIndex: 0,
+					EndColumnIndex:   SpellTabColumns, // 3 = A:C
+				},
+				Rows: rows,
+				// Pitfall #8: ALWAYS exactly "userEnteredValue" — never "*"
+				// (would clear notes/formatting too) and never
+				// "userEnteredValue,note" (would carry note semantics we
+				// don't manage from the watcher side).
+				Fields: "userEnteredValue",
+			},
+		}},
+	}
+	if _, err := c.svc.Spreadsheets.BatchUpdate(c.spreadsheetID, req).Context(ctx).Do(); err != nil {
+		return fmt.Errorf("batchUpdate %s: %w", tabName, err)
+	}
+	return nil
+}
+
 // toRowData converts a []string to a *sheets.RowData using StringValue
 // for every cell. Pitfall #8 enforcement: do NOT use NumberValue here,
 // even for cells that look numeric (item ID, Count). Numeric coercion

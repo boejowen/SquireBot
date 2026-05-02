@@ -46,6 +46,16 @@ const (
 	// InvTabColumns = 6 (A:Location, B:Name, C:ID, D:Count, E:Slots,
 	// F:_uploaded_at).
 	InvTabColumns = 6
+
+	// SpellTabMaxRows is the GridRange.EndRowIndex (exclusive) for spell:<Char>
+	// writes. P99 max ~520 scribed spells for a level-65 paragon (Necro/Mage/
+	// Wizard span the largest libraries); 600 gives headroom and matches the
+	// atomic-clear contract semantics of InvTabMaxRows.
+	SpellTabMaxRows = 600
+
+	// SpellTabColumns = 3 (A:Level, B:Name, C:_uploaded_at). Schema-locked at
+	// schema_version=1 per 02-CONTEXT.md §Schema Lock.
+	SpellTabColumns = 3
 )
 
 // ErrWrongWorkbook is returned by ValidateWorkbook when the picked

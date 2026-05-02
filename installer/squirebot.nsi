@@ -27,6 +27,15 @@
     !define APPVERSION "0.1.0"
 !endif
 
+; APPVERSIONNUMERIC is the strict X.X.X.X numeric form NSIS VIProductVersion
+; requires (it rejects prerelease suffixes like '-rc1'). CI passes both
+; APPVERSION (display, may include '-rc1') and APPVERSIONNUMERIC (numeric).
+; For local builds without a prerelease suffix, the fallback "${APPVERSION}.0"
+; works because non-prerelease APPVERSION values like "0.1.0" pad cleanly.
+!ifndef APPVERSIONNUMERIC
+    !define APPVERSIONNUMERIC "${APPVERSION}.0"
+!endif
+
 !define APPNAME    "SquireBot"
 !define EXE_NAME   "squirebot.exe"
 !define PUBLISHER  "boejowen"
@@ -52,7 +61,7 @@ BrandingText   "${APPNAME} ${APPVERSION}"
 InstallDir       "$LOCALAPPDATA\Programs\${APPNAME}"
 InstallDirRegKey HKCU "${REGPATH_UNINSTSUBKEY}" "InstallLocation"
 
-VIProductVersion "${APPVERSION}.0"
+VIProductVersion "${APPVERSIONNUMERIC}"
 VIAddVersionKey  "ProductName"      "${APPNAME}"
 VIAddVersionKey  "CompanyName"      "${PUBLISHER}"
 VIAddVersionKey  "FileDescription"  "SquireBot per-guildie watcher (P99 inventory -> Google Sheets)"

@@ -112,8 +112,18 @@ jobs:
             Write-Error "Could not derive version from tag or workflow_dispatch input"
             exit 1
           }
+          # NSIS VIProductVersion requires strictly numeric X.X.X.X format and
+          # rejects prerelease suffixes like '-rc1'. Strip the suffix and pad
+          # to 4 parts for the installer's VIProductVersion. Display strings
+          # (FileVersion, ProductVersion, BrandingText, OutFile, DisplayVersion)
+          # keep the full $version including any '-rc1' / '-beta.N' suffix.
+          $numeric = $version -replace '-.*$', ''
+          $parts = $numeric.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $numericVersion = $parts[0..3] -join '.'
           "version=$version" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-          Write-Host "Building version: $version"
+          "numeric_version=$numericVersion" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          Write-Host "Building version: $version (NSIS VIProductVersion: $numericVersion)"
 
       - name: Load OAuth constants from oauth-config.json (AUTH-03 gate)
         id: oauth
@@ -160,7 +170,7 @@ jobs:
       - name: Build NSIS installer (pre-manifest)
         shell: pwsh
         run: |
-          & $env:MAKENSIS /V2 /DAPPVERSION=${{ steps.ver.outputs.version }} installer/squirebot.nsi
+          & $env:MAKENSIS /V2 /DAPPVERSION=${{ steps.ver.outputs.version }} /DAPPVERSIONNUMERIC=${{ steps.ver.outputs.numeric_version }} installer/squirebot.nsi
           if ($LASTEXITCODE -ne 0) {
             Write-Error "makensis exited $LASTEXITCODE"
             exit $LASTEXITCODE

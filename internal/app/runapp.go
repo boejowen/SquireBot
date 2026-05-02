@@ -36,6 +36,7 @@ import (
 
 	"github.com/boejowen/SquireBot/internal/auth"
 	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/heartbeat"
 	"github.com/boejowen/SquireBot/internal/parse"
 	"github.com/boejowen/SquireBot/internal/picker"
 	"github.com/boejowen/SquireBot/internal/scaffold"
@@ -228,6 +229,14 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	t.SetSpreadsheetID(cfg.SpreadsheetID)
 	t.SetIconHealth(tray.HealthGreen)
 	t.SetStatus(fmt.Sprintf("Connected as %s — watching %s", cfg.GoogleEmail, strings.Join(folders, ", ")))
+
+	// Plan 02-05 (WATCH-08 + OPS-05): launch the heartbeat goroutine.
+	// Fires immediately, then every 24h. Goes through the same
+	// mutex-funneled c.batchUpdate as the watcher writes, so heartbeat
+	// fires cannot interleave with WriteInventory / WriteSpellbook.
+	// Honors globalAuthSuspended (skips the API call when true so we
+	// don't burn quota on doomed requests during a Reauthorize wait).
+	go heartbeat.Run(ctx, sc, cfg, cfg.GoogleEmail, bc.WatcherVersion, &globalAuthSuspended)
 
 	// Plan 02-04 (AUTH-05): pass &globalAuthSuspended through to the
 	// handlers. They will Store(true) on permanent auth failure and

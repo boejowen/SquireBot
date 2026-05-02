@@ -292,3 +292,215 @@ func TestWriteInventory_NoSpreadsheetID(t *testing.T) {
 		t.Fatal("expected error when spreadsheetID empty, got nil")
 	}
 }
+
+// ----------------------------------------------------------------------------
+// WriteSpellbook tests (Plan 02-02 Task 2). Symmetric to WriteInventory:
+// "exactly one batchUpdate, exactly one UpdateCellsRequest" (Critical
+// Constraint #3) + "every cell is StringValue, never NumberValue" (Pitfall #8).
+// Range is spell:<Char>!A1:C600 (SpellTabMaxRows × SpellTabColumns).
+// ----------------------------------------------------------------------------
+
+// Test 1 + 2 + 3 + 5 — atomic single call shape; GridRange dimensions; header
+// row order locked; Fields exact-string.
+func TestWriteSpellbook_AtomicSingleCall(t *testing.T) {
+	s := &writeStub{
+		t:          t,
+		sheetsList: []sheetInfo{{Title: "spell:Slampeach", SheetID: 777}},
+	}
+	c, srv := newWriteClient(t, s)
+	defer srv.Close()
+	c.tabs["spell:Slampeach"] = 777 // pre-cache so EnsureSheet does not Get
+
+	dataRows := [][]string{
+		{"9", "Lifetap"},
+		{"15", "Fear"},
+		{"30", "Heat Blood"},
+	}
+	err := c.WriteSpellbook(context.Background(), "Slampeach", SpellbookHeader, dataRows,
+		"2026-05-01T18:00:00Z")
+	if err != nil {
+		t.Fatalf("WriteSpellbook: %v", err)
+	}
+
+	// Test 1: exactly ONE batchUpdate.
+	if len(s.batchUpdates) != 1 {
+		t.Fatalf("batchUpdates = %d, want 1", len(s.batchUpdates))
+	}
+	req := s.batchUpdates[0]
+	if len(req.Requests) != 1 {
+		t.Fatalf("inner Requests = %d, want 1", len(req.Requests))
+	}
+	uc := req.Requests[0].UpdateCells
+	if uc == nil {
+		t.Fatal("expected UpdateCells request")
+	}
+
+	// Test 2: GridRange dimensions — A1:C600 on the spell:Slampeach sheet.
+	if uc.Range.SheetId != 777 {
+		t.Errorf("SheetId = %d, want 777", uc.Range.SheetId)
+	}
+	if uc.Range.StartRowIndex != 0 {
+		t.Errorf("StartRowIndex = %d, want 0", uc.Range.StartRowIndex)
+	}
+	if uc.Range.EndRowIndex != 600 {
+		t.Errorf("EndRowIndex = %d, want 600 (SpellTabMaxRows)", uc.Range.EndRowIndex)
+	}
+	if uc.Range.StartColumnIndex != 0 {
+		t.Errorf("StartColumnIndex = %d, want 0", uc.Range.StartColumnIndex)
+	}
+	if uc.Range.EndColumnIndex != 3 {
+		t.Errorf("EndColumnIndex = %d, want 3 (SpellTabColumns)", uc.Range.EndColumnIndex)
+	}
+
+	// Test 5: Fields exactly "userEnteredValue" — no wildcard, no commas.
+	if uc.Fields != "userEnteredValue" {
+		t.Errorf("Fields = %q, want \"userEnteredValue\"", uc.Fields)
+	}
+
+	// Test 3: header row order locked = [Level, Name, _uploaded_at].
+	if len(uc.Rows) != 4 {
+		t.Fatalf("Rows = %d, want 4 (header + 3 data)", len(uc.Rows))
+	}
+	header := uc.Rows[0]
+	if len(header.Values) != 3 {
+		t.Errorf("header cells = %d, want 3", len(header.Values))
+	}
+	wantHeader := []string{"Level", "Name", "_uploaded_at"}
+	for i, want := range wantHeader {
+		got := header.Values[i].UserEnteredValue
+		if got == nil || got.StringValue == nil {
+			t.Errorf("header[%d] not a StringValue", i)
+			continue
+		}
+		if *got.StringValue != want {
+			t.Errorf("header[%d] = %q, want %q", i, *got.StringValue, want)
+		}
+	}
+}
+
+// Test 2: every cell is StringValue, never NumberValue, even for the integer
+// Level column. Pitfall #8 enforcement.
+func TestWriteSpellbook_AllCellsAreStringValue(t *testing.T) {
+	s := &writeStub{
+		t:          t,
+		sheetsList: []sheetInfo{{Title: "spell:Foo", SheetID: 100}},
+	}
+	c, srv := newWriteClient(t, s)
+	defer srv.Close()
+	c.tabs["spell:Foo"] = 100
+
+	dataRows := [][]string{
+		{"9", "Lifetap"},
+		{"30", "Heat Blood"},
+	}
+	if err := c.WriteSpellbook(context.Background(), "Foo", SpellbookHeader, dataRows,
+		"2026-05-01T19:00:00Z"); err != nil {
+		t.Fatalf("WriteSpellbook: %v", err)
+	}
+
+	uc := s.batchUpdates[0].Requests[0].UpdateCells
+	for ri, row := range uc.Rows {
+		for ci, cell := range row.Values {
+			ev := cell.UserEnteredValue
+			if ev == nil {
+				t.Errorf("row %d col %d: nil UserEnteredValue", ri, ci)
+				continue
+			}
+			if ev.StringValue == nil {
+				t.Errorf("row %d col %d: StringValue is nil", ri, ci)
+			}
+			// Pitfall #8: Level looks numeric — MUST still be StringValue.
+			if ev.NumberValue != nil {
+				t.Errorf("row %d col %d: NumberValue = %v — Pitfall #8 violation", ri, ci, *ev.NumberValue)
+			}
+			if ev.FormulaValue != nil {
+				t.Errorf("row %d col %d: FormulaValue = %v — must be StringValue only", ri, ci, *ev.FormulaValue)
+			}
+		}
+	}
+
+	// Spot-check that Level column carries the literal string, not a parsed number.
+	level := uc.Rows[1].Values[0].UserEnteredValue
+	if level == nil || level.StringValue == nil || *level.StringValue != "9" {
+		t.Errorf("Level column for row 1 = %v, want StringValue=\"9\"", level)
+	}
+}
+
+// Test 3: data row layout — [level, name, uploadedAt].
+func TestWriteSpellbook_DataRowLayout(t *testing.T) {
+	s := &writeStub{
+		t:          t,
+		sheetsList: []sheetInfo{{Title: "spell:Layout", SheetID: 200}},
+	}
+	c, srv := newWriteClient(t, s)
+	defer srv.Close()
+	c.tabs["spell:Layout"] = 200
+
+	dataRows := [][]string{
+		{"22", "Vampiric Embrace"},
+	}
+	if err := c.WriteSpellbook(context.Background(), "Layout", SpellbookHeader, dataRows,
+		"2026-05-01T20:00:00Z"); err != nil {
+		t.Fatalf("WriteSpellbook: %v", err)
+	}
+	uc := s.batchUpdates[0].Requests[0].UpdateCells
+	if len(uc.Rows) != 2 {
+		t.Fatalf("Rows = %d, want 2 (header + 1 data)", len(uc.Rows))
+	}
+	data := uc.Rows[1]
+	if len(data.Values) != 3 {
+		t.Fatalf("data cells = %d, want 3", len(data.Values))
+	}
+	want := []string{"22", "Vampiric Embrace", "2026-05-01T20:00:00Z"}
+	for i, w := range want {
+		ev := data.Values[i].UserEnteredValue
+		if ev == nil || ev.StringValue == nil || *ev.StringValue != w {
+			t.Errorf("data[%d] = %v, want %q", i, ev, w)
+		}
+	}
+}
+
+// Test 4: WriteSpellbook with empty dataRows still issues a BatchUpdate with
+// only the header row + (SpellTabMaxRows-1) cleared rows. Symmetric to
+// WriteInventory's atomic-clear-on-empty behavior.
+func TestWriteSpellbook_EmptyDataRowsClearsRange(t *testing.T) {
+	s := &writeStub{
+		t:          t,
+		sheetsList: []sheetInfo{{Title: "spell:Empty", SheetID: 4321}},
+	}
+	c, srv := newWriteClient(t, s)
+	defer srv.Close()
+	c.tabs["spell:Empty"] = 4321
+
+	if err := c.WriteSpellbook(context.Background(), "Empty", SpellbookHeader,
+		nil, "2026-05-01T21:00:00Z"); err != nil {
+		t.Fatalf("WriteSpellbook: %v", err)
+	}
+	if len(s.batchUpdates) != 1 {
+		t.Fatalf("batchUpdates = %d, want 1", len(s.batchUpdates))
+	}
+	uc := s.batchUpdates[0].Requests[0].UpdateCells
+	if uc == nil {
+		t.Fatal("expected UpdateCells")
+	}
+	if len(uc.Rows) != 1 {
+		t.Errorf("Rows = %d, want 1 (header only)", len(uc.Rows))
+	}
+	// Range still spans A1:C600 so cells outside row 0 are cleared atomically.
+	if uc.Range.EndRowIndex != 600 {
+		t.Errorf("EndRowIndex = %d, want 600 (must still clear stale rows)", uc.Range.EndRowIndex)
+	}
+}
+
+// Spreadsheet not configured → return error rather than 4xx the API.
+func TestWriteSpellbook_NoSpreadsheetID(t *testing.T) {
+	ctx := context.Background()
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "fake"})
+	c, err := NewClient(ctx, ts, "")
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if err := c.WriteSpellbook(ctx, "Foo", SpellbookHeader, nil, ""); err == nil {
+		t.Fatal("expected error when spreadsheetID empty, got nil")
+	}
+}

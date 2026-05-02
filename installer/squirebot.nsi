@@ -97,30 +97,58 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
-    ; Stop a running instance before deleting the .exe (graceful kill).
+    ; Phase 2 (CONTEXT.md Q3): ask whether to fully wipe (config.json +
+    ; wincred token). Default focus = No (preserve), so reinstalling later
+    ; resumes work without re-OAuth. MB_DEFBUTTON2 puts focus on No.
+    Var /GLOBAL UninstallWipe
+    StrCpy $UninstallWipe "0"
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 \
+        "Also delete saved configuration and Google account credentials?$\r$\n$\r$\n\
+        Yes = full wipe (you will need to re-authenticate Google on next install).$\r$\n\
+        No  = preserve config.json and wincred (recommended; default)." \
+        IDYES UninstallWipeYes IDNO UninstallWipeNo
+    UninstallWipeYes:
+        StrCpy $UninstallWipe "1"
+        Goto UninstallWipeDone
+    UninstallWipeNo:
+        StrCpy $UninstallWipe "0"
+    UninstallWipeDone:
+
+    ; If full wipe requested AND the binary still exists, run it to
+    ; delete the wincred entry BEFORE we delete the binary. NSIS doesn't
+    ; speak DPAPI; only the Go binary can.
+    StrCmp $UninstallWipe "1" 0 SkipWipeBinary
+    IfFileExists "$INSTDIR\${EXE_NAME}" RunWipeBinary SkipWipeBinary
+    RunWipeBinary:
+        ExecWait '"$INSTDIR\${EXE_NAME}" --uninstall-wipe-credentials'
+    SkipWipeBinary:
+
+    ; Always: stop running instance before deleting the .exe (graceful kill).
     ExecWait 'taskkill /IM "${EXE_NAME}" /F'
 
+    ; Always: remove binary, icon, uninstaller.
     Delete "$INSTDIR\${EXE_NAME}"
     Delete "$INSTDIR\icon.ico"
     Delete "$INSTDIR\uninstall.exe"
     RMDir  "$INSTDIR"
 
-    ; Cleanup user data per Phase 1 uninstall policy.
-    Delete "$LOCALAPPDATA\${APPNAME}\config.json"
+    ; Always: remove rotated log files (low-sensitivity; preserving them
+    ; serves no recovery purpose).
     Delete "$LOCALAPPDATA\${APPNAME}\squirebot.log"
     Delete "$LOCALAPPDATA\${APPNAME}\squirebot.log.*"
-    RMDir  "$LOCALAPPDATA\${APPNAME}"
 
-    ; NOTE: wincred entry SquireBot:<email> is NOT auto-deleted -- DPAPI
-    ; tokens survive uninstall by design (re-install reuses the cached
-    ; refresh token, sparing the guildie a second OAuth round trip).
-    ; Manual cleanup if a guildie wants a full wipe:
-    ;   cmdkey /list                              (find SquireBot:<email>)
-    ;   cmdkey /delete:SquireBot:<email>
-    ; Documented in docs/build-and-install.md "Uninstalling".
+    ; Conditional: full wipe deletes config.json.
+    StrCmp $UninstallWipe "1" 0 SkipConfigDelete
+    Delete "$LOCALAPPDATA\${APPNAME}\config.json"
+    SkipConfigDelete:
 
-    ; INST-04 cleanup: remove the autostart Run-key value.
+    ; Always: try to remove the SquireBot LOCALAPPDATA dir (succeeds
+    ; only if empty -- preserves config.json under preserve-mode).
+    RMDir "$LOCALAPPDATA\${APPNAME}"
+
+    ; Always: remove autostart Run-key value (Phase 2 INST-04 cleanup).
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "SquireBot"
 
+    ; Always: remove uninstall registry subkey.
     DeleteRegKey HKCU "${REGPATH_UNINSTSUBKEY}"
 SectionEnd

@@ -57,7 +57,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           check-latest: true
 
       - name: Materialise oauth-config.json from secret

@@ -1,14 +1,22 @@
 name: release
 
-# Phase 1 release pipeline (Plan 08).
+# Phase 2 release pipeline (Plan 02-08).
 #
-# What this does:
+# Architecture: LINEAR explicit-step workflow. CI does NOT invoke
+# goreleaser (Pitfall F: a goreleaser-driven CI step would (a) dual-build
+# the binary, (b) complicate the AUTH-03 PRODUCTION gate's interaction
+# with goreleaser's declarative pipeline, and (c) risk clobbering the
+# gate during a future scaffold-regeneration). The .goreleaser.yaml at
+# the repo root exists for local snapshot builds only.
+#
+# What this workflow does (in order):
 #   1. Materialises oauth-config.json from the OAUTH_CONFIG_JSON repo
 #      secret. The local file is gitignored so CI must rebuild it.
 #   2. Refuses to build if consent_screen_status != "PRODUCTION" --
 #      AUTH-03 enforcement at the CI layer (Pitfall #1: Testing-mode
 #      refresh tokens silently expire after 7 days, so a non-Production
-#      release is always a bug).
+#      release is always a bug). This gate is preserved VERBATIM from
+#      Phase 1; do NOT remove it without a phase-level decision.
 #   3. Builds dist/squirebot.exe with -ldflags injecting the five
 #      build-time vars (OAuthClientID, OAuthClientSecret, PickerAPIKey,
 #      GCPProjectNumber, Version). OAuthClientSecret is required by
@@ -16,12 +24,17 @@ name: release
 #      docs/build-and-install.md "About the client secret".
 #   4. Installs NSIS (verifies version >= 3.10) and runs makensis to
 #      produce dist/SquireBot-Setup-<version>.exe.
-#   5. Computes SHA-256 of the installer, writes dist/latest.json --
-#      the manifest Phase 2's auto-updater (OPS-04) will consume.
-#   6. Uploads both artifacts. On tag push, also creates a GitHub Release.
+#   5. Computes SHA-256 of BOTH the installer and the bare binary;
+#      writes dist/latest.json -- the Phase 2 manifest the auto-updater
+#      (Plan 02-06 / OPS-04) will consume. Schema includes binary_url +
+#      binary_sha256 in addition to installer_url + installer_sha256.
+#   6. Uploads three artifacts (installer .exe, bare squirebot.exe,
+#      latest.json). On tag push, also creates a GitHub Release using
+#      the canonical action.
 #
-# Phase 1 ships unsigned (D-13). Phase 2 will add a code-signing step
-# between the makensis step and the Compute SHA-256 step.
+# Phase 2 still ships unsigned (D-13 inherited from Phase 1). SignPath
+# OSS code-signing (Plan 02-09) will land as an additional workflow
+# step between makensis and Compute SHA-256 -- not via goreleaser.
 
 on:
   push:
@@ -34,7 +47,7 @@ on:
         required: true
 
 permissions:
-  contents: write   # required by softprops/action-gh-release
+  contents: write   # required for creating a GitHub Release
 
 jobs:
   release:
@@ -123,23 +136,28 @@ jobs:
           "api_key=$($cfg.picker_api_key)"             | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
           "project_num=$($cfg.gcp_project_number)"     | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
 
-      - name: Build squirebot.exe
+      - name: Build bare squirebot.exe (pre-NSIS, pre-manifest)
         shell: pwsh
         env:
           GOOS: windows
           GOARCH: amd64
+          CGO_ENABLED: '0'
+          OAUTH_CLIENT_ID:     ${{ steps.oauth.outputs.client_id }}
+          OAUTH_CLIENT_SECRET: ${{ steps.oauth.outputs.client_secret }}
+          PICKER_API_KEY:      ${{ steps.oauth.outputs.api_key }}
+          GCP_PROJECT_NUMBER:  ${{ steps.oauth.outputs.project_num }}
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $ldflags = "-H=windowsgui -s -w " +
-                     "-X main.OAuthClientID=${{ steps.oauth.outputs.client_id }} " +
-                     "-X main.OAuthClientSecret=${{ steps.oauth.outputs.client_secret }} " +
-                     "-X main.PickerAPIKey=${{ steps.oauth.outputs.api_key }} " +
-                     "-X main.GCPProjectNumber=${{ steps.oauth.outputs.project_num }} " +
+                     "-X main.OAuthClientID=$env:OAUTH_CLIENT_ID " +
+                     "-X main.OAuthClientSecret=$env:OAUTH_CLIENT_SECRET " +
+                     "-X main.PickerAPIKey=$env:PICKER_API_KEY " +
+                     "-X main.GCPProjectNumber=$env:GCP_PROJECT_NUMBER " +
                      "-X main.Version=${{ steps.ver.outputs.version }}"
           go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
           Get-Item dist/squirebot.exe | Select-Object Name, Length
 
-      - name: Build NSIS installer
+      - name: Build NSIS installer (pre-manifest)
         shell: pwsh
         run: |
           & $env:MAKENSIS /V2 /DAPPVERSION=${{ steps.ver.outputs.version }} installer/squirebot.nsi
@@ -149,25 +167,40 @@ jobs:
           }
           Get-Item dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe | Select-Object Name, Length
 
-      - name: Compute SHA-256 of installer
-        id: hash
+      - name: Compute SHA-256 sums (installer + bare binary)
+        id: hashes
         shell: pwsh
         run: |
-          $path = "dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe"
-          $h = (Get-FileHash $path -Algorithm SHA256).Hash.ToLower()
-          Write-Host "SHA-256: $h"
-          "sha256=$h" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          $installerPath = "dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe"
+          $binaryPath    = "dist/squirebot.exe"
+          $installerHash = (Get-FileHash $installerPath -Algorithm SHA256).Hash.ToLower()
+          $binaryHash    = (Get-FileHash $binaryPath    -Algorithm SHA256).Hash.ToLower()
+          Write-Host "Installer SHA-256: $installerHash"
+          Write-Host "Binary    SHA-256: $binaryHash"
+          "installer_sha256=$installerHash" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "binary_sha256=$binaryHash"       | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
 
-      - name: Write latest.json (Phase 2 auto-updater manifest)
+      - name: Write latest.json (Phase 2 manifest with both URLs)
         shell: pwsh
         run: |
+          # Phase 2 manifest schema (consumed by Plan 02-06 auto-updater):
+          #   { version, installer_url, installer_sha256, binary_url,
+          #     binary_sha256, released_at, phase, signed }
+          # binary_url is the bare squirebot.exe asset that the in-app
+          # auto-updater downloads + SHA-256-verifies before the startup
+          # swap. Keep this schema in lockstep with internal/update/manifest.go.
+          $version = "${{ steps.ver.outputs.version }}"
+          $owner   = "${{ github.repository_owner }}"
+          $repo    = "${{ github.event.repository.name }}"
           $manifest = @{
-            version           = "${{ steps.ver.outputs.version }}"
-            installer_url     = "https://github.com/${{ github.repository }}/releases/download/v${{ steps.ver.outputs.version }}/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe"
-            installer_sha256  = "${{ steps.hash.outputs.sha256 }}"
-            released_at       = (Get-Date).ToUniversalTime().ToString("o")
-            phase             = 1
-            signed            = $false
+            version          = $version
+            installer_url    = "https://github.com/$owner/$repo/releases/download/v$version/SquireBot-Setup-$version.exe"
+            installer_sha256 = "${{ steps.hashes.outputs.installer_sha256 }}"
+            binary_url       = "https://github.com/$owner/$repo/releases/download/v$version/squirebot.exe"
+            binary_sha256    = "${{ steps.hashes.outputs.binary_sha256 }}"
+            released_at      = (Get-Date).ToUniversalTime().ToString("o")
+            phase            = 2
+            signed           = $false
           }
           $manifest | ConvertTo-Json -Depth 4 | Out-File -Encoding utf8 -NoNewline dist/latest.json
           Get-Content dist/latest.json
@@ -175,9 +208,10 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: squirebot-installer
+          name: squirebot-release
           path: |
             dist/SquireBot-Setup-*.exe
+            dist/squirebot.exe
             dist/latest.json
           if-no-files-found: error
 
@@ -187,16 +221,25 @@ jobs:
         with:
           files: |
             dist/SquireBot-Setup-*.exe
+            dist/squirebot.exe
             dist/latest.json
           body: |
-            SquireBot ${{ steps.ver.outputs.version }} -- Phase 1 unsigned release.
+            SquireBot ${{ steps.ver.outputs.version }} -- Phase 2 unsigned release.
 
             **Install:** download `SquireBot-Setup-${{ steps.ver.outputs.version }}.exe`,
             double-click, walk through the SmartScreen "More info -> Run anyway"
-            wall (D-13: Phase 1 ships unsigned). NSIS wizard installs to
-            `%LOCALAPPDATA%\Programs\SquireBot\` with no UAC prompt.
+            wall (D-13: Phase 2 still ships unsigned; SignPath OSS pending).
+            NSIS wizard installs to `%LOCALAPPDATA%\Programs\SquireBot\` with
+            no UAC prompt.
+
+            **Auto-updater asset:** `squirebot.exe` (bare binary, ~17 MB) is
+            consumed by the in-app auto-updater (OPS-04 / Plan 02-06) via
+            `binary_url` in `latest.json`. End users do NOT download this
+            file directly.
 
             See [docs/build-and-install.md](https://github.com/${{ github.repository }}/blob/main/docs/build-and-install.md)
             for the full local-build + smoke instructions.
 
-            SHA-256: `${{ steps.hash.outputs.sha256 }}`
+            SHA-256 sums:
+            - Installer: `${{ steps.hashes.outputs.installer_sha256 }}`
+            - Bare binary: `${{ steps.hashes.outputs.binary_sha256 }}`

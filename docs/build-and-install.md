@@ -224,26 +224,49 @@ to the VM and check off each step as you go.
 
 ## Uninstalling
 
-Either path works (both invoke `uninstall.exe`):
+SquireBot is uninstalled the standard Windows way: **Settings -> Apps ->
+Apps & features -> SquireBot -> Uninstall** (or via the Start Menu
+shortcut's right-click menu, or by running
+`%LOCALAPPDATA%\Programs\SquireBot\uninstall.exe` directly).
 
-- **Settings -> Apps -> Installed apps -> SquireBot -> Uninstall** (uses
-  the HKCU `UninstallString` value).
-- **Run `%LOCALAPPDATA%\Programs\SquireBot\uninstall.exe` directly.**
+During uninstall, SquireBot asks:
 
-The uninstaller deletes:
-- `%LOCALAPPDATA%\Programs\SquireBot\` (the binary, icon, uninstaller)
-- `%LOCALAPPDATA%\SquireBot\config.json`
-- `%LOCALAPPDATA%\SquireBot\squirebot.log*`
-- The HKCU Uninstall registry subkey
+> **Also delete saved configuration and Google account credentials?**
+>
+> - **Yes** -> full wipe. `%LOCALAPPDATA%\SquireBot\config.json` is
+>   deleted, and the Windows Credential Manager entry
+>   `SquireBot:<your-email>` is removed. Reinstalling later will require
+>   completing the wizard + Google OAuth flow from scratch.
+> - **No** *(recommended; default)* -> preserve config.json and the
+>   wincred entry. Reinstalling later resumes immediately, with no
+>   re-authentication needed.
 
-It deliberately does **not** delete the wincred refresh-token entry; a
-re-install reuses the cached token and skips the OAuth round trip. To wipe
-the token manually:
+**Always removed regardless of the prompt answer:**
+
+- The `squirebot.exe` binary and `icon.ico` from
+  `%LOCALAPPDATA%\Programs\SquireBot\`.
+- The autostart entry under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\SquireBot`.
+- The uninstall registry subkey
+  (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\SquireBot`).
+- Rotated log files under `%LOCALAPPDATA%\SquireBot\squirebot.log*`.
+
+### Manual recovery (if you chose "No" but later want a full wipe)
+
+Open PowerShell:
 
 ```powershell
-cmdkey /list | Select-String SquireBot       # find target name
-cmdkey /delete:SquireBot:<email>             # delete it
+# 1. List your SquireBot wincred entries
+cmdkey /list | Select-String 'SquireBot:'
+
+# 2. Delete the entry (replace <email> with whatever the list showed)
+cmdkey /delete:SquireBot:<email>
+
+# 3. Delete config
+Remove-Item "$env:LOCALAPPDATA\SquireBot\config.json"
 ```
+
+The next install will trigger a fresh OAuth wizard.
 
 ---
 

@@ -30,8 +30,8 @@
 
 !define APPNAME    "SquireBot"
 !define EXE_NAME   "squirebot.exe"
-!define PUBLISHER  "jbowen-mn"
-!define ABOUTURL   "https://github.com/jbowen-mn/squirebot"
+!define PUBLISHER  "boejowen"
+!define ABOUTURL   "https://github.com/boejowen/SquireBot"
 !define REGPATH_UNINSTSUBKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
 
 ; --- THE critical directive: no UAC. ---

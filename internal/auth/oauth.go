@@ -68,7 +68,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
-	"github.com/jbowen-mn/squirebot/internal/config"
+	"github.com/boejowen/SquireBot/internal/config"
 )
 
 // ManualPasteTimeout is the AUTH-01 deadline after which the wizard

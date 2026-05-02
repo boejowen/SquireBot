@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/jbowen-mn/squirebot/internal/config"
+	"github.com/boejowen/SquireBot/internal/config"
 )
 
 // fixedBC is a stable BuildConstants used across the offline tests in

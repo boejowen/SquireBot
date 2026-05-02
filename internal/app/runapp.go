@@ -31,14 +31,14 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/jbowen-mn/squirebot/internal/auth"
-	"github.com/jbowen-mn/squirebot/internal/config"
-	"github.com/jbowen-mn/squirebot/internal/parse"
-	"github.com/jbowen-mn/squirebot/internal/picker"
-	"github.com/jbowen-mn/squirebot/internal/sheet"
-	"github.com/jbowen-mn/squirebot/internal/tray"
-	"github.com/jbowen-mn/squirebot/internal/watch"
-	"github.com/jbowen-mn/squirebot/internal/wizard"
+	"github.com/boejowen/SquireBot/internal/auth"
+	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/parse"
+	"github.com/boejowen/SquireBot/internal/picker"
+	"github.com/boejowen/SquireBot/internal/sheet"
+	"github.com/boejowen/SquireBot/internal/tray"
+	"github.com/boejowen/SquireBot/internal/watch"
+	"github.com/boejowen/SquireBot/internal/wizard"
 )
 
 // charNameRE extracts <Char> from "<Char>-Inventory.txt". Phase 1

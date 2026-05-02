@@ -23,9 +23,9 @@ import (
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
 
-	"github.com/jbowen-mn/squirebot/internal/auth"
-	"github.com/jbowen-mn/squirebot/internal/config"
-	"github.com/jbowen-mn/squirebot/internal/sheet"
+	"github.com/boejowen/SquireBot/internal/auth"
+	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/sheet"
 )
 
 // errTokenSource always returns an error from Token(); used to drive Test 6.

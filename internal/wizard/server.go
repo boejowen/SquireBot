@@ -35,11 +35,11 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/jbowen-mn/squirebot/internal/auth"
-	"github.com/jbowen-mn/squirebot/internal/config"
-	"github.com/jbowen-mn/squirebot/internal/eqfind"
-	"github.com/jbowen-mn/squirebot/internal/picker"
-	"github.com/jbowen-mn/squirebot/internal/sheet"
+	"github.com/boejowen/SquireBot/internal/auth"
+	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/eqfind"
+	"github.com/boejowen/SquireBot/internal/picker"
+	"github.com/boejowen/SquireBot/internal/sheet"
 )
 
 // FolderPicker abstracts the sqweek/dialog native folder dialog so tests

@@ -68,7 +68,7 @@ You do **not** need to enable People API, Identity Toolkit, or any "Google+ API"
    - **User support email:** your own Gmail address (Google requires a real, monitored mailbox).
    - **App logo:** optional. Skip in Phase 1.
 4. **App domain:**
-   - **Application home page:** the GitHub repo URL (e.g. `https://github.com/jbowen-mn/squirebot`). Optional but Google nudges for it.
+   - **Application home page:** the GitHub repo URL (e.g. `https://github.com/boejowen/SquireBot`). Optional but Google nudges for it.
    - **Application privacy policy / Terms of service:** leave blank for now.
 5. **Authorized domains:** **leave empty.** Desktop OAuth clients with loopback redirect_uri do not need authorized domains. (Adding one will not hurt, but is unnecessary noise.)
 6. **Developer contact information:** your Gmail address.

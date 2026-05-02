@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/jbowen-mn/squirebot/internal/config"
+	"github.com/boejowen/SquireBot/internal/config"
 )
 
 func TestExtractCharName(t *testing.T) {

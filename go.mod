@@ -1,4 +1,4 @@
-module github.com/jbowen-mn/squirebot
+module github.com/boejowen/SquireBot
 
 go 1.25.0
 

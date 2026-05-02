@@ -68,7 +68,7 @@ For a stamped release build append `-X main.Version=v0.1.0` to the ldflags.
 
 ## Forking / changing the module owner
 
-The default module path is `github.com/jbowen-mn/squirebot`. If you fork to
+The default module path is `github.com/boejowen/SquireBot`. If you fork to
 your own account, rename in one shot:
 
 ```bash

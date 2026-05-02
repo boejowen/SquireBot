@@ -1,6 +1,6 @@
 package main
 
-import "github.com/jbowen-mn/squirebot/assets"
+import "github.com/boejowen/SquireBot/assets"
 
 // iconBytes is the embedded tray icon, re-exported from the assets package.
 //

@@ -24,9 +24,9 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/jbowen-mn/squirebot/internal/auth"
-	"github.com/jbowen-mn/squirebot/internal/config"
-	"github.com/jbowen-mn/squirebot/internal/sheet"
+	"github.com/boejowen/SquireBot/internal/auth"
+	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/sheet"
 )
 
 // makeBuildConstants returns a populated BuildConstants so authMgr.AuthURL

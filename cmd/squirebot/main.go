@@ -13,11 +13,11 @@ import (
 
 	"fyne.io/systray"
 
-	"github.com/jbowen-mn/squirebot/internal/app"
-	"github.com/jbowen-mn/squirebot/internal/auth"
-	"github.com/jbowen-mn/squirebot/internal/config"
-	"github.com/jbowen-mn/squirebot/internal/logging"
-	"github.com/jbowen-mn/squirebot/internal/tray"
+	"github.com/boejowen/SquireBot/internal/app"
+	"github.com/boejowen/SquireBot/internal/auth"
+	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/logging"
+	"github.com/boejowen/SquireBot/internal/tray"
 )
 
 func main() {

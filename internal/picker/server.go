@@ -42,9 +42,9 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/jbowen-mn/squirebot/internal/auth"
-	"github.com/jbowen-mn/squirebot/internal/config"
-	"github.com/jbowen-mn/squirebot/internal/sheet"
+	"github.com/boejowen/SquireBot/internal/auth"
+	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/sheet"
 )
 
 // defaultRedirectAfterPick is the wizard step Plan 07 owns. The handler

@@ -27,6 +27,7 @@ type Config struct {
 	LastKnownInventoryMtime map[string]string `json:"last_known_inventory_mtime"`           // Plan 02-02 WATCH-09 catch-up: per-char inventory mtime
 	LastKnownSpellbookMtime map[string]string `json:"last_known_spellbook_mtime"`           // Plan 02-02 WATCH-09 catch-up: per-char spellbook mtime
 	LogLevel                string            `json:"log_level"`                            // "info" default
+	PendingUpdateVersion    string            `json:"pending_update_version,omitempty"`     // Plan 02-06 OPS-04 informational; the .new file presence is the SOURCE OF TRUTH for whether a swap will happen on next launch — this field is for diagnostics only
 }
 
 // pathFn is the directory resolver used to compute the config path.

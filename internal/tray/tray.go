@@ -36,13 +36,14 @@ type MenuItem struct {
 // Canonical menu labels — exported so callers / tests can reference
 // them by name without relying on string-literal duplication.
 const (
-	LabelStatus          = "Initialising…" // disabled status row, mutated by SetStatus
-	LabelOpenWorkbook    = "Open Workbook"
-	LabelOpenLogFolder   = "Open log folder"
-	LabelChangeWorkbook  = "Change Workbook…"
-	LabelContinueSetup   = "Continue setup…"
-	LabelReauthorize     = "Reauthorize…" // Plan 02-04 (AUTH-05): hidden until ErrPermanentAuth/IsRevokedRefreshToken trips authSuspended
-	LabelQuit            = "Quit"
+	LabelStatus         = "Initialising…" // disabled status row, mutated by SetStatus
+	LabelOpenWorkbook   = "Open Workbook"
+	LabelOpenLogFolder  = "Open log folder"
+	LabelCheckUpdates   = "Check for updates" // Plan 02-06 (OPS-04): manual fire of update.CheckOnce
+	LabelChangeWorkbook = "Change Workbook…"
+	LabelContinueSetup  = "Continue setup…"
+	LabelReauthorize    = "Reauthorize…" // Plan 02-04 (AUTH-05): hidden until ErrPermanentAuth/IsRevokedRefreshToken trips authSuspended
+	LabelQuit           = "Quit"
 )
 
 // MenuPlan returns the ordered list of action menu items the tray
@@ -54,6 +55,7 @@ func MenuPlan() []MenuItem {
 	return []MenuItem{
 		{Label: LabelOpenWorkbook, Tooltip: "Open the configured Google Sheet in your browser"},
 		{Label: LabelOpenLogFolder, Tooltip: `Open %LOCALAPPDATA%\SquireBot in Explorer`},
+		{Label: LabelCheckUpdates, Tooltip: "Check GitHub Releases for a newer SquireBot; downloads + verifies in the background."},
 		{Label: LabelChangeWorkbook, Tooltip: "Pick a different SquireBot workbook (re-runs Picker)"},
 		{Label: LabelContinueSetup, Tooltip: "Resume the SquireBot wizard"},
 		{Label: LabelReauthorize, Tooltip: "Refresh token died. Click to re-sign-in to Google."},
@@ -78,6 +80,7 @@ type Config struct {
 	SpreadsheetID    string // initial; can be empty (wizard not yet run)
 	OnContinueSetup  func() // wizard re-entry trigger (D-07)
 	OnChangeWorkbook func() // D-04: re-run picker on existing token
+	OnCheckUpdates   func() // Plan 02-06 (OPS-04): manual fire of update.CheckOnce
 	OnReauthorize    func() // Plan 02-04 (AUTH-05): re-run OAuth loopback flow on refresh-token death
 	OnQuit           func() // app shutdown trigger
 }
@@ -96,6 +99,7 @@ type Controller struct {
 	mStatus         *systray.MenuItem
 	mWorkbook       *systray.MenuItem
 	mLogs           *systray.MenuItem
+	mCheckUpdates   *systray.MenuItem // Plan 02-06 (OPS-04)
 	mChangeWorkbook *systray.MenuItem // D-04
 	mContinueSetup  *systray.MenuItem // D-07 (hidden by default)
 	mReauthorize    *systray.MenuItem // Plan 02-04 (AUTH-05) — hidden by default
@@ -103,6 +107,7 @@ type Controller struct {
 
 	onContinueSetup  func()
 	onChangeWorkbook func()
+	onCheckUpdates   func()
 	onReauthorize    func()
 	onQuit           func()
 }
@@ -117,6 +122,7 @@ func NewController(c Config) *Controller {
 		spreadsheetID:    c.SpreadsheetID,
 		onContinueSetup:  c.OnContinueSetup,
 		onChangeWorkbook: c.OnChangeWorkbook,
+		onCheckUpdates:   c.OnCheckUpdates,
 		onReauthorize:    c.OnReauthorize,
 		onQuit:           c.OnQuit,
 	}
@@ -139,13 +145,14 @@ func (t *Controller) OnReady() {
 	plan := MenuPlan()
 	t.mWorkbook = systray.AddMenuItem(plan[0].Label, plan[0].Tooltip)       // Open Workbook
 	t.mLogs = systray.AddMenuItem(plan[1].Label, plan[1].Tooltip)           // Open log folder
-	t.mChangeWorkbook = systray.AddMenuItem(plan[2].Label, plan[2].Tooltip) // Change Workbook… (D-04)
-	t.mContinueSetup = systray.AddMenuItem(plan[3].Label, plan[3].Tooltip)  // Continue setup… (D-07)
+	t.mCheckUpdates = systray.AddMenuItem(plan[2].Label, plan[2].Tooltip)   // Check for updates (Plan 02-06 / OPS-04)
+	t.mChangeWorkbook = systray.AddMenuItem(plan[3].Label, plan[3].Tooltip) // Change Workbook… (D-04)
+	t.mContinueSetup = systray.AddMenuItem(plan[4].Label, plan[4].Tooltip)  // Continue setup… (D-07)
 	t.mContinueSetup.Hide()                                                 // D-07: shown only when wizard is incomplete
-	t.mReauthorize = systray.AddMenuItem(plan[4].Label, plan[4].Tooltip)    // Reauthorize… (Plan 02-04 / AUTH-05)
+	t.mReauthorize = systray.AddMenuItem(plan[5].Label, plan[5].Tooltip)    // Reauthorize… (Plan 02-04 / AUTH-05)
 	t.mReauthorize.Hide()                                                   // surfaced only when authSuspended is true
 	systray.AddSeparator()
-	t.mQuit = systray.AddMenuItem(plan[5].Label, plan[5].Tooltip) // Quit
+	t.mQuit = systray.AddMenuItem(plan[6].Label, plan[6].Tooltip) // Quit
 
 	go t.loop()
 }
@@ -179,6 +186,14 @@ func (t *Controller) loop() {
 			}
 			if err := exec.Command("explorer.exe", filepath.Clean(t.logDir)).Start(); err != nil {
 				slog.Warn("Open log folder failed", "err", err)
+			}
+		case _, ok := <-t.mCheckUpdates.ClickedCh:
+			if !ok {
+				return
+			}
+			slog.Info("Check for updates clicked")
+			if t.onCheckUpdates != nil {
+				t.onCheckUpdates()
 			}
 		case _, ok := <-t.mChangeWorkbook.ClickedCh:
 			if !ok {

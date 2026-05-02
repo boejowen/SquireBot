@@ -71,19 +71,31 @@ func TestHealthConstants(t *testing.T) {
 // Hotfix #4 motivation: the live binary was observed missing
 // "Open log folder" — this test now fails-loud if anyone removes it.
 //
-// Plan 02-04 (AUTH-05): Reauthorize lands at index 4, between Continue
-// setup… and Quit. Hidden by default; surfaced when ErrPermanentAuth /
-// IsRevokedRefreshToken trips the watcher's authSuspended flag.
+// Plan 02-04 (AUTH-05): Reauthorize sits between Continue setup… and Quit.
+// Plan 02-06 (OPS-04): "Check for updates" inserted at index 2 (between
+// Open log folder and Change Workbook…). Final 7-item order:
+//
+//	0  Open Workbook
+//	1  Open log folder         — CONTEXT.md mandatory (hotfix #4)
+//	2  Check for updates       — Plan 02-06 (OPS-04)
+//	3  Change Workbook…        — D-04
+//	4  Continue setup…         — D-07 (hidden until needsWizard)
+//	5  Reauthorize…            — Plan 02-04 (AUTH-05) (hidden until authSuspended)
+//	6  Quit
+//
+// Hidden-by-default items (Continue setup, Reauthorize) still occupy a
+// MenuPlan slot — the slot exists; visibility is the runtime concern.
 func TestMenuPlan_ContextMandatoryItems(t *testing.T) {
 	plan := MenuPlan()
 
 	wantOrder := []string{
 		LabelOpenWorkbook,   // 0
 		LabelOpenLogFolder,  // 1 — CONTEXT.md mandatory, hotfix #4
-		LabelChangeWorkbook, // 2 — D-04
-		LabelContinueSetup,  // 3 — D-07
-		LabelReauthorize,    // 4 — Plan 02-04 (AUTH-05)
-		LabelQuit,           // 5
+		LabelCheckUpdates,   // 2 — Plan 02-06 (OPS-04)
+		LabelChangeWorkbook, // 3 — D-04
+		LabelContinueSetup,  // 4 — D-07
+		LabelReauthorize,    // 5 — Plan 02-04 (AUTH-05)
+		LabelQuit,           // 6
 	}
 
 	if len(plan) != len(wantOrder) {
@@ -182,6 +194,7 @@ func TestLabelConstants_Stable(t *testing.T) {
 	cases := map[string]string{
 		"LabelOpenWorkbook":   LabelOpenWorkbook,
 		"LabelOpenLogFolder":  LabelOpenLogFolder,
+		"LabelCheckUpdates":   LabelCheckUpdates,
 		"LabelChangeWorkbook": LabelChangeWorkbook,
 		"LabelContinueSetup":  LabelContinueSetup,
 		"LabelReauthorize":    LabelReauthorize,
@@ -190,6 +203,7 @@ func TestLabelConstants_Stable(t *testing.T) {
 	want := map[string]string{
 		"LabelOpenWorkbook":   "Open Workbook",
 		"LabelOpenLogFolder":  "Open log folder",
+		"LabelCheckUpdates":   "Check for updates",
 		"LabelChangeWorkbook": "Change Workbook…",
 		"LabelContinueSetup":  "Continue setup…",
 		"LabelReauthorize":    "Reauthorize…",
@@ -199,5 +213,48 @@ func TestLabelConstants_Stable(t *testing.T) {
 		if got != want[name] {
 			t.Errorf("%s = %q, want %q", name, got, want[name])
 		}
+	}
+}
+
+// TestMenuPlan_CheckUpdatesPosition (Plan 02-06) pins LabelCheckUpdates
+// between LabelOpenLogFolder and LabelChangeWorkbook so update concerns
+// sit alongside the other operational menu items.
+func TestMenuPlan_CheckUpdatesPosition(t *testing.T) {
+	plan := MenuPlan()
+	idxLogs, idxCheck, idxChange := -1, -1, -1
+	for i, item := range plan {
+		switch item.Label {
+		case LabelOpenLogFolder:
+			idxLogs = i
+		case LabelCheckUpdates:
+			idxCheck = i
+		case LabelChangeWorkbook:
+			idxChange = i
+		}
+	}
+	if idxCheck == -1 {
+		t.Fatal(`"Check for updates" missing from MenuPlan (OPS-04)`)
+	}
+	if !(idxLogs < idxCheck && idxCheck < idxChange) {
+		t.Errorf("expected Open log folder (%d) < Check for updates (%d) < Change Workbook… (%d)",
+			idxLogs, idxCheck, idxChange)
+	}
+}
+
+// TestOnCheckUpdatesCallback_Wired (Plan 02-06) verifies the
+// OnCheckUpdates closure is propagated from Config into the Controller's
+// internal callback field. Live menu-click semantics validated by Plan
+// 08's smoke checkpoint.
+func TestOnCheckUpdatesCallback_Wired(t *testing.T) {
+	calls := 0
+	c := NewController(Config{
+		OnCheckUpdates: func() { calls++ },
+	})
+	if c.onCheckUpdates == nil {
+		t.Fatal("Controller.onCheckUpdates not wired from Config.OnCheckUpdates")
+	}
+	c.onCheckUpdates()
+	if calls != 1 {
+		t.Errorf("calls = %d, want 1", calls)
 	}
 }

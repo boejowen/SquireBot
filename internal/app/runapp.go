@@ -42,6 +42,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/scaffold"
 	"github.com/boejowen/SquireBot/internal/sheet"
 	"github.com/boejowen/SquireBot/internal/tray"
+	"github.com/boejowen/SquireBot/internal/update"
 	"github.com/boejowen/SquireBot/internal/watch"
 	"github.com/boejowen/SquireBot/internal/wizard"
 )
@@ -237,6 +238,21 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	// Honors globalAuthSuspended (skips the API call when true so we
 	// don't burn quota on doomed requests during a Reauthorize wait).
 	go heartbeat.Run(ctx, sc, cfg, cfg.GoogleEmail, bc.WatcherVersion, &globalAuthSuspended)
+
+	// Plan 02-06 (OPS-04): launch the auto-update daily-check goroutine
+	// alongside the heartbeat. Independent goroutines: heartbeat goes
+	// through Sheets API (mutex-funneled batchUpdate); auto-update goes
+	// through direct net/http to GitHub Releases. No coordination needed.
+	// On a successful staging the statusFn updates the tray status; the
+	// startup-swap (cmd/squirebot/main.go update.Apply) takes effect on
+	// the next launch. Owner/repo are hard-coded to the canonical
+	// repository — Phase 5+ may switch to ldflag injection if forking
+	// becomes a real concern (CONTEXT.md Claude's Discretion).
+	if exe, err := os.Executable(); err != nil {
+		slog.Warn("os.Executable failed; auto-update goroutine not launched", "err", err)
+	} else {
+		go update.RunDailyCheck(ctx, "boejowen", "SquireBot", bc.WatcherVersion, exe, func(msg string) { t.SetStatus(msg) })
+	}
 
 	// Plan 02-04 (AUTH-05): pass &globalAuthSuspended through to the
 	// handlers. They will Store(true) on permanent auth failure and

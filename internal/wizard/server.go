@@ -322,7 +322,12 @@ func (s *Server) handleEQFolderConfirm(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest)
 		return
 	}
+	// Plan 02-02 (WATCH-03): write BOTH the legacy single-folder field and
+	// the Phase 2 multi-folder slice so runWatcher reads either correctly
+	// without depending on a fresh config.Load round-trip. Phase 5 will
+	// own the multi-folder wizard UX; this one is single-folder only.
 	s.cfg.EQFolder = path
+	s.cfg.EQFolders = []string{path}
 	if err := s.cfg.Save(); err != nil {
 		http.Error(w, "Failed to save: "+err.Error(), http.StatusInternalServerError)
 		return

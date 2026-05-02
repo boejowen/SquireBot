@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -43,9 +44,13 @@ import (
 	"github.com/boejowen/SquireBot/internal/wizard"
 )
 
-// charNameRE extracts <Char> from "<Char>-Inventory.txt". Phase 1
-// ignores anything that doesn't match (spellbook handling = Phase 2).
+// charNameRE extracts <Char> from "<Char>-Inventory.txt". Plan 02-02 Task 5
+// adds a parallel charNameSpellbookRE for "<Char>-Spellbook.txt".
 var charNameRE = regexp.MustCompile(`^(.+)-Inventory\.txt$`)
+
+// charNameSpellbookRE extracts <Char> from "<Char>-Spellbook.txt".
+// Mirrors charNameRE for the WATCH-02 spellbook handler.
+var charNameSpellbookRE = regexp.MustCompile(`^(.+)-Spellbook\.txt$`)
 
 // changeWorkbookTimeout is how long ChangeWorkbook waits for the user
 // to complete a pick before it gives up and tears down the listener.
@@ -111,8 +116,14 @@ func RunApp(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *
 
 // needsWizard reports whether any of the three config values RunApp
 // needs is missing. Used by both RunApp and the tray's startup flow.
+//
+// Plan 02-02 (WATCH-03): folder presence is satisfied by EITHER the legacy
+// single-string EQFolder OR the new EQFolders slice; either is enough.
 func needsWizard(cfg *config.Config) bool {
-	return cfg.GoogleEmail == "" || cfg.SpreadsheetID == "" || cfg.EQFolder == ""
+	if cfg.GoogleEmail == "" || cfg.SpreadsheetID == "" {
+		return true
+	}
+	return cfg.EQFolder == "" && len(cfg.EQFolders) == 0
 }
 
 // buildTokenSourceFromWincred reconstructs an oauth2.TokenSource from
@@ -151,8 +162,14 @@ func buildTokenSourceFromWincred(ctx context.Context, cfg *config.Config, bc aut
 }
 
 // runWatcher starts the watcher loop and dispatches parse → write →
-// upsert per inventory event. Returns when ctx is cancelled or
-// fsnotify errors fatally.
+// upsert per inventory or spellbook event. Returns when ctx is cancelled
+// or fsnotify errors fatally.
+//
+// Plan 02-02 (WATCH-02 + WATCH-03 + WATCH-09): spans every folder in
+// cfg.EQFolders (back-compat-shim'd from cfg.EQFolder by config.Load),
+// dispatches inventory + spellbook events to separate handlers, and
+// runs a startup catch-up scan so files saved while the watcher was
+// off are uploaded on the next launch.
 func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, ts oauth2.TokenSource) error {
 	sc, err := sheet.NewClient(ctx, ts, cfg.SpreadsheetID)
 	if err != nil {
@@ -178,24 +195,114 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 		return fmt.Errorf("scaffold schema v1: %w", err)
 	}
 
+	// Plan 02-02 (WATCH-03): determine the folders to watch. Prefer
+	// cfg.EQFolders (Phase 2 multi-folder); fall back to the legacy
+	// cfg.EQFolder for any pre-Phase-2 config that hasn't been re-saved
+	// yet. config.Load already shims EQFolder→EQFolders on read, so
+	// this fallback is belt-and-braces.
+	folders := cfg.EQFolders
+	if len(folders) == 0 && cfg.EQFolder != "" {
+		folders = []string{cfg.EQFolder}
+	}
+	if len(folders) == 0 {
+		return fmt.Errorf("no EQ folders configured (cfg.EQFolders empty)")
+	}
+
 	t.SetSpreadsheetID(cfg.SpreadsheetID)
 	t.SetIconHealth(tray.HealthGreen)
-	t.SetStatus(fmt.Sprintf("Connected as %s — watching %s", cfg.GoogleEmail, filepath.Base(cfg.EQFolder)))
+	t.SetStatus(fmt.Sprintf("Connected as %s — watching %s", cfg.GoogleEmail, strings.Join(folders, ", ")))
 
-	onChange := makeOnInventoryChange(ctx, sc, cfg, bc, t)
-	// Plan 02-02 Task 3 watcher signature change: multi-folder + dual-suffix.
-	// Spellbook handler + multi-folder config + WATCH-09 catch-up land in
-	// Task 4 / Task 5 of this plan; for now pass a single-element slice
-	// derived from the legacy cfg.EQFolder and a no-op spellbook handler.
-	noopSpellbook := func(string) {}
-	return watch.Run(ctx, []string{cfg.EQFolder}, onChange, noopSpellbook)
+	onInventory := makeOnInventoryChange(ctx, sc, cfg, bc, t)
+	onSpellbook := makeOnSpellbookChange(ctx, sc, cfg, bc, t)
+
+	// Plan 02-02 (WATCH-09): on startup, walk every folder and synthesize
+	// onInventory / onSpellbook calls for any file whose mtime is newer
+	// than the cached LastKnown*Mtime. A guildie who runs SquireBot 5
+	// minutes a day no longer loses snapshots produced while the watcher
+	// was off. Idempotent — re-running with no file changes is a no-op.
+	rescanCatchUp(ctx, cfg, folders, onInventory, onSpellbook)
+
+	return watch.Run(ctx, folders, onInventory, onSpellbook)
+}
+
+// rescanCatchUp walks every folder in `folders`, lists every
+// <Char>-Inventory.txt and <Char>-Spellbook.txt, compares mtime against
+// cfg.LastKnownInventoryMtime[char] / cfg.LastKnownSpellbookMtime[char],
+// and synthesizes an onInventory / onSpellbook call for each newer file.
+//
+// Per Plan 02-02 Task 5: the OnChange callbacks themselves persist the
+// updated mtime once a sheet write succeeds (see makeOnInventoryChange /
+// makeOnSpellbookChange). rescanCatchUp does NOT update the maps itself —
+// this avoids the false-positive "already uploaded" state if a transient
+// sheet failure happens during catch-up but accepts a re-upload on a
+// clean restart after a partial failure (idempotent re-uploads are cheap).
+//
+// ctx is forwarded to the callbacks via closure. The function does not
+// block on the callbacks — they run synchronously here on the catch-up
+// goroutine; if a callback blocks, catch-up blocks. Acceptable because
+// catch-up runs once at startup and the callbacks are bounded by sheet
+// API latency.
+func rescanCatchUp(ctx context.Context, cfg *config.Config, folders []string, onInventory, onSpellbook watch.OnChange) {
+	if ctx.Err() != nil {
+		return
+	}
+	for _, folder := range folders {
+		entries, err := os.ReadDir(folder)
+		if err != nil {
+			slog.Warn("catch-up: read folder", "folder", folder, "err", err)
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			var charName, suffix string
+			var lastMap map[string]string
+			var cb watch.OnChange
+			switch {
+			case strings.HasSuffix(name, watch.InventorySuffix):
+				suffix = watch.InventorySuffix
+				lastMap = cfg.LastKnownInventoryMtime
+				cb = onInventory
+			case strings.HasSuffix(name, watch.SpellbookSuffix):
+				suffix = watch.SpellbookSuffix
+				lastMap = cfg.LastKnownSpellbookMtime
+				cb = onSpellbook
+			default:
+				continue
+			}
+			charName = strings.TrimSuffix(name, suffix)
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			currentMtime := info.ModTime().UTC().Format(time.RFC3339)
+			prevMtime := ""
+			if lastMap != nil {
+				prevMtime = lastMap[charName]
+			}
+			if currentMtime == prevMtime {
+				continue // already uploaded the latest version
+			}
+			slog.Info("catch-up upload",
+				"folder", folder, "char", charName, "type", suffix,
+				"prev_mtime", prevMtime, "current_mtime", currentMtime)
+			cb(filepath.Join(folder, name))
+		}
+	}
 }
 
 // makeOnInventoryChange wraps the parse → WriteInventory → UpsertCharOwner
 // chain into a watch.OnChange callback. Extracted for testability.
+//
+// Plan 02-02 (WATCH-09): on a successful write, the file's source mtime
+// (captured before parse) is persisted to cfg.LastKnownInventoryMtime[char]
+// + cfg.Save() so a watcher restart's catch-up scan correctly recognises
+// "already uploaded" without re-firing.
 func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller) watch.OnChange {
 	return func(path string) {
-		charName := extractCharName(path)
+		charName := extractCharNameForSuffix(path, watch.InventorySuffix)
 		if charName == "" {
 			slog.Warn("inventory file with unexpected name; skipping",
 				"path", filepath.Base(path))
@@ -203,6 +310,15 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 		}
 		// Per CLAUDE.md / RESEARCH.md §8.3: re-stat + re-read fresh on
 		// every event. Never trust fsnotify event payloads on Windows.
+		// Capture mtime BEFORE parse so a same-second re-fire after this
+		// upload is recognised as "already uploaded" by catch-up.
+		fi, statErr := os.Stat(path)
+		if statErr != nil {
+			slog.Error("stat inventory", "char", charName, "err", statErr)
+			return
+		}
+		fileMtime := fi.ModTime().UTC().Format(time.RFC3339)
+
 		f, err := os.Open(path)
 		if err != nil {
 			slog.Error("open inventory", "char", charName, "err", err)
@@ -230,14 +346,84 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 			// Non-fatal — inv:Char write succeeded; surface warning, continue.
 			slog.Warn("upsert char_owner", "char", charName, "err", err)
 		}
+		// WATCH-09: persist the mtime so the next catch-up sees it.
+		if cfg.LastKnownInventoryMtime == nil {
+			cfg.LastKnownInventoryMtime = make(map[string]string)
+		}
+		cfg.LastKnownInventoryMtime[charName] = fileMtime
+		if err := cfg.Save(); err != nil {
+			slog.Warn("save cfg after inventory upload", "char", charName, "err", err)
+		}
 		slog.Info("uploaded", "char", charName, "rows", len(rows))
 		t.SetStatus(fmt.Sprintf("Last upload: %s at %s", charName, time.Now().Format("15:04")))
 	}
 }
 
+// makeOnSpellbookChange wraps the parse → WriteSpellbook → UpsertCharOwner
+// chain into a watch.OnChange callback. Mirrors makeOnInventoryChange but
+// for <Char>-Spellbook.txt files.
+//
+// Plan 02-02 (WATCH-02): UpsertCharOwner runs after spellbook events too,
+// so last_seen is refreshed on every signal of life — Plan 02-01 Task 3
+// already extended UpsertCharOwner to refresh last_seen on every match.
+func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller) watch.OnChange {
+	return func(path string) {
+		charName := extractCharNameForSuffix(path, watch.SpellbookSuffix)
+		if charName == "" {
+			slog.Warn("spellbook file with unexpected name; skipping",
+				"path", filepath.Base(path))
+			return
+		}
+		fi, statErr := os.Stat(path)
+		if statErr != nil {
+			slog.Error("stat spellbook", "char", charName, "err", statErr)
+			return
+		}
+		fileMtime := fi.ModTime().UTC().Format(time.RFC3339)
+
+		f, err := os.Open(path)
+		if err != nil {
+			slog.Error("open spellbook", "char", charName, "err", err)
+			return
+		}
+		rows, perr := parse.ParseSpellbook(f)
+		_ = f.Close()
+		if perr != nil {
+			slog.Error("parse spellbook", "char", charName, "err", perr)
+			return
+		}
+		if len(rows) == 0 {
+			// Same T-07-05-style mitigation as inventory: don't write zero
+			// rows (would clear the tab). EQ flush mid-write or empty
+			// spellbook → skip.
+			slog.Info("spellbook empty; skipping write", "char", charName)
+			return
+		}
+		uploadedAt := time.Now().UTC().Format(time.RFC3339)
+		if err := sc.WriteSpellbook(ctx, charName, sheet.SpellbookHeader, rows, uploadedAt); err != nil {
+			slog.Error("write spellbook", "char", charName, "err", err)
+			t.SetStatus(fmt.Sprintf("Last upload failed: %s spellbook", charName))
+			return
+		}
+		if err := sc.UpsertCharOwner(ctx, charName, cfg.GoogleEmail, bc.WatcherVersion); err != nil {
+			slog.Warn("upsert char_owner", "char", charName, "err", err)
+		}
+		if cfg.LastKnownSpellbookMtime == nil {
+			cfg.LastKnownSpellbookMtime = make(map[string]string)
+		}
+		cfg.LastKnownSpellbookMtime[charName] = fileMtime
+		if err := cfg.Save(); err != nil {
+			slog.Warn("save cfg after spellbook upload", "char", charName, "err", err)
+		}
+		slog.Info("uploaded spellbook", "char", charName, "rows", len(rows))
+		t.SetStatus(fmt.Sprintf("Last upload: %s spellbook at %s", charName, time.Now().Format("15:04")))
+	}
+}
+
 // extractCharName returns "<Char>" for "<Char>-Inventory.txt" or "" for
-// any other basename. The regex is intentionally narrow — Phase 2 will
-// add a parallel "<Char>-Spellbook.txt" branch (WATCH-02).
+// any other basename. Retained for the existing TestExtractCharName cases
+// and any external callers; Plan 02-02 callbacks use
+// extractCharNameForSuffix to disambiguate inventory vs. spellbook.
 func extractCharName(path string) string {
 	base := filepath.Base(path)
 	m := charNameRE.FindStringSubmatch(base)
@@ -245,6 +431,23 @@ func extractCharName(path string) string {
 		return ""
 	}
 	return m[1]
+}
+
+// extractCharNameForSuffix returns "<Char>" for a basename matching
+// "<Char>"+suffix, or "" otherwise. Plan 02-02 Task 5 introduces this
+// helper so the inventory and spellbook handlers can share extraction
+// logic without each owning a regex. Suffixes are watch.InventorySuffix
+// and watch.SpellbookSuffix.
+func extractCharNameForSuffix(path, suffix string) string {
+	base := filepath.Base(path)
+	if !strings.HasSuffix(base, suffix) {
+		return ""
+	}
+	name := strings.TrimSuffix(base, suffix)
+	if name == "" {
+		return ""
+	}
+	return name
 }
 
 // ChangeWorkbook is the D-04 tray flow. Re-runs picker.Server on a

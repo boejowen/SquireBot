@@ -20,6 +20,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -156,12 +157,17 @@ func runWatcher(ctx context.Context, cfg *config.Config, t *tray.Controller, ts 
 	if err != nil {
 		return fmt.Errorf("sheet client: %w", err)
 	}
-	if err := sc.ValidateWorkbook(ctx); err != nil {
-		// D-03 / Critical Constraint #5: refuse to start if the workbook
-		// is wrong or schema is too new. The wizard's picker step already
-		// validated, but the user may have rotated workbooks since.
-		return fmt.Errorf("validate workbook on startup: %w", err)
+	// Plan 02-01 Task 1: ValidateWorkbook returns one of three states.
+	// Wrong → refuse. SchemaTooNew (any state with that error) → refuse.
+	// Empty or Matches → proceed (Task 4 will wire ScaffoldSchemaV1 here).
+	state, vErr := sc.ValidateWorkbook(ctx)
+	if errors.Is(vErr, sheet.ErrSchemaTooNew) {
+		return fmt.Errorf("validate workbook on startup: %w", vErr)
 	}
+	if state == sheet.WorkbookStateWrong {
+		return fmt.Errorf("validate workbook on startup: %w", vErr)
+	}
+	// state is Empty or Matches — both proceed.
 
 	t.SetSpreadsheetID(cfg.SpreadsheetID)
 	t.SetIconHealth(tray.HealthGreen)

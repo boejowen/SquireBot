@@ -184,7 +184,14 @@ func (s *Server) handleResult(w http.ResponseWriter, r *http.Request) {
 	// Provisionally point the Sheets client at the picked workbook.
 	s.sheetClient.SetSpreadsheetID(body.SpreadsheetID)
 
-	if err := s.sheetClient.ValidateWorkbook(r.Context()); err != nil {
+	// Plan 02-01 Task 1: ValidateWorkbook returns a three-state enum
+	// (MatchesCanonical / Empty / WrongCanonical) plus an optional
+	// error. The picker accepts both Empty (fresh shared workbook —
+	// scaffold will run on first watcher startup) and MatchesCanonical
+	// (already-scaffolded workbook). It rejects WrongCanonical and
+	// any error path (including ErrSchemaTooNew on the Matches path).
+	state, err := s.sheetClient.ValidateWorkbook(r.Context())
+	if err != nil || state == sheet.WorkbookStateWrong {
 		// We log the rejection so an officer reading the log can see
 		// "Bob picked workbook X and was rejected with reason Y." The
 		// workbook NAME (not ID) is logged because:
@@ -192,6 +199,7 @@ func (s *Server) handleResult(w http.ResponseWriter, r *http.Request) {
 		//   - the name is human-meaningful in the log file.
 		slog.Warn("picked workbook rejected",
 			"err", err,
+			"state", state,
 			"name", body.Name)
 
 		// Reset the Sheets client's spreadsheetID so subsequent unrelated
@@ -205,6 +213,10 @@ func (s *Server) handleResult(w http.ResponseWriter, r *http.Request) {
 			// HTTP 400 body so the JS in picker.html displays it
 			// unchanged in the #status div.
 			http.Error(w, err.Error(), http.StatusBadRequest)
+		case state == sheet.WorkbookStateWrong && err == nil:
+			// Defensive: Wrong without an error (shouldn't happen — meta.go
+			// always pairs WrongCanonical with ErrWrongWorkbook).
+			http.Error(w, sheet.ErrWrongWorkbook.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "Failed to validate workbook. Please try again.", http.StatusInternalServerError)
 		}

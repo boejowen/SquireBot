@@ -22,6 +22,35 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
+// ListSheets returns the full title→sheetId map for the active spreadsheet
+// without creating any tabs. Plan 02-01 Task 2 added this so the scaffold
+// package can do a single bulk read of existing tab titles before
+// deciding which to create. Side effect: refreshes the Client's tabs
+// cache so subsequent EnsureSheet calls will hit the cache.
+//
+// Unlike EnsureSheet, ListSheets never mutates the workbook. Callers
+// that want lazy creation should still go through EnsureSheet.
+func (c *Client) ListSheets(ctx context.Context) (map[string]int64, error) {
+	if c.spreadsheetID == "" {
+		return nil, fmt.Errorf("ListSheets: spreadsheetID not set")
+	}
+	ss, err := c.svc.Spreadsheets.Get(c.spreadsheetID).
+		Fields("sheets(properties(title,sheetId,hidden))").
+		Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("get spreadsheet: %w", err)
+	}
+	out := make(map[string]int64, len(ss.Sheets))
+	for _, s := range ss.Sheets {
+		if s.Properties == nil {
+			continue
+		}
+		out[s.Properties.Title] = s.Properties.SheetId
+		c.tabs[s.Properties.Title] = s.Properties.SheetId
+	}
+	return out, nil
+}
+
 // EnsureSheet returns the numeric sheetId for the tab named `name`,
 // creating the tab via AddSheetRequest if it does not already exist.
 // Idempotent — safe to call before every write.

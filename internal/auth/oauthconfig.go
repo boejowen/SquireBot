@@ -22,6 +22,13 @@ type BuildConstants struct {
 	OAuthClientSecret string // effectively public for desktop apps; Google's token endpoint requires it as a parameter even with PKCE — see docs/build-and-install.md "About the client secret"
 	PickerAPIKey      string // public per RESEARCH.md §5.4 — restricted to Google Picker API
 	GCPProjectNumber  string // public — Picker AppID (Plan 06)
+	// WatcherVersion is the build-time Version constant from
+	// cmd/squirebot/main.go, plumbed here so internal packages
+	// (sheet.UpsertCharOwner, the heartbeat in Phase 2 plans) can stamp
+	// it onto _char_owner.watcher_version + _status.watcher_version
+	// rows without importing main. Empty string is acceptable — Validate
+	// does not require it (the four OAuth values remain mandatory).
+	WatcherVersion string
 }
 
 // Validate returns ErrMissingConstants if any of the four values is

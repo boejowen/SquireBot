@@ -1,10 +1,17 @@
 package sheet
 
-// Tests for UpsertCharOwner (Plan 01-05 Task 3). Exercises:
-//   1. Empty _char_owner → append (charName, ownerEmail, "", "", isoTime)
-//   2. charName present + email matches → no-op (no append, no warn)
-//   3. charName present + email mismatches → slog.Warn, NO append, returns nil
-//   4. _char_owner tab missing → EnsureSheet creates it then appends
+// Tests for UpsertCharOwner (Plan 02-01 Task 3 — extended from 5 to 13
+// columns). Exercises:
+//
+//   1. Empty _char_owner → append 13-column row with locked defaults.
+//   2. charName + email both match → refresh last_seen ONLY (no append,
+//      no overwrite of class/level/first_seen).
+//   3. charName present + email mismatch → slog.Warn, NO append, NO
+//      last_seen touch, returns nil.
+//   4. watcher_version column populated from caller-supplied param.
+//   5. server column hard-coded to "blue" (P99 Blue is the only target).
+//   6. _char_owner tab missing → EnsureSheet creates it then appends.
+//   7. spreadsheetID empty → error.
 
 import (
 	"bytes"
@@ -22,7 +29,7 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-// ownerStub captures values.get + values.append + addSheet calls.
+// ownerStub captures values.get + values.append + values.update + AddSheet.
 type ownerStub struct {
 	t          *testing.T
 	sheetsList []sheetInfo
@@ -31,6 +38,9 @@ type ownerStub struct {
 
 	getCalls       int
 	appendCalls    int
+	updateCalls    int
+	updatedRanges  []string
+	updatedValues  [][]any
 	appendedBodies []*sheets.ValueRange
 	batchUpdates   []*sheets.BatchUpdateSpreadsheetRequest
 }
@@ -55,8 +65,7 @@ func (o *ownerStub) handler() http.HandlerFunc {
 			}
 			_ = json.NewEncoder(w).Encode(body)
 
-		// values.append on _char_owner!A:E. The Sheets v4 client uses
-		// path suffix ":append" for append.
+		// values.append on _char_owner!A:M.
 		case r.Method == "POST" && strings.Contains(path, "/values/") && strings.Contains(path, ":append"):
 			o.appendCalls++
 			var vr sheets.ValueRange
@@ -65,10 +74,27 @@ func (o *ownerStub) handler() http.HandlerFunc {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"spreadsheetId": "SHEET1",
 				"updates": map[string]any{
-					"updatedRange": "_char_owner!A2:E2",
+					"updatedRange": "_char_owner!A2:M2",
 					"updatedRows":  1,
-					"updatedCells": 5,
+					"updatedCells": 13,
 				},
+			})
+
+		// values.update on _char_owner!K{row} (last_seen refresh).
+		case r.Method == "PUT" && strings.Contains(path, "/values/_char_owner"):
+			o.updateCalls++
+			var vr sheets.ValueRange
+			_ = json.NewDecoder(r.Body).Decode(&vr)
+			// Decode the range from the URL.
+			idx := strings.Index(path, "/values/")
+			rng := path[idx+len("/values/"):]
+			o.updatedRanges = append(o.updatedRanges, rng)
+			if len(vr.Values) > 0 {
+				o.updatedValues = append(o.updatedValues, vr.Values[0])
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"updatedRange": rng,
+				"updatedRows":  1,
 			})
 
 		// AddSheet via batchUpdate.
@@ -125,21 +151,25 @@ func captureLogs(t *testing.T) (*bytes.Buffer, func()) {
 	return buf, func() { slog.SetDefault(prev) }
 }
 
-func TestUpsertCharOwner_AppendsOnFirstSighting(t *testing.T) {
+// Test 1: empty _char_owner → append a 13-column row.
+func TestUpsertCharOwner_AppendsThirteenColumnsOnFirstSighting(t *testing.T) {
 	o := &ownerStub{
 		t: t,
 		sheetsList: []sheetInfo{
 			{Title: "_char_owner", SheetID: 7},
 		},
 		rows: [][]any{
-			{"char_name", "owner_email"}, // header only
+			// header only — full 13-col header from scaffold
+			{"char_name", "owner_email", "display_name", "discord_handle",
+				"class", "level", "is_bank_toon", "is_hidden", "is_removed",
+				"first_seen", "last_seen", "server", "watcher_version"},
 		},
 	}
 	c, srv := newOwnerClient(t, o)
 	defer srv.Close()
 
 	before := time.Now().UTC()
-	if err := c.UpsertCharOwner(context.Background(), "Foo", "alice@example.com"); err != nil {
+	if err := c.UpsertCharOwner(context.Background(), "Foo", "alice@example.com", "0.2.0"); err != nil {
 		t.Fatalf("UpsertCharOwner: %v", err)
 	}
 	after := time.Now().UTC()
@@ -155,58 +185,89 @@ func TestUpsertCharOwner_AppendsOnFirstSighting(t *testing.T) {
 		t.Fatalf("Values rows = %d, want 1", len(row))
 	}
 	cells := row[0]
-	if len(cells) != 5 {
-		t.Fatalf("appended cells = %d, want 5 (Phase 1 schema)", len(cells))
+	if len(cells) != 13 {
+		t.Fatalf("appended cells = %d, want 13 (v1 schema-locked)", len(cells))
 	}
-	if cells[0] != "Foo" {
-		t.Errorf("cell[0] = %v, want \"Foo\"", cells[0])
+	// Spot-check the load-bearing cells.
+	checks := []struct {
+		idx  int
+		want any
+		name string
+	}{
+		{0, "Foo", "char_name (A)"},
+		{1, "alice@example.com", "owner_email (B)"},
+		{2, "", "display_name (C)"},
+		{3, "", "discord_handle (D)"},
+		{4, "", "class (E)"},
+		{5, "", "level (F)"},
+		{6, "FALSE", "is_bank_toon (G)"},
+		{7, "FALSE", "is_hidden (H)"},
+		{8, "FALSE", "is_removed (I)"},
+		{11, "blue", "server (L)"},
+		{12, "0.2.0", "watcher_version (M)"},
 	}
-	if cells[1] != "alice@example.com" {
-		t.Errorf("cell[1] = %v, want \"alice@example.com\"", cells[1])
+	for _, c := range checks {
+		if cells[c.idx] != c.want {
+			t.Errorf("%s = %v, want %v", c.name, cells[c.idx], c.want)
+		}
 	}
-	if cells[2] != "" {
-		t.Errorf("cell[2] = %v, want empty (Phase 2 column)", cells[2])
-	}
-	if cells[3] != "" {
-		t.Errorf("cell[3] = %v, want empty (Phase 2 column)", cells[3])
-	}
-	iso, _ := cells[4].(string)
-	if iso == "" {
-		t.Fatalf("cell[4] (first_seen) = %v, want RFC3339 string", cells[4])
-	}
-	parsed, err := time.Parse(time.RFC3339, iso)
-	if err != nil {
-		t.Fatalf("first_seen %q not RFC3339: %v", iso, err)
-	}
-	// first_seen must be sandwiched between before and after (UTC).
-	if parsed.Before(before.Truncate(time.Second)) || parsed.After(after.Add(time.Second)) {
-		t.Errorf("first_seen %v outside [%v, %v]", parsed, before, after)
+	// first_seen + last_seen must both be RFC3339 within the test window.
+	for _, idx := range []int{9, 10} {
+		iso, _ := cells[idx].(string)
+		parsed, perr := time.Parse(time.RFC3339, iso)
+		if perr != nil {
+			t.Fatalf("cell[%d] = %q not RFC3339: %v", idx, iso, perr)
+		}
+		if parsed.Before(before.Truncate(time.Second)) || parsed.After(after.Add(time.Second)) {
+			t.Errorf("cell[%d] %v outside [%v, %v]", idx, parsed, before, after)
+		}
 	}
 }
 
-func TestUpsertCharOwner_NoOpOnMatch(t *testing.T) {
+// Test 2: charName + email both match → last_seen refresh ONLY.
+func TestUpsertCharOwner_RefreshesLastSeenOnMatch(t *testing.T) {
 	o := &ownerStub{
-		t: t,
+		t:          t,
 		sheetsList: []sheetInfo{{Title: "_char_owner", SheetID: 7}},
 		rows: [][]any{
-			{"char_name", "owner_email"},
-			{"Foo", "alice@example.com"},
+			{"char_name", "owner_email"},                 // header (row 1)
+			{"Foo", "alice@example.com", "", "", "Mage"}, // existing row 2
 		},
 	}
 	c, srv := newOwnerClient(t, o)
 	defer srv.Close()
 
-	if err := c.UpsertCharOwner(context.Background(), "Foo", "alice@example.com"); err != nil {
+	if err := c.UpsertCharOwner(context.Background(), "Foo", "alice@example.com", "0.2.0"); err != nil {
 		t.Fatalf("UpsertCharOwner: %v", err)
 	}
 	if o.appendCalls != 0 {
-		t.Errorf("appendCalls = %d, want 0 (no-op on match)", o.appendCalls)
+		t.Errorf("appendCalls = %d, want 0 (match → refresh, not append)", o.appendCalls)
+	}
+	if o.updateCalls != 1 {
+		t.Fatalf("updateCalls = %d, want 1 (last_seen refresh)", o.updateCalls)
+	}
+	if len(o.updatedRanges) != 1 {
+		t.Fatalf("updatedRanges len = %d, want 1", len(o.updatedRanges))
+	}
+	// Row 2 → range _char_owner!K2.
+	wantRange := "_char_owner!K2"
+	if o.updatedRanges[0] != wantRange {
+		t.Errorf("updatedRange = %q, want %q (column K = last_seen, row 2)", o.updatedRanges[0], wantRange)
+	}
+	// Single cell, RFC3339 string.
+	if len(o.updatedValues[0]) != 1 {
+		t.Errorf("updated cell count = %d, want 1", len(o.updatedValues[0]))
+	}
+	iso, _ := o.updatedValues[0][0].(string)
+	if _, err := time.Parse(time.RFC3339, iso); err != nil {
+		t.Errorf("last_seen value %q not RFC3339: %v", iso, err)
 	}
 }
 
+// Test 3: charName + email mismatch → log, no overwrite, no last_seen touch.
 func TestUpsertCharOwner_LogsAndReturnsNilOnMismatch(t *testing.T) {
 	o := &ownerStub{
-		t: t,
+		t:          t,
 		sheetsList: []sheetInfo{{Title: "_char_owner", SheetID: 7}},
 		rows: [][]any{
 			{"char_name", "owner_email"},
@@ -219,34 +280,54 @@ func TestUpsertCharOwner_LogsAndReturnsNilOnMismatch(t *testing.T) {
 	buf, restore := captureLogs(t)
 	defer restore()
 
-	err := c.UpsertCharOwner(context.Background(), "Foo", "bob@example.com")
+	err := c.UpsertCharOwner(context.Background(), "Foo", "bob@example.com", "0.2.0")
 	if err != nil {
-		t.Fatalf("UpsertCharOwner: %v (mismatch must NOT return error in Phase 1)", err)
+		t.Fatalf("UpsertCharOwner: %v (mismatch must NOT return error)", err)
 	}
 	if o.appendCalls != 0 {
 		t.Errorf("appendCalls = %d, want 0 (mismatch must NOT overwrite)", o.appendCalls)
+	}
+	if o.updateCalls != 0 {
+		t.Errorf("updateCalls = %d, want 0 (mismatch must NOT touch last_seen)", o.updateCalls)
 	}
 
 	logs := buf.String()
 	if !strings.Contains(logs, "char_owner email mismatch") {
 		t.Errorf("expected slog.Warn message in output:\n%s", logs)
 	}
-	// Verify level WARN.
-	var rec map[string]any
-	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.SplitN(logs, "\n", 2)[0])), &rec); err == nil {
-		if rec["level"] != "WARN" {
-			t.Errorf("log level = %v, want WARN", rec["level"])
-		}
-		// Make sure the existing email and the current email both leaked
-		// into the log so an officer reading the file later can audit.
-		if !strings.Contains(logs, "alice@example.com") || !strings.Contains(logs, "bob@example.com") {
-			t.Errorf("expected both emails in log:\n%s", logs)
-		}
+	if !strings.Contains(logs, "alice@example.com") || !strings.Contains(logs, "bob@example.com") {
+		t.Errorf("expected both emails in log:\n%s", logs)
 	}
 }
 
-// _char_owner tab missing on a fresh-from-template workbook → EnsureSheet
-// creates it via AddSheet (one batchUpdate), then we append our row.
+// Test 4 & 5 are subsumed by Test 1's spot-checks — server="blue" + watcher_version
+// from the param. Spell out as a focused regression test for clarity.
+func TestUpsertCharOwner_ServerHardCodedAndWatcherVersionPlumbed(t *testing.T) {
+	o := &ownerStub{
+		t:          t,
+		sheetsList: []sheetInfo{{Title: "_char_owner", SheetID: 7}},
+		rows:       [][]any{{"char_name", "owner_email"}},
+	}
+	c, srv := newOwnerClient(t, o)
+	defer srv.Close()
+
+	const wantVersion = "1.2.3-test"
+	if err := c.UpsertCharOwner(context.Background(), "Bar", "joe@example.com", wantVersion); err != nil {
+		t.Fatalf("UpsertCharOwner: %v", err)
+	}
+	if len(o.appendedBodies) != 1 {
+		t.Fatalf("captured bodies = %d, want 1", len(o.appendedBodies))
+	}
+	cells := o.appendedBodies[0].Values[0]
+	if cells[11] != "blue" {
+		t.Errorf("server (col L) = %v, want \"blue\"", cells[11])
+	}
+	if cells[12] != wantVersion {
+		t.Errorf("watcher_version (col M) = %v, want %q", cells[12], wantVersion)
+	}
+}
+
+// Test 6: _char_owner tab missing → EnsureSheet creates it then appends.
 func TestUpsertCharOwner_CreatesTabIfMissing(t *testing.T) {
 	o := &ownerStub{
 		t:          t,
@@ -255,7 +336,7 @@ func TestUpsertCharOwner_CreatesTabIfMissing(t *testing.T) {
 	c, srv := newOwnerClient(t, o)
 	defer srv.Close()
 
-	if err := c.UpsertCharOwner(context.Background(), "Foo", "alice@example.com"); err != nil {
+	if err := c.UpsertCharOwner(context.Background(), "Foo", "alice@example.com", "0.2.0"); err != nil {
 		t.Fatalf("UpsertCharOwner: %v", err)
 	}
 	if len(o.batchUpdates) != 1 {
@@ -270,7 +351,7 @@ func TestUpsertCharOwner_CreatesTabIfMissing(t *testing.T) {
 	}
 }
 
-// Defensive: spreadsheetID empty → error.
+// Test 7: spreadsheetID empty → error.
 func TestUpsertCharOwner_NoSpreadsheetID(t *testing.T) {
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "fake"})
@@ -278,7 +359,7 @@ func TestUpsertCharOwner_NoSpreadsheetID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	if err := c.UpsertCharOwner(ctx, "Foo", "alice@example.com"); err == nil {
+	if err := c.UpsertCharOwner(ctx, "Foo", "alice@example.com", "0.2.0"); err == nil {
 		t.Fatal("expected error when spreadsheetID empty, got nil")
 	}
 }

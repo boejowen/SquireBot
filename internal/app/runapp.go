@@ -101,7 +101,7 @@ func RunApp(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *
 		ts = built
 	}
 
-	if err := runWatcher(ctx, cfg, t, ts); err != nil {
+	if err := runWatcher(ctx, cfg, bc, t, ts); err != nil {
 		slog.Error("watcher exited", "err", err)
 		t.SetStatus(fmt.Sprintf("Watcher error: %v", err))
 		t.SetIconHealth(tray.HealthRed)
@@ -152,7 +152,7 @@ func buildTokenSourceFromWincred(ctx context.Context, cfg *config.Config, bc aut
 // runWatcher starts the watcher loop and dispatches parse → write →
 // upsert per inventory event. Returns when ctx is cancelled or
 // fsnotify errors fatally.
-func runWatcher(ctx context.Context, cfg *config.Config, t *tray.Controller, ts oauth2.TokenSource) error {
+func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, ts oauth2.TokenSource) error {
 	sc, err := sheet.NewClient(ctx, ts, cfg.SpreadsheetID)
 	if err != nil {
 		return fmt.Errorf("sheet client: %w", err)
@@ -173,13 +173,13 @@ func runWatcher(ctx context.Context, cfg *config.Config, t *tray.Controller, ts 
 	t.SetIconHealth(tray.HealthGreen)
 	t.SetStatus(fmt.Sprintf("Connected as %s — watching %s", cfg.GoogleEmail, filepath.Base(cfg.EQFolder)))
 
-	onChange := makeOnInventoryChange(ctx, sc, cfg, t)
+	onChange := makeOnInventoryChange(ctx, sc, cfg, bc, t)
 	return watch.Run(ctx, cfg.EQFolder, onChange)
 }
 
 // makeOnInventoryChange wraps the parse → WriteInventory → UpsertCharOwner
 // chain into a watch.OnChange callback. Extracted for testability.
-func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, t *tray.Controller) watch.OnChange {
+func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller) watch.OnChange {
 	return func(path string) {
 		charName := extractCharName(path)
 		if charName == "" {
@@ -212,7 +212,7 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 			t.SetStatus(fmt.Sprintf("Last upload failed: %s", charName))
 			return
 		}
-		if err := sc.UpsertCharOwner(ctx, charName, cfg.GoogleEmail); err != nil {
+		if err := sc.UpsertCharOwner(ctx, charName, cfg.GoogleEmail, bc.WatcherVersion); err != nil {
 			// Non-fatal — inv:Char write succeeded; surface warning, continue.
 			slog.Warn("upsert char_owner", "char", charName, "err", err)
 		}

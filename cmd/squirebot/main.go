@@ -35,6 +35,7 @@ func main() {
 		OAuthClientSecret: OAuthClientSecret,
 		PickerAPIKey:      PickerAPIKey,
 		GCPProjectNumber:  GCPProjectNumber,
+		WatcherVersion:    Version,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

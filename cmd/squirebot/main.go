@@ -56,6 +56,13 @@ func main() {
 			slog.Info("Change Workbook clicked — launching picker on existing token")
 			go app.ChangeWorkbook(ctx, cfg, bc, trayCtl)
 		},
+		OnReauthorize: func() {
+			// Plan 02-04 (AUTH-05): refresh token died. Re-run the OAuth
+			// loopback flow against the existing email; on success the
+			// wincred entry is replaced and the watcher resumes.
+			slog.Info("Reauthorize clicked — running OAuth flow")
+			go app.RunReauthorize(ctx, cfg, bc, trayCtl)
+		},
 		OnQuit: func() {
 			slog.Info("Quit clicked — cancelling root context")
 			cancel()

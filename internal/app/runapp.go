@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -175,6 +176,22 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	if err != nil {
 		return fmt.Errorf("sheet client: %w", err)
 	}
+	// Plan 02-04 (AUTH-05): tell *Client how to refresh its access token
+	// on a 403-with-auth-reason. ts is a ReuseTokenSource wrapping the
+	// underlying ConfigTokenSource — calling Token() when the cached
+	// access token is expired/invalid triggers a refresh exchange against
+	// Google. If the REFRESH token itself is dead, this returns
+	// *oauth2.RetrieveError, which Plan 02-03's withRetry promotes to
+	// sheet.ErrPermanentAuth on the second auth-flavored 403. The
+	// inventory + spellbook handlers below detect that signal AND a
+	// direct auth.IsRevokedRefreshToken match (covers the case where
+	// the bare refresh exchange surfaced the error before withRetry got
+	// a second chance) and trip globalAuthSuspended.
+	sc.SetOnRefresh(func() error {
+		_, err := ts.Token()
+		return err
+	})
+
 	// Plan 02-01 Task 1: ValidateWorkbook returns one of three states.
 	// Wrong → refuse. SchemaTooNew (any state with that error) → refuse.
 	// Empty or Matches → proceed to ScaffoldSchemaV1.
@@ -212,8 +229,11 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	t.SetIconHealth(tray.HealthGreen)
 	t.SetStatus(fmt.Sprintf("Connected as %s — watching %s", cfg.GoogleEmail, strings.Join(folders, ", ")))
 
-	onInventory := makeOnInventoryChange(ctx, sc, cfg, bc, t)
-	onSpellbook := makeOnSpellbookChange(ctx, sc, cfg, bc, t)
+	// Plan 02-04 (AUTH-05): pass &globalAuthSuspended through to the
+	// handlers. They will Store(true) on permanent auth failure and
+	// short-circuit subsequent fires until Reauthorize clears the flag.
+	onInventory := makeOnInventoryChange(ctx, sc, cfg, bc, t, &globalAuthSuspended)
+	onSpellbook := makeOnSpellbookChange(ctx, sc, cfg, bc, t, &globalAuthSuspended)
 
 	// Plan 02-02 (WATCH-09): on startup, walk every folder and synthesize
 	// onInventory / onSpellbook calls for any file whose mtime is newer
@@ -300,8 +320,16 @@ func rescanCatchUp(ctx context.Context, cfg *config.Config, folders []string, on
 // (captured before parse) is persisted to cfg.LastKnownInventoryMtime[char]
 // + cfg.Save() so a watcher restart's catch-up scan correctly recognises
 // "already uploaded" without re-firing.
-func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller) watch.OnChange {
+func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, authSuspended *atomic.Bool) watch.OnChange {
 	return func(path string) {
+		// Plan 02-04 (AUTH-05): if the watcher is suspended (refresh
+		// token died, awaiting Reauthorize click), skip BEFORE the
+		// stat/parse/write chain. CONTEXT.md (locked): no silent
+		// retry-loop after invalid_grant.
+		if authSuspended != nil && authSuspended.Load() {
+			slog.Info("auth suspended; skipping inventory", "path", filepath.Base(path))
+			return
+		}
 		charName := extractCharNameForSuffix(path, watch.InventorySuffix)
 		if charName == "" {
 			slog.Warn("inventory file with unexpected name; skipping",
@@ -338,6 +366,13 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 		}
 		uploadedAt := time.Now().UTC().Format(time.RFC3339)
 		if err := sc.WriteInventory(ctx, charName, sheet.InventoryHeader, rows, uploadedAt); err != nil {
+			// Plan 02-04 (AUTH-05): permanent auth failure → suspend
+			// writes, surface tray red + Reauthorize menu, return WITHOUT
+			// upserting char_owner (we are not actually writing).
+			if isPermanentAuthErr(err) {
+				suspendForAuth(authSuspended, t, charName, "inventory", err)
+				return
+			}
 			slog.Error("write inventory", "char", charName, "err", err)
 			t.SetStatus(fmt.Sprintf("Last upload failed: %s", charName))
 			return
@@ -366,8 +401,14 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 // Plan 02-02 (WATCH-02): UpsertCharOwner runs after spellbook events too,
 // so last_seen is refreshed on every signal of life — Plan 02-01 Task 3
 // already extended UpsertCharOwner to refresh last_seen on every match.
-func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller) watch.OnChange {
+func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, authSuspended *atomic.Bool) watch.OnChange {
 	return func(path string) {
+		// Plan 02-04 (AUTH-05): mirrors makeOnInventoryChange. Skip when
+		// suspended.
+		if authSuspended != nil && authSuspended.Load() {
+			slog.Info("auth suspended; skipping spellbook", "path", filepath.Base(path))
+			return
+		}
 		charName := extractCharNameForSuffix(path, watch.SpellbookSuffix)
 		if charName == "" {
 			slog.Warn("spellbook file with unexpected name; skipping",
@@ -401,6 +442,11 @@ func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 		}
 		uploadedAt := time.Now().UTC().Format(time.RFC3339)
 		if err := sc.WriteSpellbook(ctx, charName, sheet.SpellbookHeader, rows, uploadedAt); err != nil {
+			// Plan 02-04 (AUTH-05): same permanent-auth handling as inventory.
+			if isPermanentAuthErr(err) {
+				suspendForAuth(authSuspended, t, charName, "spellbook", err)
+				return
+			}
 			slog.Error("write spellbook", "char", charName, "err", err)
 			t.SetStatus(fmt.Sprintf("Last upload failed: %s spellbook", charName))
 			return
@@ -448,6 +494,36 @@ func extractCharNameForSuffix(path, suffix string) string {
 		return ""
 	}
 	return name
+}
+
+// isPermanentAuthErr returns true if err is the boundary signal Plan
+// 02-03's withRetry produces on a second auth-flavored 403
+// (sheet.ErrPermanentAuth) OR the canonical Google refresh-token-dead
+// shape Plan 02-04 Task 1's IsRevokedRefreshToken matches against. Both
+// trigger the same UX: tray red + suspend writes + Reauthorize click.
+func isPermanentAuthErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, sheet.ErrPermanentAuth) {
+		return true
+	}
+	return auth.IsRevokedRefreshToken(err)
+}
+
+// suspendForAuth trips authSuspended, turns the tray red, surfaces the
+// Reauthorize menu item, and logs a structured event. Called from both
+// inventory + spellbook handlers on a permanent-auth failure. Safe with
+// a nil authSuspended (test plumbing).
+func suspendForAuth(authSuspended *atomic.Bool, t *tray.Controller, charName, kind string, err error) {
+	if authSuspended != nil {
+		authSuspended.Store(true)
+	}
+	slog.Error("permanent auth failure — suspending writes",
+		"char", charName, "kind", kind, "err", err)
+	t.SetIconHealth(tray.HealthRed)
+	t.SetStatus("Reauthorize: refresh token died. Click Reauthorize…")
+	t.ShowReauthorize()
 }
 
 // ChangeWorkbook is the D-04 tray flow. Re-runs picker.Server on a

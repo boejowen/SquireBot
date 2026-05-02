@@ -4,7 +4,7 @@
 
 **Time:** ~20 minutes if you're already logged into a Google account with a billing-enabled Cloud project. ~45 minutes if you're starting from scratch.
 
-**Output:** an "In production" OAuth consent screen + three recorded constants (`oauth_client_id`, `picker_api_key`, `gcp_project_number`) saved into `.planning/phases/01-end-to-end-thin-slice/oauth-config.json`.
+**Output:** an "In production" OAuth consent screen + four recorded constants (`oauth_client_id`, `oauth_client_secret`, `picker_api_key`, `gcp_project_number`) saved into `.planning/phases/01-end-to-end-thin-slice/oauth-config.json`.
 
 ---
 
@@ -90,14 +90,16 @@ The consent screen is now created in **Testing** state. We publish it in Step 6 
 ## Step 4 — Create the OAuth 2.0 Client ID
 
 1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
-2. **Application type:** **Desktop app**. *(Not Web. Not Android. Desktop. PKCE replaces the client secret for desktop clients per RESEARCH.md §4.1.)*
+2. **Application type:** **Desktop app**. *(Not Web. Not Android. Desktop.)*
 3. **Name:** `SquireBot Desktop Client`.
 4. Click **Create**.
 5. A modal pops up showing **Client ID** and **Client secret**.
    - **Copy `Client ID`** — looks like `123456789012-abcdef0123456789abcdef.apps.googleusercontent.com`. Paste into `oauth-config.json` as `oauth_client_id`.
-   - **IGNORE `Client secret`.** PKCE replaces it. Per RESEARCH.md §4.1 the client_secret is *optional* for desktop clients; we will not use it and it must not be committed anywhere. If anyone ever asks "where do we store the client secret?" the answer is **we don't have one**.
+   - **Copy `Client secret`** — looks like `GOCSPX-…`. Paste into `oauth-config.json` as `oauth_client_secret`. Despite the OAuth 2.0 PKCE spec saying `client_secret` is optional for public clients, **Google's token endpoint contract requires it as a parameter even when PKCE is in use** — the smoke during Phase 1 produced a hard `invalid_request: client_secret is missing` from `oauth2.googleapis.com/token` until we wired it through. Per Google's own docs (https://developers.google.com/identity/protocols/oauth2/native-app): *"when a client runs on a device, it's considered to be a public client and the `client_secret` is no longer truly confidential."* So treat the desktop secret as effectively public — it's safe to bake into the binary alongside the client ID.
 
-> ⚠️ If you click the modal away before copying: re-open the OAuth client from the Credentials list and the Client ID is shown there permanently. The Client secret is also retrievable but **stays unused**.
+> ⚠️ If you click the modal away before copying the **Client secret**: Google does **not** show existing secrets after creation. You'll have to re-open the OAuth client from the Credentials list, click **Add secret**, and use the newly-generated value. (The Client ID is shown permanently — only the secret is one-time-display.)
+>
+> ⚠️ This is a documented correction. The original `01-RESEARCH.md` §4.1 claimed PKCE replaces `client_secret` end-to-end. That is true for the OAuth 2.0 spec — and false for Google's token-endpoint enforcement. Don't trust spec-level reasoning here; trust what Google's `/token` endpoint actually accepts.
 
 ---
 
@@ -136,20 +138,23 @@ The consent screen is now created in **Testing** state. We publish it in Step 6 
 
 ## Step 7 — Record values in oauth-config.json
 
-By this point `.planning/phases/01-end-to-end-thin-slice/oauth-config.json` should have **no remaining `TODO_` sentinels**. Open it and confirm all five fields are filled:
+By this point `.planning/phases/01-end-to-end-thin-slice/oauth-config.json` should have **no remaining `TODO_` sentinels**. Open it and confirm all six credential/status fields are filled:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "_comment": "...",
   "_security_note": "...",
   "oauth_client_id": "123456789012-abcdef…apps.googleusercontent.com",
+  "oauth_client_secret": "GOCSPX-…",
   "picker_api_key": "AIzaSy…",
   "gcp_project_number": "194829382913",
   "consent_screen_status": "PRODUCTION",
   "consent_screen_published_at": "2026-05-01T15:30:00Z"
 }
 ```
+
+> Note: `schema_version` was bumped from `1` → `2` during Phase 1 hotfix #1 when `oauth_client_secret` was added. Plan 03's build reads all four credential fields.
 
 Validate the JSON parses (any of these works):
 - PowerShell: `Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json | ConvertFrom-Json`
@@ -186,9 +191,10 @@ If the consent screen looks right, publishing succeeded.
 | `403: API key not valid` later in Plan 06 | API key restrictions are too tight or wrong API restricted | Re-check Step 5.4 (Application restrictions = None) and Step 5.5 (API restrictions = Google Picker API only). |
 | "This app isn't verified" banner appears in Step 8 | Publishing did not take effect | Reload the OAuth consent screen page in console. If Status still says Testing, click Publish App again. If Status says In production but the banner appears, wait 60s and reload — propagation can lag briefly. |
 | Browser refuses to load Google sign-in: `client_id` is wrong | Pasted the project_id or numeric project_number instead of the OAuth client ID | The OAuth client ID always ends in `.apps.googleusercontent.com`. Re-copy from Credentials → OAuth 2.0 Client IDs. |
+| Watcher logs `oauth2: invalid_request: client_secret is missing` after the consent prompt | `oauth_client_secret` not recorded in Step 4, or not present in `oauth-config.json` | Re-open Credentials → the OAuth client → **Add secret**, copy the `GOCSPX-…` value (Google does not show existing secrets), paste into `oauth_client_secret`, rebuild the binary. |
 
 ---
 
 ## Reproduction Note
 
-If you ever need to migrate to a different Google account or a fresh Cloud project (e.g. someone else takes over Phase 1, or this becomes a Workspace-org-owned project), repeat Steps 1–6 verbatim and overwrite the values in `oauth-config.json`. Plan 03 reads `oauth_client_id` and `gcp_project_number` from this JSON at build time via `-ldflags`, so changing the file + rebuilding the binary is the entire migration.
+If you ever need to migrate to a different Google account or a fresh Cloud project (e.g. someone else takes over Phase 1, or this becomes a Workspace-org-owned project), repeat Steps 1–6 verbatim and overwrite the values in `oauth-config.json`. Plan 03 reads `oauth_client_id`, `oauth_client_secret`, `picker_api_key`, and `gcp_project_number` from this JSON at build time via `-ldflags`, so changing the file + rebuilding the binary is the entire migration.

@@ -8,9 +8,10 @@
 //	Continue setup…   (D-07 — hidden until needsWizard; OnContinueSetup callback)
 //	Quit              (cancels app ctx + systray.Quit)
 //
-// The Controller is tested only via the tray-less menu-construction
-// helper Build (no live systray.Run — that needs a desktop session).
-// Plan 08 smoke checkpoint validates the live tray on Win11 VM.
+// The Controller's menu construction is centralised in MenuPlan() so
+// unit tests can assert the contract without a live systray (which
+// requires a desktop session). Plan 08 smoke checkpoint validates the
+// live tray on Win11 VM.
 //
 // Phase 5 polish: the green/red icon distinction is currently a
 // stand-in (same bytes for both); a distinct red overlay is deferred.
@@ -24,6 +25,39 @@ import (
 
 	"fyne.io/systray"
 )
+
+// MenuItem describes one entry in the tray menu plan. The plan is
+// consumed by OnReady (live) and asserted by tests (offline).
+type MenuItem struct {
+	Label   string
+	Tooltip string
+}
+
+// Canonical menu labels — exported so callers / tests can reference
+// them by name without relying on string-literal duplication.
+const (
+	LabelStatus          = "Initialising…" // disabled status row, mutated by SetStatus
+	LabelOpenWorkbook    = "Open Workbook"
+	LabelOpenLogFolder   = "Open log folder"
+	LabelChangeWorkbook  = "Change Workbook…"
+	LabelContinueSetup   = "Continue setup…"
+	LabelQuit            = "Quit"
+)
+
+// MenuPlan returns the ordered list of action menu items the tray
+// builds (excluding the leading Status row and separators). Order is
+// the contract: CONTEXT.md mandates Status / Open Workbook / Open log
+// folder / Quit be present; D-04 and D-07 add Change Workbook… and
+// Continue setup… adjacent to their workflow neighbours.
+func MenuPlan() []MenuItem {
+	return []MenuItem{
+		{Label: LabelOpenWorkbook, Tooltip: "Open the configured Google Sheet in your browser"},
+		{Label: LabelOpenLogFolder, Tooltip: `Open %LOCALAPPDATA%\SquireBot in Explorer`},
+		{Label: LabelChangeWorkbook, Tooltip: "Pick a different SquireBot workbook (re-runs Picker)"},
+		{Label: LabelContinueSetup, Tooltip: "Resume the SquireBot wizard"},
+		{Label: LabelQuit, Tooltip: "Exit SquireBot"},
+	}
+}
 
 // Health drives the tray-icon swap. SetIconHealth flips between green
 // (normal) and red (Setup needed / watcher error / OAuth gate).
@@ -84,24 +118,26 @@ func NewController(c Config) *Controller {
 
 // OnReady is the systray.Run callback that builds the menu. systray
 // itself is not test-friendly (needs a desktop session), so unit tests
-// use Build to assert the menu contract via the helper API.
+// assert MenuPlan() instead of running this function. Order MUST match
+// MenuPlan() — both reflect CONTEXT.md's "Claude's Discretion" floor.
 func (t *Controller) OnReady() {
 	if len(t.iconGreen) > 0 {
 		systray.SetIcon(t.iconGreen)
 	}
 	systray.SetTooltip("SquireBot")
 
-	t.mStatus = systray.AddMenuItem("Initialising…", "")
+	t.mStatus = systray.AddMenuItem(LabelStatus, "")
 	t.mStatus.Disable()
 
 	systray.AddSeparator()
-	t.mWorkbook = systray.AddMenuItem("Open Workbook", "Open the configured Google Sheet in your browser")
-	t.mLogs = systray.AddMenuItem("Open log folder", `Open %LOCALAPPDATA%\SquireBot in Explorer`)
-	t.mChangeWorkbook = systray.AddMenuItem("Change Workbook…", "Pick a different SquireBot workbook (re-runs Picker)") // D-04
-	t.mContinueSetup = systray.AddMenuItem("Continue setup…", "Resume the SquireBot wizard")
-	t.mContinueSetup.Hide() // D-07: shown only when wizard is incomplete
+	plan := MenuPlan()
+	t.mWorkbook = systray.AddMenuItem(plan[0].Label, plan[0].Tooltip)       // Open Workbook
+	t.mLogs = systray.AddMenuItem(plan[1].Label, plan[1].Tooltip)           // Open log folder
+	t.mChangeWorkbook = systray.AddMenuItem(plan[2].Label, plan[2].Tooltip) // Change Workbook… (D-04)
+	t.mContinueSetup = systray.AddMenuItem(plan[3].Label, plan[3].Tooltip)  // Continue setup… (D-07)
+	t.mContinueSetup.Hide()                                                 // D-07: shown only when wizard is incomplete
 	systray.AddSeparator()
-	t.mQuit = systray.AddMenuItem("Quit", "Exit SquireBot")
+	t.mQuit = systray.AddMenuItem(plan[4].Label, plan[4].Tooltip) // Quit
 
 	go t.loop()
 }

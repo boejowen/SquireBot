@@ -63,3 +63,83 @@ func TestHealthConstants(t *testing.T) {
 		t.Fatal("HealthGreen == HealthRed")
 	}
 }
+
+// TestMenuPlan_ContextMandatoryItems guards CONTEXT.md's four mandatory
+// menu items (Status / Open Workbook / Open log folder / Quit) plus
+// the D-04 / D-07 additions, in the exact order OnReady builds them.
+//
+// Hotfix #4 motivation: the live binary was observed missing
+// "Open log folder" — this test now fails-loud if anyone removes it.
+func TestMenuPlan_ContextMandatoryItems(t *testing.T) {
+	plan := MenuPlan()
+
+	wantOrder := []string{
+		LabelOpenWorkbook,   // 0
+		LabelOpenLogFolder,  // 1 — CONTEXT.md mandatory, hotfix #4
+		LabelChangeWorkbook, // 2 — D-04
+		LabelContinueSetup,  // 3 — D-07
+		LabelQuit,           // 4
+	}
+
+	if len(plan) != len(wantOrder) {
+		t.Fatalf("MenuPlan length = %d, want %d (%v)", len(plan), len(wantOrder), wantOrder)
+	}
+	for i, want := range wantOrder {
+		if plan[i].Label != want {
+			t.Errorf("MenuPlan[%d].Label = %q, want %q", i, plan[i].Label, want)
+		}
+		if plan[i].Tooltip == "" {
+			t.Errorf("MenuPlan[%d] (%q) has empty tooltip", i, plan[i].Label)
+		}
+	}
+}
+
+// TestMenuPlan_OpenLogFolder_Position pins the position of the
+// "Open log folder" item between "Open Workbook" and "Change Workbook…"
+// (CONTEXT.md ordering — keeps the two workbook-related items adjacent).
+func TestMenuPlan_OpenLogFolder_Position(t *testing.T) {
+	plan := MenuPlan()
+	idxOpen, idxLogs, idxChange := -1, -1, -1
+	for i, item := range plan {
+		switch item.Label {
+		case LabelOpenWorkbook:
+			idxOpen = i
+		case LabelOpenLogFolder:
+			idxLogs = i
+		case LabelChangeWorkbook:
+			idxChange = i
+		}
+	}
+	if idxLogs == -1 {
+		t.Fatal(`"Open log folder" missing from MenuPlan (CONTEXT.md mandatory)`)
+	}
+	if !(idxOpen < idxLogs && idxLogs < idxChange) {
+		t.Errorf("expected Open Workbook (%d) < Open log folder (%d) < Change Workbook… (%d)",
+			idxOpen, idxLogs, idxChange)
+	}
+}
+
+// TestLabelConstants_Stable guards the canonical menu-item label
+// strings against accidental rename. Watcher logs and any future
+// integration tests pin against these constants.
+func TestLabelConstants_Stable(t *testing.T) {
+	cases := map[string]string{
+		"LabelOpenWorkbook":   LabelOpenWorkbook,
+		"LabelOpenLogFolder":  LabelOpenLogFolder,
+		"LabelChangeWorkbook": LabelChangeWorkbook,
+		"LabelContinueSetup":  LabelContinueSetup,
+		"LabelQuit":           LabelQuit,
+	}
+	want := map[string]string{
+		"LabelOpenWorkbook":   "Open Workbook",
+		"LabelOpenLogFolder":  "Open log folder",
+		"LabelChangeWorkbook": "Change Workbook…",
+		"LabelContinueSetup":  "Continue setup…",
+		"LabelQuit":           "Quit",
+	}
+	for name, got := range cases {
+		if got != want[name] {
+			t.Errorf("%s = %q, want %q", name, got, want[name])
+		}
+	}
+}

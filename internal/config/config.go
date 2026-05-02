@@ -19,12 +19,14 @@ import (
 //
 // SECURITY: NEVER add a refresh_token field. Refresh tokens live in wincred only (AUTH-04).
 type Config struct {
-	Version                 int               `json:"version"`                    // schema version, =1
-	EQFolder                string            `json:"eq_folder"`                  // set by Plan 04 wizard step
-	SpreadsheetID           string            `json:"spreadsheet_id"`             // set by Plan 06 picker
-	GoogleEmail             string            `json:"google_email"`               // set by Plan 03 OAuth (cached)
-	LastKnownInventoryMtime map[string]string `json:"last_known_inventory_mtime"` // Phase 2 will populate; empty in Phase 1
-	LogLevel                string            `json:"log_level"`                  // "info" default
+	Version                 int               `json:"version"`                              // schema version, =1
+	EQFolder                string            `json:"eq_folder"`                            // Phase 1 single-folder; preserved for back-compat
+	EQFolders               []string          `json:"eq_folders,omitempty"`                 // Plan 02-02 WATCH-03 multi-folder
+	SpreadsheetID           string            `json:"spreadsheet_id"`                       // set by Plan 06 picker
+	GoogleEmail             string            `json:"google_email"`                         // set by Plan 03 OAuth (cached)
+	LastKnownInventoryMtime map[string]string `json:"last_known_inventory_mtime"`           // Plan 02-02 WATCH-09 catch-up: per-char inventory mtime
+	LastKnownSpellbookMtime map[string]string `json:"last_known_spellbook_mtime"`           // Plan 02-02 WATCH-09 catch-up: per-char spellbook mtime
+	LogLevel                string            `json:"log_level"`                            // "info" default
 }
 
 // pathFn is the directory resolver used to compute the config path.
@@ -64,6 +66,19 @@ func Load() (*Config, error) {
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
+	}
+	// Plan 02-02 WATCH-03 back-compat: Phase 1 stored a single eq_folder; Phase 2
+	// uses eq_folders. If only eq_folder is set, migrate it forward into
+	// eq_folders. Preserve eq_folder for any tooling still reading it (delete
+	// in a later phase). When both are present, eq_folders wins.
+	if len(c.EQFolders) == 0 && c.EQFolder != "" {
+		c.EQFolders = []string{c.EQFolder}
+	}
+	if c.LastKnownInventoryMtime == nil {
+		c.LastKnownInventoryMtime = make(map[string]string)
+	}
+	if c.LastKnownSpellbookMtime == nil {
+		c.LastKnownSpellbookMtime = make(map[string]string)
 	}
 	return &c, nil
 }

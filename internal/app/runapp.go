@@ -183,7 +183,12 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	t.SetStatus(fmt.Sprintf("Connected as %s — watching %s", cfg.GoogleEmail, filepath.Base(cfg.EQFolder)))
 
 	onChange := makeOnInventoryChange(ctx, sc, cfg, bc, t)
-	return watch.Run(ctx, cfg.EQFolder, onChange)
+	// Plan 02-02 Task 3 watcher signature change: multi-folder + dual-suffix.
+	// Spellbook handler + multi-folder config + WATCH-09 catch-up land in
+	// Task 4 / Task 5 of this plan; for now pass a single-element slice
+	// derived from the legacy cfg.EQFolder and a no-op spellbook handler.
+	noopSpellbook := func(string) {}
+	return watch.Run(ctx, []string{cfg.EQFolder}, onChange, noopSpellbook)
 }
 
 // makeOnInventoryChange wraps the parse → WriteInventory → UpsertCharOwner

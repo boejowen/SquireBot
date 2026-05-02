@@ -167,6 +167,42 @@ jobs:
           }
           Get-Item dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe | Select-Object Name, Length
 
+      # TODO(SignPath OSS): wire SignPath signing here, between makensis
+      # and Compute SHA-256 sums.
+      #
+      # Status: SignPath Foundation OSS sponsorship application is
+      # tracked in docs/signpath-application.md. Until approved, both
+      # artifacts ship UNSIGNED and the SmartScreen walkthrough at
+      # docs/smartscreen-walkthrough.md is the documented install path.
+      #
+      # When approved, replace this comment block with the SignPath
+      # GitHub Action invocation per
+      # https://about.signpath.io/documentation/build-systems/github-actions/.
+      # The step MUST sign BOTH:
+      #   - dist/SquireBot-Setup-<version>.exe (NSIS installer)
+      #   - dist/squirebot.exe (bare binary, consumed by auto-updater)
+      # BEFORE the next step (Compute SHA-256 sums) runs, so the
+      # manifest hashes the SIGNED bytes -- the in-app auto-updater
+      # verifies SHA-256 against whatever shipped, signed or not.
+      #
+      # Required repo secret (add at
+      # https://github.com/boejowen/SquireBot/settings/secrets/actions):
+      #   - SIGNPATH_API_TOKEN
+      # (Plus any project/org/policy slugs SignPath provides during
+      # onboarding -- those are non-secret and can live inline.)
+      #
+      # After enabling, also flip `signed: false` to `signed: true` in
+      # the "Write latest.json" step's manifest payload below.
+      #
+      # DO NOT add a `signs:` block to .goreleaser.yaml -- CI does not
+      # invoke goreleaser (LINEAR explicit-step workflow per Plan 02-08).
+      # Signing belongs here, in the workflow, not in goreleaser config.
+      #
+      # NEVER replace this with EV cert acquisition -- per
+      # .planning/phases/02-watcher-robustness-schema-lock/02-CONTEXT.md
+      # Microsoft removed EV's instant-SmartScreen-reputation perk in
+      # March 2024; EV cert is value destruction at our scale.
+
       - name: Compute SHA-256 sums (installer + bare binary)
         id: hashes
         shell: pwsh

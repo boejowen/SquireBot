@@ -64,9 +64,7 @@ func (c *Client) UpsertCharOwner(ctx context.Context, charName, ownerEmail, watc
 	}
 	// Read columns A:B for upsert lookup. We don't need C-M for the
 	// dedup check — they're only written on append / refresh.
-	resp, err := c.svc.Spreadsheets.Values.
-		Get(c.spreadsheetID, "_char_owner!A:B").
-		Context(ctx).Do()
+	resp, err := c.valuesGet(ctx, "_char_owner!A:B")
 	if err != nil {
 		return fmt.Errorf("read _char_owner: %w", err)
 	}
@@ -95,10 +93,7 @@ func (c *Client) UpsertCharOwner(ctx context.Context, charName, ownerEmail, watc
 			body := &sheets.ValueRange{
 				Values: [][]any{{now}},
 			}
-			if _, err := c.svc.Spreadsheets.Values.
-				Update(c.spreadsheetID, rng, body).
-				ValueInputOption("RAW").
-				Context(ctx).Do(); err != nil {
+			if err := c.valuesUpdate(ctx, rng, body); err != nil {
 				return fmt.Errorf("refresh last_seen %s: %w", rng, err)
 			}
 			return nil
@@ -136,11 +131,7 @@ func (c *Client) UpsertCharOwner(ctx context.Context, charName, ownerEmail, watc
 			},
 		},
 	}
-	if _, err := c.svc.Spreadsheets.Values.
-		Append(c.spreadsheetID, "_char_owner!A:M", body).
-		ValueInputOption("RAW").
-		InsertDataOption("INSERT_ROWS").
-		Context(ctx).Do(); err != nil {
+	if _, err := c.valuesAppend(ctx, "_char_owner!A:M", body); err != nil {
 		return fmt.Errorf("append _char_owner: %w", err)
 	}
 	return nil

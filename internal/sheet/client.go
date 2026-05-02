@@ -20,6 +20,7 @@ package sheet
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
@@ -76,15 +77,36 @@ var ErrSchemaTooNew = errors.New("This workbook uses a newer SquireBot schema. U
 // The tabs map caches title → sheetId lookups so EnsureSheet can avoid
 // re-fetching the spreadsheet on every WriteInventory call.
 //
-// Concurrency: a single Client is safe for serial use only. The Phase 1
-// watcher writes one tab at a time (a single fsnotify event is debounced
-// then handled on the same goroutine) so per-Client mutexing is
-// unnecessary. If a future plan parallelises tab writes, add a sync.Mutex
-// around tabs.
+// Concurrency: a single Client is safe for concurrent use BY DESIGN —
+// batchMu serializes every Sheets API call. The heartbeat goroutine
+// (Plan 02-05) and the watcher goroutine BOTH go through this mutex.
+// Pitfall D (Plan 02-03): do NOT add code paths that bypass the helpers
+// (batchUpdate, valuesGet, valuesAppend, valuesUpdate, spreadsheetsGet) —
+// the bare svc.* calls do not acquire the mutex. Every API call this
+// package issues MUST go through one of the helpers in
+// internal/sheet/client_helpers.go.
 type Client struct {
 	svc           *sheets.Service
 	spreadsheetID string
 	tabs          map[string]int64
+
+	// batchMu serializes ALL Sheets API calls from this Client. Pitfall D
+	// (Plan 02-03): heartbeat goroutine + watcher goroutine share a Client;
+	// this mutex prevents BatchUpdate ordering races. The mutex is held
+	// for the duration of the API round-trip (including the WATCH-07 retry
+	// schedule sleeps), so no two writes can interleave. The mutex is also
+	// the right place to enforce backoff: a transient error → re-acquire
+	// delay → retry, with the mutex preventing a second goroutine from
+	// blowing through the same backoff slot.
+	batchMu sync.Mutex
+
+	// onRefresh is the callback withRetry invokes on a 403 with auth-flavored
+	// reason. Set via SetOnRefresh after construction; nil means "no refresh
+	// available," in which case the first such 403 still gets one retry
+	// (via a no-op refresh) before propagating ErrPermanentAuth. Plan 02-04
+	// will wire this to oauth2.TokenSource.Token() + re-StoreToken so the
+	// retry actually swaps in a fresh access token.
+	onRefresh func() error
 }
 
 // NewClient builds a Client from an oauth2.TokenSource (handed in by
@@ -116,3 +138,14 @@ func (c *Client) SetSpreadsheetID(id string) {
 
 // SpreadsheetID returns the currently configured spreadsheet ID.
 func (c *Client) SpreadsheetID() string { return c.spreadsheetID }
+
+// SetOnRefresh installs the token-refresh callback. Plan 02-04 wires this
+// to oauth2.TokenSource.Token() + wincred.StoreToken so withRetry can
+// recover from a transient 403 by swapping in a fresh access token.
+//
+// Goroutine-safe semantics: callers MUST set this once at startup, before
+// the watcher loop or heartbeat goroutine starts. After that point the
+// field is read-only — no synchronization needed because every reader
+// holds batchMu (which writers do not, by intent — SetOnRefresh is a
+// startup-only init).
+func (c *Client) SetOnRefresh(f func() error) { c.onRefresh = f }

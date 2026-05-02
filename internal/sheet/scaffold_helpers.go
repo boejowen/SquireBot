@@ -33,10 +33,7 @@ func (c *Client) WriteHeaderRow(ctx context.Context, tab string, headers []strin
 	}
 	rng := fmt.Sprintf("%s!A1", tab)
 	body := &sheets.ValueRange{Values: [][]any{row}}
-	if _, err := c.svc.Spreadsheets.Values.
-		Update(c.spreadsheetID, rng, body).
-		ValueInputOption("RAW").
-		Context(ctx).Do(); err != nil {
+	if err := c.valuesUpdate(ctx, rng, body); err != nil {
 		return fmt.Errorf("write header %s: %w", tab, err)
 	}
 	return nil
@@ -62,8 +59,7 @@ func (c *Client) HideSheet(ctx context.Context, sheetID int64) error {
 			},
 		}},
 	}
-	if _, err := c.svc.Spreadsheets.BatchUpdate(c.spreadsheetID, req).
-		Context(ctx).Do(); err != nil {
+	if err := c.updateSheetProperties(ctx, req); err != nil {
 		return fmt.Errorf("hide sheet %d: %w", sheetID, err)
 	}
 	return nil
@@ -77,9 +73,7 @@ func (c *Client) ReadColumn(ctx context.Context, rangeA1 string) ([]string, erro
 	if c.spreadsheetID == "" {
 		return nil, fmt.Errorf("ReadColumn: spreadsheetID not set")
 	}
-	resp, err := c.svc.Spreadsheets.Values.
-		Get(c.spreadsheetID, rangeA1).
-		Context(ctx).Do()
+	resp, err := c.valuesGet(ctx, rangeA1)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", rangeA1, err)
 	}
@@ -108,11 +102,7 @@ func (c *Client) AppendRow(ctx context.Context, rangeA1 string, cells []string) 
 		row[i] = s
 	}
 	body := &sheets.ValueRange{Values: [][]any{row}}
-	if _, err := c.svc.Spreadsheets.Values.
-		Append(c.spreadsheetID, rangeA1, body).
-		ValueInputOption("RAW").
-		InsertDataOption("INSERT_ROWS").
-		Context(ctx).Do(); err != nil {
+	if _, err := c.valuesAppend(ctx, rangeA1, body); err != nil {
 		return fmt.Errorf("append %s: %w", rangeA1, err)
 	}
 	return nil

@@ -34,9 +34,7 @@ func (c *Client) ListSheets(ctx context.Context) (map[string]int64, error) {
 	if c.spreadsheetID == "" {
 		return nil, fmt.Errorf("ListSheets: spreadsheetID not set")
 	}
-	ss, err := c.svc.Spreadsheets.Get(c.spreadsheetID).
-		Fields("sheets(properties(title,sheetId,hidden))").
-		Context(ctx).Do()
+	ss, err := c.spreadsheetsGet(ctx, "sheets(properties(title,sheetId,hidden))")
 	if err != nil {
 		return nil, fmt.Errorf("get spreadsheet: %w", err)
 	}
@@ -64,9 +62,7 @@ func (c *Client) EnsureSheet(ctx context.Context, name string) (int64, error) {
 	// Refresh the title→sheetId map from the spreadsheet (one Get call).
 	// Use a Fields filter so the response carries only sheets.properties —
 	// avoids transferring grid data we don't need.
-	ss, err := c.svc.Spreadsheets.Get(c.spreadsheetID).
-		Fields("sheets(properties(title,sheetId))").
-		Context(ctx).Do()
+	ss, err := c.spreadsheetsGet(ctx, "sheets(properties(title,sheetId))")
 	if err != nil {
 		return 0, fmt.Errorf("get spreadsheet: %w", err)
 	}
@@ -86,7 +82,7 @@ func (c *Client) EnsureSheet(ctx context.Context, name string) (int64, error) {
 			},
 		}},
 	}
-	resp, err := c.svc.Spreadsheets.BatchUpdate(c.spreadsheetID, req).Context(ctx).Do()
+	resp, err := c.batchUpdate(ctx, req)
 	if err != nil {
 		return 0, fmt.Errorf("addSheet %q: %w", name, err)
 	}

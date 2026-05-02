@@ -95,7 +95,7 @@ func (c *Client) WriteInventory(ctx context.Context, charName string, header []s
 			},
 		}},
 	}
-	if _, err := c.svc.Spreadsheets.BatchUpdate(c.spreadsheetID, req).Context(ctx).Do(); err != nil {
+	if _, err := c.batchUpdate(ctx, req); err != nil {
 		return fmt.Errorf("batchUpdate %s: %w", tabName, err)
 	}
 	return nil
@@ -174,7 +174,7 @@ func (c *Client) WriteSpellbook(ctx context.Context, charName string, header []s
 			},
 		}},
 	}
-	if _, err := c.svc.Spreadsheets.BatchUpdate(c.spreadsheetID, req).Context(ctx).Do(); err != nil {
+	if _, err := c.batchUpdate(ctx, req); err != nil {
 		return fmt.Errorf("batchUpdate %s: %w", tabName, err)
 	}
 	return nil

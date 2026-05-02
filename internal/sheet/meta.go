@@ -118,9 +118,7 @@ func (c *Client) readMeta(ctx context.Context) ([][]any, error) {
 	if _, err := c.EnsureSheet(ctx, "_meta"); err != nil {
 		return nil, err
 	}
-	resp, err := c.svc.Spreadsheets.Values.
-		Get(c.spreadsheetID, "_meta!A1:B20").
-		Context(ctx).Do()
+	resp, err := c.valuesGet(ctx, "_meta!A1:B20")
 	if err != nil {
 		return nil, err
 	}

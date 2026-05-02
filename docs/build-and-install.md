@@ -140,6 +140,39 @@ The installer expects:
 
 ---
 
+## Local snapshot build (developers)
+
+For a reproducible build matching the CI output, install
+[goreleaser](https://goreleaser.com/install/) v2 and run:
+
+```powershell
+# Required env vars (substitute real values from
+# .planning/phases/01-end-to-end-thin-slice/oauth-config.json).
+$env:OAUTH_CLIENT_ID     = "..."
+$env:OAUTH_CLIENT_SECRET = "..."
+$env:PICKER_API_KEY      = "..."
+$env:GCP_PROJECT_NUMBER  = "..."
+
+goreleaser build --snapshot --clean
+```
+
+Output lands under `dist/squirebot_windows_amd64_v1/squirebot.exe`. To
+also produce the NSIS installer locally, mirror the CI sequence:
+
+```powershell
+Copy-Item -Force dist\squirebot_windows_amd64_v1\squirebot.exe dist\squirebot.exe
+makensis -V2 -DAPPVERSION=0.2.0-dev installer\squirebot.nsi
+```
+
+CI does NOT use goreleaser -- the workflow at
+`.github/workflows/release.yml` does explicit `go build` + `makensis` +
+manifest steps and uploads via `softprops/action-gh-release`. The
+`.goreleaser.yaml` at the repo root exists for local-dev parity only;
+its `release:` / `signs:` / `archives:` / `changelog:` blocks are
+intentionally absent because CI does not invoke them.
+
+---
+
 ## Installing on a clean Windows 11 VM (manual smoke)
 
 This procedure is what gets executed by Plan 08 Task 3 to validate Phase 1
@@ -259,6 +292,27 @@ which case Phase 2 code signing is the right long-term fix.
 
 ---
 
+## Release artifacts
+
+Each tagged release on GitHub Releases publishes three files:
+
+| File | Purpose |
+|------|---------|
+| `SquireBot-Setup-<version>.exe` | NSIS installer for new guildies -- runs the wizard, sets up autostart, installs the watcher. |
+| `squirebot.exe` *(bare binary)* | Used by the in-app auto-updater (OPS-04 / Plan 02-06). The `internal/update` package consumes this via `binary_url` in `latest.json`; end users do NOT download this file directly. |
+| `latest.json` | Manifest the auto-updater fetches every 24h to detect new versions. Schema: `{ version, installer_url, installer_sha256, binary_url, binary_sha256, released_at, phase, signed }`. |
+
+SHA-256 sums for both `.exe` artifacts are listed in the GitHub Release
+body and embedded in `latest.json`.
+
+The `latest.json` schema evolved from Phase 1 (which only had
+`installer_url` + `installer_sha256`) to Phase 2 by adding `binary_url`
+and `binary_sha256`. Older v0.1.x manifests still parse cleanly; the
+auto-updater treats absent `binary_url` as "installer-only release"
+and falls back to a manual upgrade prompt.
+
+---
+
 ## CI parity
 
 The GitHub Actions release pipeline (`.github/workflows/release.yml`) is
@@ -266,13 +320,17 @@ the authoritative producer of release artifacts. It:
 
 1. Materialises `oauth-config.json` from the `OAUTH_CONFIG_JSON` repo
    secret (same shape the local file has).
-2. Runs the same `go build` invocation documented above with `-X` ldflags
+2. Refuses to proceed if `consent_screen_status != "PRODUCTION"` --
+   AUTH-03 gate, preserved verbatim from Phase 1.
+3. Runs the same `go build` invocation documented above with `-X` ldflags
    from the secret.
-3. Runs `makensis -DAPPVERSION=$tag -V2 installer/squirebot.nsi`.
-4. Computes SHA-256 of the produced installer and writes
-   `dist/latest.json` (the manifest Phase 2's auto-updater will consume).
-5. Uploads `SquireBot-Setup-<version>.exe` and `latest.json` as both build
-   artifacts and -- on tag push -- a GitHub Release.
+4. Runs `makensis -DAPPVERSION=$tag -V2 installer/squirebot.nsi`.
+5. Computes SHA-256 of BOTH the installer AND the bare binary; writes
+   `dist/latest.json` with `installer_url`, `installer_sha256`,
+   `binary_url`, `binary_sha256`, `released_at`, `phase`, `signed`.
+6. Uploads three files (`SquireBot-Setup-<version>.exe`, `squirebot.exe`,
+   `latest.json`) as both build artifacts and -- on tag push -- a GitHub
+   Release via `softprops/action-gh-release`.
 
 If your local build behaves differently from a CI tag-push build, that is
 a regression. Most likely root causes: (a) different `oauth-config.json`

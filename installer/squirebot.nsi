@@ -13,11 +13,10 @@
 ; an "Unknown publisher" wall. The user clicks "More info -> Run anyway".
 ; This is the documented path; Phase 2 adds code signing.
 ;
-; -- INST-04 (autostart) is DEFERRED TO PHASE 2 --
-; Phase 1 deliberately does NOT register HKCU\Software\Microsoft\Windows\
-; CurrentVersion\Run. The watcher only runs when launched explicitly. This
-; keeps the Phase 1 install reversible and avoids surprising guildies whose
-; OAuth grant might silently expire while they aren't watching.
+; -- INST-04 (autostart) --
+; Per-user HKCU\Software\Microsoft\Windows\CurrentVersion\Run\SquireBot
+; pointing at $INSTDIR\squirebot.exe. No UAC needed (HKCU, not HKLM).
+; The uninstaller removes this key unconditionally.
 ;
 ; -- Build invocation --
 ;   makensis -DAPPVERSION=0.1.0 -V2 installer\squirebot.nsi
@@ -88,9 +87,10 @@ Section "Install"
     WriteRegDWORD HKCU "${REGPATH_UNINSTSUBKEY}" "NoModify" 1
     WriteRegDWORD HKCU "${REGPATH_UNINSTSUBKEY}" "NoRepair" 1
 
-    ; INST-04 autostart is Phase 2. Phase 1 does NOT write the Run key --
-    ; the watcher only runs when launched explicitly (post-install Exec
-    ; below, or by the user from Start Menu / file explorer).
+    ; INST-04: autostart on logon. Per-user Run key, no UAC required.
+    ; The double-quoted value handles $INSTDIR paths containing spaces
+    ; (e.g., usernames with spaces). The Run-key parser respects quoting.
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "SquireBot" '"$INSTDIR\${EXE_NAME}"'
 
     ; Phase 1: launch the wizard immediately after install.
     Exec '"$INSTDIR\${EXE_NAME}"'
@@ -118,6 +118,9 @@ Section "Uninstall"
     ;   cmdkey /list                              (find SquireBot:<email>)
     ;   cmdkey /delete:SquireBot:<email>
     ; Documented in docs/build-and-install.md "Uninstalling".
+
+    ; INST-04 cleanup: remove the autostart Run-key value.
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "SquireBot"
 
     DeleteRegKey HKCU "${REGPATH_UNINSTSUBKEY}"
 SectionEnd

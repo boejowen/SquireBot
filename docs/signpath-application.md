@@ -1,11 +1,11 @@
 # SignPath Foundation OSS Application — Tracker
 
-**Status:** DEFERRED — pending user submission (the SignPath web form requires a real human + GitHub MFA confirmation; cannot be filed by the executor)
-**Application URL:** <https://signpath.org/foundation> (eligibility form lives on the Foundation page)
-**Submission date:** {pending — fill in once submitted}
+**Status:** SUBMITTED — pending SignPath Foundation review
+**Application URL:** <https://signpath.org/apply> (the actual form; not <https://signpath.org/foundation>, which is the about-page)
+**Submission date:** 2026-05-02 (~17:53 UTC / ~12:53 CDT)
 **Expected response timeline:** ~1–4 weeks per community reports (no official SLA)
 **Project repo:** <https://github.com/boejowen/SquireBot>
-**Contact thread:** {pending — fill in the email or Foundation contact thread once the application acknowledgement arrives}
+**Contact thread:** {pending — fill in once acknowledgement email arrives}
 
 ## Why this exists
 
@@ -33,9 +33,35 @@ No watcher code changes. The auto-updater (Plan 02-06's `internal/update`) is si
 - [x] **Active project** — Phase 1 shipped 2026-05-02 (`phase1-complete` tag); Phase 2 in progress
 - [x] **Single-project sponsorship** — no prior SignPath sponsorship for this user / org
 
-## Copy-paste application package
+## As-submitted package (filed 2026-05-02)
 
-The SignPath Foundation web form (<https://signpath.org/foundation>) typically asks for the following fields. Use these verbatim values when filling out the application:
+The SignPath form at <https://signpath.org/apply> asks for the fields below. Values used in the actual submission are verbatim what was pasted; **field names listed here match the live form, NOT the executor's pre-filing guesses** (the executor guessed at fields like "Estimated release frequency" and "MFA confirmation" that don't exist on the form, and missed required fields like Tagline, Reputation, Maintainer Type dropdown, Primary Discovery Channel dropdown).
+
+| Form field | Submitted value |
+|---|---|
+| Project Name * | `SquireBot` |
+| Repository URL * | `https://github.com/boejowen/SquireBot` |
+| Homepage URL * | `https://github.com/boejowen/SquireBot` |
+| Download URL | _(blank — the only download page is GitHub Releases, which can't truthfully mention SignPath until approved; chicken-and-egg)_ |
+| Privacy Policy URL | _(blank — SquireBot does not collect data on a project-controlled server; all data flows are user-owned)_ |
+| Wikipedia URL | _(blank — no article)_ |
+| Tagline * | `A Windows tray app that syncs Project 1999 (EverQuest emulator) character inventories from per-PC text files to a shared Google Sheet for small guilds.` |
+| Description * (500-char limit) | `SquireBot is a Windows watcher that syncs Project 1999 character data into a shared Google Sheet. It watches the game's install folder for text files produced by in-game commands, parses them, and writes the rows to tabs in the workbook via the Google Sheets API using a per-user OAuth drive.file scope. The shared sheet then aggregates players' data into consolidated views for cross-character search, gear progression checklists, and a shared bank inventory.` |
+| Reputation * | `SquireBot is a small project — its target audience is a single 12-person guild on the Project 1999 'Blue' server, not a general user base. There is no media coverage, no measurable download statistics, and no community discussion threads. The repository is public OSS but new (Phase 1 shipped 2026-05-02; Phase 2 in progress). We are applying for SignPath OSS sponsorship specifically because the project will never accumulate enough Microsoft Defender SmartScreen reputation organically to clear the SmartScreen warning panel for guildies installing the binary — SignPath's aggregate cross-project reputation is reported by community sources to build SmartScreen trust faster than a single small project's would.` |
+| Maintainer Type | `Individual maintainer(s)` |
+| Build System | `GitHub Actions` |
+| First Name * | `Joe` |
+| Last Name * | `Bowen` |
+| Email * | `boejowen@gmail.com` |
+| Company Name | _(blank — no company)_ |
+| Primary Discovery Channel * | `AI / LLM tools` |
+| Please specify the exact source | `Surfaced via Claude Code (AI coding assistant) during automated research of OSS code-signing options on 2026-05-01. The research compared SignPath Foundation OSS, EV/OV commercial certs, and Certum OSS smartcards across cost, SmartScreen UX, and toolchain integration; SignPath surfaced as the recommended path for small-audience OSS Windows projects after Microsoft removed EV's instant SmartScreen reputation perk in March 2024.` |
+
+### Form-field guess mismatches (for posterity)
+
+The executor's prepared package guessed at field names that don't match the live form. Fields the executor hallucinated (NOT actually on the form): "Build / release process description", "Code-review process description", "Why SignPath / what we'd sign", "Estimated release frequency", "MFA confirmation". Fields the live form actually requires that the executor missed: Tagline, Reputation, Maintainer Type dropdown, Primary Discovery Channel dropdown, First/Last/Email/Company. If anyone files a future SignPath application, **trust the live form, not this section's structure** — SignPath may change the form again.
+
+### Original guess-package (kept for diff archeology, do NOT use)
 
 ### Project name
 

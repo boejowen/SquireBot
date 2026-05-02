@@ -31,7 +31,7 @@ See `.planning/research/STACK.md` and `.planning/research/SUMMARY.md` for full r
 
 **Three-layer pancake inside the workbook:**
 
-1. **Landing tabs** (watcher-written, one per character per file type): `inv:<CharName>` (cols `Location, Name, ID, Count, Slots, _uploaded_at`), `spell:<CharName>` (cols `Slot, Name, _uploaded_at`). Watcher writes full-snapshot replace via `spreadsheets.batchUpdate` (atomic clear `A2:F` + write `A1:F<N+1>`) — never appends, never row-diffs.
+1. **Landing tabs** (watcher-written, one per character per file type): `inv:<CharName>` (cols `Location, Name, ID, Count, Slots, _uploaded_at`), `spell:<CharName>` (cols `Level, Name, _uploaded_at`). Watcher writes full-snapshot replace via `spreadsheets.batchUpdate` (atomic clear `A2:F` + write `A1:F<N+1>`) — never appends, never row-diffs.
 2. **Dimension tabs** (Apps Script-written, hidden, `_`-prefixed): `_meta`, `_char_owner`, `_item_master`, `_pigparse`, `_wiki_spells`, `_wiki_gear_tier`, `_quest_items`, `_audit`, `_status`.
 3. **View tabs** (Apps Script-written, visible, **CONSOLIDATED filterable mega-tabs** with a leading `Char` column): `view`, `gear_check`, `spell_check`, `bank`. Search is an `HtmlService` sidebar (not a tab).
 

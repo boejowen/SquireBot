@@ -6,6 +6,7 @@ require (
 	fyne.io/systray v1.10.0
 	github.com/danieljoos/wincred v1.2.0
 	github.com/fsnotify/fsnotify v1.7.0
+	github.com/minio/selfupdate v0.6.0
 	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.43.0
@@ -29,7 +30,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
 	github.com/googleapis/gax-go/v2 v2.18.0 // indirect
-	github.com/minio/selfupdate v0.6.0 // indirect
 	github.com/tevino/abool v1.2.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect

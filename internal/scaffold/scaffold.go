@@ -126,15 +126,21 @@ var MetaRows = [][]string{
 // runWatcher after ValidateWorkbook returns Empty or Matches. Idempotent.
 //
 // Sequence:
-//  1. ListSheets — single bulk read of existing tab titles + sheetIds.
-//  2. For each DimensionTab missing → EnsureSheet, WriteHeaderRow, HideSheet.
+//  1. ListSheets — single bulk read of existing tab titles + sheetIds + hidden flag.
+//  2. For each DimensionTab:
+//     - missing → EnsureSheet, WriteHeaderRow, HideSheet
+//     - present but visible → HideSheet (fixes up tabs created visible
+//       by upstream EnsureSheet side-effects, e.g. ValidateWorkbook's
+//       defensive EnsureSheet("_meta") and the heartbeat code path
+//       that creates "_status" before scaffold's loop reaches it)
+//     - present and hidden → no-op
 //  3. For each ViewTab missing → EnsureSheet, WriteHeaderRow (no hide).
 //  4. ReadColumn _meta!A:A — collect existing keys.
 //  5. For each MetaRow whose key is NOT in the existing set → AppendRow.
 //
-// On a fully-scaffolded workbook (second-run / steady-state), steps 2-3
-// hit zero EnsureSheet→AddSheet calls (cache populated by step 1) and
-// zero WriteHeaderRow / HideSheet calls. Step 5 hits zero AppendRow
+// On a fully-scaffolded workbook with all dimension tabs already hidden
+// (second-run / steady-state), steps 2-3 hit zero AddSheet, zero
+// WriteHeaderRow, and zero HideSheet calls. Step 5 hits zero AppendRow
 // calls. Net cost: one Get + one Get = two API calls.
 func ScaffoldSchemaV1(ctx context.Context, sc *sheet.Client) error {
 	existing, err := sc.ListSheets(ctx)
@@ -144,7 +150,21 @@ func ScaffoldSchemaV1(ctx context.Context, sc *sheet.Client) error {
 
 	// Step 2: hidden dimension tabs.
 	for _, tab := range DimensionTabs {
-		if _, present := existing[tab.Name]; present {
+		if meta, present := existing[tab.Name]; present {
+			// Tab exists. Ensure it's hidden — it may have been
+			// created visible by an upstream EnsureSheet side-effect
+			// (Day-0 finding from soak validation 2026-05-02:
+			// ValidateWorkbook's defensive EnsureSheet("_meta") and
+			// heartbeat's EnsureSheet("_status") run BEFORE this
+			// loop, so without this branch _meta and _status remain
+			// visible on every fresh install).
+			if !meta.Hidden {
+				if err := sc.HideSheet(ctx, meta.ID); err != nil {
+					return fmt.Errorf("hide pre-existing %s: %w", tab.Name, err)
+				}
+				slog.Info("scaffold: hid pre-existing dimension tab",
+					"tab", tab.Name)
+			}
 			continue
 		}
 		id, err := sc.EnsureSheet(ctx, tab.Name)

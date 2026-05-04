@@ -475,6 +475,98 @@ func TestScaffoldSchemaV1_HidesDimensionTabsOnCreate(t *testing.T) {
 	}
 }
 
+// Test 7: regression — pre-existing dimension tabs that are visible
+// (e.g., _meta created by ValidateWorkbook's EnsureSheet side-effect,
+// or _status created by heartbeat's EnsureSheet before scaffold ran)
+// must be hidden by scaffold rather than left visible. Day-0 finding
+// from soak validation 2026-05-02.
+func TestScaffoldSchemaV1_HidesPreExistingVisibleDimensionTabs(t *testing.T) {
+	// Pre-populate the workbook with two dimension tabs in the visible
+	// state (Hidden:false) — mirroring the Day-0 production state where
+	// _meta and _status existed but were not hidden.
+	tabs := []sheetInfo{
+		{Title: "Sheet1", SheetID: 0},
+		{Title: "_meta", SheetID: 100, Hidden: false},
+		{Title: "_status", SheetID: 101, Hidden: false},
+	}
+	h := newHandler(t, tabs, nil)
+	c, srv := newTestClient(t, h)
+	defer srv.Close()
+
+	if err := ScaffoldSchemaV1(context.Background(), c); err != nil {
+		t.Fatalf("ScaffoldSchemaV1: %v", err)
+	}
+
+	// Both pre-existing visible dimension tabs MUST appear in
+	// hiddenChanges (scaffold must have called HideSheet for each).
+	preExistingHidden := map[int64]bool{}
+	for _, sid := range h.hiddenChanges {
+		preExistingHidden[sid] = true
+	}
+	if !preExistingHidden[100] {
+		t.Errorf("pre-existing visible _meta (sheetId=100) was NOT hidden by scaffold; hiddenChanges=%v", h.hiddenChanges)
+	}
+	if !preExistingHidden[101] {
+		t.Errorf("pre-existing visible _status (sheetId=101) was NOT hidden by scaffold; hiddenChanges=%v", h.hiddenChanges)
+	}
+
+	// Pre-existing tabs must NOT have their headers re-written (the user's
+	// existing data, if any, is preserved per the partial-scaffold contract).
+	if _, wrote := h.tabHeaders["_meta"]; wrote {
+		t.Errorf("_meta header was overwritten — pre-existing tab headers must be preserved")
+	}
+	if _, wrote := h.tabHeaders["_status"]; wrote {
+		t.Errorf("_status header was overwritten — pre-existing tab headers must be preserved")
+	}
+
+	// addSheetCalls = 11 (7 missing dimension tabs + 4 view tabs).
+	wantAdds := len(DimensionTabs) + len(ViewTabs) - 2
+	if h.addSheetCalls != wantAdds {
+		t.Errorf("addSheetCalls = %d, want %d (skip 2 pre-existing dim tabs)", h.addSheetCalls, wantAdds)
+	}
+
+	// Total hideUpdateReqs = 7 newly-created dimension tabs + 2
+	// pre-existing visible ones = 9 = len(DimensionTabs).
+	wantHides := len(DimensionTabs)
+	if h.hideUpdateReqs != wantHides {
+		t.Errorf("hideUpdateReqs = %d, want %d (7 new + 2 pre-existing visible)", h.hideUpdateReqs, wantHides)
+	}
+}
+
+// Test 8: regression companion — pre-existing dimension tabs that are
+// ALREADY hidden must NOT trigger a redundant HideSheet call (avoids
+// burning an API call per scaffold run on a healthy workbook).
+func TestScaffoldSchemaV1_DoesNotRehidePreExistingHiddenDimensionTabs(t *testing.T) {
+	tabs := []sheetInfo{
+		{Title: "Sheet1", SheetID: 0},
+		{Title: "_meta", SheetID: 100, Hidden: true},   // already hidden
+		{Title: "_status", SheetID: 101, Hidden: true}, // already hidden
+	}
+	h := newHandler(t, tabs, nil)
+	c, srv := newTestClient(t, h)
+	defer srv.Close()
+
+	if err := ScaffoldSchemaV1(context.Background(), c); err != nil {
+		t.Fatalf("ScaffoldSchemaV1: %v", err)
+	}
+
+	// _meta and _status should NOT appear in hiddenChanges (no redundant hides).
+	for _, sid := range h.hiddenChanges {
+		if sid == 100 {
+			t.Errorf("pre-existing already-hidden _meta was redundantly re-hidden")
+		}
+		if sid == 101 {
+			t.Errorf("pre-existing already-hidden _status was redundantly re-hidden")
+		}
+	}
+
+	// Total hideUpdateReqs = 7 (only the newly-created dimension tabs).
+	wantHides := len(DimensionTabs) - 2
+	if h.hideUpdateReqs != wantHides {
+		t.Errorf("hideUpdateReqs = %d, want %d (7 new only; 2 pre-existing skipped)", h.hideUpdateReqs, wantHides)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

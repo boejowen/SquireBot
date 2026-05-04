@@ -22,15 +22,28 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-// ListSheets returns the full title→sheetId map for the active spreadsheet
-// without creating any tabs. Plan 02-01 Task 2 added this so the scaffold
-// package can do a single bulk read of existing tab titles before
-// deciding which to create. Side effect: refreshes the Client's tabs
-// cache so subsequent EnsureSheet calls will hit the cache.
+// SheetMeta describes a tab's identity and visibility state within a
+// workbook. Returned by ListSheets so callers can decide both "is this
+// tab present?" AND "is it in the visibility state we expect?". The
+// scaffold relies on the Hidden flag to fix up dimension tabs that
+// were created visible by upstream side-effects (e.g.,
+// ValidateWorkbook's defensive EnsureSheet("_meta") call) before
+// scaffold ran.
+type SheetMeta struct {
+	ID     int64
+	Hidden bool
+}
+
+// ListSheets returns the full title→SheetMeta map for the active
+// spreadsheet without creating any tabs. Plan 02-01 Task 2 added this
+// so the scaffold package can do a single bulk read of existing tab
+// state before deciding which to create or hide. Side effect:
+// refreshes the Client's tabs cache so subsequent EnsureSheet calls
+// will hit the cache.
 //
 // Unlike EnsureSheet, ListSheets never mutates the workbook. Callers
 // that want lazy creation should still go through EnsureSheet.
-func (c *Client) ListSheets(ctx context.Context) (map[string]int64, error) {
+func (c *Client) ListSheets(ctx context.Context) (map[string]SheetMeta, error) {
 	if c.spreadsheetID == "" {
 		return nil, fmt.Errorf("ListSheets: spreadsheetID not set")
 	}
@@ -38,12 +51,15 @@ func (c *Client) ListSheets(ctx context.Context) (map[string]int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get spreadsheet: %w", err)
 	}
-	out := make(map[string]int64, len(ss.Sheets))
+	out := make(map[string]SheetMeta, len(ss.Sheets))
 	for _, s := range ss.Sheets {
 		if s.Properties == nil {
 			continue
 		}
-		out[s.Properties.Title] = s.Properties.SheetId
+		out[s.Properties.Title] = SheetMeta{
+			ID:     s.Properties.SheetId,
+			Hidden: s.Properties.Hidden,
+		}
 		c.tabs[s.Properties.Title] = s.Properties.SheetId
 	}
 	return out, nil

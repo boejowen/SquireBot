@@ -46,25 +46,26 @@
 
 **Validates:** Sheets API exponential backoff, Retry-After honoring, persistent-failure surfacing.
 
-**Procedure:** see [scripts/soak/inject-quota-throttle.md](../scripts/soak/inject-quota-throttle.md).
+> ⚠ **Live-test caveat (added 2026-05-03 after first soak attempt).** The OAuth-Playground-storm procedure originally specified here is **structurally infeasible** against a single watcher install. SC-4 evidence is captured via the WATCH-07 unit suite instead — see [scripts/soak/inject-quota-throttle.md](../scripts/soak/inject-quota-throttle.md) for the full explanation of the two architectural barriers (per-project OAuth quota isolation + mutex serialization preventing self-throttle) and the canonical evidence-capture procedure.
 
-**Expected outcome:**
-- During the synthetic write storm, the log shows multiple `batchUpdate` failures with status code 429.
-- The watcher backs off per the WATCH-07 schedule (look for delays of approx 2s, 4s, 8s between retry attempts in log timestamps).
-- The tray status should NOT turn red — quota throttling is transient.
-- After the storm subsides (~5 minutes), normal uploads resume.
+### Canonical SC-4 evidence (Option C)
+
+```bash
+go test ./internal/sheet/... -run TestWithRetry -v
+```
 
 **Pass criteria:**
-- [ ] At least one log line shows a 429 error.
-- [ ] At least one log line shows a successful retry after the 429 (i.e., an `uploaded` line for the file you touched during the storm).
-- [ ] No `permanent auth failure` log line during the throttle.
-- [ ] No tray transition to red.
+- [ ] All 13 `TestWithRetry_*` tests pass (covers 429 with Retry-After seconds + HTTP-date, 429 fall-through to schedule, 403 user rate limit, 5xx exhausted, ctx cancellation during sleep, and 8 more edge cases).
+- [ ] Mutex-serialization tests in `internal/sheet/client_helpers_test.go` pass (`TestClient_batchUpdateSerializesConcurrentGoroutines`, `TestClient_valuesGetSerializesAgainstBatchUpdate`, `TestClient_MutexReleasedOnError`, `TestClient_MutexReleasedOnPanic`).
+- [ ] During the soak window (24h since T0), no `permanent auth failure` log line appears.
+- [ ] During the soak window, no tray-state-change to red.
 - [ ] Heartbeat continues to fire on its 24h boundary.
 
-Run the assertion script:
-```powershell
-.\scripts\soak\grep-log-assertions.ps1 -Scenario QuotaThrottle
-```
+### Expected live observations during the soak window
+
+The watcher's normal operation produces no 429s under typical guildie usage (~1 file change per few hours per character). The unit suite is the source of truth that the retry path *would* fire correctly if a 429 ever arrived.
+
+If you specifically want a live 429 (not required for SC-4 PASS), the only viable approach is documented as "Option B" in [scripts/soak/inject-quota-throttle.md](../scripts/soak/inject-quota-throttle.md) — extracting the watcher's wincred-stored OAuth token to storm via the watcher's own client. Estimated 30–60 min of test infrastructure work; not worth doing unless investigating a specific Google-side regression that mocks can't catch.
 
 ---
 

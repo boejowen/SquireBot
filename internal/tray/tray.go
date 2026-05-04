@@ -13,8 +13,12 @@
 // requires a desktop session). Plan 08 smoke checkpoint validates the
 // live tray on Win11 VM.
 //
-// Phase 5 polish: the green/red icon distinction is currently a
-// stand-in (same bytes for both); a distinct red overlay is deferred.
+// Green/red icon distinction: the Controller swaps tray icons via
+// SetIconHealth using the IconGreen / IconRed bytes supplied by main.go
+// (sourced from assets/icon-green.ico and assets/icon-red.ico —
+// distinct 16x16 BMP-in-ICO solid-color placeholders, 1118 bytes each).
+// Day-1 soak finding 2026-05-03 promoted this from the original "same
+// bytes for both" stand-in noted as deferred Phase 5 polish.
 package tray
 
 import (

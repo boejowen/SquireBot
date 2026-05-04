@@ -97,8 +97,8 @@ func main() {
 
 	var trayCtl *tray.Controller
 	trayCtl = tray.NewController(tray.Config{
-		IconGreen:     iconBytes,
-		IconRed:       iconBytes, // Phase 5 polish — distinct red art deferred
+		IconGreen:     iconGreenBytes,
+		IconRed:       iconRedBytes,
 		LogDir:        logDir,
 		SpreadsheetID: cfg.SpreadsheetID,
 		OnContinueSetup: func() {
@@ -150,7 +150,8 @@ func main() {
 		"go_version", runtime.Version(),
 		"log_dir", logDir,
 		"config_path", config.Path(),
-		"icon_bytes", len(iconBytes),
+		"icon_green_bytes", len(iconGreenBytes),
+		"icon_red_bytes", len(iconRedBytes),
 		"google_email", cfg.GoogleEmail,
 		"spreadsheet_id_set", cfg.SpreadsheetID != "",
 		"eq_folder_set", cfg.EQFolder != "",

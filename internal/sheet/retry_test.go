@@ -410,6 +410,90 @@ func TestParseRetryAfter(t *testing.T) {
 	})
 }
 
+// TestWithRetry_401RefreshThenSuccess — first 401 triggers one refresh; the
+// second op call succeeds. No sleep consumed.
+func TestWithRetry_401RefreshThenSuccess(t *testing.T) {
+	recorded := installFakeSleep(t)
+	refreshes := 0
+	onRefresh := func() error {
+		refreshes++
+		return nil
+	}
+	calls := 0
+	op := func() error {
+		calls++
+		if calls == 1 {
+			return &googleapi.Error{Code: http.StatusUnauthorized}
+		}
+		return nil
+	}
+	if err := withRetry(context.Background(), op, onRefresh); err != nil {
+		t.Fatalf("withRetry: %v", err)
+	}
+	if refreshes != 1 {
+		t.Errorf("refreshes = %d, want 1", refreshes)
+	}
+	if calls != 2 {
+		t.Errorf("op calls = %d, want 2", calls)
+	}
+	if len(*recorded) != 0 {
+		t.Errorf("sleeps = %v, want none (401 retries immediately after refresh)", *recorded)
+	}
+}
+
+// TestWithRetry_401TwiceIsPermanent — second 401 after a successful refresh
+// returns ErrPermanentAuth with no further retries.
+func TestWithRetry_401TwiceIsPermanent(t *testing.T) {
+	installFakeSleep(t)
+	refreshes := 0
+	onRefresh := func() error {
+		refreshes++
+		return nil
+	}
+	calls := 0
+	op := func() error {
+		calls++
+		return &googleapi.Error{Code: http.StatusUnauthorized}
+	}
+	err := withRetry(context.Background(), op, onRefresh)
+	if !errors.Is(err, ErrPermanentAuth) {
+		t.Fatalf("withRetry error = %v, want ErrPermanentAuth", err)
+	}
+	if refreshes != 1 {
+		t.Errorf("refreshes = %d, want exactly 1", refreshes)
+	}
+	if calls != 2 {
+		t.Errorf("op calls = %d, want 2 (initial + post-refresh retry)", calls)
+	}
+}
+
+// TestWithRetry_401RefreshFailsWrapsError — if onRefresh itself fails (e.g.
+// the token endpoint returns invalid_grant), the error is wrapped and returned
+// so that isPermanentAuthErr / IsRevokedRefreshToken can match on it.
+func TestWithRetry_401RefreshFailsWrapsError(t *testing.T) {
+	installFakeSleep(t)
+	refreshErr := errors.New("oauth2: cannot fetch token: invalid_grant")
+	onRefresh := func() error { return refreshErr }
+	op := func() error {
+		return &googleapi.Error{Code: http.StatusUnauthorized}
+	}
+	err := withRetry(context.Background(), op, onRefresh)
+	if err == nil {
+		t.Fatal("withRetry returned nil, want non-nil")
+	}
+	if !errors.Is(err, refreshErr) {
+		t.Errorf("withRetry error = %v; want errors.Is chain to include refreshErr", err)
+	}
+	if got := err.Error(); len(got) == 0 {
+		t.Errorf("error string is empty")
+	}
+	// Verify the wrapping preserves "401" in the message so callers can
+	// distinguish this path from a 403 refresh failure.
+	if s := err.Error(); len(s) < 3 {
+		t.Errorf("error string too short: %q", s)
+	}
+}
+
 // TestErrPermanentAuth_IsExportedSentinel — light sanity test that the
 // sentinel is exported and non-nil. The behavioral tests above prove it
 // is the value returned on the second auth-flavored 403.

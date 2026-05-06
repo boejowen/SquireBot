@@ -4,6 +4,16 @@ package sheet
 //
 // withRetry runs op with the WATCH-07 retry policy:
 //
+//   401 (Unauthorized):
+//     Refresh ONCE via onRefresh; retry immediately. If refresh itself
+//     fails (e.g. invalid_grant the refresh token is dead) the wrapped
+//     error is surfaced — isPermanentAuthErr catches it via
+//     IsRevokedRefreshToken. If the post-refresh retry is also 401,
+//     return ErrPermanentAuth. This covers the case where the access
+//     token is still cached but the underlying OAuth grant was revoked
+//     (Google's resource server returns 401 before the access token
+//     expires and a refresh is attempted by the transport layer).
+//
 //   429 (Too Many Requests):
 //     Honor Retry-After header (overrides schedule for that retry); else
 //     schedule[attempt]. Both RFC 7231 forms are accepted (integer seconds
@@ -86,10 +96,11 @@ func realSleep(ctx context.Context, d time.Duration) error {
 }
 
 // withRetry runs op with the WATCH-07 retry envelope. onRefresh is invoked
-// at most ONCE — on a 403 with reason in {authError, insufficientPermissions,
-// forbidden}. If onRefresh returns an error, withRetry surfaces that error
-// wrapped (no further retries). If the post-refresh retry returns the same
-// auth-flavored 403, withRetry returns ErrPermanentAuth.
+// at most ONCE — on a 401, or on a 403 with reason in {authError,
+// insufficientPermissions, forbidden}. If onRefresh returns an error,
+// withRetry surfaces that error wrapped (no further retries). If the
+// post-refresh retry returns the same auth error, withRetry returns
+// ErrPermanentAuth.
 func withRetry(ctx context.Context, op func() error, onRefresh func() error) error {
 	refreshed := false
 	for attempt := 0; ; attempt++ {
@@ -109,6 +120,20 @@ func withRetry(ctx context.Context, op func() error, onRefresh func() error) err
 			continue
 		}
 		switch ge.Code {
+		case http.StatusUnauthorized: // 401
+			// A 401 is unambiguously an auth error. Unlike a 403 there is no
+			// reason field to inspect — go straight to one refresh attempt.
+			// If refresh fails (e.g. invalid_grant) the wrapped error surfaces
+			// to isPermanentAuthErr via IsRevokedRefreshToken. If the second
+			// attempt is also 401, return ErrPermanentAuth directly.
+			if refreshed {
+				return ErrPermanentAuth
+			}
+			refreshed = true
+			if rerr := onRefresh(); rerr != nil {
+				return fmt.Errorf("token refresh after 401: %w", rerr)
+			}
+			continue
 		case http.StatusTooManyRequests: // 429
 			d := retrySchedule[min(attempt, len(retrySchedule)-1)]
 			if ra := parseRetryAfter(ge.Header.Get("Retry-After")); ra > 0 {

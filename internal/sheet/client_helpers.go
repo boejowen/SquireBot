@@ -17,7 +17,9 @@ package sheet
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/sheets/v4"
@@ -146,4 +148,32 @@ func (c *Client) onRefreshOrNoop() func() error {
 		return c.onRefresh
 	}
 	return func() error { return nil }
+}
+
+// PingNoLock makes a lightweight Spreadsheets.Get call WITHOUT acquiring
+// batchMu. It MUST only be called from within onRefresh (i.e., from code
+// that already holds batchMu via withRetry).
+//
+// Purpose: after onRefresh swaps in a fresh TokenSource, the first retry
+// attempt is batchUpdate — which hits the Sheets API without any prior
+// read of the spreadsheet under the new grant. A Spreadsheets.Get here:
+//   - verifies the new access token actually works for this spreadsheet, and
+//   - satisfies any drive.file "file was opened" registration requirement
+//     so the subsequent batchUpdate retry is accepted.
+//
+// Returns ErrPermanentAuth on HTTP 401 (token invalid for this resource),
+// or the raw error for other failures.
+func (c *Client) PingNoLock(ctx context.Context) error {
+	if c.spreadsheetID == "" {
+		return fmt.Errorf("PingNoLock: spreadsheetID not set")
+	}
+	_, err := c.svc.Spreadsheets.Get(c.spreadsheetID).Fields("spreadsheetId").Context(ctx).Do()
+	if err == nil {
+		return nil
+	}
+	var ge *googleapi.Error
+	if errors.As(err, &ge) && ge.Code == http.StatusUnauthorized {
+		return ErrPermanentAuth
+	}
+	return err
 }

@@ -212,6 +212,12 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	// whatever stale access token the previous ReuseTokenSource had cached.
 	// On success we swap sts.cur to the fresh source so the withRetry retry
 	// (and all subsequent calls) receive the new access token.
+	//
+	// After the swap we call PingNoLock: the first API call after a swap
+	// is otherwise the batchUpdate retry itself, which never made a prior
+	// Spreadsheets.Get with the new token. The ping (a) confirms the new
+	// token works for this specific spreadsheet, and (b) satisfies the
+	// drive.file "file was opened" registration before the write retry.
 	sc.SetOnRefresh(func() error {
 		freshTS, err := buildTokenSourceFromWincred(ctx, cfg, bc)
 		if err != nil {
@@ -221,6 +227,10 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 			return err
 		}
 		sts.swap(freshTS)
+		if pingErr := sc.PingNoLock(ctx); pingErr != nil {
+			slog.Warn("onRefresh: post-swap ping failed", "err", pingErr)
+			return pingErr
+		}
 		return nil
 	})
 

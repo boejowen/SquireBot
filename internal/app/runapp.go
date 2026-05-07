@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -129,6 +130,30 @@ func needsWizard(cfg *config.Config) bool {
 	return cfg.EQFolder == "" && len(cfg.EQFolders) == 0
 }
 
+// swappableTS is an oauth2.TokenSource whose underlying source can be
+// replaced while the sheet client is running. onRefresh swaps it when
+// Reauthorize has stored a new refresh token in wincred: the old
+// ReuseTokenSource cached access token is then stale even though it has
+// not expired by wall-clock time, so simply calling ts.Token() returns
+// the revoked token from cache and the retry 401s again.
+type swappableTS struct {
+	mu  sync.Mutex
+	cur oauth2.TokenSource
+}
+
+func (s *swappableTS) Token() (*oauth2.Token, error) {
+	s.mu.Lock()
+	cur := s.cur
+	s.mu.Unlock()
+	return cur.Token()
+}
+
+func (s *swappableTS) swap(newTS oauth2.TokenSource) {
+	s.mu.Lock()
+	s.cur = newTS
+	s.mu.Unlock()
+}
+
 // buildTokenSourceFromWincred reconstructs an oauth2.TokenSource from
 // the wincred-stored refresh token. Used on the skip-wizard cold-start
 // path and by ChangeWorkbook. Plan 03's OAuthConfigForRefresh keeps the
@@ -174,24 +199,29 @@ func buildTokenSourceFromWincred(ctx context.Context, cfg *config.Config, bc aut
 // runs a startup catch-up scan so files saved while the watcher was
 // off are uploaded on the next launch.
 func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, ts oauth2.TokenSource) error {
-	sc, err := sheet.NewClient(ctx, ts, cfg.SpreadsheetID)
+	sts := &swappableTS{cur: ts}
+	sc, err := sheet.NewClient(ctx, sts, cfg.SpreadsheetID)
 	if err != nil {
 		return fmt.Errorf("sheet client: %w", err)
 	}
-	// Plan 02-04 (AUTH-05): tell *Client how to refresh its access token
-	// on a 403-with-auth-reason. ts is a ReuseTokenSource wrapping the
-	// underlying ConfigTokenSource — calling Token() when the cached
-	// access token is expired/invalid triggers a refresh exchange against
-	// Google. If the REFRESH token itself is dead, this returns
-	// *oauth2.RetrieveError, which Plan 02-03's withRetry promotes to
-	// sheet.ErrPermanentAuth on the second auth-flavored 403. The
-	// inventory + spellbook handlers below detect that signal AND a
-	// direct auth.IsRevokedRefreshToken match (covers the case where
-	// the bare refresh exchange surfaced the error before withRetry got
-	// a second chance) and trip globalAuthSuspended.
+	// Plan 02-04 (AUTH-05): onRefresh rebuilds from wincred on every call.
+	// We re-read wincred because Reauthorize may have stored a new refresh
+	// token there since the watcher started. buildTokenSourceFromWincred
+	// produces a ReuseTokenSource whose initial token has a zero Expiry, so
+	// its first Token() call always makes a real HTTP exchange — bypassing
+	// whatever stale access token the previous ReuseTokenSource had cached.
+	// On success we swap sts.cur to the fresh source so the withRetry retry
+	// (and all subsequent calls) receive the new access token.
 	sc.SetOnRefresh(func() error {
-		_, err := ts.Token()
-		return err
+		freshTS, err := buildTokenSourceFromWincred(ctx, cfg, bc)
+		if err != nil {
+			return err
+		}
+		if _, err = freshTS.Token(); err != nil {
+			return err
+		}
+		sts.swap(freshTS)
+		return nil
 	})
 
 	// Plan 02-01 Task 1: ValidateWorkbook returns one of three states.

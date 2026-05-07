@@ -222,9 +222,20 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	// be the first real API call under the swapped token. If that retry also
 	// returns 401, withRetry surfaces ErrPermanentAuth in the normal way.
 	sc.SetOnRefresh(func() error {
-		freshTS, err := buildTokenSourceFromWincred(ctx, cfg, bc)
-		if err != nil {
-			return err
+		// Prefer the token source handed off by Reauthorize Phase 2: it
+		// already has the AT (AT2a) that the Drive Picker used to register
+		// the workbook. A second exchange from wincred yields AT2b which
+		// Google does not recognise as having drive.file access.
+		var freshTS oauth2.TokenSource
+		select {
+		case freshTS = <-globalReauthTSCh:
+			slog.Info("onRefresh: using post-reauth token source")
+		default:
+			var err error
+			freshTS, err = buildTokenSourceFromWincred(ctx, cfg, bc)
+			if err != nil {
+				return err
+			}
 		}
 		tok, err := freshTS.Token()
 		if err != nil {

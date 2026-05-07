@@ -55,6 +55,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/boejowen/SquireBot/internal/auth"
 	"github.com/boejowen/SquireBot/internal/config"
 	"github.com/boejowen/SquireBot/internal/picker"
@@ -79,6 +81,15 @@ const reauthorizeTimeout = 5 * time.Minute
 // goroutine). Write paths are the same handlers (Store(true) on permanent
 // auth failure) + Reauthorize (Store(false) on success).
 var globalAuthSuspended atomic.Bool
+
+// globalReauthTSCh carries the picker's oauth2.TokenSource from a completed
+// Reauthorize Phase 2 to the watcher's onRefresh closure. Capacity 1 so
+// Reauthorize can store and proceed without blocking; onRefresh drains it
+// non-blocking. The token source has the access token (AT2a) that the Drive
+// Picker used to register the workbook under the new grant — using this AT
+// directly avoids a second exchange that would yield a different AT (AT2b)
+// which Google does not recognise as having file access under drive.file scope.
+var globalReauthTSCh = make(chan oauth2.TokenSource, 1)
 
 // Reauthorize re-runs the OAuth loopback flow against cfg.GoogleEmail,
 // then (Phase 2) re-registers the workbook via the Drive Picker so that
@@ -221,6 +232,14 @@ func Reauthorize(ctx context.Context, cfg *config.Config, bc auth.BuildConstants
 	select {
 	case <-pickedCh:
 		slog.Info("Reauthorize: picker step complete", "email", cfg.GoogleEmail)
+		// Hand freshTS to the watcher's onRefresh so the batchUpdate retry
+		// uses the same access token the picker registered (AT2a), not a
+		// second exchange from wincred (AT2b) which lacks drive.file access.
+		select {
+		case <-globalReauthTSCh: // drain any stale entry from a previous reauth
+		default:
+		}
+		globalReauthTSCh <- freshTS
 	case <-pickerCtx.Done():
 		err := pickerCtx.Err()
 		slog.Error("Reauthorize: picker timeout / cancelled", "err", err)

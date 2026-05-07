@@ -213,24 +213,25 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	// On success we swap sts.cur to the fresh source so the withRetry retry
 	// (and all subsequent calls) receive the new access token.
 	//
-	// After the swap we call PingNoLock: the first API call after a swap
-	// is otherwise the batchUpdate retry itself, which never made a prior
-	// Spreadsheets.Get with the new token. The ping (a) confirms the new
-	// token works for this specific spreadsheet, and (b) satisfies the
-	// drive.file "file was opened" registration before the write retry.
+	// We do NOT call PingNoLock here: Reauthorize Phase 2 (picker) already
+	// registered the file under the new grant via the Drive Picker. A
+	// Spreadsheets.Get ping was found to return 401 even after a successful
+	// picker interaction (Spreadsheets.Get and Spreadsheets.Values.Get have
+	// different drive.file scope semantics), so we let the withRetry retry
+	// — the batchUpdate or valuesGet that originally triggered the 401 —
+	// be the first real API call under the swapped token. If that retry also
+	// returns 401, withRetry surfaces ErrPermanentAuth in the normal way.
 	sc.SetOnRefresh(func() error {
 		freshTS, err := buildTokenSourceFromWincred(ctx, cfg, bc)
 		if err != nil {
 			return err
 		}
-		if _, err = freshTS.Token(); err != nil {
+		tok, err := freshTS.Token()
+		if err != nil {
 			return err
 		}
+		slog.Info("onRefresh: fresh token obtained", "expiry", tok.Expiry)
 		sts.swap(freshTS)
-		if pingErr := sc.PingNoLock(ctx); pingErr != nil {
-			slog.Warn("onRefresh: post-swap ping failed", "err", pingErr)
-			return pingErr
-		}
 		return nil
 	})
 

@@ -177,3 +177,34 @@ func (c *Client) PingNoLock(ctx context.Context) error {
 	}
 	return err
 }
+
+// PingWriteNoLock probes write access via an empty batchUpdate WITHOUT
+// acquiring batchMu. It MUST only be called from within onRefresh.
+//
+// After Reauthorize+picker, drive.file write access takes 8–25 minutes to
+// propagate to all Sheets API servers; Spreadsheets.Get (PingNoLock) returns
+// 200 immediately while batchUpdate returns 401 during that window. This
+// probe tests the exact write path. Google validates auth before the request
+// body, so 401 = not yet propagated; any other response (200, 400, network
+// error) = auth accepted.
+//
+// Returns ErrPermanentAuth on 401, nil otherwise.
+func (c *Client) PingWriteNoLock(ctx context.Context) error {
+	if c.spreadsheetID == "" {
+		return fmt.Errorf("PingWriteNoLock: spreadsheetID not set")
+	}
+	_, err := c.svc.Spreadsheets.BatchUpdate(c.spreadsheetID,
+		&sheets.BatchUpdateSpreadsheetRequest{Requests: []*sheets.Request{}}).
+		Context(ctx).Do()
+	if err == nil {
+		return nil
+	}
+	var ge *googleapi.Error
+	if errors.As(err, &ge) && ge.Code == http.StatusUnauthorized {
+		return ErrPermanentAuth
+	}
+	// 400 (empty requests invalid but auth accepted), 403, 5xx, or network
+	// error: not a propagation-delay 401 — proceed and let the real
+	// batchUpdate retry surface any actual error.
+	return nil
+}

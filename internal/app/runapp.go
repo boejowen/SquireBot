@@ -204,32 +204,23 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	if err != nil {
 		return fmt.Errorf("sheet client: %w", err)
 	}
-	// Plan 02-04 (AUTH-05): onRefresh rebuilds from wincred on every call.
-	// We re-read wincred because Reauthorize may have stored a new refresh
-	// token there since the watcher started. buildTokenSourceFromWincred
-	// produces a ReuseTokenSource whose initial token has a zero Expiry, so
-	// its first Token() call always makes a real HTTP exchange — bypassing
-	// whatever stale access token the previous ReuseTokenSource had cached.
-	// On success we swap sts.cur to the fresh source so the withRetry retry
-	// (and all subsequent calls) receive the new access token.
-	//
-	// We do NOT call PingNoLock here: Reauthorize Phase 2 (picker) already
-	// registered the file under the new grant via the Drive Picker. A
-	// Spreadsheets.Get ping was found to return 401 even after a successful
-	// picker interaction (Spreadsheets.Get and Spreadsheets.Values.Get have
-	// different drive.file scope semantics), so we let the withRetry retry
-	// — the batchUpdate or valuesGet that originally triggered the 401 —
-	// be the first real API call under the swapped token. If that retry also
-	// returns 401, withRetry surfaces ErrPermanentAuth in the normal way.
+	// Plan 02-04 (AUTH-05): onRefresh rebuilds the token source on every call.
+	// When called after Reauthorize, it drains globalReauthTSCh to get the
+	// picker's freshTS (AT2a). After swapping sts, it probes write access in
+	// a loop: drive.file batchUpdate returns 401 for 8–25 minutes after picker
+	// registration while Google propagates the new grant. The probe sleeps here
+	// inside batchMu; that is safe because authSuspended=false causes watcher
+	// events to queue on batchMu (not skip), and heartbeat checks
+	// globalAuthSuspended (skips when true) — but here it's false, so heartbeat
+	// may block on batchMu briefly per 60s probe; the 24h fire rate makes that
+	// negligible.
 	sc.SetOnRefresh(func() error {
-		// Prefer the token source handed off by Reauthorize Phase 2: it
-		// already has the AT (AT2a) that the Drive Picker used to register
-		// the workbook. A second exchange from wincred yields AT2b which
-		// Google does not recognise as having drive.file access.
 		var freshTS oauth2.TokenSource
+		fromReauth := false
 		select {
 		case freshTS = <-globalReauthTSCh:
 			slog.Info("onRefresh: using post-reauth token source")
+			fromReauth = true
 		default:
 			var err error
 			freshTS, err = buildTokenSourceFromWincred(ctx, cfg, bc)
@@ -243,7 +234,36 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 		}
 		slog.Info("onRefresh: fresh token obtained", "expiry", tok.Expiry)
 		sts.swap(freshTS)
-		return nil
+		if !fromReauth {
+			return nil // non-reauth refresh; no propagation delay expected
+		}
+		// Probe write access until Google propagates the new grant or timeout.
+		const probeInterval = 60 * time.Second
+		const probeMaxWait = 25 * time.Minute
+		probeDeadline := time.Now().Add(probeMaxWait)
+		for attempt := 1; ; attempt++ {
+			if perr := sc.PingWriteNoLock(ctx); !errors.Is(perr, sheet.ErrPermanentAuth) {
+				if perr == nil {
+					slog.Info("onRefresh: write probe succeeded", "attempt", attempt)
+				} else {
+					slog.Warn("onRefresh: write probe non-auth error; proceeding", "err", perr)
+				}
+				return nil
+			}
+			if time.Now().After(probeDeadline) {
+				break
+			}
+			slog.Info("onRefresh: write probe 401 — drive.file propagating",
+				"attempt", attempt, "retry_in", probeInterval)
+			t.SetStatus(fmt.Sprintf("Reauthorized: waiting for Google propagation (attempt %d)…", attempt))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(probeInterval):
+			}
+		}
+		slog.Error("onRefresh: drive.file write access did not propagate", "after", probeMaxWait)
+		return sheet.ErrPermanentAuth
 	})
 
 	// Plan 02-01 Task 1: ValidateWorkbook returns one of three states.

@@ -91,6 +91,13 @@ var globalAuthSuspended atomic.Bool
 // which Google does not recognise as having file access under drive.file scope.
 var globalReauthTSCh = make(chan oauth2.TokenSource, 1)
 
+// globalPostReauthPending is set to true by Reauthorize immediately after
+// picker completes. makeOnInventoryChange / makeOnSpellbookChange read-and-clear
+// it (via Swap) when they see ErrPermanentAuth: if the flag was set, the 401
+// is a drive.file propagation delay (not a dead RT), so a background probe
+// goroutine waits it out without surfacing the Reauthorize button.
+var globalPostReauthPending atomic.Bool
+
 // Reauthorize re-runs the OAuth loopback flow against cfg.GoogleEmail,
 // then (Phase 2) re-registers the workbook via the Drive Picker so that
 // the new drive.file grant covers the workbook before writes resume.
@@ -240,6 +247,7 @@ func Reauthorize(ctx context.Context, cfg *config.Config, bc auth.BuildConstants
 		default:
 		}
 		globalReauthTSCh <- freshTS
+		globalPostReauthPending.Store(true)
 	case <-pickerCtx.Done():
 		err := pickerCtx.Err()
 		slog.Error("Reauthorize: picker timeout / cancelled", "err", err)

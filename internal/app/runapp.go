@@ -204,23 +204,14 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 	if err != nil {
 		return fmt.Errorf("sheet client: %w", err)
 	}
-	// Plan 02-04 (AUTH-05): onRefresh rebuilds the token source on every call.
-	// When called after Reauthorize, it drains globalReauthTSCh to get the
-	// picker's freshTS (AT2a). After swapping sts, it probes write access in
-	// a loop: drive.file batchUpdate returns 401 for 8–25 minutes after picker
-	// registration while Google propagates the new grant. The probe sleeps here
-	// inside batchMu; that is safe because authSuspended=false causes watcher
-	// events to queue on batchMu (not skip), and heartbeat checks
-	// globalAuthSuspended (skips when true) — but here it's false, so heartbeat
-	// may block on batchMu briefly per 60s probe; the 24h fire rate makes that
-	// negligible.
+	// Plan 02-04 (AUTH-05): onRefresh swaps in a fresh token source on 401.
+	// drive.file write-access propagation after Reauthorize is handled by
+	// runPostReauthProbe (see makeOnInventoryChange / makeOnSpellbookChange).
 	sc.SetOnRefresh(func() error {
 		var freshTS oauth2.TokenSource
-		fromReauth := false
 		select {
 		case freshTS = <-globalReauthTSCh:
 			slog.Info("onRefresh: using post-reauth token source")
-			fromReauth = true
 		default:
 			var err error
 			freshTS, err = buildTokenSourceFromWincred(ctx, cfg, bc)
@@ -234,36 +225,7 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 		}
 		slog.Info("onRefresh: fresh token obtained", "expiry", tok.Expiry)
 		sts.swap(freshTS)
-		if !fromReauth {
-			return nil // non-reauth refresh; no propagation delay expected
-		}
-		// Probe write access until Google propagates the new grant or timeout.
-		const probeInterval = 60 * time.Second
-		const probeMaxWait = 25 * time.Minute
-		probeDeadline := time.Now().Add(probeMaxWait)
-		for attempt := 1; ; attempt++ {
-			if perr := sc.PingWriteNoLock(ctx); !errors.Is(perr, sheet.ErrPermanentAuth) {
-				if perr == nil {
-					slog.Info("onRefresh: write probe succeeded", "attempt", attempt)
-				} else {
-					slog.Warn("onRefresh: write probe non-auth error; proceeding", "err", perr)
-				}
-				return nil
-			}
-			if time.Now().After(probeDeadline) {
-				break
-			}
-			slog.Info("onRefresh: write probe 401 — drive.file propagating",
-				"attempt", attempt, "retry_in", probeInterval)
-			t.SetStatus(fmt.Sprintf("Reauthorized: waiting for Google propagation (attempt %d)…", attempt))
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(probeInterval):
-			}
-		}
-		slog.Error("onRefresh: drive.file write access did not propagate", "after", probeMaxWait)
-		return sheet.ErrPermanentAuth
+		return nil
 	})
 
 	// Plan 02-01 Task 1: ValidateWorkbook returns one of three states.
@@ -410,6 +372,42 @@ func rescanCatchUp(ctx context.Context, cfg *config.Config, folders []string, on
 	}
 }
 
+// runPostReauthProbe waits for drive.file batchUpdate write access to
+// propagate after Reauthorize+picker. Runs as a goroutine so batchMu is
+// not held during the wait. Clears authSuspended and restores the tray to
+// green when a probe write succeeds. On 90-minute timeout, surfaces the
+// Reauthorize prompt so the user can retry.
+func runPostReauthProbe(ctx context.Context, sc *sheet.Client, authSuspended *atomic.Bool, t *tray.Controller) {
+	const probeInterval = 60 * time.Second
+	const probeMaxWait = 90 * time.Minute
+	probeDeadline := time.Now().Add(probeMaxWait)
+	for attempt := 1; time.Now().Before(probeDeadline); attempt++ {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(probeInterval):
+		}
+		if err := sc.PingWriteNoLock(ctx); !errors.Is(err, sheet.ErrPermanentAuth) {
+			if err == nil {
+				slog.Info("post-reauth probe: write access propagated", "attempt", attempt)
+			} else {
+				slog.Warn("post-reauth probe: non-auth error; resuming", "err", err)
+			}
+			authSuspended.Store(false)
+			t.SetIconHealth(tray.HealthGreen)
+			t.HideReauthorize()
+			t.SetStatus("Reauthorized — resuming uploads")
+			return
+		}
+		slog.Info("post-reauth probe: drive.file write still propagating", "attempt", attempt)
+		t.SetStatus(fmt.Sprintf("Reauthorized: waiting for Google propagation (attempt %d)…", attempt))
+	}
+	slog.Error("post-reauth probe: write access not propagated", "after", probeMaxWait)
+	t.SetIconHealth(tray.HealthRed)
+	t.ShowReauthorize()
+	t.SetStatus("Reauthorize: Google propagation timed out. Click Reauthorize…")
+}
+
 // makeOnInventoryChange wraps the parse → WriteInventory → UpsertCharOwner
 // chain into a watch.OnChange callback. Extracted for testability.
 //
@@ -463,9 +461,17 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 		}
 		uploadedAt := time.Now().UTC().Format(time.RFC3339)
 		if err := sc.WriteInventory(ctx, charName, sheet.InventoryHeader, rows, uploadedAt); err != nil {
-			// Plan 02-04 (AUTH-05): permanent auth failure → suspend
-			// writes, surface tray red + Reauthorize menu, return WITHOUT
-			// upserting char_owner (we are not actually writing).
+			if errors.Is(err, sheet.ErrPermanentAuth) && globalPostReauthPending.Swap(false) {
+				// drive.file batchUpdate 401 immediately after Reauthorize:
+				// propagation delay, not a dead RT. Suspend writes and probe
+				// in a background goroutine; no Reauthorize button needed.
+				authSuspended.Store(true)
+				t.SetIconHealth(tray.HealthGreen)
+				t.SetStatus("Reauthorized: waiting for Google propagation…")
+				slog.Info("post-reauth propagation wait started", "char", charName)
+				go runPostReauthProbe(ctx, sc, authSuspended, t)
+				return
+			}
 			if isPermanentAuthErr(err) {
 				suspendForAuth(authSuspended, t, charName, "inventory", err)
 				return
@@ -539,7 +545,14 @@ func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 		}
 		uploadedAt := time.Now().UTC().Format(time.RFC3339)
 		if err := sc.WriteSpellbook(ctx, charName, sheet.SpellbookHeader, rows, uploadedAt); err != nil {
-			// Plan 02-04 (AUTH-05): same permanent-auth handling as inventory.
+			if errors.Is(err, sheet.ErrPermanentAuth) && globalPostReauthPending.Swap(false) {
+				authSuspended.Store(true)
+				t.SetIconHealth(tray.HealthGreen)
+				t.SetStatus("Reauthorized: waiting for Google propagation…")
+				slog.Info("post-reauth propagation wait started", "char", charName)
+				go runPostReauthProbe(ctx, sc, authSuspended, t)
+				return
+			}
 			if isPermanentAuthErr(err) {
 				suspendForAuth(authSuspended, t, charName, "spellbook", err)
 				return

@@ -24,13 +24,21 @@
 //
 //   4. User clicks tray "Reauthorize…". main.go's tray.Config.OnReauthorize
 //      closure invokes app.RunReauthorize on a goroutine, which calls
-//      Reauthorize. Reauthorize:
-//        - opens a fresh loopback listener on 127.0.0.1:0
-//        - constructs auth.Manager with the existing cfg.GoogleEmail
-//        - opens the browser, runs the OAuth flow with a 5-minute timeout
-//        - on success: exchangeAndStore (inside the manager) replaces the
-//          wincred entry under SquireBot:<email> with the new refresh token
-//        - clears globalAuthSuspended, sets tray green, hides Reauthorize
+//      Reauthorize. Reauthorize runs TWO phases on the same loopback server:
+//
+//      Phase 1 — OAuth: constructs auth.Manager, opens the browser to the
+//        consent URL, waits for the callback. On success exchangeAndStore
+//        replaces the wincred entry under SquireBot:<email>.
+//
+//      Phase 2 — Picker: drive.file scope requires the workbook to be
+//        "opened" via the Drive Picker under each new OAuth grant; a plain
+//        Spreadsheets.Get (or batchUpdate) against an un-opened file returns
+//        401 even with a fresh valid access token. After Phase 1 stores the
+//        new refresh token, Reauthorize opens a second browser window to the
+//        picker page (same loopback server, new routes attached to the same
+//        mux). The user re-selects the workbook; picker.Server.ValidateWorkbook
+//        runs under the new token, registering the file with the new grant.
+//        Only after OnPicked fires does Reauthorize clear globalAuthSuspended.
 //
 //   5. On failure (timeout, user closed browser, network error): logs the
 //      failure, leaves globalAuthSuspended TRUE, leaves tray red, leaves
@@ -49,13 +57,15 @@ import (
 
 	"github.com/boejowen/SquireBot/internal/auth"
 	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/picker"
+	"github.com/boejowen/SquireBot/internal/sheet"
 	"github.com/boejowen/SquireBot/internal/tray"
 )
 
-// reauthorizeTimeout is the per-attempt budget the user has to complete
-// the OAuth consent flow once Reauthorize fires. Generous: a guildie
-// could be in the middle of something; 5 minutes lets them finish their
-// turn in EQ before clicking through Google's screens.
+// reauthorizeTimeout is the per-phase budget for each of the two browser
+// interactions in the Reauthorize flow (OAuth consent + picker). Generous:
+// a guildie could be mid-pull; 5 minutes per phase lets them finish before
+// clicking through the screens.
 const reauthorizeTimeout = 5 * time.Minute
 
 // globalAuthSuspended is the package-level suspension flag the watcher
@@ -70,15 +80,19 @@ const reauthorizeTimeout = 5 * time.Minute
 // auth failure) + Reauthorize (Store(false) on success).
 var globalAuthSuspended atomic.Bool
 
-// Reauthorize re-runs the OAuth loopback flow against cfg.GoogleEmail.
-// On success: replaces the wincred entry, clears authSuspended, returns
-// the tray to green. On failure: returns the error and leaves the
-// suspension state alone (CONTEXT.md locked invariant — never silently
-// resume after a failed re-auth).
+// Reauthorize re-runs the OAuth loopback flow against cfg.GoogleEmail,
+// then (Phase 2) re-registers the workbook via the Drive Picker so that
+// the new drive.file grant covers the workbook before writes resume.
+//
+// On success: replaces the wincred entry, re-registers the workbook,
+// clears authSuspended, returns the tray to green.
+// On failure: returns the error and leaves the suspension state alone
+// (CONTEXT.md locked invariant — never silently resume after a failed
+// re-auth).
 //
 // The caller (RunReauthorize, wired from main.go's tray.Config.OnReauthorize)
-// owns the goroutine; this function blocks until the user completes the
-// OAuth flow OR the timeout fires OR ctx is cancelled.
+// owns the goroutine; this function blocks until both browser interactions
+// complete OR a per-phase timeout fires OR ctx is cancelled.
 //
 // Phase 1 lesson #10 (locked): Google's /token endpoint requires
 // client_secret as a parameter even on Desktop PKCE clients. The Manager
@@ -125,9 +139,10 @@ func Reauthorize(ctx context.Context, cfg *config.Config, bc auth.BuildConstants
 		slog.Warn("Reauthorize: open browser failed", "err", err)
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, reauthorizeTimeout)
-	defer cancel()
+	oauthCtx, oauthCancel := context.WithTimeout(ctx, reauthorizeTimeout)
+	defer oauthCancel()
 
+	// ── Phase 1: OAuth ────────────────────────────────────────────────────
 	select {
 	case res := <-m.DoneChan():
 		if res.Err != nil {
@@ -146,26 +161,80 @@ func Reauthorize(ctx context.Context, cfg *config.Config, bc auth.BuildConstants
 				slog.Warn("Reauthorize: save cfg after email change", "err", err)
 			}
 		}
-
 		// auth.Manager.exchangeAndStore already wrote the new refresh
-		// token to wincred under SquireBot:<email> — no extra StoreToken
-		// call needed here.
+		// token to wincred under SquireBot:<email>.
 
-		authSuspended.Store(false)
-		t.SetIconHealth(tray.HealthGreen)
-		t.HideReauthorize()
-		t.SetStatus(fmt.Sprintf("Reauthorized as %s — resumed", cfg.GoogleEmail))
-		slog.Info("Reauthorize complete", "email", cfg.GoogleEmail)
-		return nil
-
-	case <-timeoutCtx.Done():
-		err := timeoutCtx.Err()
-		slog.Error("Reauthorize: timeout / cancelled", "err", err)
+	case <-oauthCtx.Done():
+		err := oauthCtx.Err()
+		slog.Error("Reauthorize: OAuth timeout / cancelled", "err", err)
 		t.SetStatus("Reauthorize cancelled (timeout)")
-		// authSuspended intentionally NOT cleared — see CONTEXT.md
-		// "no silent retry-loop after invalid_grant".
-		return fmt.Errorf("Reauthorize: %w", err)
+		return fmt.Errorf("Reauthorize OAuth: %w", err)
 	}
+
+	// ── Phase 2: Picker (drive.file file registration) ────────────────────
+	// drive.file scope only covers files "opened" via the Drive Picker under
+	// the current grant. Revoking a grant and re-authorizing creates a new
+	// grant with zero registered files; any Sheets API call (even GET)
+	// returns 401 until the file is re-opened via the Picker. We attach
+	// picker routes to the same mux and open a new browser tab so the user
+	// can re-select the workbook, registering it under the new grant.
+	t.SetStatus("Reauthorize: pick your workbook in the browser to restore access…")
+	slog.Info("Reauthorize: picker phase start", "email", cfg.GoogleEmail)
+
+	freshTS, err := buildTokenSourceFromWincred(ctx, cfg, bc)
+	if err != nil {
+		return fmt.Errorf("Reauthorize: rebuild token for picker: %w", err)
+	}
+	sc, err := sheet.NewClient(ctx, freshTS, cfg.SpreadsheetID)
+	if err != nil {
+		return fmt.Errorf("Reauthorize: sheet client for picker: %w", err)
+	}
+
+	mux.HandleFunc("/reauth-done", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:system-ui;text-align:center;margin-top:4em">` +
+			`<h1 style="color:#2e7d32">&#10003; Reauthorization complete</h1>` +
+			`<p>You can close this tab. SquireBot has been reauthorized and will resume uploads.</p>` +
+			`</body></html>`))
+	})
+
+	pickedCh := make(chan struct{}, 1)
+	pickerSrv := picker.NewServer(sc, freshTS, cfg, bc)
+	pickerSrv.SetRedirectAfterPick("/reauth-done")
+	pickerSrv.OnPicked(func() {
+		select {
+		case pickedCh <- struct{}{}:
+		default:
+		}
+	})
+	pickerSrv.AttachRoutes(mux)
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	pickerURL := fmt.Sprintf("http://127.0.0.1:%d/picker", port)
+	if err := auth.OpenBrowser(pickerURL); err != nil {
+		slog.Warn("Reauthorize: open picker browser", "err", err)
+	}
+
+	pickerCtx, pickerCancel := context.WithTimeout(ctx, reauthorizeTimeout)
+	defer pickerCancel()
+
+	select {
+	case <-pickedCh:
+		slog.Info("Reauthorize: picker step complete", "email", cfg.GoogleEmail)
+	case <-pickerCtx.Done():
+		err := pickerCtx.Err()
+		slog.Error("Reauthorize: picker timeout / cancelled", "err", err)
+		t.SetStatus("Reauthorize: picker cancelled (timeout)")
+		return fmt.Errorf("Reauthorize picker: %w", err)
+	}
+
+	// Both phases complete. The new grant now covers the workbook.
+	authSuspended.Store(false)
+	t.SetIconHealth(tray.HealthGreen)
+	t.HideReauthorize()
+	t.SetStatus(fmt.Sprintf("Reauthorized as %s — resumed", cfg.GoogleEmail))
+	slog.Info("Reauthorize complete", "email", cfg.GoogleEmail)
+	return nil
 }
 
 // RunReauthorize is the goroutine entry point wired from
@@ -191,3 +260,4 @@ func RunReauthorize(ctx context.Context, cfg *config.Config, bc auth.BuildConsta
 		slog.Error("Reauthorize failed", "err", err)
 	}
 }
+

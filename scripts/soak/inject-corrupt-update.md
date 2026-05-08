@@ -22,12 +22,14 @@ Both are documented below.
    $exe = "$env:LOCALAPPDATA\Programs\SquireBot\squirebot.exe"
    ```
 
-3. Stage a corrupted .new file. The "corruption" is just bytes that don't match the sidecar SHA — easiest is to write garbage:
+3. Stage a corrupted .new file. The "corruption" is just bytes that don't match the sidecar SHA — easiest is to write a zero-filled buffer:
    ```powershell
    $newPath  = "$exe.new"
    $hashPath = "$exe.expected-sha256"
-   # Write 1024 bytes of garbage to .new
-   [byte[]]$garbage = (1..1024)
+   # Write 1024 bytes of zeros to .new (any content works — the SHA mismatch is
+   # what matters; do NOT use `(1..1024)` here — that fails because [byte] is
+   # unsigned 8-bit and the cast errors at value 256).
+   $garbage = New-Object byte[] 1024
    [System.IO.File]::WriteAllBytes($newPath, $garbage)
    # Write a sidecar hash that does NOT match the garbage (any 64-hex string works)
    Set-Content -Path $hashPath -Value "0000000000000000000000000000000000000000000000000000000000000000" -NoNewline -Encoding ASCII

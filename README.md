@@ -44,6 +44,10 @@ A red tray icon means one of three things:
 
 Most red-tray states are recoverable in under 30 seconds via the tray menu. If you're stuck, share the relevant lines from the log file with your guild leader.
 
+## Known issues
+
+- **After Reauthorize, uploads pause for up to ~50 minutes.** When you click **Reauthorize…** to recover from a dead refresh token, the OAuth handshake itself completes in seconds — but Google's Drive backend takes time to propagate write access for the workbook under the new permission grant. During this window the tray stays **green** with status **"Reauthorized: waiting for Google propagation…"** and the watcher waits in the background. You don't need to do anything; the next `/outputfile` after the wait completes uploads normally. If the wait exceeds 90 minutes, the tray will eventually go red and ask you to Reauthorize again — that's a fallback that should never trigger in practice (worst observed wait so far is 51 minutes). See [docs/soak-reports/2026-05-07-day4-auth05-sc1.md](docs/soak-reports/2026-05-07-day4-auth05-sc1.md) for the full investigation.
+
 ## Auto-update
 
 SquireBot auto-updates daily via a `latest.json` manifest fetched from GitHub Releases. SHA-256 verification of the new binary happens before any swap, and the swap itself is **startup-only** (Windows file-locking forbids in-process replacement of a running `.exe`). The new binary lands at `<exepath>.new`; on next launch the swap completes before the main goroutine starts. Manual trigger: tray's **Check for updates**.

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SquireBot — EQ aesthetic preview (4 options)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=IM+Fell+English:ital@0;1&family=Inter:wght@300;400;500;600&family=MedievalSharp&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #0a0a0a; color: #ddd; font-family: Inter, system-ui, sans-serif; }
+  .page-header { padding: 24px 32px; border-bottom: 1px solid #222; }
+  .page-header h1 { margin: 0 0 6px; font-size: 22px; font-weight: 500; letter-spacing: 0.02em; }
+  .page-header p { margin: 0; color: #888; font-size: 13px; max-width: 720px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #1a1a1a; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+
+  .quad { padding: 28px; min-height: 600px; display: flex; flex-direction: column; gap: 18px; }
+  .quad-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  .quad-title { margin: 0; font-size: 20px; font-weight: 600; }
+  .quad-tag { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7; }
+  .quad-desc { margin: 0; font-size: 13px; line-height: 1.6; opacity: 0.85; }
+
+  .palette { display: flex; gap: 6px; }
+  .swatch { width: 28px; height: 28px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.15); }
+
+  .surface-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; opacity: 0.55; margin: 0 0 6px; }
+
+  /* Mock tab base layout */
+  .mock-tab { border-radius: 4px; overflow: hidden; font-size: 12px; }
+  .mock-tab table { width: 100%; border-collapse: collapse; }
+  .mock-tab th, .mock-tab td { padding: 8px 10px; text-align: left; }
+
+  /* Mock sidebar base layout */
+  .mock-sidebar { padding: 14px; border-radius: 4px; font-size: 12px; line-height: 1.5; }
+  .mock-sidebar input { width: 100%; padding: 6px 9px; border: none; border-radius: 2px; font-size: 12px; }
+  .mock-sidebar .result-item { font-weight: 600; margin-top: 12px; }
+  .mock-sidebar .result-loc { padding-left: 14px; opacity: 0.85; }
+
+  /* ============== A. VANILLA ============== */
+  .quad.vanilla { background: #1a120b; color: #c9b896; font-family: 'Crimson Text', Georgia, serif; }
+  .vanilla .quad-title { font-family: Cinzel, serif; color: #d4af37; letter-spacing: 0.03em; }
+  .vanilla .mock-tab { background: #2a1f15; border: 1px solid #5a4128; }
+  .vanilla .mock-tab thead { background: linear-gradient(#3d2c1d, #2a1f15); border-bottom: 2px solid #d4af37; }
+  .vanilla .mock-tab th { color: #d4af37; font-family: Cinzel, serif; font-weight: 600; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .vanilla .mock-tab tbody tr:nth-child(odd) { background: rgba(212, 175, 55, 0.04); }
+  .vanilla .mock-tab tbody tr { border-top: 1px solid #3d2c1d; }
+  .vanilla .mock-tab td.item { color: #e8d8a8; text-decoration: underline; text-decoration-color: #5a4128; }
+  .vanilla .mock-tab td.status-ok { color: #6fa86f; font-weight: 600; }
+  .vanilla .mock-tab td.status-missing { color: #c66666; font-weight: 600; }
+  .vanilla .mock-tab td.status-other { color: #d4af37; }
+  .vanilla .mock-sidebar { background: #2a1f15; border: 1px solid #5a4128; }
+  .vanilla .mock-sidebar h3 { font-family: Cinzel, serif; color: #d4af37; margin: 0 0 10px; font-size: 13px; letter-spacing: 0.05em; }
+  .vanilla .mock-sidebar input { background: #1a120b; color: #c9b896; border: 1px solid #5a4128; }
+  .vanilla .mock-sidebar .result-item { color: #d4af37; }
+
+  /* ============== B. VELIOUS ============== */
+  .quad.velious { background: #060b18; color: #d4dee8; font-family: 'IM Fell English', Georgia, serif; }
+  .quad.velious .quad-title { font-family: 'Cinzel Decorative', serif; color: #a8c5e0; }
+  .velious .mock-tab { background: #0f1729; border: 1px solid #4a6585; box-shadow: inset 0 0 0 1px rgba(168,197,224,0.08); }
+  .velious .mock-tab thead { background: linear-gradient(#1a2438, #0f1729); border-bottom: 2px solid #a8c5e0; }
+  .velious .mock-tab th { color: #a8c5e0; font-family: 'Cinzel Decorative', serif; font-weight: 700; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .velious .mock-tab tbody tr:nth-child(odd) { background: rgba(168, 197, 224, 0.04); }
+  .velious .mock-tab tbody tr { border-top: 1px solid #1a2438; }
+  .velious .mock-tab td.item { color: #c8e0f0; text-decoration: underline; text-decoration-color: #4a6585; }
+  .velious .mock-tab td.status-ok { color: #6fc8b0; font-weight: 600; }
+  .velious .mock-tab td.status-missing { color: #e88a8a; font-weight: 600; }
+  .velious .mock-tab td.status-other { color: #a8c5e0; }
+  .velious .mock-sidebar { background: #0f1729; border: 1px solid #4a6585; box-shadow: inset 0 0 30px rgba(168,197,224,0.05); }
+  .velious .mock-sidebar h3 { font-family: 'Cinzel Decorative', serif; color: #a8c5e0; margin: 0 0 10px; font-size: 14px; letter-spacing: 0.08em; }
+  .velious .mock-sidebar input { background: #060b18; color: #d4dee8; border: 1px solid #4a6585; }
+  .velious .mock-sidebar .result-item { color: #a8c5e0; }
+
+  /* ============== C. MINIMALIST ============== */
+  .quad.mini { background: #141414; color: #e8e0d4; font-family: Inter, system-ui, sans-serif; }
+  .quad.mini .quad-title { font-family: Cinzel, serif; color: #b8915c; font-weight: 400; }
+  .mini .mock-tab { background: #1f1f1d; border: 1px solid #2a2a28; }
+  .mini .mock-tab thead { border-bottom: 1px solid #b8915c; }
+  .mini .mock-tab th { color: #b8915c; font-family: Cinzel, serif; font-weight: 400; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; padding: 10px 10px 8px; }
+  .mini .mock-tab tbody tr { border-top: 1px solid #2a2a28; }
+  .mini .mock-tab tbody tr:hover { background: rgba(184, 145, 92, 0.05); }
+  .mini .mock-tab td { font-size: 12px; color: #d4ccc0; }
+  .mini .mock-tab td.item { color: #e8e0d4; }
+  .mini .mock-tab td.item a { color: #b8915c; text-decoration: none; border-bottom: 1px dotted #b8915c; }
+  .mini .mock-tab td.status-ok { color: #7fa87f; font-weight: 500; }
+  .mini .mock-tab td.status-missing { color: #c87878; font-weight: 500; }
+  .mini .mock-tab td.status-other { color: #b8915c; font-weight: 500; }
+  .mini .mock-sidebar { background: #1f1f1d; border: 1px solid #2a2a28; }
+  .mini .mock-sidebar h3 { font-family: Cinzel, serif; color: #b8915c; margin: 0 0 10px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 400; }
+  .mini .mock-sidebar input { background: #141414; color: #e8e0d4; border: 1px solid #2a2a28; font-family: Inter, sans-serif; }
+  .mini .mock-sidebar .result-item { color: #e8e0d4; font-weight: 500; }
+
+  /* ============== D. HEAVY ============== */
+  .quad.heavy {
+    background:
+      radial-gradient(ellipse at top left, rgba(196,160,108,0.12), transparent 60%),
+      radial-gradient(ellipse at bottom right, rgba(140,90,40,0.18), transparent 70%),
+      #1a1109;
+    color: #e8d8a8;
+    font-family: 'IM Fell English', Georgia, serif;
+  }
+  .heavy .quad-title { font-family: 'MedievalSharp', cursive; color: #f0d088; font-size: 24px; }
+  .heavy .mock-tab {
+    background:
+      repeating-linear-gradient(90deg, transparent 0 50px, rgba(58,40,23,0.12) 50px 51px),
+      linear-gradient(#e0c98a, #c9b072);
+    color: #3a2817;
+    border: 6px solid #3a2817;
+    border-image: linear-gradient(135deg, #6b4520, #3a2817 30%, #6b4520 50%, #3a2817 70%, #6b4520) 1;
+    box-shadow: inset 0 0 0 2px #b89060, inset 0 0 30px rgba(58,40,23,0.25);
+  }
+  .heavy .mock-tab thead {
+    background: linear-gradient(#5a3a1f, #3a2817 60%, #5a3a1f);
+    border-bottom: 4px double #6b1a1a;
+  }
+  .heavy .mock-tab th {
+    color: #f0d088;
+    font-family: 'MedievalSharp', cursive;
+    font-weight: 400;
+    font-size: 13px;
+    letter-spacing: 0.03em;
+    text-shadow: 1px 1px 0 #1a0e05;
+    padding: 10px;
+  }
+  .heavy .mock-tab tbody tr { border-top: 1px solid rgba(58,40,23,0.3); }
+  .heavy .mock-tab tbody tr:nth-child(even) { background: rgba(58,40,23,0.08); }
+  .heavy .mock-tab td { font-size: 13px; color: #3a2817; padding: 9px 10px; }
+  .heavy .mock-tab td.item a { color: #6b1a1a; font-weight: 600; }
+  .heavy .mock-tab td.status-ok { color: #2d5a2d; font-weight: 700; }
+  .heavy .mock-tab td.status-missing { color: #6b1a1a; font-weight: 700; }
+  .heavy .mock-tab td.status-other { color: #5a3a1f; font-style: italic; font-weight: 600; }
+  .heavy .mock-sidebar {
+    background: linear-gradient(#3a2817, #2a1c0f);
+    border: 4px solid #6b4520;
+    border-image: linear-gradient(135deg, #8a6030, #6b4520) 1;
+    box-shadow: inset 0 0 0 2px #b89060, 0 4px 20px rgba(0,0,0,0.6);
+    color: #e8d8a8;
+  }
+  .heavy .mock-sidebar h3 { font-family: 'MedievalSharp', cursive; color: #f0d088; margin: 0 0 12px; font-size: 16px; text-shadow: 1px 1px 0 #1a0e05; }
+  .heavy .mock-sidebar input { background: #1a0e05; color: #e8d8a8; border: 2px solid #6b4520; font-family: 'IM Fell English', serif; box-shadow: inset 0 1px 4px rgba(0,0,0,0.6); }
+  .heavy .mock-sidebar .result-item { color: #f0d088; font-weight: 700; }
+
+  /* footer */
+  .page-footer { padding: 20px 32px; border-top: 1px solid #222; color: #666; font-size: 12px; line-height: 1.6; }
+  .page-footer code { background: #1f1f1f; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>SquireBot — EverQuest aesthetic preview (4 options)</h1>
+  <p>
+    Throwaway preview mockups generated 2026-05-08. Each option shows a mock <code>gear_check</code> view tab (cell-based — what Sheets can render) plus a mock search sidebar (HtmlService — full HTML/CSS freedom).
+    Final visual decision happens in Phase 3 — these are just to anchor the conversation. Sample data is fake but realistic for a Velious-era Iksar Shadow Knight guildie.
+  </p>
+</div>
+
+<div class="grid">
+
+  <!-- ============================ A. VANILLA ============================ -->
+  <section class="quad vanilla">
+    <header class="quad-head">
+      <h2 class="quad-title">A. Vanilla</h2>
+      <span class="quad-tag">pre-Kunark · medium</span>
+    </header>
+    <p class="quad-desc">Browns + golds + simple serif. Evokes the original 1999–2000 EQ login screen, the "ye olde tavern" feel. Warm and grounded; reads as classic-fantasy without committing to a specific zone era.</p>
+
+    <div class="palette">
+      <div class="swatch" style="background:#1a120b" title="bg"></div>
+      <div class="swatch" style="background:#2a1f15" title="panel"></div>
+      <div class="swatch" style="background:#5a4128" title="border"></div>
+      <div class="swatch" style="background:#c9b896" title="text"></div>
+      <div class="swatch" style="background:#d4af37" title="accent gold"></div>
+    </div>
+
+    <div>
+      <p class="surface-label">view tab — gear_check</p>
+      <div class="mock-tab">
+        <table>
+          <thead><tr>
+            <th>Char</th><th>Tier</th><th>Slot</th><th>Recommended</th><th>Equipped</th><th>Status</th><th>Price</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Primary</td><td class="item">Velium Battle Axe</td><td>Crystalline Falchion</td><td class="status-other">OTHER</td><td>850pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Secondary</td><td class="item">Crystal Spider Eye</td><td>—</td><td class="status-missing">MISSING</td><td>200pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Helm</td><td class="item">Coldain Helm</td><td>Coldain Helm</td><td class="status-ok">OK</td><td>1,400pp</td></tr>
+            <tr><td>Otherchar</td><td>velious_raiding</td><td>Helm</td><td class="item">Crown of Narandi</td><td>Crown of Narandi</td><td class="status-ok">OK</td><td>4,200pp</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="surface-label">search sidebar</p>
+      <div class="mock-sidebar">
+        <h3>Find Item</h3>
+        <input type="text" value="yaulp" readonly>
+        <div class="result-item">Yaulp IV (id 5391)</div>
+        <div class="result-loc">↳ Slampeach: General-Slot3, count 1</div>
+        <div class="result-loc">↳ Otherchar: Bank-Slot12, count 2</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ B. VELIOUS ============================ -->
+  <section class="quad velious">
+    <header class="quad-head">
+      <h2 class="quad-title">B. Velious</h2>
+      <span class="quad-tag">2000–2001 · medium</span>
+    </header>
+    <p class="quad-desc">Icy blues + silver + frosted accents. The Velious zone-art palette — Coldain hold, Wakening Land, the eye in the storm. Cooler and more modern-feeling than Vanilla; matches the era your guild plays.</p>
+
+    <div class="palette">
+      <div class="swatch" style="background:#060b18" title="bg"></div>
+      <div class="swatch" style="background:#0f1729" title="panel"></div>
+      <div class="swatch" style="background:#4a6585" title="border"></div>
+      <div class="swatch" style="background:#d4dee8" title="text"></div>
+      <div class="swatch" style="background:#a8c5e0" title="accent ice"></div>
+    </div>
+
+    <div>
+      <p class="surface-label">view tab — gear_check</p>
+      <div class="mock-tab">
+        <table>
+          <thead><tr>
+            <th>Char</th><th>Tier</th><th>Slot</th><th>Recommended</th><th>Equipped</th><th>Status</th><th>Price</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Primary</td><td class="item">Velium Battle Axe</td><td>Crystalline Falchion</td><td class="status-other">OTHER</td><td>850pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Secondary</td><td class="item">Crystal Spider Eye</td><td>—</td><td class="status-missing">MISSING</td><td>200pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Helm</td><td class="item">Coldain Helm</td><td>Coldain Helm</td><td class="status-ok">OK</td><td>1,400pp</td></tr>
+            <tr><td>Otherchar</td><td>velious_raiding</td><td>Helm</td><td class="item">Crown of Narandi</td><td>Crown of Narandi</td><td class="status-ok">OK</td><td>4,200pp</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="surface-label">search sidebar</p>
+      <div class="mock-sidebar">
+        <h3>Find Item</h3>
+        <input type="text" value="yaulp" readonly>
+        <div class="result-item">Yaulp IV (id 5391)</div>
+        <div class="result-loc">↳ Slampeach: General-Slot3, count 1</div>
+        <div class="result-loc">↳ Otherchar: Bank-Slot12, count 2</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ C. MINIMALIST ============================ -->
+  <section class="quad mini">
+    <header class="quad-head">
+      <h2 class="quad-title">C. Minimalist EQ-flavored</h2>
+      <span class="quad-tag">era-agnostic · light</span>
+    </header>
+    <p class="quad-desc">Muted EQ palette + clean sans for body, serif accent only on key elements. "Stranger Things title style" — the EQ is in the gold + the serif accent, not the chrome. Reads as a modern boutique tool that happens to know what EQ is.</p>
+
+    <div class="palette">
+      <div class="swatch" style="background:#141414" title="bg"></div>
+      <div class="swatch" style="background:#1f1f1d" title="panel"></div>
+      <div class="swatch" style="background:#2a2a28" title="border"></div>
+      <div class="swatch" style="background:#e8e0d4" title="text"></div>
+      <div class="swatch" style="background:#b8915c" title="accent gold"></div>
+    </div>
+
+    <div>
+      <p class="surface-label">view tab — gear_check</p>
+      <div class="mock-tab">
+        <table>
+          <thead><tr>
+            <th>Char</th><th>Tier</th><th>Slot</th><th>Recommended</th><th>Equipped</th><th>Status</th><th>Price</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Primary</td><td class="item"><a href="#">Velium Battle Axe</a></td><td>Crystalline Falchion</td><td class="status-other">OTHER</td><td>850pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Secondary</td><td class="item"><a href="#">Crystal Spider Eye</a></td><td>—</td><td class="status-missing">MISSING</td><td>200pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Helm</td><td class="item"><a href="#">Coldain Helm</a></td><td>Coldain Helm</td><td class="status-ok">OK</td><td>1,400pp</td></tr>
+            <tr><td>Otherchar</td><td>velious_raiding</td><td>Helm</td><td class="item"><a href="#">Crown of Narandi</a></td><td>Crown of Narandi</td><td class="status-ok">OK</td><td>4,200pp</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="surface-label">search sidebar</p>
+      <div class="mock-sidebar">
+        <h3>Find Item</h3>
+        <input type="text" value="yaulp" readonly>
+        <div class="result-item">Yaulp IV <span style="opacity:0.5">(id 5391)</span></div>
+        <div class="result-loc">↳ Slampeach: General-Slot3, count 1</div>
+        <div class="result-loc">↳ Otherchar: Bank-Slot12, count 2</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ D. HEAVY ============================ -->
+  <section class="quad heavy">
+    <header class="quad-head">
+      <h2 class="quad-title">D. Heavy EQ-replica</h2>
+      <span class="quad-tag">parchment + stone · heavy</span>
+    </header>
+    <p class="quad-desc">Parchment rows, beveled stone-panel headers, ornate borders, MedievalSharp display font, deep red accents for headers (think EQ spell scroll). Goes all-in on the "guild artifact" feel. Highest visual lift; most assertive — leans into the cosplay rather than just nodding to it.</p>
+
+    <div class="palette">
+      <div class="swatch" style="background:#1a0e05" title="frame"></div>
+      <div class="swatch" style="background:#3a2817" title="stone"></div>
+      <div class="swatch" style="background:#6b4520" title="bevel"></div>
+      <div class="swatch" style="background:#c9b072" title="parchment"></div>
+      <div class="swatch" style="background:#f0d088" title="gold"></div>
+      <div class="swatch" style="background:#6b1a1a" title="ink red"></div>
+    </div>
+
+    <div>
+      <p class="surface-label">view tab — gear_check</p>
+      <div class="mock-tab">
+        <table>
+          <thead><tr>
+            <th>Char</th><th>Tier</th><th>Slot</th><th>Recommended</th><th>Equipped</th><th>Status</th><th>Price</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Primary</td><td class="item"><a href="#">Velium Battle Axe</a></td><td>Crystalline Falchion</td><td class="status-other">OTHER</td><td>850pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Secondary</td><td class="item"><a href="#">Crystal Spider Eye</a></td><td>—</td><td class="status-missing">MISSING</td><td>200pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Helm</td><td class="item"><a href="#">Coldain Helm</a></td><td>Coldain Helm</td><td class="status-ok">OK</td><td>1,400pp</td></tr>
+            <tr><td>Otherchar</td><td>velious_raiding</td><td>Helm</td><td class="item"><a href="#">Crown of Narandi</a></td><td>Crown of Narandi</td><td class="status-ok">OK</td><td>4,200pp</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="surface-label">search sidebar</p>
+      <div class="mock-sidebar">
+        <h3>Seek Treasure</h3>
+        <input type="text" value="yaulp" readonly>
+        <div class="result-item">Yaulp IV (id 5391)</div>
+        <div class="result-loc">↳ Slampeach: General-Slot3, count 1</div>
+        <div class="result-loc">↳ Otherchar: Bank-Slot12, count 2</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="page-footer">
+  <p>
+    Mockups are pure CSS approximations of what each direction would feel like as a Sheets workbook + sidebar. Real implementation (Phase 3) would use Apps Script <code>setBackground</code> / <code>setFontColor</code> / <code>setBorder</code> / <code>setFontFamily</code> / <code>IMAGE()</code> for cells, and HtmlService templates for the sidebar.
+    Limitations: Sheets cells can't have background images (so the parchment effect in option D would need to fall back to a solid warm tan + maybe an inline IMAGE() banner). Sidebar has no such limit.
+  </p>
+  <p>
+    Throwaway file. Will be revisited when Phase 3 picks a direction.
+  </p>
+</div>
+
+</body>
+</html>

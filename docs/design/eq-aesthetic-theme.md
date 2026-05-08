@@ -16,21 +16,24 @@ SquireBot is a fan project for a Project 1999 (Classic EQ emulator) guild. The g
 
 **Why "all four" instead of picking one:** during preview-mockup review on 2026-05-08, all four candidate themes (Vanilla / Velious / Minimalist / Heavy) were judged worth shipping. Different guilds will have different tastes — a no-fuss officer cohort might want Minimalist; a Velious-cosplay guild might want Heavy. The marginal cost of building a 4-theme picker over a single-theme implementation is ~20–30% Phase 3 effort (vs. ~50–100% to retrofit it later), so the right call is to bake the picker in from day 1.
 
-## The five built-in options
+## The six built-in options
 
 Reference mockups: [docs/design/mockups/eq-aesthetic-preview.html](mockups/eq-aesthetic-preview.html) (side-by-side comparison) and [docs/design/mockups/eq-aesthetic-picker.html](mockups/eq-aesthetic-picker.html) (the picker dialog). Open in any browser.
 
-Four themed options + one explicit no-theme opt-out:
+Five themed options (chronological era trilogy + two era-agnostic vibes) + one explicit no-theme opt-out:
 
 | Option | Era | Intensity | Visual character |
 |---|---|---|---|
 | **A. Vanilla** | pre-Kunark (1999–2000) | Medium | Browns + golds, Cinzel + Crimson Text serif, "ye olde tavern" feel. Warm and grounded. |
-| **B. Velious** | 2000–2001 | Medium | Icy blues + silver, Cinzel Decorative + IM Fell English, frosted accents. Matches the era your guild plays. |
-| **C. Minimalist** | era-agnostic | Light | Muted EQ palette + Inter sans for body, Cinzel for accents only. "Stranger Things title style" — modern boutique tool that knows what EQ is. **System default for fresh workbooks.** |
-| **D. Heavy** | era-agnostic | Heavy | Parchment rows, beveled stone-panel headers, MedievalSharp display font, dark-red ink accents. Goes all-in on the guild-artifact feel. |
-| **E. Sheets default** | n/a | n/a (opt-out) | No custom styling. White background, Arial, default Sheets borders. Conditional formatting on Status column is the only color. Useful for printing, exporting, or guildies who prefer a plain spreadsheet. |
+| **B. Kunark** | Kunark (1999–2000) | Medium | Jungle greens + copper accents, Cinzel + IM Fell English, weathered Iksar-civilization feel. Fills the era gap between Vanilla and Velious. |
+| **C. Velious** | Velious (2000–2001) | Medium | Icy blues + silver, Cinzel Decorative + IM Fell English, frosted accents. Matches the era your guild plays. |
+| **D. Minimalist** | era-agnostic | Light | Muted EQ palette + Inter sans for body, Cinzel for accents only. "Stranger Things title style" — modern boutique tool that knows what EQ is. **System default for fresh workbooks.** |
+| **E. Heavy** | era-agnostic | Heavy | Parchment rows, beveled stone-panel headers, MedievalSharp display font, dark-red ink accents. Goes all-in on the guild-artifact feel. |
+| **F. Sheets default** | n/a | n/a (opt-out) | No custom styling. White background, Arial, default Sheets borders. Conditional formatting on Status column is the only color. Useful for printing, exporting, or guildies who prefer a plain spreadsheet. |
 
 Per-theme color palettes, font choices, and visual notes are in the preview mockup HTML.
+
+**Why a chronological era trilogy:** Vanilla (pre-Kunark) → Kunark → Velious is the canonical Project 1999 expansion arc. Different guilds identify with different eras of their playthrough; a complete trilogy lets them pick the one that resonates. Velious is the headline pick for current-era guilds; Vanilla is the nostalgic pick; Kunark gives the green-jungle palette that's distinctly different from the other two.
 
 **Why a "no theme" option exists:** not everyone wants any aesthetic. Officers who print or export the workbook get cleaner output with default styling. New guildies intimidated by "fancy" tools may prefer something familiar. Cross-tool integrations (third-party Sheets viewers, embedded iframes) render default styling more reliably than custom themes. Offering an explicit opt-out is cheaper than fielding "how do I turn off the colors" support requests.
 
@@ -38,7 +41,7 @@ Per-theme color palettes, font choices, and visual notes are in the preview mock
 
 ### Single source of truth: `_meta.theme`
 
-A new row in the `_meta` dimension tab stores the active theme name. Valid values: `vanilla` | `velious` | `minimalist` | `heavy` | `sheets-default`. Default value: `minimalist` (lowest "yikes that's a lot" risk for a non-EQ-purist taking their first look at a fresh workbook, while still showing off what SquireBot can do — `sheets-default` would undersell the product on first impression). One workbook = one theme = one consistent view for the whole guild.
+A new row in the `_meta` dimension tab stores the active theme name. Valid values: `vanilla` | `kunark` | `velious` | `minimalist` | `heavy` | `sheets-default`. Default value: `minimalist` (lowest "yikes that's a lot" risk for a non-EQ-purist taking their first look at a fresh workbook, while still showing off what SquireBot can do — `sheets-default` would undersell the product on first impression). One workbook = one theme = one consistent view for the whole guild.
 
 ```
 _meta:
@@ -74,6 +77,7 @@ type ThemeTokens = {
 
 const THEMES: Record<ThemeName, ThemeTokens | null> = {
   vanilla:         { bg: '#2a1f15', accent: '#d4af37', fontHeader: 'Cinzel', ... },
+  kunark:          { bg: '#0f1612', accent: '#c89060', fontHeader: 'Cinzel', ... },
   velious:         { bg: '#0f1729', accent: '#a8c5e0', fontHeader: 'Cinzel Decorative', ... },
   minimalist:      { bg: '#1f1f1d', accent: '#b8915c', fontHeader: 'Cinzel', ... },
   heavy:           { bg: '#c9b072', accent: '#6b1a1a', fontHeader: 'MedievalSharp', ... },
@@ -118,8 +122,8 @@ Single sidebar template serves all four themes. The mockup HTML is already struc
 
 A custom-menu entry — **SquireBot → Settings → Theme…** — opens an HtmlService modal dialog with:
 
-- A **2×2 grid of preview tiles** for the four themed options (Vanilla / Velious / Minimalist / Heavy). Each tile renders a miniature live preview (header strip + 3-row mock view-tab + 1-line mock sidebar snippet) using the same CSS-custom-property approach.
-- Below the 2×2 grid, a **full-width "Sheets default" tile** — no preview (nothing to preview), just a name + 1-sentence description + a small swatch hinting at default Sheets appearance. Visually grouped separately from the themed family to read as the explicit opt-out.
+- A **3×2 grid of uniform preview tiles** for all six options. Top row: chronological era themes (Vanilla / Kunark / Velious). Bottom row: era-agnostic vibes + opt-out (Minimalist / Heavy / Sheets default).
+- Each tile renders a miniature live preview (header strip + 3-row mock view-tab + 1-line mock sidebar snippet) using the same CSS-custom-property approach. Sheets default's mini-preview shows what the workbook looks like with no styling applied (white background, Arial, default Sheets borders) — visually parity with the other tiles, distinct content.
 - Tile click selects + highlights that option (blue ring).
 - The currently active theme shows a `CURRENT` badge in the corner.
 - "Apply" button: writes the chosen theme name to `_meta.theme`, closes the dialog, kicks off the rebuild.
@@ -196,17 +200,17 @@ Most of the original open questions are now resolved by "ship all four + Sheets 
 
 ## Scope estimate
 
-**Medium-Large.** The "four themes + Sheets default + polished picker" approach is roughly 20–30% more Phase 3 effort than a single-theme implementation:
+**Medium-Large.** The "five themes + Sheets default + polished picker" approach is roughly 25–35% more Phase 3 effort than a single-theme implementation:
 
-- Theme registry definition: ~100–200 LOC of declarative tokens × 4 themed options = ~400–800 LOC of pure data
+- Theme registry definition: ~100–200 LOC of declarative tokens × 5 themed options = ~500–1000 LOC of pure data
 - `sheets-default` no-op handling: trivial — a single conditional branch in each builder
 - Theme-aware view-tab builders (token lookups instead of hardcoded values): +10–20% over single-theme builder complexity
 - `clearTheme(range)` helper for resetting styling on theme switch: ~30 LOC
 - Sidebar CSS via custom properties: roughly equal effort to a single-theme sidebar
 - Theme-change rebuild trigger + onEdit handler: ~50 LOC
-- Polished picker dialog (HtmlService modal, 2×2 preview tiles + 1 wide opt-out tile, apply/cancel): ~2–4 hours of focused work
+- Polished picker dialog (HtmlService modal, 3×2 preview tiles, apply/cancel): ~2–4 hours of focused work
 
-Net: instead of "Medium" for one theme, this is "Medium-Large" for four-themes-plus-opt-out-plus-picker. Well worth the ~25% surcharge to ship the choice. Adding Sheets default to the original four-theme plan was nearly free (single conditional in each builder + one extra picker tile).
+Net: instead of "Medium" for one theme, this is "Medium-Large" for six-options-plus-picker. Well worth the ~30% surcharge to ship the choice. Adding Kunark and Sheets default to the original four-theme plan added ~5% over the four-theme version (one extra registry entry per added theme; Sheets default is a single conditional).
 
 ## Related references
 

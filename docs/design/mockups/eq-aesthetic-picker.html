@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>SquireBot — Theme picker mockup</title>
+<title>SquireBot — Theme picker mockup (6 options, 3×2 grid)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700&family=Crimson+Text&family=IM+Fell+English&family=Inter:wght@400;500;600&family=MedievalSharp&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
@@ -48,7 +48,7 @@
     background: #fff;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 16px rgba(60,64,67,0.15);
-    width: 720px;
+    width: 860px;
     max-width: calc(100vw - 32px);
     overflow: hidden;
     font-family: Roboto, Arial, sans-serif;
@@ -76,10 +76,10 @@
     background: #f8f9fa;
   }
 
-  /* Tile grid */
+  /* Tile grid — 3 columns × 2 rows */
   .tile-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 12px;
   }
 
@@ -91,6 +91,7 @@
     cursor: pointer;
     transition: border-color 0.15s, box-shadow 0.15s;
     box-shadow: 0 1px 2px rgba(60,64,67,0.08);
+    position: relative;
   }
   .tile:hover { box-shadow: 0 1px 3px rgba(60,64,67,0.18); border-color: #dadce0; }
   .tile.selected { border-color: #1967d2; box-shadow: 0 0 0 1px #1967d2, 0 1px 4px rgba(25,103,210,0.3); }
@@ -105,8 +106,8 @@
     padding: 2px 6px;
     border-radius: 8px;
     font-weight: 600;
+    z-index: 1;
   }
-  .tile { position: relative; }
 
   .tile-label {
     padding: 10px 12px;
@@ -138,7 +139,18 @@
   .preview.vanilla .mini-side .head { color: #d4af37; font-family: Cinzel, serif; }
   .preview.vanilla .mini-side .item { color: #d4af37; }
 
-  /* ============== B. VELIOUS ============== */
+  /* ============== B. KUNARK ============== */
+  .preview.kunark { background: #0f1612; color: #d4cab0; font-family: 'IM Fell English', serif; }
+  .preview.kunark .mini-tab .row.head { background: linear-gradient(#1d2820, #0f1612); color: #c89060; font-family: Cinzel, serif; border-bottom: 1px solid #c89060; }
+  .preview.kunark .mini-tab .row.body { border-top-color: #1d2820; }
+  .preview.kunark .item { color: #e8dcb8; }
+  .preview.kunark .ok { color: #6fa86f; font-weight: 600; }
+  .preview.kunark .miss { color: #c66666; font-weight: 600; }
+  .preview.kunark .mini-side { background: #0a1108; }
+  .preview.kunark .mini-side .head { color: #c89060; font-family: Cinzel, serif; }
+  .preview.kunark .mini-side .item { color: #c89060; }
+
+  /* ============== C. VELIOUS ============== */
   .preview.velious { background: #0f1729; color: #d4dee8; font-family: 'IM Fell English', serif; }
   .preview.velious .mini-tab .row.head { background: linear-gradient(#1a2438, #0f1729); color: #a8c5e0; font-family: 'Cinzel Decorative', serif; border-bottom: 1px solid #a8c5e0; }
   .preview.velious .mini-tab .row.body { border-top-color: #1a2438; }
@@ -149,7 +161,7 @@
   .preview.velious .mini-side .head { color: #a8c5e0; font-family: 'Cinzel Decorative', serif; }
   .preview.velious .mini-side .item { color: #a8c5e0; }
 
-  /* ============== C. MINIMALIST ============== */
+  /* ============== D. MINIMALIST ============== */
   .preview.mini { background: #1f1f1d; color: #e8e0d4; font-family: Inter, sans-serif; }
   .preview.mini .mini-tab .row.head { color: #b8915c; font-family: Cinzel, serif; border-bottom: 1px solid #b8915c; font-weight: 400; }
   .preview.mini .mini-tab .row.body { border-top-color: #2a2a28; }
@@ -160,7 +172,7 @@
   .preview.mini .mini-side .head { color: #b8915c; font-family: Cinzel, serif; font-weight: 400; }
   .preview.mini .mini-side .item { color: #e8e0d4; }
 
-  /* ============== D. HEAVY ============== */
+  /* ============== E. HEAVY ============== */
   .preview.heavy {
     background:
       repeating-linear-gradient(90deg, transparent 0 30px, rgba(58,40,23,0.1) 30px 31px),
@@ -176,39 +188,16 @@
   .preview.heavy .mini-side .head { color: #f0d088; font-family: MedievalSharp, cursive; text-shadow: 1px 1px 0 #1a0e05; }
   .preview.heavy .mini-side .item { color: #f0d088; }
 
-  /* Sheets-default opt-out tile (full-width, no preview) */
-  .default-row { margin-top: 12px; }
-  .default-tile {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: #fff;
-    border: 2px solid transparent;
-    border-radius: 6px;
-    padding: 12px 16px;
-    cursor: pointer;
-    transition: border-color 0.15s, box-shadow 0.15s;
-    box-shadow: 0 1px 2px rgba(60,64,67,0.08);
-  }
-  .default-tile:hover { border-color: #dadce0; box-shadow: 0 1px 3px rgba(60,64,67,0.18); }
-  .default-tile.selected { border-color: #1967d2; box-shadow: 0 0 0 1px #1967d2, 0 1px 4px rgba(25,103,210,0.3); }
-  .default-swatch {
-    width: 56px; height: 56px;
-    background: #fff;
-    border: 1px solid #dadce0;
-    border-radius: 4px;
-    flex-shrink: 0;
-    background-image:
-      linear-gradient(transparent 11px, #e0e0e0 12px, transparent 12px),
-      linear-gradient(transparent 23px, #e0e0e0 24px, transparent 24px),
-      linear-gradient(transparent 35px, #e0e0e0 36px, transparent 36px),
-      linear-gradient(transparent 47px, #e0e0e0 48px, transparent 48px),
-      linear-gradient(90deg, transparent 18px, #e0e0e0 19px, transparent 19px),
-      linear-gradient(90deg, transparent 36px, #e0e0e0 37px, transparent 37px);
-  }
-  .default-text { flex: 1; }
-  .default-name { font-size: 13px; font-weight: 500; color: #202124; margin-bottom: 3px; }
-  .default-desc { font-size: 12px; color: #5f6368; line-height: 1.4; }
+  /* ============== F. SHEETS DEFAULT ============== */
+  .preview.sheetsdef { background: #fff; color: #202124; font-family: Arial, sans-serif; }
+  .preview.sheetsdef .mini-tab .row.head { background: #f8f9fa; color: #202124; font-family: Arial, sans-serif; border-bottom: 1px solid #dadce0; font-weight: 700; }
+  .preview.sheetsdef .mini-tab .row.body { border-top-color: #f1f3f4; }
+  .preview.sheetsdef .item { color: #1967d2; }
+  .preview.sheetsdef .ok { color: #137333; font-weight: 700; }
+  .preview.sheetsdef .miss { color: #c5221f; font-weight: 700; }
+  .preview.sheetsdef .mini-side { background: #fff; border-top-color: #dadce0; }
+  .preview.sheetsdef .mini-side .head { color: #202124; font-family: Arial, sans-serif; font-weight: 600; }
+  .preview.sheetsdef .mini-side .item { color: #202124; }
 
   /* Note about cell vs sidebar fidelity */
   .fidelity-note {
@@ -324,10 +313,30 @@
           </div>
         </div>
 
+        <!-- Kunark -->
+        <div class="tile">
+          <div class="tile-label">
+            <div class="tile-name">B. Kunark</div>
+            <div class="tile-tag">1999–2000 · medium</div>
+          </div>
+          <div class="preview kunark">
+            <div class="mini-tab">
+              <div class="row head"><div>Char</div><div>Item</div><div>Status</div><div>Price</div></div>
+              <div class="row body"><div>Slampeach</div><div class="item">Velium Battle Axe</div><div class="ok">OK</div><div>850pp</div></div>
+              <div class="row body"><div>Slampeach</div><div class="item">Crystal Spider Eye</div><div class="miss">MISSING</div><div>200pp</div></div>
+            </div>
+            <div class="mini-side">
+              <div class="head">Find Item</div>
+              <div class="item">Yaulp IV (id 5391)</div>
+              <div class="loc">↳ Slampeach: General-Slot3</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Velious -->
         <div class="tile">
           <div class="tile-label">
-            <div class="tile-name">B. Velious</div>
+            <div class="tile-name">C. Velious</div>
             <div class="tile-tag">2000–2001 · medium</div>
           </div>
           <div class="preview velious">
@@ -347,7 +356,7 @@
         <!-- Minimalist (selected + active) -->
         <div class="tile selected active">
           <div class="tile-label">
-            <div class="tile-name">C. Minimalist</div>
+            <div class="tile-name">D. Minimalist</div>
             <div class="tile-tag">era-agnostic · light</div>
           </div>
           <div class="preview mini">
@@ -367,7 +376,7 @@
         <!-- Heavy -->
         <div class="tile">
           <div class="tile-label">
-            <div class="tile-name">D. Heavy</div>
+            <div class="tile-name">E. Heavy</div>
             <div class="tile-tag">parchment + stone · heavy</div>
           </div>
           <div class="preview heavy">
@@ -384,21 +393,30 @@
           </div>
         </div>
 
-      </div>
-
-      <!-- Sheets default — explicit opt-out, no preview -->
-      <div class="default-row">
-        <div class="default-tile">
-          <div class="default-swatch"></div>
-          <div class="default-text">
-            <div class="default-name">Sheets default</div>
-            <div class="default-desc">No custom styling — standard Google Sheets formatting (white background, Arial). Useful for printing, exporting, or guildies who prefer a plain spreadsheet.</div>
+        <!-- Sheets default -->
+        <div class="tile">
+          <div class="tile-label">
+            <div class="tile-name">F. Sheets default</div>
+            <div class="tile-tag">opt-out · no styling</div>
+          </div>
+          <div class="preview sheetsdef">
+            <div class="mini-tab">
+              <div class="row head"><div>Char</div><div>Item</div><div>Status</div><div>Price</div></div>
+              <div class="row body"><div>Slampeach</div><div class="item">Velium Battle Axe</div><div class="ok">OK</div><div>850pp</div></div>
+              <div class="row body"><div>Slampeach</div><div class="item">Crystal Spider Eye</div><div class="miss">MISSING</div><div>200pp</div></div>
+            </div>
+            <div class="mini-side">
+              <div class="head">Find Item</div>
+              <div class="item">Yaulp IV (id 5391)</div>
+              <div class="loc">↳ Slampeach: General-Slot3</div>
+            </div>
           </div>
         </div>
+
       </div>
 
       <p class="fidelity-note">
-        <strong>Heavy</strong>: parchment cell texture (top half) approximates how it'll render — Sheets cells fall back to solid warm tan since Sheets has no per-cell background images. The sidebar (bottom half) renders 100% as previewed.
+        <strong>Heavy</strong>: parchment cell texture (top half) approximates how it'll render — Sheets cells fall back to solid warm tan since Sheets has no per-cell background images. Sidebars (bottom half) render 100% as previewed for all themes.
       </p>
     </div>
 
@@ -414,7 +432,7 @@
 
 <div class="caption">
   <strong>Picker mockup</strong> — opens via SquireBot → Settings → Theme…<br>
-  Selected tile (blue ring) = staged choice. "CURRENT" badge = active theme.<br>
+  6 options in a 3×2 grid. Selected tile (blue ring) = staged choice. "CURRENT" badge = active theme.<br>
   "Apply" writes <code>_meta.theme</code> + triggers a view-tab rebuild (~seconds).
 </div>
 

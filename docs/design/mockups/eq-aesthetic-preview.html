@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>SquireBot — EQ aesthetic preview (4 options)</title>
+<title>SquireBot — EQ aesthetic preview (6 options)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=IM+Fell+English:ital@0;1&family=Inter:wght@300;400;500;600&family=MedievalSharp&display=swap" rel="stylesheet">
@@ -26,12 +26,10 @@
 
   .surface-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; opacity: 0.55; margin: 0 0 6px; }
 
-  /* Mock tab base layout */
   .mock-tab { border-radius: 4px; overflow: hidden; font-size: 12px; }
   .mock-tab table { width: 100%; border-collapse: collapse; }
   .mock-tab th, .mock-tab td { padding: 8px 10px; text-align: left; }
 
-  /* Mock sidebar base layout */
   .mock-sidebar { padding: 14px; border-radius: 4px; font-size: 12px; line-height: 1.5; }
   .mock-sidebar input { width: 100%; padding: 6px 9px; border: none; border-radius: 2px; font-size: 12px; }
   .mock-sidebar .result-item { font-weight: 600; margin-top: 12px; }
@@ -54,7 +52,24 @@
   .vanilla .mock-sidebar input { background: #1a120b; color: #c9b896; border: 1px solid #5a4128; }
   .vanilla .mock-sidebar .result-item { color: #d4af37; }
 
-  /* ============== B. VELIOUS ============== */
+  /* ============== B. KUNARK ============== */
+  .quad.kunark { background: #0a1108; color: #d4cab0; font-family: 'IM Fell English', Georgia, serif; }
+  .kunark .quad-title { font-family: Cinzel, serif; color: #c89060; letter-spacing: 0.03em; }
+  .kunark .mock-tab { background: #0f1612; border: 1px solid #4a6b3a; }
+  .kunark .mock-tab thead { background: linear-gradient(#1d2820, #0f1612); border-bottom: 2px solid #c89060; }
+  .kunark .mock-tab th { color: #c89060; font-family: Cinzel, serif; font-weight: 600; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .kunark .mock-tab tbody tr:nth-child(odd) { background: rgba(200, 144, 96, 0.05); }
+  .kunark .mock-tab tbody tr { border-top: 1px solid #1d2820; }
+  .kunark .mock-tab td.item { color: #e8dcb8; text-decoration: underline; text-decoration-color: #4a6b3a; }
+  .kunark .mock-tab td.status-ok { color: #6fa86f; font-weight: 600; }
+  .kunark .mock-tab td.status-missing { color: #c66666; font-weight: 600; }
+  .kunark .mock-tab td.status-other { color: #d4a020; }
+  .kunark .mock-sidebar { background: #0f1612; border: 1px solid #4a6b3a; }
+  .kunark .mock-sidebar h3 { font-family: Cinzel, serif; color: #c89060; margin: 0 0 10px; font-size: 13px; letter-spacing: 0.05em; }
+  .kunark .mock-sidebar input { background: #0a1108; color: #d4cab0; border: 1px solid #4a6b3a; }
+  .kunark .mock-sidebar .result-item { color: #c89060; }
+
+  /* ============== C. VELIOUS ============== */
   .quad.velious { background: #060b18; color: #d4dee8; font-family: 'IM Fell English', Georgia, serif; }
   .quad.velious .quad-title { font-family: 'Cinzel Decorative', serif; color: #a8c5e0; }
   .velious .mock-tab { background: #0f1729; border: 1px solid #4a6585; box-shadow: inset 0 0 0 1px rgba(168,197,224,0.08); }
@@ -71,7 +86,7 @@
   .velious .mock-sidebar input { background: #060b18; color: #d4dee8; border: 1px solid #4a6585; }
   .velious .mock-sidebar .result-item { color: #a8c5e0; }
 
-  /* ============== C. MINIMALIST ============== */
+  /* ============== D. MINIMALIST ============== */
   .quad.mini { background: #141414; color: #e8e0d4; font-family: Inter, system-ui, sans-serif; }
   .quad.mini .quad-title { font-family: Cinzel, serif; color: #b8915c; font-weight: 400; }
   .mini .mock-tab { background: #1f1f1d; border: 1px solid #2a2a28; }
@@ -90,7 +105,7 @@
   .mini .mock-sidebar input { background: #141414; color: #e8e0d4; border: 1px solid #2a2a28; font-family: Inter, sans-serif; }
   .mini .mock-sidebar .result-item { color: #e8e0d4; font-weight: 500; }
 
-  /* ============== D. HEAVY ============== */
+  /* ============== E. HEAVY ============== */
   .quad.heavy {
     background:
       radial-gradient(ellipse at top left, rgba(196,160,108,0.12), transparent 60%),
@@ -140,52 +155,38 @@
   .heavy .mock-sidebar input { background: #1a0e05; color: #e8d8a8; border: 2px solid #6b4520; font-family: 'IM Fell English', serif; box-shadow: inset 0 1px 4px rgba(0,0,0,0.6); }
   .heavy .mock-sidebar .result-item { color: #f0d088; font-weight: 700; }
 
+  /* ============== F. SHEETS DEFAULT ============== */
+  .quad.sheetsdef { background: #f8f9fa; color: #202124; font-family: Arial, sans-serif; }
+  .sheetsdef .quad-title { color: #202124; font-family: Arial, sans-serif; font-weight: 600; }
+  .sheetsdef .quad-tag { color: #5f6368; }
+  .sheetsdef .quad-desc { color: #3c4043; }
+  .sheetsdef .surface-label { color: #5f6368; }
+  .sheetsdef .swatch { border-color: rgba(0,0,0,0.1); }
+  .sheetsdef .mock-tab { background: #fff; border: 1px solid #dadce0; }
+  .sheetsdef .mock-tab thead { background: #f8f9fa; border-bottom: 1px solid #dadce0; }
+  .sheetsdef .mock-tab th { color: #202124; font-family: Arial, sans-serif; font-weight: 700; font-size: 12px; }
+  .sheetsdef .mock-tab tbody tr { border-top: 1px solid #f1f3f4; }
+  .sheetsdef .mock-tab td { color: #202124; }
+  .sheetsdef .mock-tab td.item a { color: #1967d2; text-decoration: underline; }
+  .sheetsdef .mock-tab td.status-ok { color: #137333; font-weight: 700; }
+  .sheetsdef .mock-tab td.status-missing { color: #c5221f; font-weight: 700; }
+  .sheetsdef .mock-tab td.status-other { color: #5f6368; }
+  .sheetsdef .mock-sidebar { background: #fff; border: 1px solid #dadce0; }
+  .sheetsdef .mock-sidebar h3 { color: #202124; font-family: Arial, sans-serif; margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+  .sheetsdef .mock-sidebar input { background: #fff; color: #202124; border: 1px solid #dadce0; font-family: Arial, sans-serif; }
+  .sheetsdef .mock-sidebar .result-item { color: #202124; }
+
   /* footer */
   .page-footer { padding: 20px 32px; border-top: 1px solid #222; color: #666; font-size: 12px; line-height: 1.6; }
   .page-footer code { background: #1f1f1f; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
-
-  /* Sheets default — explicit opt-out, full-width banner */
-  .default-banner {
-    background: #fff;
-    color: #202124;
-    padding: 28px 32px;
-    border-top: 1px solid #222;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    font-family: Arial, system-ui, sans-serif;
-  }
-  .default-banner .swatch-area {
-    width: 240px;
-    height: 140px;
-    background: #fff;
-    border: 1px solid #dadce0;
-    border-radius: 4px;
-    flex-shrink: 0;
-    display: grid;
-    grid-template-columns: 80px 1fr 60px 50px;
-    grid-auto-rows: 24px;
-    align-content: start;
-    font-size: 11px;
-    overflow: hidden;
-  }
-  .default-banner .swatch-area .h { background: #f8f9fa; color: #202124; padding: 4px 8px; font-weight: 700; border-bottom: 1px solid #dadce0; }
-  .default-banner .swatch-area .c { padding: 4px 8px; border-bottom: 1px solid #f1f3f4; color: #202124; }
-  .default-banner .swatch-area .ok { color: #137333; font-weight: 700; }
-  .default-banner .swatch-area .miss { color: #c5221f; font-weight: 700; }
-  .default-banner .text { flex: 1; }
-  .default-banner h2 { margin: 0 0 6px; font-size: 20px; font-weight: 600; color: #202124; }
-  .default-banner .tag { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #5f6368; margin-bottom: 12px; }
-  .default-banner p { margin: 0; font-size: 13px; line-height: 1.6; color: #3c4043; max-width: 640px; }
 </style>
 </head>
 <body>
 
 <div class="page-header">
-  <h1>SquireBot — EverQuest aesthetic preview (4 options)</h1>
+  <h1>SquireBot — EverQuest aesthetic preview (6 options)</h1>
   <p>
-    Throwaway preview mockups generated 2026-05-08. Four themed options shown in the 2×2 grid below; a fifth opt-out option (Sheets default — no styling) is shown as a full-width banner at the bottom.
-    Each themed option shows a mock <code>gear_check</code> view tab (cell-based — what Sheets can render) plus a mock search sidebar (HtmlService — full HTML/CSS freedom).
+    Throwaway preview mockups generated 2026-05-08. Five themed options (Vanilla / Kunark / Velious / Minimalist / Heavy) plus one explicit opt-out (Sheets default). Each option shows a mock <code>gear_check</code> view tab (cell-based — what Sheets can render) plus a mock search sidebar (HtmlService — full HTML/CSS freedom).
     Final visual decision happens in Phase 3 — these are just to anchor the conversation. Sample data is fake but realistic for a Velious-era Iksar Shadow Knight guildie.
   </p>
 </div>
@@ -237,10 +238,55 @@
     </div>
   </section>
 
-  <!-- ============================ B. VELIOUS ============================ -->
+  <!-- ============================ B. KUNARK ============================ -->
+  <section class="quad kunark">
+    <header class="quad-head">
+      <h2 class="quad-title">B. Kunark</h2>
+      <span class="quad-tag">1999–2000 · medium</span>
+    </header>
+    <p class="quad-desc">Jungle greens + copper accents + IM Fell English serif. Iksar-civilization-in-the-jungle feel — Cabilis stonework, the Field of Bone, weathered ruins. Fills the era gap between Vanilla and Velious; gives a green palette none of the other themes have.</p>
+
+    <div class="palette">
+      <div class="swatch" style="background:#0a1108" title="bg"></div>
+      <div class="swatch" style="background:#0f1612" title="panel"></div>
+      <div class="swatch" style="background:#4a6b3a" title="border mossy"></div>
+      <div class="swatch" style="background:#d4cab0" title="text aged ivory"></div>
+      <div class="swatch" style="background:#c89060" title="accent copper"></div>
+    </div>
+
+    <div>
+      <p class="surface-label">view tab — gear_check</p>
+      <div class="mock-tab">
+        <table>
+          <thead><tr>
+            <th>Char</th><th>Tier</th><th>Slot</th><th>Recommended</th><th>Equipped</th><th>Status</th><th>Price</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Primary</td><td class="item">Velium Battle Axe</td><td>Crystalline Falchion</td><td class="status-other">OTHER</td><td>850pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Secondary</td><td class="item">Crystal Spider Eye</td><td>—</td><td class="status-missing">MISSING</td><td>200pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Helm</td><td class="item">Coldain Helm</td><td>Coldain Helm</td><td class="status-ok">OK</td><td>1,400pp</td></tr>
+            <tr><td>Otherchar</td><td>velious_raiding</td><td>Helm</td><td class="item">Crown of Narandi</td><td>Crown of Narandi</td><td class="status-ok">OK</td><td>4,200pp</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="surface-label">search sidebar</p>
+      <div class="mock-sidebar">
+        <h3>Find Item</h3>
+        <input type="text" value="yaulp" readonly>
+        <div class="result-item">Yaulp IV (id 5391)</div>
+        <div class="result-loc">↳ Slampeach: General-Slot3, count 1</div>
+        <div class="result-loc">↳ Otherchar: Bank-Slot12, count 2</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ C. VELIOUS ============================ -->
   <section class="quad velious">
     <header class="quad-head">
-      <h2 class="quad-title">B. Velious</h2>
+      <h2 class="quad-title">C. Velious</h2>
       <span class="quad-tag">2000–2001 · medium</span>
     </header>
     <p class="quad-desc">Icy blues + silver + frosted accents. The Velious zone-art palette — Coldain hold, Wakening Land, the eye in the storm. Cooler and more modern-feeling than Vanilla; matches the era your guild plays.</p>
@@ -282,13 +328,13 @@
     </div>
   </section>
 
-  <!-- ============================ C. MINIMALIST ============================ -->
+  <!-- ============================ D. MINIMALIST ============================ -->
   <section class="quad mini">
     <header class="quad-head">
-      <h2 class="quad-title">C. Minimalist EQ-flavored</h2>
-      <span class="quad-tag">era-agnostic · light</span>
+      <h2 class="quad-title">D. Minimalist EQ-flavored</h2>
+      <span class="quad-tag">era-agnostic · light · system default</span>
     </header>
-    <p class="quad-desc">Muted EQ palette + clean sans for body, serif accent only on key elements. "Stranger Things title style" — the EQ is in the gold + the serif accent, not the chrome. Reads as a modern boutique tool that happens to know what EQ is.</p>
+    <p class="quad-desc">Muted EQ palette + clean sans for body, serif accent only on key elements. "Stranger Things title style" — the EQ is in the gold + the serif accent, not the chrome. Reads as a modern boutique tool that happens to know what EQ is. <strong>System default for fresh workbooks.</strong></p>
 
     <div class="palette">
       <div class="swatch" style="background:#141414" title="bg"></div>
@@ -327,10 +373,10 @@
     </div>
   </section>
 
-  <!-- ============================ D. HEAVY ============================ -->
+  <!-- ============================ E. HEAVY ============================ -->
   <section class="quad heavy">
     <header class="quad-head">
-      <h2 class="quad-title">D. Heavy EQ-replica</h2>
+      <h2 class="quad-title">E. Heavy EQ-replica</h2>
       <span class="quad-tag">parchment + stone · heavy</span>
     </header>
     <p class="quad-desc">Parchment rows, beveled stone-panel headers, ornate borders, MedievalSharp display font, deep red accents for headers (think EQ spell scroll). Goes all-in on the "guild artifact" feel. Highest visual lift; most assertive — leans into the cosplay rather than just nodding to it.</p>
@@ -373,36 +419,61 @@
     </div>
   </section>
 
-</div>
+  <!-- ============================ F. SHEETS DEFAULT ============================ -->
+  <section class="quad sheetsdef">
+    <header class="quad-head">
+      <h2 class="quad-title">F. Sheets default</h2>
+      <span class="quad-tag">opt-out · no styling</span>
+    </header>
+    <p class="quad-desc">No custom theme — the workbook renders as standard Google Sheets: white background, Arial font, default cell borders. Conditional formatting on the Status column (red MISSING / green OK) is the only color. The search sidebar uses default browser styling with no custom CSS. Useful for printing, exporting, integrations that re-render the data, or guildies who actively prefer a plain spreadsheet.</p>
 
-<!-- ============================ E. SHEETS DEFAULT (full-width opt-out) ============================ -->
-<section class="default-banner">
-  <div class="swatch-area">
-    <div class="h">Char</div><div class="h">Item</div><div class="h">Status</div><div class="h">Price</div>
-    <div class="c">Slampeach</div><div class="c">Velium Battle Axe</div><div class="c ok">OK</div><div class="c">850pp</div>
-    <div class="c">Slampeach</div><div class="c">Crystal Spider Eye</div><div class="c miss">MISSING</div><div class="c">200pp</div>
-    <div class="c">Slampeach</div><div class="c">Coldain Helm</div><div class="c ok">OK</div><div class="c">1,400pp</div>
-    <div class="c">Otherchar</div><div class="c">Crown of Narandi</div><div class="c ok">OK</div><div class="c">4,200pp</div>
-  </div>
-  <div class="text">
-    <h2>E. Sheets default</h2>
-    <div class="tag">opt-out · no styling</div>
-    <p>
-      No custom theme — the workbook renders as standard Google Sheets: white background, Arial font, default cell borders. Conditional formatting on the Status column (red MISSING / green OK) is the only color. The search sidebar uses default browser styling with no custom CSS.
-    </p>
-    <p style="margin-top: 8px; font-size: 12px; color: #5f6368;">
-      Useful for printing, exporting, integrations that re-render the data, or guildies who actively prefer a plain spreadsheet. Not the system default — selectable via the theme picker.
-    </p>
-  </div>
-</section>
+    <div class="palette">
+      <div class="swatch" style="background:#ffffff" title="bg"></div>
+      <div class="swatch" style="background:#f8f9fa" title="header bg"></div>
+      <div class="swatch" style="background:#dadce0" title="border"></div>
+      <div class="swatch" style="background:#202124" title="text"></div>
+      <div class="swatch" style="background:#137333" title="ok green"></div>
+      <div class="swatch" style="background:#c5221f" title="missing red"></div>
+    </div>
+
+    <div>
+      <p class="surface-label">view tab — gear_check</p>
+      <div class="mock-tab">
+        <table>
+          <thead><tr>
+            <th>Char</th><th>Tier</th><th>Slot</th><th>Recommended</th><th>Equipped</th><th>Status</th><th>Price</th>
+          </tr></thead>
+          <tbody>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Primary</td><td class="item"><a href="#">Velium Battle Axe</a></td><td>Crystalline Falchion</td><td class="status-other">OTHER</td><td>850pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Secondary</td><td class="item"><a href="#">Crystal Spider Eye</a></td><td>—</td><td class="status-missing">MISSING</td><td>200pp</td></tr>
+            <tr><td>Slampeach</td><td>velious_pre_raid</td><td>Helm</td><td class="item"><a href="#">Coldain Helm</a></td><td>Coldain Helm</td><td class="status-ok">OK</td><td>1,400pp</td></tr>
+            <tr><td>Otherchar</td><td>velious_raiding</td><td>Helm</td><td class="item"><a href="#">Crown of Narandi</a></td><td>Crown of Narandi</td><td class="status-ok">OK</td><td>4,200pp</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <p class="surface-label">search sidebar</p>
+      <div class="mock-sidebar">
+        <h3>Find Item</h3>
+        <input type="text" value="yaulp" readonly>
+        <div class="result-item">Yaulp IV (id 5391)</div>
+        <div class="result-loc">↳ Slampeach: General-Slot3, count 1</div>
+        <div class="result-loc">↳ Otherchar: Bank-Slot12, count 2</div>
+      </div>
+    </div>
+  </section>
+
+</div>
 
 <div class="page-footer">
   <p>
     Mockups are pure CSS approximations of what each direction would feel like as a Sheets workbook + sidebar. Real implementation (Phase 3) would use Apps Script <code>setBackground</code> / <code>setFontColor</code> / <code>setBorder</code> / <code>setFontFamily</code> / <code>IMAGE()</code> for cells, and HtmlService templates for the sidebar.
-    Limitations: Sheets cells can't have background images (so the parchment effect in option D would need to fall back to a solid warm tan + maybe an inline IMAGE() banner). Sidebar has no such limit.
+    Limitations: Sheets cells can't have background images (so the parchment effect in option E would need to fall back to a solid warm tan + maybe an inline IMAGE() banner). Sidebar has no such limit.
   </p>
   <p>
-    Throwaway file. Will be revisited when Phase 3 picks a direction.
+    Throwaway file. Will be revisited when Phase 3 picks per-theme refinements.
   </p>
 </div>
 

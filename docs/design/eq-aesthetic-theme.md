@@ -16,24 +16,29 @@ SquireBot is a fan project for a Project 1999 (Classic EQ emulator) guild. The g
 
 **Why "all four" instead of picking one:** during preview-mockup review on 2026-05-08, all four candidate themes (Vanilla / Velious / Minimalist / Heavy) were judged worth shipping. Different guilds will have different tastes — a no-fuss officer cohort might want Minimalist; a Velious-cosplay guild might want Heavy. The marginal cost of building a 4-theme picker over a single-theme implementation is ~20–30% Phase 3 effort (vs. ~50–100% to retrofit it later), so the right call is to bake the picker in from day 1.
 
-## The four built-in themes
+## The five built-in options
 
-Reference mockups: [docs/design/mockups/eq-aesthetic-preview.html](mockups/eq-aesthetic-preview.html). Open in any browser for a side-by-side comparison of all four with realistic SquireBot data (mock `gear_check` view tab + mock search sidebar per theme).
+Reference mockups: [docs/design/mockups/eq-aesthetic-preview.html](mockups/eq-aesthetic-preview.html) (side-by-side comparison) and [docs/design/mockups/eq-aesthetic-picker.html](mockups/eq-aesthetic-picker.html) (the picker dialog). Open in any browser.
 
-| Theme | Era | Intensity | Visual character |
+Four themed options + one explicit no-theme opt-out:
+
+| Option | Era | Intensity | Visual character |
 |---|---|---|---|
 | **A. Vanilla** | pre-Kunark (1999–2000) | Medium | Browns + golds, Cinzel + Crimson Text serif, "ye olde tavern" feel. Warm and grounded. |
 | **B. Velious** | 2000–2001 | Medium | Icy blues + silver, Cinzel Decorative + IM Fell English, frosted accents. Matches the era your guild plays. |
-| **C. Minimalist** | era-agnostic | Light | Muted EQ palette + Inter sans for body, Cinzel for accents only. "Stranger Things title style" — modern boutique tool that knows what EQ is. |
+| **C. Minimalist** | era-agnostic | Light | Muted EQ palette + Inter sans for body, Cinzel for accents only. "Stranger Things title style" — modern boutique tool that knows what EQ is. **System default for fresh workbooks.** |
 | **D. Heavy** | era-agnostic | Heavy | Parchment rows, beveled stone-panel headers, MedievalSharp display font, dark-red ink accents. Goes all-in on the guild-artifact feel. |
+| **E. Sheets default** | n/a | n/a (opt-out) | No custom styling. White background, Arial, default Sheets borders. Conditional formatting on Status column is the only color. Useful for printing, exporting, or guildies who prefer a plain spreadsheet. |
 
-Per-theme color palettes, font choices, and visual notes are in the mockup HTML.
+Per-theme color palettes, font choices, and visual notes are in the preview mockup HTML.
+
+**Why a "no theme" option exists:** not everyone wants any aesthetic. Officers who print or export the workbook get cleaner output with default styling. New guildies intimidated by "fancy" tools may prefer something familiar. Cross-tool integrations (third-party Sheets viewers, embedded iframes) render default styling more reliably than custom themes. Offering an explicit opt-out is cheaper than fielding "how do I turn off the colors" support requests.
 
 ## Architectural design (LOCKED for Phase 3)
 
 ### Single source of truth: `_meta.theme`
 
-A new row in the `_meta` dimension tab stores the active theme name. Default value: `minimalist` (lowest "yikes that's a lot" risk for a non-EQ-purist taking their first look at a fresh workbook). One workbook = one theme = one consistent view for the whole guild.
+A new row in the `_meta` dimension tab stores the active theme name. Valid values: `vanilla` | `velious` | `minimalist` | `heavy` | `sheets-default`. Default value: `minimalist` (lowest "yikes that's a lot" risk for a non-EQ-purist taking their first look at a fresh workbook, while still showing off what SquireBot can do — `sheets-default` would undersell the product on first impression). One workbook = one theme = one consistent view for the whole guild.
 
 ```
 _meta:
@@ -67,13 +72,16 @@ type ThemeTokens = {
   sidebarHeaderEffect: string;
 };
 
-const THEMES: Record<ThemeName, ThemeTokens> = {
-  vanilla:    { bg: '#2a1f15', accent: '#d4af37', fontHeader: 'Cinzel', ... },
-  velious:    { bg: '#0f1729', accent: '#a8c5e0', fontHeader: 'Cinzel Decorative', ... },
-  minimalist: { bg: '#1f1f1d', accent: '#b8915c', fontHeader: 'Cinzel', ... },
-  heavy:      { bg: '#c9b072', accent: '#6b1a1a', fontHeader: 'MedievalSharp', ... },
+const THEMES: Record<ThemeName, ThemeTokens | null> = {
+  vanilla:         { bg: '#2a1f15', accent: '#d4af37', fontHeader: 'Cinzel', ... },
+  velious:         { bg: '#0f1729', accent: '#a8c5e0', fontHeader: 'Cinzel Decorative', ... },
+  minimalist:      { bg: '#1f1f1d', accent: '#b8915c', fontHeader: 'Cinzel', ... },
+  heavy:           { bg: '#c9b072', accent: '#6b1a1a', fontHeader: 'MedievalSharp', ... },
+  'sheets-default': null,  // explicit opt-out — builders skip all styling calls
 };
 ```
+
+**`sheets-default` is a sentinel `null`**, not a registry entry with default values. View-tab builders branch on it: if the active theme is `sheets-default`, they skip every styling call (`setBackground`, `setFontFamily`, etc.) and let Sheets render its native defaults. The sidebar template emits no `<style>` block beyond the conditional-formatting palette for Status. This makes `sheets-default` the **cheapest theme to implement** — it's a single conditional in each builder, no design tokens, no CSS.
 
 ### Theme-aware view-tab builders
 
@@ -110,16 +118,25 @@ Single sidebar template serves all four themes. The mockup HTML is already struc
 
 A custom-menu entry — **SquireBot → Settings → Theme…** — opens an HtmlService modal dialog with:
 
-- A **2×2 grid of preview tiles**, one per theme. Each tile renders a miniature live preview of the theme (header strip + 3-row mock view-tab + 1-line mock sidebar snippet) using the same CSS-custom-property approach.
-- Tile click selects + highlights that theme.
-- "Apply" button at the bottom: writes the chosen theme name to `_meta.theme`, closes the dialog, kicks off the rebuild.
+- A **2×2 grid of preview tiles** for the four themed options (Vanilla / Velious / Minimalist / Heavy). Each tile renders a miniature live preview (header strip + 3-row mock view-tab + 1-line mock sidebar snippet) using the same CSS-custom-property approach.
+- Below the 2×2 grid, a **full-width "Sheets default" tile** — no preview (nothing to preview), just a name + 1-sentence description + a small swatch hinting at default Sheets appearance. Visually grouped separately from the themed family to read as the explicit opt-out.
+- Tile click selects + highlights that option (blue ring).
+- The currently active theme shows a `CURRENT` badge in the corner.
+- "Apply" button: writes the chosen theme name to `_meta.theme`, closes the dialog, kicks off the rebuild.
 - "Cancel" closes without changes.
+- "Open full-size preview →" link in the footer opens [`docs/design/mockups/eq-aesthetic-preview.html`](mockups/eq-aesthetic-preview.html) for a larger side-by-side comparison.
+
+**Access location:** the SquireBot custom menu lives in the standard Google Sheets menu bar (next to Help). Visible to all workbook viewers; Apply requires edit access on `_meta`. Most guildies have edit access since they need to write their own landing-tab data — view-only access is rare in this setup.
 
 Why polished over cheap (`_meta` cell + manual rebuild): the originator is making a one-time aesthetic decision they'll live with for months. A picker with live previews is the right ergonomics — the cheap approach (typing a string into a cell + hoping it spelled right + manually triggering rebuild) is hostile UX for a low-frequency-but-high-stakes choice.
 
+Reference mockup: [`docs/design/mockups/eq-aesthetic-picker.html`](mockups/eq-aesthetic-picker.html).
+
 ### Theme-change rebuild trigger
 
-When `_meta.theme` changes (detected by `onEdit` trigger AND by direct write from the picker dialog), all four view tabs (`view`, `gear_check`, `spell_check`, `bank`) get rebuilt with the new theme's tokens. At v1 scale (~120 landing tabs feeding 4 consolidated mega-tabs) this is seconds, well within Apps Script's 6-min execution cap. Chunk-and-resume not needed for v1.
+When `_meta.theme` changes (detected by `onEdit` trigger AND by direct write from the picker dialog), all four view tabs (`view`, `gear_check`, `spell_check`, `bank`) get rebuilt with the new theme's tokens (or with no styling, in the `sheets-default` case). At v1 scale (~120 landing tabs feeding 4 consolidated mega-tabs) this is seconds, well within Apps Script's 6-min execution cap. Chunk-and-resume not needed for v1.
+
+**Switching to `sheets-default` requires an explicit "clear styling" pass** on each view tab — `range.setBackground(null)`, `range.setFontFamily(null)`, etc. — to remove whatever the previously-active theme set. Otherwise the residual styling from the old theme would persist underneath. Builders need a `clearTheme(range)` helper that gets called before applying the new theme tokens.
 
 ### What's NOT in scope for v1
 
@@ -168,25 +185,28 @@ If a future guild operator forks SquireBot and wants to ship the literal Daybrea
 
 ## Open questions remaining for Phase 3
 
-Most of the original open questions are now resolved by "ship all four." The remaining ones:
+Most of the original open questions are now resolved by "ship all four + Sheets default." The remaining ones:
 
-1. **Default theme.** Recommendation: Minimalist. Rationale: lowest "yikes that's a lot" risk for a non-EQ-purist taking their first look at a brand-new workbook; the originator can switch to a more assertive theme via the picker if they want. Open to override.
+1. **Default theme — DECIDED 2026-05-08: Minimalist.** Rationale: lowest "yikes that's a lot" risk for a non-EQ-purist taking their first look at a fresh workbook, while still showing off what SquireBot can do (Sheets default would undersell the product on first impression). The originator can switch to any of the other four options via the picker.
 2. **Per-theme refinements during implementation.** The mockup HTML colors/fonts are starting points, not locked values. Phase 3 implementation will inevitably tweak (e.g., contrast against the conditional-formatting yellow may need a palette adjustment). Reviewer: project owner, sign-off per theme during Phase 3.
 3. **Performance ceiling for `IMAGE()`-heavy themes.** The Heavy theme implies more inline images (class icons, decorative dividers) than the other three. Phase 3 needs to validate that a fully-loaded `view` tab with Heavy theme renders snappily on a 12-guildie / ~120-tab workbook. If not, drop image density on Heavy or warn the user via a tooltip on the picker tile ("Heavy: may render slower on larger workbooks").
-4. **Filter UX clash check.** Phase 3 should test the standard Sheets filter funnel against each theme. If Heavy clashes badly enough, surface filtering through the SquireBot custom menu instead (theme-aware filter UI).
-5. **Picker preview tile fidelity.** The picker dialog's mini-preview tiles need to match the actual rendered output closely enough that the originator's choice isn't "surprising" when they first see the rebuilt views. Phase 3: build the picker tiles AFTER the view-tab styling is implemented so the preview can sample real CSS.
+4. **Filter UX clash check.** Phase 3 should test the standard Sheets filter funnel against each theme. If Heavy clashes badly enough, surface filtering through the SquireBot custom menu instead (theme-aware filter UI). Sheets default has no clash by definition.
+5. **Picker preview tile fidelity.** The picker dialog's mini-preview tiles need to match the actual rendered output closely enough that the originator's choice isn't "surprising" when they first see the rebuilt views. Phase 3: build the picker tiles AFTER the view-tab styling is implemented so the preview can sample real CSS. Sheets-default tile is exempt (no preview needed).
+6. **`clearTheme` helper coverage.** When switching from any themed option to Sheets default (or between themes), the builders need a comprehensive "clear styling" pass that resets every property the previous theme might have set. Phase 3 should enumerate every styling property used across all four themes and ensure `clearTheme` resets each one — missing one (e.g., a custom `setFontWeight` only set by Heavy) would leave residue when switching away.
 
 ## Scope estimate
 
-**Medium-Large.** The "all four + polished picker" approach is roughly 20–30% more Phase 3 effort than a single-theme implementation:
+**Medium-Large.** The "four themes + Sheets default + polished picker" approach is roughly 20–30% more Phase 3 effort than a single-theme implementation:
 
-- Theme registry definition: ~100–200 LOC of declarative tokens × 4 themes = ~400–800 LOC of pure data
+- Theme registry definition: ~100–200 LOC of declarative tokens × 4 themed options = ~400–800 LOC of pure data
+- `sheets-default` no-op handling: trivial — a single conditional branch in each builder
 - Theme-aware view-tab builders (token lookups instead of hardcoded values): +10–20% over single-theme builder complexity
-- Sidebar CSS via custom properties: roughly equal effort to a single-theme sidebar (the work is structuring the properties, then 4× variable definitions)
+- `clearTheme(range)` helper for resetting styling on theme switch: ~30 LOC
+- Sidebar CSS via custom properties: roughly equal effort to a single-theme sidebar
 - Theme-change rebuild trigger + onEdit handler: ~50 LOC
-- Polished picker dialog (HtmlService modal, 2×2 preview tiles, apply/cancel): ~2–4 hours of focused work
+- Polished picker dialog (HtmlService modal, 2×2 preview tiles + 1 wide opt-out tile, apply/cancel): ~2–4 hours of focused work
 
-Net: instead of "Medium" for one theme, this is "Medium-Large" for four-themes-plus-picker. Well worth the ~25% surcharge to ship the choice.
+Net: instead of "Medium" for one theme, this is "Medium-Large" for four-themes-plus-opt-out-plus-picker. Well worth the ~25% surcharge to ship the choice. Adding Sheets default to the original four-theme plan was nearly free (single conditional in each builder + one extra picker tile).
 
 ## Related references
 

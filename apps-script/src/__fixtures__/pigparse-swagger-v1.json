@@ -1,0 +1,829 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "P99 Pricing Data API",
+    "description": "Below are a set of apis that can be used to get pricing data for green and blue servers.",
+    "contact": {
+      "name": "Scott",
+      "url": "https://github.com/smasherprog/EqTool"
+    },
+    "version": "v1"
+  },
+  "paths": {
+    "/api/item/getall/{server}": {
+      "get": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "Will get all items for server and the averages. This data is rebuild every 10 minutes.",
+        "parameters": [
+          {
+            "name": "server",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "enum": [
+                "0 = Green",
+                "1 = Blue",
+                "2 = Red",
+                "3 = Quarm",
+                "4 = MaxServers"
+              ],
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuctionItem"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuctionItem"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuctionItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/item/get/{server}/{itemname}": {
+      "get": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "Use this API when you want just the averages and counts for the item. This is MUCH faster than the getdetails function and should be preferred.",
+        "parameters": [
+          {
+            "name": "server",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "enum": [
+                "0 = Green",
+                "1 = Blue",
+                "2 = Red",
+                "3 = Quarm",
+                "4 = MaxServers"
+              ],
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "itemname",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "10 Dose Greater Potion of Purity"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/item/getmultiple/{server}": {
+      "get": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "A bulk version of api/item/get/{server}/{itemname}",
+        "parameters": [
+          {
+            "name": "server",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "enum": [
+                "0 = Green",
+                "1 = Blue",
+                "2 = Red",
+                "3 = Quarm",
+                "4 = MaxServers"
+              ],
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "itemnames",
+            "in": "query",
+            "description": "\"10 Dose Greater Potion of Purity \", \"A Blue Squire\"",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/item/postmultiple": {
+      "post": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "A bulk version of api/item/get/{server}/{itemname}",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsLookups"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsLookups"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemsLookups"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/item/getdetails/{server}/{itemname}": {
+      "get": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "Use this API when you want Full history on item. This might transfer ALOT of data, so only use it if you need it!",
+        "parameters": [
+          {
+            "name": "server",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "enum": [
+                "0 = Green",
+                "1 = Blue",
+                "2 = Red",
+                "3 = Quarm",
+                "4 = MaxServers"
+              ],
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "itemname",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "10 Dose Greater Potion of Purity"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemDetail"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemDetail"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/item/getdetails/{itemid}": {
+      "get": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "Will get an item and all of its details. This can include alot of data!\nDO NOT USE THIS. They will replace the regular version once data import is done!",
+        "parameters": [
+          {
+            "name": "itemid",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 22741
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemDetail"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemDetail"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/item/auctionParse": {
+      "post": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "Will parse in game message and return auction data",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "default": "Fuxi auctions, 'WTS Silver Chitin Hand Wraps 1.3 / Nilitim's Grimoire Pg. 300 x3 / Nilitim's Grimoire Pg. 116 / Nilitim's Grimoire Pg. 115 / Nilitim's Grimoire Pg. 35 / Salil's Writ Pg. 174 L 5pp ea last call pst WTB Spell: Pillar of Lightning 50p l Sarnak-Hide Mask 50p l Arctic Wyvern Hide 300p/stack l WTS Ring of stealthy travel 14k WTS Bag of the Tinkerers 5300pp.  5250ea for qty 2+.  5200 for qty 4+.  (price firm) pst WTB Scepter of the Forlorn paying 5k WTB'"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "string",
+                "default": "Fuxi auctions, 'WTS Silver Chitin Hand Wraps 1.3 / Nilitim's Grimoire Pg. 300 x3 / Nilitim's Grimoire Pg. 116 / Nilitim's Grimoire Pg. 115 / Nilitim's Grimoire Pg. 35 / Salil's Writ Pg. 174 L 5pp ea last call pst WTB Spell: Pillar of Lightning 50p l Sarnak-Hide Mask 50p l Arctic Wyvern Hide 300p/stack l WTS Ring of stealthy travel 14k WTS Bag of the Tinkerers 5300pp.  5250ea for qty 2+.  5200 for qty 4+.  (price firm) pst WTB Scepter of the Forlorn paying 5k WTB'"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "string",
+                "default": "Fuxi auctions, 'WTS Silver Chitin Hand Wraps 1.3 / Nilitim's Grimoire Pg. 300 x3 / Nilitim's Grimoire Pg. 116 / Nilitim's Grimoire Pg. 115 / Nilitim's Grimoire Pg. 35 / Salil's Writ Pg. 174 L 5pp ea last call pst WTB Spell: Pillar of Lightning 50p l Sarnak-Hide Mask 50p l Arctic Wyvern Hide 300p/stack l WTS Ring of stealthy travel 14k WTS Bag of the Tinkerers 5300pp.  5250ea for qty 2+.  5200 for qty 4+.  (price firm) pst WTB Scepter of the Forlorn paying 5k WTB'"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/Auction"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Auction"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Auction"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/item/wiki": {
+      "post": {
+        "tags": [
+          "Item"
+        ],
+        "summary": "Will return wiki information in raw format.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/P99WikiLookup"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/P99WikiLookup"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/P99WikiLookup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/secured/test": {
+      "get": {
+        "tags": [
+          "Secured"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Auction": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "type": "string",
+            "nullable": true
+          },
+          "tunnelTimestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Auctionitem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuctionItem": {
+        "type": "object",
+        "properties": {
+          "i": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "t": {
+            "enum": [
+              "0 = WTS",
+              "1 = WTB",
+              "2 = BOTH"
+            ],
+            "type": "integer",
+            "format": "int32"
+          },
+          "n": {
+            "type": "string",
+            "nullable": true
+          },
+          "l": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tc": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "t30": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "a30": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "t60": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "a60": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "t90": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "a90": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "t6m": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "a6m": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ty": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ay": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Auctionitem": {
+        "type": "object",
+        "properties": {
+          "auctionType": {
+            "enum": [
+              "0 = WTS",
+              "1 = WTB",
+              "2 = BOTH"
+            ],
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "price": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "eQitemId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "itemName": {
+            "maxLength": 64,
+            "type": "string",
+            "nullable": true
+          },
+          "server": {
+            "enum": [
+              "0 = Green",
+              "1 = Blue",
+              "2 = Red",
+              "3 = Quarm",
+              "4 = MaxServers"
+            ],
+            "type": "integer",
+            "format": "int32"
+          },
+          "lastWTBSeen": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastWTSSeen": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "totalWTSAuctionCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSAuctionAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast30DaysCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast30DaysAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast60DaysCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast60DaysAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast90DaysCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast90DaysAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast6MonthsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLast6MonthsAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLastYearCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTSLastYearAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBAuctionCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBAuctionAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast30DaysCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast30DaysAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast60DaysCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast60DaysAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast90DaysCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast90DaysAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast6MonthsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLast6MonthsAverage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLastYearCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalWTBLastYearAverage": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemAuctionDetail": {
+        "type": "object",
+        "properties": {
+          "u": {
+            "enum": [
+              "0 = WTS",
+              "1 = WTB",
+              "2 = BOTH"
+            ],
+            "type": "integer",
+            "format": "int32"
+          },
+          "i": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "p": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "t": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemDetail": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemAuctionDetail"
+            },
+            "nullable": true
+          },
+          "itemName": {
+            "type": "string",
+            "nullable": true
+          },
+          "players": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "nullable": true
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ItemsLookups": {
+        "required": [
+          "itemnames"
+        ],
+        "type": "object",
+        "properties": {
+          "server": {
+            "enum": [
+              "0 = Green",
+              "1 = Blue",
+              "2 = Red",
+              "3 = Quarm",
+              "4 = MaxServers"
+            ],
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "itemnames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "P99WikiLookup": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "zone": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -333,6 +333,29 @@ func (s *Server) handleEQFolderConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("wizard eq-folder confirmed", "folder", path)
+
+	// BUG-001 fix (v0.2.1): signal Run() that the wizard is complete NOW,
+	// not later via /done's setTimeout-driven /wizard/shutdown POST. The
+	// /done page's JS-fired shutdown is brittle: if the user closes the
+	// browser tab (or navigates away, or minimises) before its 3-second
+	// timer fires, the shutdown POST never arrives, Run() blocks forever
+	// on <-s.done, and the watcher never starts scaffolding. Signalling
+	// here makes wizard completion independent of browser behaviour: as
+	// soon as config.Save() has persisted the final value, Run() can
+	// return and runWatcher (in internal/app) can begin. /done remains
+	// purely cosmetic; its shutdown POST still fires but is now a no-op
+	// safety net (signalDone uses sync.Once, and httpSrv.Shutdown is
+	// triggered by Run's defer once the channel send completes).
+	s.mu.Lock()
+	res := Result{
+		Email:         s.cfg.GoogleEmail,
+		SpreadsheetID: s.cfg.SpreadsheetID,
+		EQFolder:      s.cfg.EQFolder,
+		TokenSource:   s.tokenSource,
+	}
+	s.mu.Unlock()
+	s.signalDone(res)
+
 	http.Redirect(w, r, "/done", http.StatusFound)
 }
 

@@ -164,6 +164,8 @@ func TestHandleEQFolderConfirm_HappyPath_RedirectsToDone(t *testing.T) {
 	defer cleanup()
 
 	s := newTestServer(t, nil)
+	s.cfg.GoogleEmail = "alice@example.com"
+	s.cfg.SpreadsheetID = "SHEET1"
 	folder := makeFakeEQFolder(t)
 
 	form := url.Values{"path": []string{folder}}
@@ -180,6 +182,66 @@ func TestHandleEQFolderConfirm_HappyPath_RedirectsToDone(t *testing.T) {
 	}
 	if s.cfg.EQFolder != folder {
 		t.Errorf("cfg.EQFolder = %q, want %q", s.cfg.EQFolder, folder)
+	}
+
+	// BUG-001 fix: confirm signalDone fires here (independent of /done's
+	// setTimeout-driven /wizard/shutdown). Without this assertion the
+	// browser-tab-closure regression could come back unnoticed.
+	select {
+	case res := <-s.done:
+		if res.Email != "alice@example.com" {
+			t.Errorf("res.Email = %q, want alice@example.com", res.Email)
+		}
+		if res.SpreadsheetID != "SHEET1" {
+			t.Errorf("res.SpreadsheetID = %q, want SHEET1", res.SpreadsheetID)
+		}
+		if res.EQFolder != folder {
+			t.Errorf("res.EQFolder = %q, want %q", res.EQFolder, folder)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no Result on done channel after handleEQFolderConfirm — BUG-001 regression")
+	}
+}
+
+// BUG-001 regression test: even if the /done POST never arrives (browser
+// closed before setTimeout fires), the wizard must have completed via the
+// signalDone in handleEQFolderConfirm. If both signal paths fire, sync.Once
+// in signalDone collapses them to a single send (idempotent).
+func TestHandleEQFolderConfirm_SignalsDoneIdempotentWithShutdown(t *testing.T) {
+	cleanup := redirectLOCALAPPDATA(t)
+	defer cleanup()
+
+	s := newTestServer(t, nil)
+	s.cfg.GoogleEmail = "alice@example.com"
+	s.cfg.SpreadsheetID = "SHEET1"
+	folder := makeFakeEQFolder(t)
+
+	form := url.Values{"path": []string{folder}}
+	req := httptest.NewRequest(http.MethodPost, "/eq-folder/confirm", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	s.handleEQFolderConfirm(httptest.NewRecorder(), req)
+
+	// Drain the first signal.
+	select {
+	case <-s.done:
+	case <-time.After(time.Second):
+		t.Fatal("first signalDone (from confirm) did not fire")
+	}
+
+	// Now simulate the browser's late /wizard/shutdown POST. Should not
+	// double-send (sync.Once protects), should not panic, should not block.
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/wizard/shutdown", nil)
+	s.handleShutdown(rec2, req2)
+	if rec2.Code != http.StatusNoContent {
+		t.Errorf("shutdown status = %d, want 204", rec2.Code)
+	}
+	// Verify no second send (channel should be empty / blocked).
+	select {
+	case res := <-s.done:
+		t.Fatalf("second signalDone fired (sync.Once broken): %+v", res)
+	case <-time.After(50 * time.Millisecond):
+		// Expected: no second value.
 	}
 }
 

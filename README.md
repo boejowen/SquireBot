@@ -8,14 +8,22 @@ See [.planning/PROJECT.md](.planning/PROJECT.md) for the full project context.
 
 ## Install
 
-1. Download `SquireBot-Setup-<version>.exe` from the [latest GitHub Release](https://github.com/boejowen/SquireBot/releases/latest).
-2. Walk through the SmartScreen "More info → Run anyway" prompt. **Don't skip this — your browser may show different prompts.** See [docs/smartscreen-walkthrough.md](docs/smartscreen-walkthrough.md) for browser-specific paths (Edge, Chrome, Firefox) and Defender-quarantine recovery. Total walkthrough time: under 30 seconds.
-3. The installer runs without admin rights (per-user only, installs to `%LOCALAPPDATA%\Programs\SquireBot\`).
-4. SquireBot launches automatically after install. Complete the wizard:
-   - Authorize Google (browser opens for OAuth — `drive.file` scope only; SquireBot only sees workbooks you explicitly pick).
-   - Pick the shared guild workbook in the Drive Picker.
-   - Confirm the EverQuest install folder (auto-detected from registry / common install paths / `eqgame.exe` heuristic).
-5. SquireBot now lives in the system tray, watching for `*-Inventory.txt` and `*-Spellbook.txt` files in the configured EQ folder.
+**👉 [Download the latest SquireBot installer](https://github.com/boejowen/SquireBot/releases/latest)**
+(this link always points at the newest version)
+
+On the release page that opens, click **`SquireBot-Setup-<version>.exe`** under "Assets" to download.
+
+### Setup steps
+
+1. **Run the installer.** Windows will show a **"Windows protected your PC"** warning — that's normal for unsigned apps. Click **More info → Run anyway**. SquireBot installs without admin rights, so you won't see a "do you want to allow this app to make changes" prompt. Stuck on the warning? See our [30-second walkthrough](docs/smartscreen-walkthrough.md) for screenshots and browser-specific tips.
+
+2. **Finish the setup wizard** that opens after install:
+   - **Sign into Google** in the browser tab that appears.
+   - **Allow Google Drive access when prompted** — there will be a Drive permission to approve (sometimes shown as a checkbox to tick). SquireBot can't write to the guild sheet without it.
+   - **Pick the guild workbook** from the picker. If you don't see it listed, ask your guild lead to share the workbook with your Gmail address first.
+   - **Confirm the EverQuest folder** — SquireBot tries to find it automatically; just verify the path it shows is correct for your install.
+
+3. **You're done.** SquireBot now lives in your system tray. To test it, run `/outputfile inventory` in EQ — the guild sheet should update within a few seconds.
 
 For local building from source, see [docs/build-and-install.md](docs/build-and-install.md). For the OAuth setup runbook (Cloud Console steps for forks), see [docs/oauth-setup.md](docs/oauth-setup.md).
 

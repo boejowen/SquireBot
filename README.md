@@ -8,10 +8,8 @@ See [.planning/PROJECT.md](.planning/PROJECT.md) for the full project context.
 
 ## Install
 
-**👉 [Download the latest SquireBot installer](https://github.com/boejowen/SquireBot/releases/latest)**
-(this link always points at the newest version)
-
-On the release page that opens, click **`SquireBot-Setup-<version>.exe`** under "Assets" to download.
+**👉 [Download the latest SquireBot installer](https://github.com/boejowen/SquireBot/releases/latest/download/SquireBot-Setup.exe)**
+(direct download, always the newest version)
 
 ### Setup steps
 

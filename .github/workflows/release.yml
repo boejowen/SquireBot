@@ -177,6 +177,20 @@ jobs:
           }
           Get-Item dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe | Select-Object Name, Length
 
+      - name: Stage versionless installer alias (for README permalink)
+        shell: pwsh
+        run: |
+          # Copy the versioned installer to a versionless filename so the
+          # README's `releases/latest/download/SquireBot-Setup.exe` URL
+          # resolves on every new non-prerelease tag without needing a doc
+          # update. The versioned asset (SquireBot-Setup-<version>.exe)
+          # is preserved alongside it for download-history clarity. Both
+          # are byte-identical; the bytes hashed for the manifest's
+          # installer_sha256 are the versioned file (which is also what
+          # the auto-updater downloads via installer_url).
+          Copy-Item dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe dist/SquireBot-Setup.exe -Force
+          Get-Item dist/SquireBot-Setup.exe | Select-Object Name, Length
+
       # TODO(SignPath OSS): wire SignPath signing here, between makensis
       # and Compute SHA-256 sums.
       #
@@ -256,7 +270,7 @@ jobs:
         with:
           name: squirebot-release
           path: |
-            dist/SquireBot-Setup-*.exe
+            dist/SquireBot-Setup*.exe
             dist/squirebot.exe
             dist/latest.json
           if-no-files-found: error
@@ -277,7 +291,7 @@ jobs:
           # page see the stale text. Followup: switch to gh CLI commands for
           # release create/edit, or set update_existing_release flag if added.
           files: |
-            dist/SquireBot-Setup-*.exe
+            dist/SquireBot-Setup*.exe
             dist/squirebot.exe
             dist/latest.json
           body: |

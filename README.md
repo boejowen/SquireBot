@@ -23,6 +23,8 @@ See [.planning/PROJECT.md](.planning/PROJECT.md) for the full project context.
 
 3. **You're done.** SquireBot now lives in your system tray. To test it, run `/outputfile inventory` in EQ — the guild sheet should update within a few seconds.
 
+> **Heads up (v0.2.0):** if the tray icon stays in "Initializing" state for more than ~30 seconds after the wizard finishes, that's a known bug. Right-click the tray icon → **Quit**, then launch SquireBot again from the Start menu — your settings are already saved, the relaunch picks them up. See [Known issues](#known-issues) below. Fixed in v0.2.1 (coming soon).
+
 For local building from source, see [docs/build-and-install.md](docs/build-and-install.md). For the OAuth setup runbook (Cloud Console steps for forks), see [docs/oauth-setup.md](docs/oauth-setup.md).
 
 ## Tray menu
@@ -51,6 +53,8 @@ A red tray icon means one of three things:
 Most red-tray states are recoverable in under 30 seconds via the tray menu. If you're stuck, share the relevant lines from the log file with your guild leader.
 
 ## Known issues
+
+- **First install: tray stays in "Initializing" after the setup wizard finishes (v0.2.0).** After completing the wizard (Google sign-in → workbook picker → EQ folder), the tray icon may stay in an "Initializing" state indefinitely instead of starting to upload. Your settings *did* get saved correctly to disk; the running app just doesn't pick them up automatically. **Workaround:** right-click the tray icon → **Quit**, then launch SquireBot again from the Start menu. On the new launch, SquireBot reads your saved settings, scaffolds the guild sheet, and begins uploading. Takes about 10 seconds. Will be fixed in v0.2.1.
 
 - **After Reauthorize, uploads pause for up to ~50 minutes.** When you click **Reauthorize…** to recover from a dead refresh token, the OAuth handshake itself completes in seconds — but Google's Drive backend takes time to propagate write access for the workbook under the new permission grant. During this window the tray stays **green** with status **"Reauthorized: waiting for Google propagation…"** and the watcher waits in the background. You don't need to do anything; the next `/outputfile` after the wait completes uploads normally. If the wait exceeds 90 minutes, the tray will eventually go red and ask you to Reauthorize again — that's a fallback that should never trigger in practice (worst observed wait so far is 51 minutes). See [docs/soak-reports/2026-05-07-day4-auth05-sc1.md](docs/soak-reports/2026-05-07-day4-auth05-sc1.md) for the full investigation.
 

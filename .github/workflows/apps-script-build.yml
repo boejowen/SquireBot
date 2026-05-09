@@ -1,0 +1,53 @@
+name: apps-script-build
+
+# Phase 3 plan 03-01 task 6.
+#
+# What this workflow does:
+#   1. Runs on every PR that touches apps-script/** (and on master push
+#      for clean baseline tracking).
+#   2. Verifies `npm ci && npm run typecheck && npm run build && npm test`
+#      all pass cleanly.
+#
+# What this workflow does NOT do:
+#   - It does NOT push to any workbook. clasp deployment is manual from
+#     the workbook owner's machine — keeps OAuth credentials out of CI.
+#     See docs/apps-script-deploy.md for the manual deploy flow.
+#   - It does NOT diff dist/ — dist/ is gitignored (built artifacts only).
+
+on:
+  pull_request:
+    paths:
+      - 'apps-script/**'
+      - '.github/workflows/apps-script-build.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'apps-script/**'
+      - '.github/workflows/apps-script-build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps-script
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps-script/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test

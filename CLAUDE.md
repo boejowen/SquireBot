@@ -13,7 +13,7 @@ See `.planning/PROJECT.md` for the full context, key decisions, and constraints.
 
 **Watcher (per-guildie Windows app):** Go 1.24, single statically-linked `.exe`. `google.golang.org/api/sheets/v4` + `golang.org/x/oauth2`, `fsnotify` v1.7+ (500 ms debounce, always re-reads on event), `wincred` for DPAPI-backed token storage, `minio/selfupdate` for auto-update, `fyne.io/systray` for the tray UI, `lumberjack` for log rotation. Distributed via NSIS 3.10+ per-user installer (no UAC), autostart via `HKCU\...\Run`.
 
-**Sheet side:** Google Sheets workbook with Apps Script V8 runtime. Code authored in TypeScript via `clasp` v3.0+ + `esbuild` 0.20+ + `@types/google-apps-script`. `HtmlService` for the search sidebar; cell notes (`Range.setNote`) for tooltips; time-driven triggers for refresh jobs.
+**Sheet side:** Google Sheets workbook with Apps Script V8 runtime. Code authored in TypeScript via `clasp` v2.4+ (NOT 3.x — has breaking changes per Phase 3 RESEARCH §6) + `esbuild` 0.20+ + `@types/google-apps-script`. `HtmlService` for the search sidebar; cell notes (`Range.setNote`) for tooltips; time-driven triggers for refresh jobs. Source lives in `apps-script/src/`; `npm run build` produces a single `dist/Code.js` IIFE bundle that the build footer re-exports as top-level globals (Apps Script's trigger system finds triggers by global function name). `npm test` runs vitest against mocked Apps Script globals. Per-workbook container-bound deployment via `clasp push` from the workbook owner's machine — see `docs/apps-script-deploy.md`. CI (`.github/workflows/apps-script-build.yml`) verifies typecheck + build + test on every PR; deploy is manual (keeps OAuth out of CI).
 
 **External APIs (NOT scraping targets):**
 - **PigParse REST**: `https://pigparse.azurewebsites.net` — Swagger at `/swagger/index.html`. Use `GET /api/item/getall/1` (server=1=Blue) once daily.
@@ -49,7 +49,12 @@ See `.planning/research/ARCHITECTURE.md` and `.planning/research/SUMMARY.md` for
 <!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during Phase 1 / Phase 2 execution.
+- Apps Script TypeScript code lives in `apps-script/src/` (libs in `lib/`, triggers in `triggers/`, tab builders in `tabs/`, tests in `__tests__/`, fixtures in `__fixtures__/`).
+- Source-of-truth for theme palettes is `docs/design/eq-aesthetic-theme.md`; the `THEMES` registry in `apps-script/src/lib/themes.ts` derives its colors from that doc.
+- Schema migrations live in `apps-script/src/lib/migrations.ts` — extend-only, version-stamped, idempotent. The `_meta.schema_version` write is always the LAST step in any migration so partial runs replay cleanly.
+- Watcher's `WatcherMaxSchemaVersion` constant in `internal/sheet/client.go` MUST be bumped to the new max BEFORE the migration ships to any workbook (otherwise watchers refuse to write with `ErrSchemaTooNew`).
+- Test fixtures use real-name files (`Slampeach-Spellbook.txt`) when sourced from a real character; generic-name files (`sample-inventory.txt`) only when synthetic. API fixtures named after their probe (`pigparse-getall-1.json`).
+- Structured logging both Go side (slog) and Apps Script side (`log(level, op, fields)` JSON-encoding helper) — keeps logs greppable.
 <!-- GSD:conventions-end -->
 
 <!-- GSD:skills-start source:skills/ -->

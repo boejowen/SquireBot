@@ -9,16 +9,19 @@
 
 import { setTheme } from './lib/themes';
 import { migrateToV2 } from './lib/migrations';
+import { refreshPigparse } from './triggers/refreshPigparse';
 
 // --- Implemented in plan 03-01 ---
 export { setTheme, migrateToV2 };
+
+// --- Implemented in plan 03-02 ---
+export { refreshPigparse };
 
 // --- Stubs filled by later plans ---
 function notImplemented(name: string, plan: string): never {
   throw new Error(`${name} not yet implemented (lands in Phase 3 ${plan})`);
 }
 
-export function refreshPigparse(): void { notImplemented('refreshPigparse', 'plan 03-02'); }
 export function refreshWikiItems(): void { notImplemented('refreshWikiItems', 'plan 03-03'); }
 export function buildView(): void { notImplemented('buildView', 'plan 03-04'); }
 export function buildBank(): void { notImplemented('buildBank', 'plan 03-04'); }

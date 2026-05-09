@@ -253,7 +253,9 @@ func TestValidateWorkbook_MatchesSchemaTooNew(t *testing.T) {
 		sheetsList: []sheetInfo{{Title: "_meta", SheetID: 12345}},
 		metaValues: [][]any{
 			{"canonical_id", CanonicalID},
-			{"schema_version", "2"},
+			// Phase 3 plan 03-01 bumped WatcherMaxSchemaVersion to 2,
+			// so schema_version=3 is now the smallest "too new" value.
+			{"schema_version", "3"},
 		},
 	}
 	c, srv := newTestClient(t, h)

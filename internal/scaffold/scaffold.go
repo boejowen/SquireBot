@@ -12,7 +12,8 @@
 //
 //   - 9 hidden dimension tabs ("_-prefixed) — DimensionTabs.
 //   - 4 visible consolidated mega-tab placeholders — ViewTabs.
-//   - 13 _meta KV rows — MetaRows.
+//   - 15 _meta KV rows — MetaRows (13 frozen at v1 + theme + contact_email
+//     appended in Phase 3 plan 03-01 alongside the schema_version=2 bump).
 //
 // These three slices are the one source of truth for the v1 schema. Any
 // future column or _meta key MUST be appended at the end of its
@@ -101,7 +102,7 @@ var ViewTabs = []dimensionTab{
 	}},
 }
 
-// MetaRows is the locked list of 13 _meta KV rows written exactly once
+// MetaRows is the locked list of 15 _meta KV rows written exactly once
 // at v1 freeze. After scaffold, no row is overwritten; later phases write
 // new keys at the END of the slice (extend-only). The first two are the
 // load-bearing schema_version + canonical_id pair the picker validates
@@ -120,6 +121,8 @@ var MetaRows = [][]string{
 	{"last_wiki_gear_refresh", ""},
 	{"last_quest_items_refresh", ""},
 	{"last_error", ""},
+	{"theme", "minimalist"},
+	{"contact_email", ""},
 }
 
 // ScaffoldSchemaV1 brings the workbook to schema_version=1. Called from

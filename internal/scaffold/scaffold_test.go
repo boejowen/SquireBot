@@ -324,7 +324,7 @@ func TestScaffoldSchemaV1_HeaderRowsMatchLockedSchema(t *testing.T) {
 	}
 }
 
-// Test 3: 13 _meta KV rows appended with locked values.
+// Test 3: all _meta KV rows appended with locked values (15 as of Phase 3).
 func TestScaffoldSchemaV1_MetaRowsAppendedWithLockedValues(t *testing.T) {
 	h := newHandler(t, []sheetInfo{{Title: "Sheet1", SheetID: 0}}, nil)
 	c, srv := newTestClient(t, h)
@@ -411,7 +411,7 @@ func TestScaffoldSchemaV1_PartialScaffoldNoOverwrite(t *testing.T) {
 		{Title: "_meta", SheetID: 100, Hidden: true},
 		{Title: "_char_owner", SheetID: 101, Hidden: true},
 	}
-	// _meta already has all 13 keys.
+	// _meta already has all keys (per len(MetaRows)).
 	keys := make([]string, 0, len(MetaRows))
 	for _, m := range MetaRows {
 		keys = append(keys, m[0])

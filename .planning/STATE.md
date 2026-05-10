@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-plan-03-complete
-last_updated: "2026-05-11T01:15:00Z"
+status: phase-4-code-complete
+last_updated: "2026-05-10T23:50:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 25
-  completed_plans: 25
-  percent: 86
+  total_plans: 26
+  completed_plans: 26
+  percent: 90
 ---
 
 # State: SquireBot
@@ -30,12 +30,16 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 4 — Differentiator Features (Plans 04-01..03 ✓ COMPLETE; 04-04 next)
-- **Plan:** 04-03 done; 04-04 next (final Phase 4 plan)
+- **Phase:** 4 — Differentiator Features ✓ CODE-COMPLETE (Plans 04-01..04 all landed)
+- **Plan:** 04-04 done; Phase 4 CODE-COMPLETE
 - **Node:** — (none yet)
-- **Status:** Plan 04-03 landed 2026-05-10/11. wiki-gear-tier types + parser (Iksar tagging via name pattern; pair-slot mapping; unknown-slot collection) + refreshWikiGearTier (2-page fetch with all-or-nothing replace; partial-failure preserves stale data) + buildGearCheck (joins inv:* ↔ _wiki_gear_tier ↔ _char_owner.race+class; emits OK/MISSING/OTHER per char/tier/slot; Iksar tier filtered to race=IKS only). Wired buildGearCheck into onChange. 179/179 vitest tests passing across 19 test files (+28 from 04-03: 15 parser + 4 trigger + 9 builder). dist/Code.js 18/18 globals. Validated against live wiki fixtures: actual Iksar item count is 4 (CONTEXT estimate of 24+ was based on overly-loose grep; real `{{:Iksar ...}}` transclusions limited to Iksar Hide Cap × Cleric+Magician + Iksar Hide Manual ×2 in Magician). Test expectations updated. Watcher v0.4.0 still pending tag. Next: plan 04-04 (bank coin sidebar + bank coin row + Range.protect + monitorCellCount + installTriggers 4→7).
-- **Resume file:** `.planning/phases/04-differentiator-features/04-04-PLAN.md` — start here.
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
+- **Status:** Plan 04-04 landed 2026-05-10. showBankCoinSidebar (manual coin entry — /outputfile inventory has no coin data) + getBankCoinForForm + saveBankCoin (writes 4 _meta rows + bank_coin_last_updated; lazy row creation; fires buildBank). buildBank prepends COIN row at row 2; inventory shifts to row 3+. protectBankCoinCells applies Range.protect to _meta.bank_coin_pp/gp/sp/cp (idempotent via description match); wired into migrateToV3 success path + installTriggers defensive re-apply. monitorCellCount weekly watchdog (Sun 03:00 PT) sums getLastRow*getLastColumn across all sheets, writes _status.cell_count, alarms at 5M (50% of 10M cap) with structured cell_count_threshold JSON to _meta.last_error + _status.last_error + top-5 sheets. installTriggers extended 4→7 (added refreshWikiSpells Sun 04:00, refreshWikiGearTier Sun 05:00, monitorCellCount Sun 03:00). onOpen menu adds 'Set Bank Coin…'. Code.ts exports 23 fns; build.mjs TRIGGER_GLOBALS 18→23. docs/apps-script-deploy.md updated (v0.4.0 prereq + migrateToV3 + 7 triggers + Set Bank Coin step + Set Character Info step + Range.protect smoke check + v0.4.0 schema-version row). 204/204 vitest tests pass across 21 test files (+25 from 04-04: 11 sidebar + 5 protect + 4 monitor + 3 installTriggers + 2 buildBank coin row). dist/Code.js 23/23 globals.
+
+  **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests.
+
+  **Next:** ship watcher v0.4.0 (Go side — bump WatcherMaxSchemaVersion 2→3 in internal/sheet/client.go + tag); end-to-end smoke test on live workbook; then Phase 5.
+- **Resume file:** Watcher v0.4.0 tag + smoke test; then `.planning/phases/05-...-PLAN.md` (not yet authored).
+- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 26/~28 plans complete (Phase 1 + 2 + 3 done; Phase 4 CODE-COMPLETE; Phase 5 unplanned)
 
 ## Performance Metrics
 

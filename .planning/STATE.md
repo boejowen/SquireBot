@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-discuss-complete
-last_updated: "2026-05-10T22:30:00Z"
+status: phase-4-research-complete
+last_updated: "2026-05-10T23:00:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
@@ -30,11 +30,11 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 4 — Differentiator Features (CONTEXT done 2026-05-10; RESEARCH pending)
-- **Plan:** none yet
+- **Phase:** 4 — Differentiator Features (CONTEXT + RESEARCH done; PLANS pending)
+- **Plan:** none yet (planning is the next workflow step)
 - **Node:** — (none yet)
-- **Status:** Phase 4 CONTEXT.md written 2026-05-10 capturing locked decisions (extend `_char_owner` with `race` column → schema_version=3 migration; ship watcher v0.4.0 first; sidebar forms for char info + bank coin; trigger inventory grows from 4 to 7; reuse Phase 3's politeFetch + resumable cursor + builder pattern; same courtesy-emails WAIVED policy). Race tracking added to handle Iksar racial gear tier without showing it as universal noise. All 12 Phase 4 REQs (ENRICH-03/04, BANK-01..04, CHECK-01..05, OPS-07) mapped. Research flag = NEEDED — must capture wikitext fixtures for the 3 Velious gear-tier pages + sample per-class spell pages, then produce parser specs. Phase 3 still complete + shipped (v0.3.0). Next: `/gsd-research-phase 4`.
-- **Resume file:** `.planning/phases/04-differentiator-features/04-CONTEXT.md` — read before invoking research.
+- **Status:** Phase 4 RESEARCH.md landed 2026-05-10. 5 fixtures captured live (3 wiki gear-tier pages + 3 class spell pages — Necromancer/Paladin/Warrior spanning archetypes). **Two CONTEXT assumptions overturned:** (1) NO separate Iksar racial tier page exists; Iksar items are inline on Pre-Raid page identifiable by `name.startsWith('Iksar ')` — parser tags them with `tier='Iksar'`; (2) NO standalone per-class spell pages; spell list lives on the class page itself (e.g., `/Necromancer`) in `==Level N==` sections containing `{{SpellRow|name=...}}` templates. 14 fetches total for spells (single page per class) — well under budget; resumable cursor used anyway for consistency. Both fixes mean NO additional schema changes beyond the planned `_char_owner.race` column. Phase 3 still complete + shipped. Next: `/gsd-plan-phase 4`.
+- **Resume file:** `.planning/phases/04-differentiator-features/04-RESEARCH.md` §4 (4-plan breakdown) + 04-CONTEXT.md.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
 
 ## Performance Metrics

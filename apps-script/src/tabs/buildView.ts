@@ -108,6 +108,10 @@ function runBuild(startMs: number): void {
       ? `=HYPERLINK("${masterRow.wikiUrl}","wiki")`
       : '';
     const price = pickPrice(pigRows);
+    // Convert ISO 8601 string to Date so Sheets can compute NOW() - cell
+    // for conditional formatting. Falls back to original string if parse
+    // fails (still readable, just won't trigger color rules).
+    const lastSynced = parseToDate(row.uploadedAt);
     dataRows.push([
       row.char,
       row.location,
@@ -116,7 +120,7 @@ function runBuild(startMs: number): void {
       row.count,
       wikiCell,
       price,
-      row.uploadedAt,
+      lastSynced,
     ]);
     notes.push([
       composeItemNote(
@@ -269,22 +273,34 @@ function applyLastSyncedConditionalFormatting(
     return;
   }
   const range = sheet.getRange(2, LAST_SYNCED_COL_INDEX_1BASED, dataRowCount, 1);
+  // Use ISBLANK guard so empty cells don't trigger any rule. Date cells
+  // subtract cleanly from NOW(). The rules evaluate top-down and stop
+  // at the first match, so order is: green (most recent) → orange → red.
   const greenRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=NOW()-INDIRECT(ADDRESS(ROW(),${LAST_SYNCED_COL_INDEX_1BASED}))<7`)
+    .whenFormulaSatisfied(`=AND(NOT(ISBLANK(H2)), NOW()-H2<7)`)
     .setBackground('#b7e1cd')
     .setRanges([range])
     .build();
   const orangeRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=NOW()-INDIRECT(ADDRESS(ROW(),${LAST_SYNCED_COL_INDEX_1BASED}))<30`)
+    .whenFormulaSatisfied(`=AND(NOT(ISBLANK(H2)), NOW()-H2<30)`)
     .setBackground('#fce8b2')
     .setRanges([range])
     .build();
   const redRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied(`=NOW()-INDIRECT(ADDRESS(ROW(),${LAST_SYNCED_COL_INDEX_1BASED}))>=30`)
+    .whenFormulaSatisfied(`=AND(NOT(ISBLANK(H2)), NOW()-H2>=30)`)
     .setBackground('#f4c7c3')
     .setRanges([range])
     .build();
   sheet.setConditionalFormatRules([greenRule, orangeRule, redRule]);
+}
+
+// parseToDate converts an ISO 8601 string to a Date. Returns the
+// original string when parse fails so users still see something
+// readable (and the conditional-format rules just don't fire on it).
+function parseToDate(s: string): Date | string {
+  if (!s) return '';
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? s : d;
 }
 
 function parseTruthy(v: unknown): boolean {

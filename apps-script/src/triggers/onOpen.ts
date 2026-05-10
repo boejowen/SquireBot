@@ -13,8 +13,11 @@ export function onOpen(): void {
     .addItem('Refresh PigParse Now', 'refreshPigparse')
     .addItem('Refresh Wiki Items Now', 'refreshWikiItems')
     .addSeparator()
+    .addItem('Set Character Info…', 'showCharInfoSidebar')
     .addItem('Set Theme…', 'showThemePickerModal')
-    .addItem('Run Migration', 'migrateToV2')
+    .addSeparator()
+    .addItem('Run Migration (v=3)', 'migrateToV3')
+    .addItem('Run Migration (v=2 legacy)', 'migrateToV2')
     .addToUi();
 }
 

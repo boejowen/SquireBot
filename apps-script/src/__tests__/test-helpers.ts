@@ -5,6 +5,7 @@
 // state.
 
 import { vi, beforeEach } from 'vitest';
+import { createHash } from 'node:crypto';
 
 export interface FakeSheet {
   name: string;
@@ -109,6 +110,12 @@ export function installAppsScriptMocks(state: MockState): void {
         s.notes.push(row.map(() => null));
         state.appendedRowsLog.push({ sheet: s.name, row: row.slice() });
       },
+      deleteRow: (rowIndex: number) => {
+        // 1-based; row 1 is the header — refuse to delete it.
+        if (rowIndex < 2 || rowIndex > s.values.length) return;
+        s.values.splice(rowIndex - 1, 1);
+        s.notes.splice(rowIndex - 1, 1);
+      },
       insertSheet: () => {},
     };
   }
@@ -155,13 +162,61 @@ export function installAppsScriptMocks(state: MockState): void {
     }),
   };
 
+  // newTrigger returns a fluent builder. Each terminal create() pushes
+  // an entry into state.triggers so callers can assert what was created.
+  function makeTriggerBuilder(handler: string) {
+    let builderType = 'CLOCK';
+    const builder = {
+      timeBased: () => {
+        builderType = 'CLOCK';
+        return {
+          after: (_ms: number) => ({ create: () => { state.triggers.push({ handler, type: 'CLOCK' }); } }),
+          everyHours: (_n: number) => ({ create: () => { state.triggers.push({ handler, type: 'CLOCK' }); } }),
+          everyDays: (_n: number) => ({
+            atHour: (_h: number) => ({
+              inTimezone: (_tz: string) => ({ create: () => { state.triggers.push({ handler, type: 'CLOCK' }); } }),
+              create: () => { state.triggers.push({ handler, type: 'CLOCK' }); },
+            }),
+            create: () => { state.triggers.push({ handler, type: 'CLOCK' }); },
+          }),
+          atHour: (_h: number) => ({
+            everyDays: (_n: number) => ({
+              inTimezone: (_tz: string) => ({ create: () => { state.triggers.push({ handler, type: 'CLOCK' }); } }),
+              create: () => { state.triggers.push({ handler, type: 'CLOCK' }); },
+            }),
+            inTimezone: (_tz: string) => ({ create: () => { state.triggers.push({ handler, type: 'CLOCK' }); } }),
+            create: () => { state.triggers.push({ handler, type: 'CLOCK' }); },
+          }),
+          onWeekDay: (_d: string) => ({
+            atHour: (_h: number) => ({
+              inTimezone: (_tz: string) => ({ create: () => { state.triggers.push({ handler, type: 'CLOCK' }); } }),
+              create: () => { state.triggers.push({ handler, type: 'CLOCK' }); },
+            }),
+            create: () => { state.triggers.push({ handler, type: 'CLOCK' }); },
+          }),
+        };
+      },
+      forSpreadsheet: (_ss: unknown) => ({
+        onChange: () => ({ create: () => { state.triggers.push({ handler, type: 'ON_CHANGE' }); } }),
+      }),
+      _type: () => builderType,
+    };
+    return builder;
+  }
+
   (globalThis as Record<string, unknown>).ScriptApp = {
     getProjectTriggers: () => state.triggers.map((t) => ({
       getHandlerFunction: () => t.handler,
       getEventType: () => t.type,
     })),
-    deleteTrigger: vi.fn(),
-    newTrigger: vi.fn(),
+    deleteTrigger: vi.fn((trig: { getHandlerFunction: () => string; getEventType: () => string }) => {
+      // Remove the first matching entry from state.triggers
+      const handler = trig.getHandlerFunction();
+      const type = trig.getEventType();
+      const idx = state.triggers.findIndex((t) => t.handler === handler && t.type === type);
+      if (idx >= 0) state.triggers.splice(idx, 1);
+    }),
+    newTrigger: vi.fn((handler: string) => makeTriggerBuilder(handler)),
     EventType: { CLOCK: 'CLOCK', ON_CHANGE: 'ON_CHANGE' },
     WeekDay: { SUNDAY: 'SUNDAY' },
   };
@@ -182,7 +237,15 @@ export function installAppsScriptMocks(state: MockState): void {
 
   (globalThis as Record<string, unknown>).Utilities = {
     sleep: vi.fn((ms: number) => { state.sleepCalls.push(ms); }),
-    computeDigest: vi.fn(() => new Array(20).fill(0)),
+    computeDigest: vi.fn((_alg: string, bytes: number[]) => {
+      // Real SHA-1 via node:crypto so deterministic-and-distinct hash
+      // tests are meaningful. Apps Script returns signed bytes (-128..127);
+      // mirror that by mapping each unsigned byte > 127 to its signed
+      // equivalent so wiki-parser.ts's b<0?b+256 conversion still works.
+      const buf = Buffer.from(bytes.map((b) => (b < 0 ? b + 256 : b)));
+      const hash = createHash('sha1').update(buf).digest();
+      return Array.from(hash).map((b) => (b > 127 ? b - 256 : b));
+    }),
     DigestAlgorithm: { SHA_1: 'SHA_1' },
     newBlob: (s: string) => ({ getBytes: () => Array.from(s).map((c) => c.charCodeAt(0)) }),
   };

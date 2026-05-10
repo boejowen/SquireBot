@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-3-complete
-last_updated: "2026-05-10T22:00:00Z"
+status: phase-4-discuss-complete
+last_updated: "2026-05-10T22:30:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
@@ -30,11 +30,11 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 3 — Apps Script Enrichment Foundation ✓ COMPLETE (smoke test PASS, tagged `phase3-complete`)
-- **Plan:** none active; ready for Phase 4
+- **Phase:** 4 — Differentiator Features (CONTEXT done 2026-05-10; RESEARCH pending)
+- **Plan:** none yet
 - **Node:** — (none yet)
-- **Status:** Phase 3 COMPLETE 2026-05-10. Smoke test PASS verdict at `docs/phase3-smoke-verdict.md` (commit `a3b3921`). All 6 ROADMAP SCs verified or formally waived. SC-1 end-to-end latency was nearly instant on real data. SC-3 resumable cursor verified organically — first run 302s checkpointed at remaining=235; second run resumed cleanly. 4 last-mile bugs fixed during smoke test (commits 434f28f, d0a2645, f28c919, e1c69da) — all test-mock-vs-real-Apps-Script gaps, no architectural issues. Watcher v0.3.0 in production; auto-update rolling to existing v0.2.1 installs over next 24h. Apps Script bundle deployed on boejowen test workbook (`153ImcLo5iD9uMw91XychkJR-51hmApxC8z2eOGIALsI`). Phase 4 (Differentiator Features: gear_check + spell_check + bank coin sidebar) unblocked.
-- **Resume file:** `/gsd-discuss-phase 4` to start planning Phase 4. Or `docs/phase3-smoke-verdict.md` for the verification record.
+- **Status:** Phase 4 CONTEXT.md written 2026-05-10 capturing locked decisions (extend `_char_owner` with `race` column → schema_version=3 migration; ship watcher v0.4.0 first; sidebar forms for char info + bank coin; trigger inventory grows from 4 to 7; reuse Phase 3's politeFetch + resumable cursor + builder pattern; same courtesy-emails WAIVED policy). Race tracking added to handle Iksar racial gear tier without showing it as universal noise. All 12 Phase 4 REQs (ENRICH-03/04, BANK-01..04, CHECK-01..05, OPS-07) mapped. Research flag = NEEDED — must capture wikitext fixtures for the 3 Velious gear-tier pages + sample per-class spell pages, then produce parser specs. Phase 3 still complete + shipped (v0.3.0). Next: `/gsd-research-phase 4`.
+- **Resume file:** `.planning/phases/04-differentiator-features/04-CONTEXT.md` — read before invoking research.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
 
 ## Performance Metrics

@@ -8,6 +8,7 @@
 import { log } from '../lib/log';
 import {
   getActiveSpreadsheet, readMetaRows, writeMetaRow,
+  type MetaRow,
 } from '../lib/sheet-helpers';
 import { applyTheme, getActiveTheme } from '../lib/themes';
 import { composeItemNote } from './composeNotes';
@@ -17,6 +18,13 @@ export const BANK_TAB = 'bank';
 export const BANK_HEADERS = [
   'Char', 'Slot', 'Item', 'ID', 'Count', 'Wiki', 'Price', 'Last Synced',
 ];
+// Phase 4 plan 04-04: bank tab now has a fixed COIN row at row 2 with
+// the bank toon's manual coin totals (PP/GP/SP/CP — /outputfile inventory
+// doesn't include coin). Inventory data shifts to row 3+. Coin values
+// live in _meta.bank_coin_pp/gp/sp/cp + bank_coin_last_updated; edited
+// via SquireBot → Set Bank Coin… (showBankCoinSidebar).
+const COIN_ROW = 2;
+const INV_DATA_START_ROW = 3;
 const ITEM_COL = 3;
 const LAST_SYNCED_COL = 8;
 const LOCK_TIMEOUT_MS = 30_000;
@@ -47,7 +55,8 @@ function runBuild(): void {
   const bankToon = meta.find((r) => r.key === 'bank_toon_name')?.value.trim() ?? '';
   if (!bankToon) {
     log('info', 'buildBank', { skipped: 'bank_toon_name_unset' });
-    // Clear stale data if any, leave header.
+    // Clear stale data if any, leave header. No coin row either —
+    // there's no bank toon to attribute it to.
     clearDataRows(bankSheet);
     return;
   }
@@ -56,6 +65,10 @@ function runBuild(): void {
   if (!invSheet) {
     log('warn', 'buildBank', { skipped: 'bank_inv_sheet_missing', bankToon });
     clearDataRows(bankSheet);
+    // Coin row still meaningful even without inventory — write it so
+    // the guild's coin totals remain visible while waiting for the
+    // bank toon's first inventory sync.
+    writeCoinRow(bankSheet, meta, bankToon);
     return;
   }
 
@@ -95,9 +108,12 @@ function runBuild(): void {
   }
 
   clearDataRows(bankSheet);
+  writeCoinRow(bankSheet, meta, bankToon);
   if (dataRows.length > 0) {
-    bankSheet.getRange(2, 1, dataRows.length, BANK_HEADERS.length).setValues(dataRows);
-    bankSheet.getRange(2, ITEM_COL, dataRows.length, 1).setNotes(notes);
+    bankSheet.getRange(INV_DATA_START_ROW, 1, dataRows.length, BANK_HEADERS.length)
+      .setValues(dataRows);
+    bankSheet.getRange(INV_DATA_START_ROW, ITEM_COL, dataRows.length, 1)
+      .setNotes(notes);
   }
 
   applyTheme(bankSheet, getActiveTheme());
@@ -114,6 +130,36 @@ function clearDataRows(sheet: GoogleAppsScript.Spreadsheet.Sheet): void {
       Array.from({ length: lastRow - 1 }, () => [null]) as unknown as string[][],
     );
   }
+}
+
+// Renders the COIN row at row 2: the bank toon's manual coin totals.
+// Always called AFTER clearDataRows in runBuild's success path, AND in
+// the inv-missing path so the row remains visible even before the bank
+// toon's first inventory sync.
+function writeCoinRow(
+  sheet: GoogleAppsScript.Spreadsheet.Sheet,
+  meta: MetaRow[],
+  bankToon: string,
+): void {
+  const row = composeCoinRow(meta, bankToon);
+  sheet.getRange(COIN_ROW, 1, 1, BANK_HEADERS.length).setValues([row]);
+}
+
+function composeCoinRow(meta: MetaRow[], bankToon: string): unknown[] {
+  const get = (k: string): number => {
+    const r = meta.find((m) => m.key === k);
+    if (!r) return 0;
+    const n = parseInt(r.value || '0', 10);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  };
+  const pp = get('bank_coin_pp');
+  const gp = get('bank_coin_gp');
+  const sp = get('bank_coin_sp');
+  const cp = get('bank_coin_cp');
+  const lastUpdated = meta.find((m) => m.key === 'bank_coin_last_updated')?.value ?? '';
+  const display = `Platinum: ${pp} | Gold: ${gp} | Silver: ${sp} | Copper: ${cp}`;
+  // [Char, Slot='COIN', Item=display, ID='', Count='', Wiki='', Price='', Last Synced=lastUpdated]
+  return [bankToon, 'COIN', display, '', '', '', '', lastUpdated];
 }
 
 interface InvRow {

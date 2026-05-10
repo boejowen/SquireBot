@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-plan-01-complete
-last_updated: "2026-05-10T23:54:00Z"
+status: phase-4-plan-02-complete
+last_updated: "2026-05-11T00:30:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 23
-  completed_plans: 23
-  percent: 81
+  total_plans: 24
+  completed_plans: 24
+  percent: 83
 ---
 
 # State: SquireBot
@@ -30,11 +30,11 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 4 — Differentiator Features (Plan 04-01 ✓ COMPLETE; 04-02 next)
-- **Plan:** 04-01 done; 04-02 next
+- **Phase:** 4 — Differentiator Features (Plans 04-01 + 04-02 ✓ COMPLETE; 04-03 next)
+- **Plan:** 04-02 done; 04-03 next
 - **Node:** — (none yet)
-- **Status:** Plan 04-01 landed 2026-05-10. 5 commits: `650f598` (Go: WatcherMaxSchemaVersion 2→3 + scaffold _char_owner.race), `d55fa9f` (eq-constants: CLASSES + RACES + WIKI_SLOT_TO_INV_SLOTS), `e81731a` (migrateToV3 + outcome-enum cleanup, 12/12 tests), `0bf...` (showCharInfoSidebar + 16/16 tests), pending C5 (Code.ts + onOpen menu + build.mjs CI assertion). 121/121 vitest tests passing across 13 test files. dist/Code.js now 14/14 globals (10 from Phase 3 + 4 new). CI assertion verified to catch Code.ts/TRIGGER_GLOBALS divergence (lesson from Phase 3 bug d0a2645). Watcher v0.4.0 still pending tag — defer until plan 04-04 lands so we ship the full Phase 4 in one watcher release. Next: plan 04-02 (refreshWikiSpells + spell_check).
-- **Resume file:** `.planning/phases/04-differentiator-features/04-02-PLAN.md` — start here.
+- **Status:** Plan 04-02 landed 2026-05-10/11. wiki-spell-types + parser + refreshWikiSpells (cursor-resumable, fires buildSpellCheck on completion) + buildSpellCheck (joins _char_owner ↔ spell:* ↔ _wiki_spells via normalized name). Wired buildSpellCheck into onChange. 151/151 vitest tests passing across 16 test files (was 121/121 before plan 04-02: +13 wiki-spell-parser + +7 refreshWikiSpells + +10 buildSpellCheck = +30 new). dist/Code.js 16/16 globals (Phase 3's 10 + Phase 4's 4 from 04-01 + 2 from 04-02). Watcher v0.4.0 still pending tag — defer until plan 04-04 lands so the full Phase 4 ships in one watcher release. Next: plan 04-03 (refreshWikiGearTier + gear_check + Iksar tagging).
+- **Resume file:** `.planning/phases/04-differentiator-features/04-03-PLAN.md` — start here.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
 
 ## Performance Metrics

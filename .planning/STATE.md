@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-3-shipped-pending-smoke-test
-last_updated: "2026-05-10T02:30:00Z"
+status: phase-3-complete
+last_updated: "2026-05-10T22:00:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
@@ -30,11 +30,11 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 3 — Apps Script Enrichment Foundation ✓ SHIPPED (pending user smoke test for SC-1)
-- **Plan:** none active; ready for end-to-end smoke test on a real workbook
+- **Phase:** 3 — Apps Script Enrichment Foundation ✓ COMPLETE (smoke test PASS, tagged `phase3-complete`)
+- **Plan:** none active; ready for Phase 4
 - **Node:** — (none yet)
-- **Status:** Phase 3 SHIPPED 2026-05-10. Watcher v0.3.0 tagged + released 2026-05-10T02:13Z (release `https://github.com/boejowen/SquireBot/releases/tag/v0.3.0`). Versionless `SquireBot-Setup.exe` lives at releases/latest/download/. Auto-update will roll out to existing v0.2.1 installs within 24h. Apps Script side ships per-workbook via clasp push (workbook owner action). SC-1 end-to-end verification (~30s upload→view) = user smoke test pending; plan at `.planning/phases/03-apps-script-enrichment-foundation/03-SMOKE-TEST.md`. SC-6 courtesy emails WAIVED. Phase 4 (Differentiator Features: gear_check + spell_check + bank coin sidebar) is now unblocked — needs CONTEXT/RESEARCH/PLAN.
-- **Resume file:** `.planning/phases/03-apps-script-enrichment-foundation/03-SMOKE-TEST.md` for the verification flow; or `/gsd-discuss-phase 4` to start planning Phase 4.
+- **Status:** Phase 3 COMPLETE 2026-05-10. Smoke test PASS verdict at `docs/phase3-smoke-verdict.md` (commit `a3b3921`). All 6 ROADMAP SCs verified or formally waived. SC-1 end-to-end latency was nearly instant on real data. SC-3 resumable cursor verified organically — first run 302s checkpointed at remaining=235; second run resumed cleanly. 4 last-mile bugs fixed during smoke test (commits 434f28f, d0a2645, f28c919, e1c69da) — all test-mock-vs-real-Apps-Script gaps, no architectural issues. Watcher v0.3.0 in production; auto-update rolling to existing v0.2.1 installs over next 24h. Apps Script bundle deployed on boejowen test workbook (`153ImcLo5iD9uMw91XychkJR-51hmApxC8z2eOGIALsI`). Phase 4 (Differentiator Features: gear_check + spell_check + bank coin sidebar) unblocked.
+- **Resume file:** `/gsd-discuss-phase 4` to start planning Phase 4. Or `docs/phase3-smoke-verdict.md` for the verification record.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
 
 ## Performance Metrics

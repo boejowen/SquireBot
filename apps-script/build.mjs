@@ -1,7 +1,12 @@
 import esbuild from 'esbuild';
-import { readFileSync } from 'node:fs';
+import { readFileSync, copyFileSync, mkdirSync } from 'node:fs';
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf8'));
+
+// clasp pushes everything under rootDir (./dist). The Apps Script
+// manifest must be alongside Code.js — copy it in.
+mkdirSync('dist', { recursive: true });
+copyFileSync('appsscript.json', 'dist/appsscript.json');
 
 // Apps Script V8 has no ES modules at runtime — every top-level function
 // must be a global. esbuild bundles to an IIFE bound to AppsScript; the

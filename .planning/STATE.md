@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-research-complete
-last_updated: "2026-05-10T23:00:00Z"
+status: phase-4-plans-complete
+last_updated: "2026-05-10T23:30:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
@@ -30,11 +30,11 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 4 — Differentiator Features (CONTEXT + RESEARCH done; PLANS pending)
-- **Plan:** none yet (planning is the next workflow step)
+- **Phase:** 4 — Differentiator Features (CONTEXT + RESEARCH + PATTERNS + 4 PLANS done; ready for execution)
+- **Plan:** 04-01 next
 - **Node:** — (none yet)
-- **Status:** Phase 4 RESEARCH.md landed 2026-05-10. 5 fixtures captured live (3 wiki gear-tier pages + 3 class spell pages — Necromancer/Paladin/Warrior spanning archetypes). **Two CONTEXT assumptions overturned:** (1) NO separate Iksar racial tier page exists; Iksar items are inline on Pre-Raid page identifiable by `name.startsWith('Iksar ')` — parser tags them with `tier='Iksar'`; (2) NO standalone per-class spell pages; spell list lives on the class page itself (e.g., `/Necromancer`) in `==Level N==` sections containing `{{SpellRow|name=...}}` templates. 14 fetches total for spells (single page per class) — well under budget; resumable cursor used anyway for consistency. Both fixes mean NO additional schema changes beyond the planned `_char_owner.race` column. Phase 3 still complete + shipped. Next: `/gsd-plan-phase 4`.
-- **Resume file:** `.planning/phases/04-differentiator-features/04-RESEARCH.md` §4 (4-plan breakdown) + 04-CONTEXT.md.
+- **Status:** Phase 4 PATTERNS + 4 PLANs landed 2026-05-10. Plan structure: 04-01 schema v=3 + watcher v0.4.0 + char-info sidebar + CI assertion; 04-02 refreshWikiSpells + spell_check + onChange wiring; 04-03 refreshWikiGearTier + gear_check + Iksar tagging; 04-04 bank coin sidebar + buildBank coin row + Range.protect + monitorCellCount + installTriggers (4→7). Most files clone Phase 3 patterns (refreshWikiSpells ← refreshWikiItems; buildSpellCheck ← buildView; etc.). New patterns: HtmlService SIDEBAR forms (vs Phase 3's modal), wiki-table-list parsing, Range.protect, cell-count monitor, build-time CI assertion. Estimated effort: 5+7+9+10 = ~31h. Next: kickoff plan 04-01.
+- **Resume file:** `.planning/phases/04-differentiator-features/04-01-PLAN.md` — start here for execution.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
 
 ## Performance Metrics

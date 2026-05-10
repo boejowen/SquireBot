@@ -22,7 +22,13 @@
 //     - _meta.schema_version: 2 → 3 (LAST)
 
 import { log } from './log';
-import { appendColumns, readMetaRowInt, writeMetaRow } from './sheet-helpers';
+import {
+  appendColumns, getActiveSpreadsheet, readMetaRowInt, readMetaRows, writeMetaRow,
+} from './sheet-helpers';
+
+const BANK_COIN_KEYS = ['bank_coin_pp', 'bank_coin_gp', 'bank_coin_sp', 'bank_coin_cp'];
+const BANK_COIN_PROTECTION_DESCRIPTION =
+  'SquireBot bank coin — edit via SquireBot menu';
 
 // Outcome enum redesigned in Phase 4 plan 04-01: was version-specific
 // ('noop_already_v2', 'migrated_v1_to_v2'); now version-agnostic so
@@ -90,8 +96,54 @@ export function migrateToV3(): MigrationOutcome {
     // schema_version write is LAST — committing the migration.
     writeMetaRow('_meta', 'schema_version', '3');
     log('info', 'migrateToV3', { done: true, charAdded });
-    return 'migrated';
   } finally {
     lock.releaseLock();
   }
+  // Defensive bank-coin cell protection runs OUTSIDE the migration lock
+  // so its own protect() calls don't contend on the document lock.
+  // protectBankCoinCells is idempotent — safe to invoke unconditionally.
+  protectBankCoinCells();
+  return 'migrated';
+}
+
+// protectBankCoinCells applies Range.protect to the four _meta rows
+// holding bank_coin_pp/gp/sp/cp. Direct edits will trigger Sheets'
+// protection warning prompt; SquireBot → Set Bank Coin… (saveBankCoin)
+// is the supported entry point.
+//
+// Idempotent: re-running is a no-op once protections are present.
+// Identifies own protections by description string. Skips bank_coin_*
+// rows that don't yet exist in _meta (they're created lazily by
+// saveBankCoin on first save) — installTriggers re-runs after first
+// save will pick them up.
+//
+// Wired from:
+//   - migrateToV3 success path (first-time setup on v=3 migration).
+//   - installTriggers (defensive re-application — covers workbooks
+//     migrated before this code shipped, and re-applies protection
+//     to bank_coin_* rows created lazily after the migration ran).
+export function protectBankCoinCells(): void {
+  const sheet = getActiveSpreadsheet().getSheetByName('_meta');
+  if (!sheet) {
+    log('warn', 'protectBankCoinCells', { skipped: '_meta_missing' });
+    return;
+  }
+  const meta = readMetaRows('_meta');
+  let added = 0;
+  let skipped = 0;
+  for (const key of BANK_COIN_KEYS) {
+    const row = meta.find((r) => r.key === key);
+    if (!row) { skipped++; continue; }
+    const cell = sheet.getRange(row.rowIndex, 2);  // column B (value)
+    const cellA1 = cell.getA1Notation();
+    const existing = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
+      .find((p) => p.getRange().getA1Notation() === cellA1
+                && p.getDescription() === BANK_COIN_PROTECTION_DESCRIPTION);
+    if (existing) { skipped++; continue; }
+    cell.protect()
+      .setDescription(BANK_COIN_PROTECTION_DESCRIPTION)
+      .setWarningOnly(false);
+    added++;
+  }
+  log('info', 'protectBankCoinCells', { added, skipped });
 }

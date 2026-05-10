@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { migrateToV2 } from '../lib/migrations';
+import { migrateToV2, protectBankCoinCells } from '../lib/migrations';
 import { resetMocks, seedMeta, makeSheet, type MockState } from './test-helpers';
 
 describe('migrateToV2', () => {
@@ -193,5 +193,69 @@ describe('migrateToV3', () => {
     expect(schemaWriteIdx).toBeGreaterThan(-1);
     expect(charColAddIdx).toBeGreaterThan(-1);
     expect(schemaWriteIdx).toBeGreaterThan(charColAddIdx);
+  });
+
+  it('protectBankCoinCells is called after migration succeeds', async () => {
+    const { migrateToV3 } = await import('../lib/migrations');
+    seedV2Workbook();
+    // Pre-seed coin rows in _meta so protectBankCoinCells has something
+    // to protect (otherwise it would skip — coin rows are created lazily
+    // by saveBankCoin).
+    const meta = state.sheets.get('_meta')!;
+    meta.values.push(['bank_coin_pp', '0']);
+    meta.values.push(['bank_coin_gp', '0']);
+    meta.values.push(['bank_coin_sp', '0']);
+    meta.values.push(['bank_coin_cp', '0']);
+
+    migrateToV3();
+
+    // 4 protections applied to _meta
+    expect(meta.protections?.length).toBe(4);
+    expect(meta.protections?.every((p) => p.description.includes('bank coin'))).toBe(true);
+  });
+});
+
+describe('protectBankCoinCells', () => {
+  let state: MockState;
+  beforeEach(() => { state = resetMocks(); });
+
+  it('applies 4 protections when all bank_coin_* rows exist', () => {
+    seedMeta(state, [
+      ['schema_version', '3'],
+      ['bank_coin_pp', '0'], ['bank_coin_gp', '0'],
+      ['bank_coin_sp', '0'], ['bank_coin_cp', '0'],
+    ]);
+    protectBankCoinCells();
+    const meta = state.sheets.get('_meta')!;
+    expect(meta.protections?.length).toBe(4);
+    expect(meta.protections?.every((p) => !p.warningOnly)).toBe(true);
+    expect(meta.protections?.every((p) =>
+      p.description === 'SquireBot bank coin — edit via SquireBot menu')).toBe(true);
+  });
+
+  it('skips bank_coin_* rows that do not exist in _meta yet (lazy creation)', () => {
+    seedMeta(state, [
+      ['schema_version', '3'],
+      ['bank_coin_pp', '100'],  // only PP exists
+    ]);
+    protectBankCoinCells();
+    expect(state.sheets.get('_meta')!.protections?.length).toBe(1);
+  });
+
+  it('is idempotent: re-running does not add duplicate protections', () => {
+    seedMeta(state, [
+      ['schema_version', '3'],
+      ['bank_coin_pp', '0'], ['bank_coin_gp', '0'],
+      ['bank_coin_sp', '0'], ['bank_coin_cp', '0'],
+    ]);
+    protectBankCoinCells();
+    protectBankCoinCells();
+    protectBankCoinCells();
+    expect(state.sheets.get('_meta')!.protections?.length).toBe(4);
+  });
+
+  it('is a no-op when _meta sheet missing', () => {
+    // No _meta sheet seeded.
+    expect(() => protectBankCoinCells()).not.toThrow();
   });
 });

@@ -22,6 +22,7 @@ const TRIGGER_GLOBALS = [
   'setTheme',
   'installTriggers',
   'showThemePickerModal',
+  'migrateToV2',
 ];
 
 const footer = TRIGGER_GLOBALS

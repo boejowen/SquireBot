@@ -15,20 +15,25 @@ export function getOrCreateSheet(name: string): GoogleAppsScript.Spreadsheet.She
 
 export interface MetaRow { key: string; value: string; rowIndex: number; }
 
-// readMetaRows reads _meta!A:B (skipping the header row at A1) and
-// returns one MetaRow per non-empty key cell, with rowIndex 1-based and
-// pointing at the row in the sheet (so writes can address it directly).
+// readMetaRows reads _meta!A:B and returns one MetaRow per non-empty
+// key cell. Header-agnostic: the literal "key|value" header row (if
+// present — Phase 2's scaffold sometimes skipped writing it on
+// pre-existing _meta tabs) is harmlessly included as a row whose key
+// is "key", which never matches any real MetaRow lookup. Reads from
+// row 1 onward for KV sheets like _meta and _status; the appendColumns
+// helper still assumes row 1 = header on dimension tabs (correct for
+// _pigparse/_item_master/_quest_items which Phase 2 created fresh).
 export function readMetaRows(sheetName = '_meta'): MetaRow[] {
   const sheet = getActiveSpreadsheet().getSheetByName(sheetName);
   if (!sheet) return [];
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-  const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+  if (lastRow < 1) return [];
+  const values = sheet.getRange(1, 1, lastRow, 2).getValues();
   const rows: MetaRow[] = [];
   for (let i = 0; i < values.length; i++) {
     const key = String(values[i][0] ?? '').trim();
     if (!key) continue;
-    rows.push({ key, value: String(values[i][1] ?? ''), rowIndex: i + 2 });
+    rows.push({ key, value: String(values[i][1] ?? ''), rowIndex: i + 1 });
   }
   return rows;
 }

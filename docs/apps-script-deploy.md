@@ -42,12 +42,15 @@ Steps:
    npx clasp push
    ```
    First push asks if you want to overwrite the empty default file — say yes.
-8. **Run the migration:** open the workbook → SquireBot menu → **Install Triggers** (lands in plan 03-04). Until plan 03-04 ships, run the migration manually:
-   - Open the script editor (Extensions → Apps Script).
-   - In the function dropdown, select `migrateToV2`. Click Run.
-   - Approve the OAuth scopes when prompted (one-time).
-   - Verify `_meta.schema_version` is now `2` and `_meta.theme` is `minimalist`.
-9. **You're done.** The view + bank tabs will populate after plan 03-04 lands.
+8. **Refresh the workbook tab in your browser** so Apps Script picks up the new menu. The **SquireBot** menu now appears in the menu bar.
+9. **Run the migration once:** SquireBot menu → **Run Migration** (or from the script editor, select `migrateToV2` in the function dropdown and click Run). Approve the OAuth scopes when prompted (one-time). Verify `_meta.schema_version` is now `2` and `_meta.theme` is `minimalist`.
+10. **Install the triggers:** SquireBot menu → **Install Triggers**. This creates four triggers (onChange, hourly view backstop, daily PigParse refresh, weekly wiki refresh). Idempotent — re-runnable safely.
+11. **(Optional) First syncs:**
+    - SquireBot menu → **Refresh PigParse Now** (otherwise waits until 03:00 PT)
+    - SquireBot menu → **Refresh Wiki Items Now** (otherwise waits until Sunday 04:00 PT)
+    - SquireBot menu → **Rebuild Views Now** (rebuilds `view` + `bank` against current data)
+12. **(Optional) Pick a theme:** SquireBot menu → **Set Theme…** opens a minimal modal with all 6 themes. The view + bank tabs rebuild automatically on theme change. The polished 6-tile picker lands in Phase 5.
+13. **You're done.** The `view` + `bank` tabs will populate as guildies' watchers upload data.
 
 ## Update flow
 

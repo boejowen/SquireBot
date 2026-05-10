@@ -40,6 +40,9 @@ const TRIGGER_GLOBALS = [
   // Phase 4 plan 04-02:
   'refreshWikiSpells',
   'buildSpellCheck',
+  // Phase 4 plan 04-03:
+  'refreshWikiGearTier',
+  'buildGearCheck',
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

@@ -14,7 +14,7 @@ import { log } from '../lib/log';
 import { buildView } from '../tabs/buildView';
 import { buildBank } from '../tabs/buildBank';
 import { buildSpellCheck } from '../tabs/buildSpellCheck';
-// Phase 4 plan 04-03 will add: import { buildGearCheck } from '../tabs/buildGearCheck';
+import { buildGearCheck } from '../tabs/buildGearCheck';
 
 export function onChange(_e?: GoogleAppsScript.Events.SheetsOnChange): void {
   log('debug', 'onChange', { fired: true });
@@ -24,5 +24,5 @@ export function onChange(_e?: GoogleAppsScript.Events.SheetsOnChange): void {
   buildView();
   buildBank();
   buildSpellCheck();
-  // buildGearCheck() — wired in plan 04-03
+  buildGearCheck();
 }

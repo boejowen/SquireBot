@@ -13,6 +13,7 @@ import { migrateToV2, migrateToV3 } from './lib/migrations';
 import { refreshPigparse } from './triggers/refreshPigparse';
 import { refreshWikiItems } from './triggers/refreshWikiItems';
 import { refreshWikiSpells } from './triggers/refreshWikiSpells';
+import { refreshWikiGearTier } from './triggers/refreshWikiGearTier';
 import { onChange } from './triggers/onChange';
 import { onOpen, showThemePickerModal } from './triggers/onOpen';
 import { installTriggers } from './triggers/installTriggers';
@@ -24,13 +25,14 @@ import {
 import { buildView } from './tabs/buildView';
 import { buildBank } from './tabs/buildBank';
 import { buildSpellCheck } from './tabs/buildSpellCheck';
+import { buildGearCheck } from './tabs/buildGearCheck';
 
 export {
   setTheme,
   migrateToV2, migrateToV3,
-  refreshPigparse, refreshWikiItems, refreshWikiSpells,
+  refreshPigparse, refreshWikiItems, refreshWikiSpells, refreshWikiGearTier,
   onChange, onOpen, showThemePickerModal,
   showCharInfoSidebar, getCharsForForm, saveCharInfo,
   installTriggers,
-  buildView, buildBank, buildSpellCheck,
+  buildView, buildBank, buildSpellCheck, buildGearCheck,
 };

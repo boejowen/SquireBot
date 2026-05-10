@@ -303,13 +303,15 @@ func TestScaffoldSchemaV1_HeaderRowsMatchLockedSchema(t *testing.T) {
 			t.Errorf("header for %s = %v, want %v", vt.Name, got, vt.Headers)
 		}
 	}
-	// Specifically: _char_owner has 13 columns including discord_handle,
-	// is_hidden, is_removed, watcher_version (load-bearing for SCHEMA-05).
+	// Specifically: _char_owner has 14 columns (13 frozen at v1 +
+	// `race` appended in Phase 4 plan 04-01) including discord_handle,
+	// is_hidden, is_removed, watcher_version (load-bearing for SCHEMA-05),
+	// and race (load-bearing for gear_check Iksar tier filtering).
 	co := h.tabHeaders["_char_owner"]
-	if len(co) != 13 {
-		t.Fatalf("_char_owner header len = %d, want 13", len(co))
+	if len(co) != 14 {
+		t.Fatalf("_char_owner header len = %d, want 14", len(co))
 	}
-	wantCols := []string{"discord_handle", "is_hidden", "is_removed", "watcher_version"}
+	wantCols := []string{"discord_handle", "is_hidden", "is_removed", "watcher_version", "race"}
 	for _, w := range wantCols {
 		found := false
 		for _, c := range co {

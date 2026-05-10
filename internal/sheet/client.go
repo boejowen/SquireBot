@@ -36,12 +36,12 @@ const (
 
 	// WatcherMaxSchemaVersion is the highest schema this binary can write
 	// against. RESEARCH.md §12.3 + Critical Constraint #5 (fail-fast on
-	// forward-compat workbook). Bumped to 2 in Phase 3 plan 03-01: Apps
-	// Script side runs migrateToV2() which extends _pigparse +
-	// _item_master + _quest_items columns at the right edge and appends
-	// _meta.theme + _meta.contact_email rows. Ship watcher v0.3.0+ to
-	// every guildie BEFORE running the migration on the workbook.
-	WatcherMaxSchemaVersion = 2
+	// forward-compat workbook). Bumped to 3 in Phase 4 plan 04-01: Apps
+	// Script side runs migrateToV3() which adds the `race` column to
+	// _char_owner. Ship watcher v0.4.0+ to every guildie BEFORE running
+	// the migration on the workbook (otherwise older watchers go red
+	// with ErrSchemaTooNew).
+	WatcherMaxSchemaVersion = 3
 
 	// InvTabMaxRows is the GridRange.EndRowIndex (exclusive) for inv:<Char>
 	// writes. P99 max ~250 rows; 500 gives 2x headroom and is comfortable

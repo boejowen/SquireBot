@@ -1,7 +1,8 @@
 package sheet
 
 // UpsertCharOwner — _char_owner upsert per AUTH-06 + RESEARCH.md §12.5.
-// Plan 01-05 Task 3, extended to 13 columns by Plan 02-01 Task 3.
+// Plan 01-05 Task 3, extended to 13 columns by Plan 02-01 Task 3,
+// then to 14 columns by Plan 04-01 Task 1 (added `race`).
 //
 // Conflict policy (RESEARCH.md §12.5):
 //
@@ -45,7 +46,7 @@ import (
 // only server SquireBot targets (per PROJECT.md Out of Scope).
 const CharOwnerServer = "blue"
 
-// UpsertCharOwner appends a 13-column row when charName is not present.
+// UpsertCharOwner appends a 14-column row when charName is not present.
 // On match (charName + ownerEmail both equal), refreshes column K
 // (last_seen) only — preserves first_seen, class, level, soft-delete
 // flags. On mismatch (charName present with different email), logs
@@ -108,9 +109,11 @@ func (c *Client) UpsertCharOwner(ctx context.Context, charName, ownerEmail, watc
 			"current", ownerEmail)
 		return nil
 	}
-	// Not present → append a 13-column row. valueInputOption=RAW so the
+	// Not present → append a 14-column row. valueInputOption=RAW so the
 	// email cell is never auto-linkified (USER_ENTERED would turn
 	// "foo@example.com" into a hyperlink with display text "foo").
+	// Phase 4 plan 04-01 added column N (race), populated lazily via
+	// the Apps Script sidebar form (showCharInfoSidebar).
 	now := time.Now().UTC().Format(time.RFC3339)
 	body := &sheets.ValueRange{
 		Values: [][]any{
@@ -128,10 +131,11 @@ func (c *Client) UpsertCharOwner(ctx context.Context, charName, ownerEmail, watc
 				now,             // K last_seen
 				CharOwnerServer, // L server ("blue")
 				watcherVersion,  // M watcher_version
+				"",              // N race (Phase 4)
 			},
 		},
 	}
-	if _, err := c.valuesAppend(ctx, "_char_owner!A:M", body); err != nil {
+	if _, err := c.valuesAppend(ctx, "_char_owner!A:N", body); err != nil {
 		return fmt.Errorf("append _char_owner: %w", err)
 	}
 	return nil

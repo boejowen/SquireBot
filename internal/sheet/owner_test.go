@@ -151,7 +151,7 @@ func captureLogs(t *testing.T) (*bytes.Buffer, func()) {
 	return buf, func() { slog.SetDefault(prev) }
 }
 
-// Test 1: empty _char_owner → append a 13-column row.
+// Test 1: empty _char_owner → append a 14-column row (Phase 4 added `race`).
 func TestUpsertCharOwner_AppendsThirteenColumnsOnFirstSighting(t *testing.T) {
 	o := &ownerStub{
 		t: t,
@@ -159,10 +159,10 @@ func TestUpsertCharOwner_AppendsThirteenColumnsOnFirstSighting(t *testing.T) {
 			{Title: "_char_owner", SheetID: 7},
 		},
 		rows: [][]any{
-			// header only — full 13-col header from scaffold
+			// header only — full 14-col header from scaffold
 			{"char_name", "owner_email", "display_name", "discord_handle",
 				"class", "level", "is_bank_toon", "is_hidden", "is_removed",
-				"first_seen", "last_seen", "server", "watcher_version"},
+				"first_seen", "last_seen", "server", "watcher_version", "race"},
 		},
 	}
 	c, srv := newOwnerClient(t, o)
@@ -185,8 +185,8 @@ func TestUpsertCharOwner_AppendsThirteenColumnsOnFirstSighting(t *testing.T) {
 		t.Fatalf("Values rows = %d, want 1", len(row))
 	}
 	cells := row[0]
-	if len(cells) != 13 {
-		t.Fatalf("appended cells = %d, want 13 (v1 schema-locked)", len(cells))
+	if len(cells) != 14 {
+		t.Fatalf("appended cells = %d, want 14 (v3 schema with race)", len(cells))
 	}
 	// Spot-check the load-bearing cells.
 	checks := []struct {
@@ -205,6 +205,7 @@ func TestUpsertCharOwner_AppendsThirteenColumnsOnFirstSighting(t *testing.T) {
 		{8, "FALSE", "is_removed (I)"},
 		{11, "blue", "server (L)"},
 		{12, "0.2.0", "watcher_version (M)"},
+		{13, "", "race (N)"},
 	}
 	for _, c := range checks {
 		if cells[c.idx] != c.want {

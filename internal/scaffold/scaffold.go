@@ -55,6 +55,10 @@ var DimensionTabs = []dimensionTab{
 		"char_name", "owner_email", "display_name", "discord_handle",
 		"class", "level", "is_bank_toon", "is_hidden", "is_removed",
 		"first_seen", "last_seen", "server", "watcher_version",
+		// Phase 4 plan 04-01: race column captured via Apps Script
+		// sidebar form (showCharInfoSidebar). Used by gear_check builder
+		// to filter Iksar racial tier rows to Iksar chars only.
+		"race",
 	}},
 	{Name: "_item_master", Headers: []string{
 		"item_id", "name", "wiki_summary", "wiki_url",

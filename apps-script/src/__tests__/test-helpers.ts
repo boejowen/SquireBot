@@ -51,59 +51,70 @@ export function installAppsScriptMocks(state: MockState): void {
         }
         const r = rowOrA1; const c = col!;
         const nr = numRows ?? 1; const nc = numCols ?? 1;
-        return {
-          getValues: () => {
-            const out: unknown[][] = [];
-            for (let i = 0; i < nr; i++) {
-              const row: unknown[] = [];
-              for (let j = 0; j < nc; j++) {
-                row.push(s.values[r - 1 + i]?.[c - 1 + j] ?? '');
-              }
-              out.push(row);
+        const range: Record<string, unknown> = {};
+        range.getValues = () => {
+          const out: unknown[][] = [];
+          for (let i = 0; i < nr; i++) {
+            const row: unknown[] = [];
+            for (let j = 0; j < nc; j++) {
+              row.push(s.values[r - 1 + i]?.[c - 1 + j] ?? '');
             }
-            return out;
-          },
-          setValue: (v: unknown) => {
-            ensureRow(s, r); ensureCol(s, r, c);
-            s.values[r - 1][c - 1] = v;
-            state.setValuesLog.push({ sheet: s.name, range: `r${r}c${c}`, values: [[v]] });
-            return this;
-          },
-          setValues: (vals: unknown[][]) => {
-            for (let i = 0; i < vals.length; i++) {
-              for (let j = 0; j < vals[i].length; j++) {
-                ensureRow(s, r + i); ensureCol(s, r + i, c + j);
-                s.values[r - 1 + i][c - 1 + j] = vals[i][j];
-              }
-            }
-            state.setValuesLog.push({ sheet: s.name, range: `r${r}c${c}-${nr}x${nc}`, values: vals });
-            return this;
-          },
-          setNotes: (notes: (string | null)[][]) => {
-            for (let i = 0; i < notes.length; i++) {
-              for (let j = 0; j < notes[i].length; j++) {
-                ensureRow(s, r + i); ensureCol(s, r + i, c + j);
-                s.notes[r - 1 + i][c - 1 + j] = notes[i][j];
-              }
-            }
-            return this;
-          },
-          setNote: (note: string) => {
-            s.notes[r - 1][c - 1] = note;
-            return this;
-          },
-          clearContent: () => {
-            for (let i = 0; i < nr; i++) {
-              for (let j = 0; j < nc; j++) {
-                if (s.values[r - 1 + i]) s.values[r - 1 + i][c - 1 + j] = '';
-              }
-            }
-            return this;
-          },
-          setBackground: () => this, setFontColor: () => this,
-          setFontFamily: () => this, setFontWeight: () => this,
-          setBorder: () => this,
+            out.push(row);
+          }
+          return out;
         };
+        range.setValue = (v: unknown) => {
+          ensureRow(s, r); ensureCol(s, r, c);
+          s.values[r - 1][c - 1] = v;
+          state.setValuesLog.push({ sheet: s.name, range: `r${r}c${c}`, values: [[v]] });
+          return range;
+        };
+        range.setValues = (vals: unknown[][]) => {
+          for (let i = 0; i < vals.length; i++) {
+            for (let j = 0; j < vals[i].length; j++) {
+              ensureRow(s, r + i); ensureCol(s, r + i, c + j);
+              s.values[r - 1 + i][c - 1 + j] = vals[i][j];
+            }
+          }
+          state.setValuesLog.push({ sheet: s.name, range: `r${r}c${c}-${nr}x${nc}`, values: vals });
+          return range;
+        };
+        range.setNotes = (notes: (string | null)[][]) => {
+          for (let i = 0; i < notes.length; i++) {
+            for (let j = 0; j < notes[i].length; j++) {
+              ensureRow(s, r + i); ensureCol(s, r + i, c + j);
+              // Ensure notes parallel array exists for any rows the
+              // value array may have grown without notes-side alignment
+              // (e.g., direct test mutations of s.values).
+              while (s.notes.length < s.values.length) {
+                s.notes.push(new Array(s.values[s.notes.length]?.length ?? 0).fill(null));
+              }
+              while (s.notes[r - 1 + i].length < c + j) {
+                s.notes[r - 1 + i].push(null);
+              }
+              s.notes[r - 1 + i][c - 1 + j] = notes[i][j];
+            }
+          }
+          return range;
+        };
+        range.setNote = (note: string) => {
+          s.notes[r - 1][c - 1] = note;
+          return range;
+        };
+        range.clearContent = () => {
+          for (let i = 0; i < nr; i++) {
+            for (let j = 0; j < nc; j++) {
+              if (s.values[r - 1 + i]) s.values[r - 1 + i][c - 1 + j] = '';
+            }
+          }
+          return range;
+        };
+        range.setBackground = () => range;
+        range.setFontColor = () => range;
+        range.setFontFamily = () => range;
+        range.setFontWeight = () => range;
+        range.setBorder = () => range;
+        return range;
       },
       appendRow: (row: unknown[]) => {
         s.values.push(row.slice());
@@ -115,6 +126,10 @@ export function installAppsScriptMocks(state: MockState): void {
         if (rowIndex < 2 || rowIndex > s.values.length) return;
         s.values.splice(rowIndex - 1, 1);
         s.notes.splice(rowIndex - 1, 1);
+      },
+      setConditionalFormatRules: (rules: unknown[]) => {
+        // Stash for assertion.
+        (s as FakeSheet & { _condFormatRules?: unknown[] })._condFormatRules = rules;
       },
       insertSheet: () => {},
     };
@@ -134,6 +149,27 @@ export function installAppsScriptMocks(state: MockState): void {
     }
   }
 
+  // Recursive menu chain mock — each method returns the same builder
+  // so any chain depth works.
+  const menuBuilder: Record<string, unknown> = {};
+  menuBuilder.addItem = () => menuBuilder;
+  menuBuilder.addSeparator = () => menuBuilder;
+  menuBuilder.addSubMenu = () => menuBuilder;
+  menuBuilder.addToUi = () => {};
+
+  // newConditionalFormatRule chain — captures whenFormulaSatisfied,
+  // setBackground, setRanges; build() returns a tagged object.
+  function makeRuleBuilder() {
+    const built: Record<string, unknown> = { _kind: 'conditional-rule' };
+    const builder = {
+      whenFormulaSatisfied: (formula: string) => { built.formula = formula; return builder; },
+      setBackground: (bg: string) => { built.background = bg; return builder; },
+      setRanges: (ranges: unknown[]) => { built.ranges = ranges; return builder; },
+      build: () => built,
+    };
+    return builder;
+  }
+
   (globalThis as Record<string, unknown>).SpreadsheetApp = {
     getActiveSpreadsheet: () => ({
       getSheetByName,
@@ -144,7 +180,12 @@ export function installAppsScriptMocks(state: MockState): void {
       },
       getSheets: () => Array.from(state.sheets.values()).map((s) => makeSheetProxy(s, state)),
     }),
-    getUi: () => ({ alert: () => {}, createMenu: () => ({ addItem: () => ({ addItem: () => ({}), addSeparator: () => ({ addItem: () => ({}) }), addToUi: () => {} }) }) }),
+    getUi: () => ({
+      alert: () => {},
+      createMenu: () => menuBuilder,
+      showModalDialog: () => {},
+    }),
+    newConditionalFormatRule: () => makeRuleBuilder(),
   };
 
   (globalThis as Record<string, unknown>).LockService = {

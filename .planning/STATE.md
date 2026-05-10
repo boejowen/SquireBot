@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-plans-complete
-last_updated: "2026-05-10T23:30:00Z"
+status: phase-4-plan-01-complete
+last_updated: "2026-05-10T23:54:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 22
-  completed_plans: 22
-  percent: 80
+  total_plans: 23
+  completed_plans: 23
+  percent: 81
 ---
 
 # State: SquireBot
@@ -30,11 +30,11 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 4 — Differentiator Features (CONTEXT + RESEARCH + PATTERNS + 4 PLANS done; ready for execution)
-- **Plan:** 04-01 next
+- **Phase:** 4 — Differentiator Features (Plan 04-01 ✓ COMPLETE; 04-02 next)
+- **Plan:** 04-01 done; 04-02 next
 - **Node:** — (none yet)
-- **Status:** Phase 4 PATTERNS + 4 PLANs landed 2026-05-10. Plan structure: 04-01 schema v=3 + watcher v0.4.0 + char-info sidebar + CI assertion; 04-02 refreshWikiSpells + spell_check + onChange wiring; 04-03 refreshWikiGearTier + gear_check + Iksar tagging; 04-04 bank coin sidebar + buildBank coin row + Range.protect + monitorCellCount + installTriggers (4→7). Most files clone Phase 3 patterns (refreshWikiSpells ← refreshWikiItems; buildSpellCheck ← buildView; etc.). New patterns: HtmlService SIDEBAR forms (vs Phase 3's modal), wiki-table-list parsing, Range.protect, cell-count monitor, build-time CI assertion. Estimated effort: 5+7+9+10 = ~31h. Next: kickoff plan 04-01.
-- **Resume file:** `.planning/phases/04-differentiator-features/04-01-PLAN.md` — start here for execution.
+- **Status:** Plan 04-01 landed 2026-05-10. 5 commits: `650f598` (Go: WatcherMaxSchemaVersion 2→3 + scaffold _char_owner.race), `d55fa9f` (eq-constants: CLASSES + RACES + WIKI_SLOT_TO_INV_SLOTS), `e81731a` (migrateToV3 + outcome-enum cleanup, 12/12 tests), `0bf...` (showCharInfoSidebar + 16/16 tests), pending C5 (Code.ts + onOpen menu + build.mjs CI assertion). 121/121 vitest tests passing across 13 test files. dist/Code.js now 14/14 globals (10 from Phase 3 + 4 new). CI assertion verified to catch Code.ts/TRIGGER_GLOBALS divergence (lesson from Phase 3 bug d0a2645). Watcher v0.4.0 still pending tag — defer until plan 04-04 lands so we ship the full Phase 4 in one watcher release. Next: plan 04-02 (refreshWikiSpells + spell_check).
+- **Resume file:** `.planning/phases/04-differentiator-features/04-02-PLAN.md` — start here.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
 
 ## Performance Metrics

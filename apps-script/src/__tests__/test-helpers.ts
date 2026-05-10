@@ -7,10 +7,17 @@
 import { vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 
+export interface ProtectionRecord {
+  rangeA1: string;          // synthetic e.g. "r5c2"
+  description: string;
+  warningOnly: boolean;
+}
+
 export interface FakeSheet {
   name: string;
   values: unknown[][]; // [row][col], row 0 = header
   notes: (string | null)[][];
+  protections?: ProtectionRecord[];
 }
 
 export interface MockState {
@@ -114,8 +121,37 @@ export function installAppsScriptMocks(state: MockState): void {
         range.setFontFamily = () => range;
         range.setFontWeight = () => range;
         range.setBorder = () => range;
+        range.getA1Notation = () => `r${r}c${c}`;
+        range.protect = () => {
+          const protection: ProtectionRecord = {
+            rangeA1: `r${r}c${c}`,
+            description: '',
+            warningOnly: false,
+          };
+          if (!s.protections) s.protections = [];
+          s.protections.push(protection);
+          const builder = {
+            setDescription: (d: string) => { protection.description = d; return builder; },
+            setWarningOnly: (w: boolean) => { protection.warningOnly = w; return builder; },
+            getRange: () => ({ getA1Notation: () => protection.rangeA1 }),
+            getDescription: () => protection.description,
+            remove: () => {
+              const idx = s.protections!.indexOf(protection);
+              if (idx >= 0) s.protections!.splice(idx, 1);
+            },
+          };
+          return builder;
+        };
         return range;
       },
+      getProtections: (_type: unknown) => (s.protections ?? []).map((p) => ({
+        getRange: () => ({ getA1Notation: () => p.rangeA1 }),
+        getDescription: () => p.description,
+        remove: () => {
+          const i = s.protections!.indexOf(p);
+          if (i >= 0) s.protections!.splice(i, 1);
+        },
+      })),
       appendRow: (row: unknown[]) => {
         s.values.push(row.slice());
         s.notes.push(row.map(() => null));
@@ -184,8 +220,10 @@ export function installAppsScriptMocks(state: MockState): void {
       alert: () => {},
       createMenu: () => menuBuilder,
       showModalDialog: () => {},
+      showSidebar: () => {},
     }),
     newConditionalFormatRule: () => makeRuleBuilder(),
+    ProtectionType: { RANGE: 'RANGE', SHEET: 'SHEET' },
   };
 
   (globalThis as Record<string, unknown>).LockService = {

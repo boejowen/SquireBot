@@ -37,6 +37,9 @@ const TRIGGER_GLOBALS = [
   'showCharInfoSidebar',
   'getCharsForForm',  // google.script.run callback from sidebar
   'saveCharInfo',     // google.script.run callback from sidebar
+  // Phase 4 plan 04-02:
+  'refreshWikiSpells',
+  'buildSpellCheck',
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

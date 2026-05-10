@@ -13,11 +13,16 @@
 import { log } from '../lib/log';
 import { buildView } from '../tabs/buildView';
 import { buildBank } from '../tabs/buildBank';
+import { buildSpellCheck } from '../tabs/buildSpellCheck';
+// Phase 4 plan 04-03 will add: import { buildGearCheck } from '../tabs/buildGearCheck';
 
 export function onChange(_e?: GoogleAppsScript.Events.SheetsOnChange): void {
   log('debug', 'onChange', { fired: true });
-  // buildView debounces internally (10s window); calling it on every
-  // onChange is safe.
+  // Each builder debounces internally (10s window) — safe to invoke
+  // unconditionally on every onChange. Heartbeat-driven false positives
+  // are absorbed by the debounce.
   buildView();
   buildBank();
+  buildSpellCheck();
+  // buildGearCheck() — wired in plan 04-03
 }

@@ -14,6 +14,7 @@ export function onOpen(): void {
     .addItem('Refresh Wiki Items Now', 'refreshWikiItems')
     .addSeparator()
     .addItem('Set Character Info…', 'showCharInfoSidebar')
+    .addItem('Set Bank Coin…', 'showBankCoinSidebar')
     .addItem('Set Theme…', 'showThemePickerModal')
     .addSeparator()
     .addItem('Run Migration (v=3)', 'migrateToV3')

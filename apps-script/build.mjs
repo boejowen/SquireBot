@@ -43,6 +43,12 @@ const TRIGGER_GLOBALS = [
   // Phase 4 plan 04-03:
   'refreshWikiGearTier',
   'buildGearCheck',
+  // Phase 4 plan 04-04:
+  'showBankCoinSidebar',
+  'getBankCoinForForm',  // google.script.run callback from sidebar
+  'saveBankCoin',        // google.script.run callback from sidebar
+  'monitorCellCount',
+  'protectBankCoinCells',  // callable from script editor for retro re-apply
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

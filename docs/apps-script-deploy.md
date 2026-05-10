@@ -14,7 +14,7 @@ Prerequisites:
 
 - Node.js 20+ on your machine
 - The shared SquireBot Google Sheet exists and you own it (or have edit access)
-- The watcher (`SquireBot.exe`) is at v0.3.0 or newer on every guildie's machine — older watchers will refuse to write to a v=2 schema workbook
+- The watcher (`SquireBot.exe`) is at v0.4.0 or newer on every guildie's machine — older watchers will refuse to write to a v=3 schema workbook
 
 Steps:
 
@@ -32,7 +32,7 @@ Steps:
    npm run build
    npm test
    ```
-   `npm test` should report 16+ tests passing.
+   `npm test` should report 200+ tests passing across 21+ test files.
 6. **Authenticate clasp** (one-time, opens a browser):
    ```bash
    npx clasp login
@@ -43,14 +43,25 @@ Steps:
    ```
    First push asks if you want to overwrite the empty default file — say yes.
 8. **Refresh the workbook tab in your browser** so Apps Script picks up the new menu. The **SquireBot** menu now appears in the menu bar.
-9. **Run the migration once:** SquireBot menu → **Run Migration** (or from the script editor, select `migrateToV2` in the function dropdown and click Run). Approve the OAuth scopes when prompted (one-time). Verify `_meta.schema_version` is now `2` and `_meta.theme` is `minimalist`.
-10. **Install the triggers:** SquireBot menu → **Install Triggers**. This creates four triggers (onChange, hourly view backstop, daily PigParse refresh, weekly wiki refresh). Idempotent — re-runnable safely.
+9. **Run the migration once:** SquireBot menu → **Run Migration (v=3)** (or from the script editor, select `migrateToV3` in the function dropdown and click Run). Approve the OAuth scopes when prompted (one-time). `migrateToV3` chains v1→v2 if needed via the legacy `migrateToV2` (still wired under the menu). Verify `_meta.schema_version` is now `3` and `_meta.theme` is `minimalist`.
+10. **Install the triggers:** SquireBot menu → **Install Triggers**. This creates **seven** triggers (onChange, hourly view backstop, daily PigParse refresh, weekly wiki-items refresh, weekly wiki-spells refresh, weekly wiki-gear-tier refresh, weekly cell-count watchdog). It also (idempotently) re-applies Range protection to the `_meta.bank_coin_*` cells. Re-runnable safely.
 11. **(Optional) First syncs:**
     - SquireBot menu → **Refresh PigParse Now** (otherwise waits until 03:00 PT)
     - SquireBot menu → **Refresh Wiki Items Now** (otherwise waits until Sunday 04:00 PT)
-    - SquireBot menu → **Rebuild Views Now** (rebuilds `view` + `bank` against current data)
-12. **(Optional) Pick a theme:** SquireBot menu → **Set Theme…** opens a minimal modal with all 6 themes. The view + bank tabs rebuild automatically on theme change. The polished 6-tile picker lands in Phase 5.
-13. **You're done.** The `view` + `bank` tabs will populate as guildies' watchers upload data.
+    - SquireBot menu → **Rebuild Views Now** (rebuilds `view` + `bank` + `gear_check` + `spell_check` against current data)
+12. **(Optional) Set bank coin:** SquireBot menu → **Set Bank Coin…** opens a sidebar with PP/GP/SP/CP inputs. Save populates the `bank` tab's COIN row at row 2. /outputfile inventory does not include coin totals — this is the manual entry point.
+13. **(Optional) Set per-character info:** SquireBot menu → **Set Character Info…** opens a sidebar with class/level/race for each character. Race is required for the Iksar racial gear tier in `gear_check`.
+14. **(Optional) Pick a theme:** SquireBot menu → **Set Theme…** opens a minimal modal with all 6 themes. The view + bank tabs rebuild automatically on theme change. The polished 6-tile picker lands in Phase 5.
+15. **You're done.** The `view` / `bank` / `gear_check` / `spell_check` tabs will populate as guildies' watchers upload data.
+
+### Range.protect smoke check (recommended, ~30s)
+
+After **Install Triggers** runs, the four `_meta.bank_coin_*` cells are protected. Verify:
+
+1. Click into `_meta` cell `B<row>` for `bank_coin_pp` and try to type a new value. Sheets should show a **protection warning prompt** ("Heads up — you're trying to edit a protected cell. Are you sure?"). Cancel.
+2. Open SquireBot → **Set Bank Coin…**, type a new platinum value, click Save. The save should succeed with no protection prompt (the script-side write bypasses Range.protect).
+
+If step 1 does not show a prompt, the protection wasn't applied — re-run **Install Triggers** (it's idempotent) and try again. If it still doesn't prompt, run `protectBankCoinCells` directly from the script editor's Run dropdown.
 
 ## Update flow
 
@@ -73,7 +84,8 @@ The watcher refuses to write to a workbook whose `_meta.schema_version` exceeds 
 | Watcher version | Max schema version it can write |
 |-----------------|---------------------------------|
 | v0.1.x – v0.2.x | 1                               |
-| v0.3.0+         | 2                               |
+| v0.3.x          | 2                               |
+| v0.4.0+         | 3                               |
 
 ## Troubleshooting
 

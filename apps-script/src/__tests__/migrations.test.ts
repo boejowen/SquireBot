@@ -25,7 +25,7 @@ describe('migrateToV2', () => {
 
   it('returns noop_already_v2 when schema_version is already 2', () => {
     seedMeta(state, [['schema_version', '2'], ['canonical_id', 'x']]);
-    expect(migrateToV2()).toBe('noop_already_v2');
+    expect(migrateToV2()).toBe('noop_already_current');
     // No header changes should have been logged
     const pigparseValues = state.sheets.get('_pigparse');
     expect(pigparseValues).toBeUndefined();
@@ -38,7 +38,7 @@ describe('migrateToV2', () => {
 
   it('migrates v1 → v2 by appending columns and bumping schema_version', () => {
     seedV1Workbook();
-    expect(migrateToV2()).toBe('migrated_v1_to_v2');
+    expect(migrateToV2()).toBe('migrated');
 
     const pigparse = state.sheets.get('_pigparse')!;
     const pigHeaders = pigparse.values[0] as string[];
@@ -65,7 +65,7 @@ describe('migrateToV2', () => {
     const pigparse = state.sheets.get('_pigparse')!;
     pigparse.values[0] = [...(pigparse.values[0] as string[]), 'direction', 't30', 'a30'];
 
-    expect(migrateToV2()).toBe('migrated_v1_to_v2');
+    expect(migrateToV2()).toBe('migrated');
     const pigHeaders = pigparse.values[0] as string[];
     // No duplicate columns added
     const counts: Record<string, number> = {};
@@ -108,5 +108,90 @@ describe('migrateToV2', () => {
     const contactRow = meta.values.find((r) => r[0] === 'contact_email');
     expect(themeRow?.[1]).toBe('minimalist');
     expect(contactRow?.[1]).toBe('');
+  });
+});
+
+describe('migrateToV3', () => {
+  let state: MockState;
+  beforeEach(() => {
+    state = resetMocks();
+  });
+
+  function seedV2Workbook(): void {
+    seedMeta(state, [
+      ['schema_version', '2'],
+      ['canonical_id', 'squirebot-v1-workbook-2026'],
+      ['theme', 'minimalist'],
+      ['contact_email', ''],
+    ]);
+    state.sheets.set('_char_owner', makeSheet('_char_owner', [
+      'char_name', 'owner_email', 'display_name', 'discord_handle',
+      'class', 'level', 'is_bank_toon', 'is_hidden', 'is_removed',
+      'first_seen', 'last_seen', 'server', 'watcher_version',
+    ]));
+  }
+
+  it('returns noop_already_current when schema_version is already 3', async () => {
+    const { migrateToV3 } = await import('../lib/migrations');
+    seedMeta(state, [['schema_version', '3'], ['canonical_id', 'x']]);
+    expect(migrateToV3()).toBe('noop_already_current');
+    expect(state.sheets.get('_char_owner')).toBeUndefined();
+  });
+
+  it('returns noop_unsupported_version on schema_version=1 (must run migrateToV2 first)', async () => {
+    const { migrateToV3 } = await import('../lib/migrations');
+    seedMeta(state, [['schema_version', '1']]);
+    expect(migrateToV3()).toBe('noop_unsupported_version');
+  });
+
+  it('returns noop_unsupported_version on unknown schema_version', async () => {
+    const { migrateToV3 } = await import('../lib/migrations');
+    seedMeta(state, [['schema_version', '99']]);
+    expect(migrateToV3()).toBe('noop_unsupported_version');
+  });
+
+  it('migrates v2 → v3 by appending race column and bumping schema_version', async () => {
+    const { migrateToV3 } = await import('../lib/migrations');
+    seedV2Workbook();
+    expect(migrateToV3()).toBe('migrated');
+
+    const charOwner = state.sheets.get('_char_owner')!;
+    const headers = charOwner.values[0] as string[];
+    expect(headers[headers.length - 1]).toBe('race');
+    expect(headers.length).toBe(14);
+
+    const meta = state.sheets.get('_meta')!;
+    const schemaRow = meta.values.find((r) => r[0] === 'schema_version');
+    expect(schemaRow![1]).toBe('3');
+  });
+
+  it('is idempotent on column-extension step (race already present)', async () => {
+    const { migrateToV3 } = await import('../lib/migrations');
+    seedV2Workbook();
+    const charOwner = state.sheets.get('_char_owner')!;
+    charOwner.values[0] = [...(charOwner.values[0] as string[]), 'race'];
+
+    expect(migrateToV3()).toBe('migrated');
+    const headers = charOwner.values[0] as string[];
+    const counts: Record<string, number> = {};
+    headers.forEach((h) => { counts[h] = (counts[h] ?? 0) + 1; });
+    expect(counts['race']).toBe(1);
+  });
+
+  it('schema_version write happens AFTER column extension', async () => {
+    const { migrateToV3 } = await import('../lib/migrations');
+    seedV2Workbook();
+    migrateToV3();
+
+    const setValuesLog = state.setValuesLog;
+    const schemaWriteIdx = setValuesLog.findIndex((l) =>
+      l.sheet === '_meta' && l.values.flat().some((v) => v === '3')
+    );
+    const charColAddIdx = setValuesLog.findIndex((l) =>
+      l.sheet === '_char_owner' && l.values.flat().includes('race')
+    );
+    expect(schemaWriteIdx).toBeGreaterThan(-1);
+    expect(charColAddIdx).toBeGreaterThan(-1);
+    expect(schemaWriteIdx).toBeGreaterThan(charColAddIdx);
   });
 });

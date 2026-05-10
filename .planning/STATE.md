@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-plan-02-complete
-last_updated: "2026-05-11T00:30:00Z"
+status: phase-4-plan-03-complete
+last_updated: "2026-05-11T01:15:00Z"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 24
-  completed_plans: 24
-  percent: 83
+  total_plans: 25
+  completed_plans: 25
+  percent: 86
 ---
 
 # State: SquireBot
@@ -30,11 +30,11 @@ progress:
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
 
-- **Phase:** 4 — Differentiator Features (Plans 04-01 + 04-02 ✓ COMPLETE; 04-03 next)
-- **Plan:** 04-02 done; 04-03 next
+- **Phase:** 4 — Differentiator Features (Plans 04-01..03 ✓ COMPLETE; 04-04 next)
+- **Plan:** 04-03 done; 04-04 next (final Phase 4 plan)
 - **Node:** — (none yet)
-- **Status:** Plan 04-02 landed 2026-05-10/11. wiki-spell-types + parser + refreshWikiSpells (cursor-resumable, fires buildSpellCheck on completion) + buildSpellCheck (joins _char_owner ↔ spell:* ↔ _wiki_spells via normalized name). Wired buildSpellCheck into onChange. 151/151 vitest tests passing across 16 test files (was 121/121 before plan 04-02: +13 wiki-spell-parser + +7 refreshWikiSpells + +10 buildSpellCheck = +30 new). dist/Code.js 16/16 globals (Phase 3's 10 + Phase 4's 4 from 04-01 + 2 from 04-02). Watcher v0.4.0 still pending tag — defer until plan 04-04 lands so the full Phase 4 ships in one watcher release. Next: plan 04-03 (refreshWikiGearTier + gear_check + Iksar tagging).
-- **Resume file:** `.planning/phases/04-differentiator-features/04-03-PLAN.md` — start here.
+- **Status:** Plan 04-03 landed 2026-05-10/11. wiki-gear-tier types + parser (Iksar tagging via name pattern; pair-slot mapping; unknown-slot collection) + refreshWikiGearTier (2-page fetch with all-or-nothing replace; partial-failure preserves stale data) + buildGearCheck (joins inv:* ↔ _wiki_gear_tier ↔ _char_owner.race+class; emits OK/MISSING/OTHER per char/tier/slot; Iksar tier filtered to race=IKS only). Wired buildGearCheck into onChange. 179/179 vitest tests passing across 19 test files (+28 from 04-03: 15 parser + 4 trigger + 9 builder). dist/Code.js 18/18 globals. Validated against live wiki fixtures: actual Iksar item count is 4 (CONTEXT estimate of 24+ was based on overly-loose grep; real `{{:Iksar ...}}` transclusions limited to Iksar Hide Cap × Cleric+Magician + Iksar Hide Manual ×2 in Magician). Test expectations updated. Watcher v0.4.0 still pending tag. Next: plan 04-04 (bank coin sidebar + bank coin row + Range.protect + monitorCellCount + installTriggers 4→7).
+- **Resume file:** `.planning/phases/04-differentiator-features/04-04-PLAN.md` — start here.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 18/~28 plans complete (Phase 1 + 2 done; Phase 3 in discuss-complete; Phase 4-5 unplanned)
 
 ## Performance Metrics

@@ -95,7 +95,7 @@
 - [x] 05-01-PLAN.md — System tab hide + bank_toon_name protect + weekly schema healthcheck (OPS-06) ✅ SHIPPED 2026-05-11 (3 commits c85586b, ae57d61, a9562b6; 229/229 tests green; trigger count 7→8; schema_version=3 unchanged)
 - [x] 05-02-PLAN.md — Archive lib + weeklyStaleCharArchive + weeklyEvictionArchive cron (VIEW-05) ✅ SHIPPED 2026-05-11 (5 commits 32f8cfa, 434adf6, ab10732, 4c3b339, 2530de3; 246/246 tests green; trigger count 8→10; schema_version=3 unchanged; Path A held)
 - [x] 05-03-PLAN.md — Cross-character search sidebar (SEARCH-01..04, TIP-04) ✅ SHIPPED 2026-05-11 (3 commits bd346c4, 1733264, bdd6774; 283/283 tests green; trigger count unchanged at 10; schema_version=3 unchanged; SEARCH-03 PARTIAL via Path 2 — cache-freshness tooltip on Search button + cross-reference to existing view/bank Last Synced; Option A — inline SIDEBAR_BODY, no companion .html)
-- [ ] 05-04-PLAN.md — Eviction sidebar + DOC-02 runbook (DOC-02)
+- [x] 05-04-PLAN.md — Eviction sidebar + DOC-02 runbook (DOC-02) ✅ SHIPPED 2026-05-11 (3 commits f213bdb, 2e39b3e, 658b4a6; 297/297 tests green; trigger count UNCHANGED at 10; schema_version=3 unchanged; Path A held; Option A — inline SIDEBAR_BODY, no companion .html; eviction_log envelope contract matches 05-02 consumer; 05-05 owns the fake-guildie E2E smoke + REQUIREMENTS.md DOC-02 mark-complete)
 - [ ] 05-05-PLAN.md — Jekyll Pages site + README shrink + 12-guildie rollout smoke (DOC-01, DOC-03)
 **UI hint**: yes
 **Research flag**: not needed (standard sidebar/HtmlService/onboarding patterns; SUMMARY.md confidence HIGH).

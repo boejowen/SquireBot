@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: phase-5-in-progress
-last_updated: "2026-05-11T05:10:00Z"
+last_updated: "2026-05-11T05:24:00Z"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 31
-  completed_plans: 29
-  percent: 94
+  completed_plans: 30
+  percent: 97
 ---
 
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-05-11 (Phase 5 plan 05-03 SHIPPED — cross-character search sidebar live; 29/31 plans complete)
+**Last updated:** 2026-05-11 (Phase 5 plan 05-04 SHIPPED — eviction sidebar + DOC-02 runbook live; 30/31 plans complete)
 
 ## Project Reference
 
@@ -31,7 +31,7 @@ Phase: 1 (End-to-End Thin Slice) — ✅ SHIPPED (v0.1.0)
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — ✅ SHIPPED (v0.3.0)
 Phase: 4 (Differentiator Features) — ✅ SHIPPED (v0.4.0 — 2026-05-11)
-Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (3/5 plans complete: 05-01 + 05-02 + 05-03 SHIPPED 2026-05-11)
+Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (4/5 plans complete: 05-01 + 05-02 + 05-03 + 05-04 SHIPPED 2026-05-11)
 
 - **Phase:** 4 — Differentiator Features ✓ SHIPPED as v0.4.0
 - **Plan:** All 4 plans (04-01..04) landed; v0.4.0 tag pushed; live smoke PASS
@@ -48,8 +48,8 @@ Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (3/5 plans 
   **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
 
   **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
-- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-04-PLAN.md` — next plan in the sequential 05-01 → 05-05 execution chain (05-01 + 05-02 + 05-03 shipped 2026-05-11).
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 29/31 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5: 05-01 + 05-02 + 05-03 shipped, 05-04..05 pending)
+- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-05-PLAN.md` — final plan in the sequential 05-01 → 05-05 execution chain (05-01 + 05-02 + 05-03 + 05-04 shipped 2026-05-11).
+- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 30/31 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5: 05-01 + 05-02 + 05-03 + 05-04 shipped, 05-05 pending)
 
 ### Phase 5 plan execution log
 
@@ -58,6 +58,9 @@ Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (3/5 plans 
 | 05-01 | Schema healthcheck + tab hide + bank-toon-name protect | ~20min | 3 | c85586b, ae57d61, a9562b6 | 2026-05-11 |
 | 05-02 | Archive lib + weeklyStaleCharArchive + weeklyEvictionArchive | ~7min | 3 | 32f8cfa, 434adf6, ab10732, 4c3b339, 2530de3 | 2026-05-11 |
 | 05-03 | Cross-character search sidebar (SEARCH-01..04 + TIP-04) | ~14min | 3 | bd346c4, 1733264, bdd6774 | 2026-05-11 |
+| 05-04 | Eviction sidebar + DOC-02 runbook | ~6min | 2 | f213bdb, 2e39b3e, 658b4a6 | 2026-05-11 |
+
+**05-04 outcomes:** DOC-02 sidebar code + runbook live. `triggers/showEvictionSidebar.ts` (1 opener + 3 google.script.run callbacks: `getEvictionEmails`, `previewEviction`, `commitEviction`) — 300px theme-aware HtmlService sidebar at `SquireBot → Evict Guildie…` (between `Search…` and `Set Theme…`). Lock-guarded `commitEviction` cascades `is_removed=TRUE` across an `owner_email`'s `_char_owner` rows and appends an `{at, email, initiated_by, grace_until, chars, reason:'evicted'}` envelope to `_meta.eviction_log` — consumed by 05-02's `weeklyEvictionArchive` after the 30-day grace. Idempotent (only flips FALSE→TRUE; already-removed chars are no-op). Defensive: `Session.getEffectiveUser()` wrapped in try/catch with `'unknown'` fallback (Assumption A5); JSON.parse on prior log wrapped in try/catch (T-05-04-07 mitigation). Option A: inline `SIDEBAR_BODY` String.raw template, no companion .html file (consistent with 05-03). XSS-defended via inline `escapeHtml` (T-05-04-01..02). `docs/eviction-runbook.md` (DOC-02, 4.6KB, 5 sections — lifecycle, un-evict, post-archive recovery, edge cases, permissions note). SQUIREBOT_HANDLERS count UNCHANGED at 10 (sidebar callbacks live in TRIGGER_GLOBALS but not in handlers). schema_version=3 unchanged; WatcherMaxSchemaVersion=3 untouched; Path A held end-to-end. 297/297 vitest green (+14 tests: 12 showEvictionSidebar + 2 installTriggers cumulative-survival), npm run build TRIGGER_GLOBALS CI assertion passes with all 15 cumulative 05-01..05-04 entries. The fake-guildie E2E smoke + REQUIREMENTS.md DOC-02 mark-complete is owned by 05-05.
 
 **05-03 outcomes:** SEARCH-01..04 + TIP-04 live. `lib/searchIndex.ts` (runSearch + levenshtein/didYouMean + prewarmSearchCache + getRecentSearches/pushRecentSearch + enrichResults + listInventorySlots) is the pure-logic search engine; `triggers/showSearchSidebar.ts` is the 300px theme-aware HtmlService sidebar (Option A — inline SIDEBAR_BODY String.raw constant, no companion .html file). CacheService key namespace `squirebot:search:*` — per-`inv:Char` 60s-TTL cache + recent-3 MRU + items_master/pigparse join caches. Auto-collapse groups with >5 chars (D-07) caps DOM at the high-cardinality query (single-letter-typo) edge case. Hand-rolled Wagner-Fischer Levenshtein (≤2 distance, ≤3 cap) on the no-match fallback. `onChange` + `installTriggers` best-effort pre-warm (try/catch envelope — throws do NOT propagate). SQUIREBOT_HANDLERS count UNCHANGED at 10 (no new time-driven trigger). SEARCH-03 PARTIAL via Path 2 (cache-freshness tooltip on Search button + cross-reference to existing view/bank Last Synced columns; per-row staleness intentionally NOT shown per user direction). schema_version=3 unchanged; WatcherMaxSchemaVersion=3 untouched; Path A held end-to-end. 283/283 vitest green (+37 tests: 27 searchIndex + 8 showSearchSidebar + 2 onChange), npm run build TRIGGER_GLOBALS CI assertion passes. test-helpers.ts upgrades (Map-backed TTL CacheService + fluent HtmlService builder + showSidebar capture) are forward-compatible scaffolding for any future Apps Script work needing those mocks.
 

@@ -42,6 +42,41 @@
 !define ABOUTURL   "https://github.com/boejowen/SquireBot"
 !define REGPATH_UNINSTSUBKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}"
 
+!include "WordFunc.nsh"  ; for ${VersionCompare} used by the INST-06 pre-install shim
+
+; StrContains: pop NEEDLE, pop HAYSTACK, push "" if not found OR the
+; matching substring if found. Inlined (vs. !include StrFunc.nsh) to
+; avoid adding another include dependency. Used by the INST-06
+; pre-install shim's poll loop to check whether tasklist output
+; mentions squirebot.exe.
+Function StrContains
+  Exch $R1 ; needle
+  Exch
+  Exch $R2 ; haystack
+  Push $R3 ; counter
+  Push $R4 ; substring
+  Push $R5 ; needle length
+  StrLen $R5 $R1
+  StrCpy $R3 0
+  StrContainsLoop:
+    StrCpy $R4 $R2 $R5 $R3
+    StrCmp $R4 $R1 StrContainsFound
+    StrCmp $R4 "" StrContainsNotFound
+    IntOp $R3 $R3 + 1
+    Goto StrContainsLoop
+  StrContainsFound:
+    StrCpy $R1 $R4
+    Goto StrContainsDone
+  StrContainsNotFound:
+    StrCpy $R1 ""
+  StrContainsDone:
+    Pop $R5
+    Pop $R4
+    Pop $R3
+    Pop $R2
+    Exch $R1
+FunctionEnd
+
 ; --- THE critical directive: no UAC. ---
 ; Pitfall #7 enforcement (RESEARCH.md §6.2): explicit `user` overrides the
 ; filename heuristic that would otherwise auto-request elevation.
@@ -75,6 +110,70 @@ UninstPage uninstConfirm
 UninstPage instfiles
 
 Section "Install"
+    ; -- INST-06 (overwrite-running shim) --
+    ; Phase 6: re-running the installer over a running watcher must NOT
+    ; require the user to right-click-Quit the tray first. We try a
+    ; graceful --quit (Plan 06-02 added the CLI handler), poll for exit
+    ; up to 10s, then fall back to taskkill /F.
+    ;
+    ; Version gate (D-02): the v1.0.0 binary does not recognize --quit
+    ; and would spawn a DUPLICATE tray on the unknown flag. So for any
+    ; prior install reporting DisplayVersion < "1.0.1" (or no prior
+    ; install), we skip --quit entirely and go straight to taskkill /F.
+
+    ; Read prior DisplayVersion from HKCU uninstaller entry. Missing
+    ; value -> $0 is empty string -> VersionCompare returns "2" (less
+    ; than 1.0.1) -> skips --quit. Same code path as fresh install.
+    ReadRegStr $0 HKCU "${REGPATH_UNINSTSUBKEY}" "DisplayVersion"
+    ${VersionCompare} "$0" "1.0.1" $1
+    ; $1 == 0 : equal      (>= 1.0.1, run --quit)
+    ; $1 == 1 : $0 > 1.0.1 (>= 1.0.1, run --quit)
+    ; $1 == 2 : $0 < 1.0.1 or empty (skip --quit, go straight to taskkill /F)
+    StrCmp $1 "2" SkipQuitSignal
+
+    ; --quit graceful-signal path. Guard with IfFileExists so we never
+    ; ExecWait against a missing binary (would surface a confusing
+    ; "command not found" in the install log).
+    IfFileExists "$INSTDIR\${EXE_NAME}" RunQuitSignal SkipQuitSignal
+
+    RunQuitSignal:
+        ; Fire-and-forget per D-01: the binary signals the named event
+        ; and exits 0 within ~1s regardless of whether a listener was
+        ; active. The watcher's listener (Plan 06-02) funnels through
+        ; cancel() + systray.Quit().
+        ExecWait '"$INSTDIR\${EXE_NAME}" --quit'
+
+        ; Poll for process exit. Up to 10 seconds total (40 iterations
+        ; * 250ms). We use `tasklist /FI ... /NH` via nsExec::Exec (no
+        ; console flash) and parse its output for the EXE name. nsExec
+        ; is built-in (bundled with NSIS) so this does NOT violate D-05.
+        ; tasklist exit code is 0 in both "found" and "not found" cases,
+        ; so we rely on output parsing rather than exit code.
+        StrCpy $2 0  ; iteration counter
+        PollLoop:
+            IntCmp $2 40 PollTimedOut PollContinue PollTimedOut
+            PollContinue:
+                Sleep 250
+                nsExec::Exec 'tasklist /FI "IMAGENAME eq ${EXE_NAME}" /NH'
+                Pop $3  ; exit code (ignored)
+                Pop $4  ; stdout+stderr
+                Push $4
+                Push "${EXE_NAME}"
+                Call StrContains
+                Pop $5
+                StrCmp $5 "" PollDone  ; EXE name not in tasklist output -> process gone
+                IntOp $2 $2 + 1
+                Goto PollLoop
+        PollTimedOut:
+        PollDone:
+    SkipQuitSignal:
+
+    ; Always: hard-kill fallback. No-op if the process is already gone
+    ; (taskkill returns 128). Copies the exact syntax from the
+    ; uninstaller (squirebot.nsi:136) for consistency.
+    ExecWait 'taskkill /IM "${EXE_NAME}" /F'
+    ; -- end INST-06 pre-install shim --
+
     SetOutPath "$INSTDIR"
 
     ; Payload: the watcher binary built upstream by `go build` and the

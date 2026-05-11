@@ -18,6 +18,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/auth"
 	"github.com/boejowen/SquireBot/internal/config"
 	"github.com/boejowen/SquireBot/internal/logging"
+	"github.com/boejowen/SquireBot/internal/system"
 	"github.com/boejowen/SquireBot/internal/tray"
 	"github.com/boejowen/SquireBot/internal/update"
 )
@@ -50,6 +51,27 @@ func main() {
 			os.Exit(0)
 		}
 		fmt.Fprintf(os.Stderr, "wincred entry removed for %s\n", cfg.GoogleEmail)
+		os.Exit(0)
+	}
+
+	// Plan 06 (INST-06): --quit. Invoked by the NSIS pre-install shim to
+	// gracefully stop a running watcher before file overwrite. Opens the
+	// Local\SquireBot-Shutdown named event and signals it; the running
+	// instance's listener goroutine observes the signal and unwinds
+	// through cancel() + systray.Quit(). This invocation exits 0 always
+	// — a signal with no listener is a benign no-op per D-01, and NSIS
+	// falls back to taskkill /F on timeout regardless of any error here.
+	//
+	// Runs FIRST (before update.Apply) — auto-update has no business
+	// firing during a --quit signal invocation. Logging is not yet set
+	// up; use stderr for all output (matches --uninstall-wipe-credentials
+	// and update.Apply's stderr-only contract).
+	if len(os.Args) >= 2 && os.Args[1] == "--quit" {
+		if err := system.SignalShutdown(); err != nil {
+			fmt.Fprintf(os.Stderr, "shutdown signal failed: %v\n", err)
+			os.Exit(0)
+		}
+		fmt.Fprintln(os.Stderr, "shutdown signal sent")
 		os.Exit(0)
 	}
 

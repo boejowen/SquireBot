@@ -2,20 +2,20 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-5-in-progress
-last_updated: "2026-05-11T05:24:00Z"
+status: phase-5-code-complete
+last_updated: "2026-05-11T05:35:00Z"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 31
-  completed_plans: 30
-  percent: 97
+  completed_plans: 31
+  percent: 100
 ---
 
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-05-11 (Phase 5 plan 05-04 SHIPPED — eviction sidebar + DOC-02 runbook live; 30/31 plans complete)
+**Last updated:** 2026-05-11 (Phase 5 plan 05-05 Task 1 CODE-COMPLETE — Jekyll Pages site source + README D-12 shrink landed; Tasks 2 + 3 PENDING USER ACTION; Phase 5 SHIP gate is user-pending)
 
 ## Project Reference
 
@@ -31,7 +31,7 @@ Phase: 1 (End-to-End Thin Slice) — ✅ SHIPPED (v0.1.0)
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — ✅ SHIPPED (v0.3.0)
 Phase: 4 (Differentiator Features) — ✅ SHIPPED (v0.4.0 — 2026-05-11)
-Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (4/5 plans complete: 05-01 + 05-02 + 05-03 + 05-04 SHIPPED 2026-05-11)
+Phase: 5 (Search + Onboarding + Privacy Polish) — 🟡 CODE-COMPLETE / SHIP-PENDING (5/5 plans landed Task-1-wise: 05-01 + 05-02 + 05-03 + 05-04 + 05-05 Task 1 all shipped 2026-05-11; 05-05 Tasks 2 + 3 are USER ACTION REQUIRED handoffs — asset capture + Pages enable + DOC-02 fake-guildie smoke + distribution report + user ship authorization)
 
 - **Phase:** 4 — Differentiator Features ✓ SHIPPED as v0.4.0
 - **Plan:** All 4 plans (04-01..04) landed; v0.4.0 tag pushed; live smoke PASS
@@ -48,8 +48,8 @@ Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (4/5 plans 
   **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
 
   **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
-- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-05-PLAN.md` — final plan in the sequential 05-01 → 05-05 execution chain (05-01 + 05-02 + 05-03 + 05-04 shipped 2026-05-11).
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 30/31 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5: 05-01 + 05-02 + 05-03 + 05-04 shipped, 05-05 pending)
+- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-05-SUMMARY.md` — Phase 5 Task 1 complete; USER ACTION REQUIRED for Tasks 2 + 3 (asset capture + Pages enable + fake-guildie smoke + distribution report + ship authorization). See SUMMARY's "What's deferred to USER ACTION" section for step-by-step checklists.
+- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 31/31 plans code-complete (Phases 1+2+3+4 SHIPPED; Phase 5 all 5 plans' code landed; Phase 5 SHIP gate is user-pending pending Task 2 + Task 3 user actions)
 
 ### Phase 5 plan execution log
 
@@ -59,6 +59,9 @@ Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (4/5 plans 
 | 05-02 | Archive lib + weeklyStaleCharArchive + weeklyEvictionArchive | ~7min | 3 | 32f8cfa, 434adf6, ab10732, 4c3b339, 2530de3 | 2026-05-11 |
 | 05-03 | Cross-character search sidebar (SEARCH-01..04 + TIP-04) | ~14min | 3 | bd346c4, 1733264, bdd6774 | 2026-05-11 |
 | 05-04 | Eviction sidebar + DOC-02 runbook | ~6min | 2 | f213bdb, 2e39b3e, 658b4a6 | 2026-05-11 |
+| 05-05 | Jekyll Pages site + README shrink + distribution handoff | ~12min | 1 of 3 (Tasks 2 + 3 USER ACTION REQUIRED) | df8c2fd | 2026-05-11 (Task 1 only) |
+
+**05-05 outcomes:** Task 1 (Pages site source + README D-12 shrink) CODE-COMPLETE. `docs/_config.yml` (Cayman remote_theme v0.2.0), `docs/index.md` (1-paragraph landing), `docs/install.md` (5-step chronological walkthrough), `docs/troubleshooting.md` (8 symptom-keyed H2 sections incl. installer-upgrade workaround per CONTEXT scope_notes), `docs/dev.md` (flat link list + Phase 1..5 SUMMARY index + screenshot-redaction note), `docs/assets/.gitkeep` (placeholder). README shrunk 117 → 11 lines per D-12 (target ≤30). REQUIREMENTS.md SEARCH-03 row updated to ✓ Complete via Path 2 + footnote added (LOCAL ONLY — file is .gitignored). 1 commit (df8c2fd). **Tasks 2 + 3 are USER ACTION REQUIRED:** Task 2 = capture 6 PNG screenshots + record ≤5MB annotated SmartScreen GIF + enable GitHub Pages on the repo settings (source=main, folder=/docs); Task 3 = DOC-02 fake-guildie E2E smoke on dev workbook + produce `docs/phase5-distribution.md` heartbeat-freshness report + user authorizes Phase 5 SHIPPED. DOC-01, DOC-02, DOC-03 status remain PENDING-USER-ACTION; REQUIREMENTS.md rows MUST NOT be marked Complete until the user lands the assets, runs the smoke, and signals `ship: phase-5-shipped`. schema_version=3 unchanged; WatcherMaxSchemaVersion=3 untouched; Path A held across all 5 Phase-5 plans. Phase 5 status: `phase-5-code-complete` (intermediate state pending Task 2 + 3 + ship signal → `phase-5-shipped`).
 
 **05-04 outcomes:** DOC-02 sidebar code + runbook live. `triggers/showEvictionSidebar.ts` (1 opener + 3 google.script.run callbacks: `getEvictionEmails`, `previewEviction`, `commitEviction`) — 300px theme-aware HtmlService sidebar at `SquireBot → Evict Guildie…` (between `Search…` and `Set Theme…`). Lock-guarded `commitEviction` cascades `is_removed=TRUE` across an `owner_email`'s `_char_owner` rows and appends an `{at, email, initiated_by, grace_until, chars, reason:'evicted'}` envelope to `_meta.eviction_log` — consumed by 05-02's `weeklyEvictionArchive` after the 30-day grace. Idempotent (only flips FALSE→TRUE; already-removed chars are no-op). Defensive: `Session.getEffectiveUser()` wrapped in try/catch with `'unknown'` fallback (Assumption A5); JSON.parse on prior log wrapped in try/catch (T-05-04-07 mitigation). Option A: inline `SIDEBAR_BODY` String.raw template, no companion .html file (consistent with 05-03). XSS-defended via inline `escapeHtml` (T-05-04-01..02). `docs/eviction-runbook.md` (DOC-02, 4.6KB, 5 sections — lifecycle, un-evict, post-archive recovery, edge cases, permissions note). SQUIREBOT_HANDLERS count UNCHANGED at 10 (sidebar callbacks live in TRIGGER_GLOBALS but not in handlers). schema_version=3 unchanged; WatcherMaxSchemaVersion=3 untouched; Path A held end-to-end. 297/297 vitest green (+14 tests: 12 showEvictionSidebar + 2 installTriggers cumulative-survival), npm run build TRIGGER_GLOBALS CI assertion passes with all 15 cumulative 05-01..05-04 entries. The fake-guildie E2E smoke + REQUIREMENTS.md DOC-02 mark-complete is owned by 05-05.
 
@@ -168,13 +171,29 @@ the GitHub Actions release stub.
 
 ### Next Action
 
-Phase 1 is complete. The Day-10 token-survival check fires automatically on 2026-05-13 — leave it alone until then unless you want to validate sooner.
+**Phase 5 code-complete (2026-05-11). USER ACTION REQUIRED to ship.** Phases 1-4 SHIPPED; Phase 5 plans 05-01..05-05 are all code-complete to the extent Claude can execute them. The remaining work for milestone v1.0 is the two USER ACTION REQUIRED handoffs in `.planning/phases/05-search-onboarding-privacy-polish/05-05-SUMMARY.md`:
 
-When ready for Phase 2:
+1. **Task 2 — Asset capture + Pages enable** (per 05-05-SUMMARY "Task 2" section):
+   - Capture 6 PNG screenshots (installer dialog, SmartScreen × 2, OAuth consent, folder picker, tray-red) → `docs/assets/0[1-5]-*.png` + `tray-red.png` (each ≤200KB; PII-redacted).
+   - Record annotated SmartScreen GIF (≤5MB, ≤720p, ≤15fps) → `docs/assets/smartscreen.gif`.
+   - Enable GitHub Pages: Settings → Pages → Deploy from a branch → main + /docs → Save. Verify `https://boejowen.github.io/SquireBot/` renders Cayman-themed.
+   - Commit assets.
 
-1. `/gsd-research-phase 2` — code-signing certificate decision (EV vs OV vs unsigned-with-walkthrough). This research output also retires the deferred SmartScreen UX validation from Phase 1.
-2. `/gsd-plan-phase 2` after research lands.
-3. Continue per roadmap.
+2. **Task 3 — DOC-02 fake-guildie smoke + distribution report + ship authorization** (per 05-05-SUMMARY "Task 3" section):
+   - Pre-flight asset audit (node -e block) must exit 0.
+   - Run the 7-step fake-guildie smoke on the `RiverFAIL VanFRAUD` dev workbook (seed → preview → evict → simulate grace expiry → run `weeklyEvictionArchive` → verify archive + log mutation → cleanup).
+   - Run the diagnostic probe (`_phase5DistributionProbe` from SUMMARY) on `_char_owner`; capture `distinctActiveEmails.size` + `distinctRecentEmails.size`.
+   - Write `docs/phase5-distribution.md` per the template (TL;DR + per-email heartbeat table + notable-gaps narrative).
+   - User authorizes ship via reply: `ship: phase-5-shipped` / `ship: hold, reason: <reason>` / `ship: smoke-regression-investigate` (only valid if count ≤ 1).
+
+**On `ship: phase-5-shipped`:**
+- Bump STATE.md status to `phase-5-shipped`, completed_phases=5, percent=100.
+- Tick ROADMAP.md Phase 5 box + 05-05 row.
+- Mark REQUIREMENTS.md DOC-01, DOC-02, DOC-03 as ✓ Complete (Plan 05-05).
+- Tag `phase5-complete` + `v1.0.0` and push.
+- Trigger milestone retrospective + reconcile the "56 vs 69 v1 requirements" roadmap-audit TODO from CLAUDE.md.
+
+**Independent of Phase 5:** Day-10 token-survival check fires automatically 2026-05-13T15:00:00Z (routine `trig_01Uog2muQ22CBsjZfqPiSH9r`).
 
 ### Files of Record
 

@@ -38,6 +38,8 @@ const SQUIREBOT_HANDLERS = [
   'refreshWikiGearTier',
   'monitorCellCount',
   'weeklySchemaHealthcheck',  // NEW 05-01
+  'weeklyStaleCharArchive',   // NEW 05-02 (VIEW-05)
+  'weeklyEvictionArchive',    // NEW 05-02 (DOC-02 back-end)
 ];
 
 export function installTriggers(): void {
@@ -95,6 +97,25 @@ export function installTriggers(): void {
     .atHour(3)
     .inTimezone('America/Los_Angeles')
     .create();
+  // Phase 5 plan 05-02: archive triggers run later in the morning so
+  // any state written by the 03:00 PT healthcheck has settled. Both
+  // archive triggers share the 06:00 PT hour window; Apps Script
+  // schedules within the hour. The two are independent (stale-archive
+  // reads _char_owner.last_seen; eviction-archive reads
+  // _meta.eviction_log) and the document lock inside moveCharToArchive
+  // serializes the actual writes, so back-to-back firing is safe.
+  ScriptApp.newTrigger('weeklyStaleCharArchive')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.SUNDAY)
+    .atHour(6)
+    .inTimezone('America/Los_Angeles')
+    .create();
+  ScriptApp.newTrigger('weeklyEvictionArchive')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.SUNDAY)
+    .atHour(6)
+    .inTimezone('America/Los_Angeles')
+    .create();
 
   // Step 3: defensive re-apply of bank-coin cell protection. Idempotent
   // — protectBankCoinCells skips already-protected cells by description
@@ -107,11 +128,11 @@ export function installTriggers(): void {
   // currently visible. Idempotent via isSheetHidden() short-circuit.
   hideAllSystemTabs();
 
-  log('info', 'installTriggers', { deleted, created: 8 });
+  log('info', 'installTriggers', { deleted, created: 10 });
 
   SpreadsheetApp.getUi().alert(
     [
-      'SquireBot triggers installed (8 total).',
+      'SquireBot triggers installed (10 total).',
       '',
       '• onChange: rebuilds view + bank + spell_check + gear_check (debounced 10s)',
       '• 1h backstop: catches missed onChange events',
@@ -121,6 +142,8 @@ export function installTriggers(): void {
       '• Sunday 04:00 PT: refreshWikiItems',
       '• Sunday 04:00 PT: refreshWikiSpells',
       '• Sunday 05:00 PT: refreshWikiGearTier',
+      '• Sunday 06:00 PT: weeklyStaleCharArchive (>90d inactive → _archive)',
+      '• Sunday 06:00 PT: weeklyEvictionArchive (eviction grace → _archive)',
       '',
       'Bank coin + bank-toon-name cells in _meta are now protected, and',
       'all system (_-prefixed) tabs are hidden. Use SquireBot → Set Bank',

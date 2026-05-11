@@ -53,6 +53,10 @@ const TRIGGER_GLOBALS = [
   'weeklySchemaHealthcheck',
   'protectBankToonName',
   'hideAllSystemTabs',
+  // Phase 5 plan 05-02:
+  'weeklyStaleCharArchive',
+  'weeklyEvictionArchive',
+  'moveCharToArchive',
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

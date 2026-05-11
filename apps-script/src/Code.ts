@@ -19,6 +19,9 @@ import { refreshWikiSpells } from './triggers/refreshWikiSpells';
 import { refreshWikiGearTier } from './triggers/refreshWikiGearTier';
 import { monitorCellCount } from './triggers/monitorCellCount';
 import { weeklySchemaHealthcheck } from './triggers/weeklySchemaHealthcheck';
+import { weeklyStaleCharArchive } from './triggers/weeklyStaleCharArchive';
+import { weeklyEvictionArchive } from './triggers/weeklyEvictionArchive';
+import { moveCharToArchive } from './lib/archive';
 import { onChange } from './triggers/onChange';
 import { onOpen, showThemePickerModal } from './triggers/onOpen';
 import { installTriggers } from './triggers/installTriggers';
@@ -43,6 +46,7 @@ export {
   protectBankToonName, hideAllSystemTabs,
   refreshPigparse, refreshWikiItems, refreshWikiSpells, refreshWikiGearTier,
   monitorCellCount, weeklySchemaHealthcheck,
+  weeklyStaleCharArchive, weeklyEvictionArchive, moveCharToArchive,
   onChange, onOpen, showThemePickerModal,
   showCharInfoSidebar, getCharsForForm, saveCharInfo,
   showBankCoinSidebar, getBankCoinForForm, saveBankCoin,

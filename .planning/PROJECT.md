@@ -14,7 +14,22 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **What's working end-to-end (verified):** Installer → OAuth → watcher → inv/spell landing tabs → daily PigParse + weekly wiki enrichment → consolidated `view` + `gear_check` + `spell_check` + `bank` tabs with cell-note tooltips and conditional Last-Synced formatting → cross-character search sidebar → lock-guarded eviction workflow with 30-day grace → text-only Pages onboarding site. All cumulative tests pass (297/297 vitest, full Go test suite). Schema at `_meta.schema_version = 3`; watcher's `WatcherMaxSchemaVersion = 3`; ErrSchemaTooNew startup gate verified.
 
-**Next milestone:** undefined. Either v1.0.1 (patch — installer overwrite-running shim, sidebar test setup, SignPath OSS resolution) or v1.1 (feature — TBD). Start via `/gsd-new-milestone`.
+**Current milestone: v1.0.1 Installer + Permissions Hardening** (started 2026-05-11) — retire v1.0 carry-over debt: harden installer upgrade path, enforce officer-only eviction by code, pay down sidebar test + documentation debt. SignPath OSS approval (999.9) tracked separately as a hotfix when the Foundation review lands. See `## Current Milestone` below for scope.
+
+## Current Milestone: v1.0.1 Installer + Permissions Hardening
+
+**Goal:** Retire v1.0 carry-over debt: harden the installer upgrade path, enforce officer-only eviction by code, and pay down sidebar test + documentation debt — without changing any user-facing data flow.
+
+**Target features:**
+- Installer overwrite-running shim (NSIS detects running watcher, gracefully stops it, then upgrades — replaces the manual workaround in `docs/troubleshooting.md`)
+- `_meta.guild_admins` allowlist (Evict Guildie sidebar enforces officer-only by code; bootstrap + admin-management UX scoped during phase)
+- Sidebar inline-JS unit tests (JSDOM in vitest; cover search + eviction + bank-coin + char-info sidebar JS currently shipping untested)
+- PropertiesService recent-query persistence (migrate Search recent-3 MRU from CacheService 25-min TTL → durable PropertiesService)
+- SUMMARY.md backfill for the 8 Phase 3 + Phase 4 plans missing summaries
+
+**Out of scope this milestone (explicitly deferred):**
+- SignPath Foundation OSS approval (999.9) — third-party timeline; lands as a hotfix when approved
+- Bank-coin permission lock (999.1) — eviction enforcement was prioritized; bank-coin remains social-convention-gated for this cycle
 
 ## Requirements
 
@@ -44,9 +59,15 @@ See `milestones/v1.0-REQUIREMENTS.md` for the full 69-REQ-ID reconciliation.
 
 ### Active
 
-<!-- No active milestone scope yet. Define via /gsd-new-milestone. -->
+<!-- v1.0.1 Installer + Permissions Hardening scope. See .planning/REQUIREMENTS.md for full REQ-ID list once defined. -->
 
-(None yet — milestone v1.0 complete; v1.1+ not yet planned.)
+**v1.0.1 — Installer + Permissions Hardening (in progress)**
+
+- [ ] Installer overwrite-running shim (NSIS) — retires manual stop-process workaround
+- [ ] `_meta.guild_admins` allowlist — code-enforced officer-only eviction
+- [ ] Sidebar inline-JS unit tests via JSDOM
+- [ ] PropertiesService recent-query persistence (Search sidebar)
+- [ ] SUMMARY.md backfill for Phase 3 + 4 (documentation debt)
 
 ### v1.0 Partials / Waivers (user-authorized; v1.0.1 candidates)
 
@@ -143,4 +164,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-11 after v1.0.0 milestone close.*
+*Last updated: 2026-05-11 — v1.0.1 Installer + Permissions Hardening started.*

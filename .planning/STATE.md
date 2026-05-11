@@ -1,15 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: milestone-v1.0-complete
-last_updated: "2026-05-11T16:30:00Z"
+milestone: v1.0.1
+milestone_name: Installer + Permissions Hardening
+status: planning
+last_updated: "2026-05-11T15:21:52.481Z"
+last_activity: 2026-05-11
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 31
-  completed_plans: 31
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State: SquireBot
@@ -29,35 +30,17 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close)
 
 ## Current Position
 
-Phase: 1 (End-to-End Thin Slice) — ✅ SHIPPED (v0.1.0)
-Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
-Phase: 3 (Apps Script Enrichment Foundation) — ✅ SHIPPED (v0.3.0)
-Phase: 4 (Differentiator Features) — ✅ SHIPPED (v0.4.0 — 2026-05-11)
-Phase: 5 (Search + Onboarding + Privacy Polish) — ✅ SHIPPED as v1.0.0 (2026-05-11; milestone v1.0 COMPLETE)
-
-- **Phase:** 4 — Differentiator Features ✓ SHIPPED as v0.4.0
-- **Plan:** All 4 plans (04-01..04) landed; v0.4.0 tag pushed; live smoke PASS
-- **Node:** — (none yet)
-- **Status:** v0.4.0 promoted from v0.4.0-rc1 on 2026-05-11T02:36:11Z (CI run 25647367282 success, 2m). Watcher binary unchanged from rc1 (Version string differs: "0.4.0" vs "0.4.0-rc1" → different SHA but same source). Apps-script HEAD at commit 9319c6b is what's deployed via clasp.
-
-  **Live smoke test on dev box (2026-05-10) — PASS for all 6 steps:** installer + tray green, version=0.4.0-rc1 confirmed in heartbeat log, ErrSchemaTooNew startup gate fires correctly with clear user-facing message, migrateToV3 runs cleanly + Install Triggers reports 7 triggers + bank-coin protect, Range.protect warning prompt fires on direct edit, gear_check populates with proper OK/MISSING/OTHER status, spell_check populates with 359 rows across all 11 caster classes (1,562 spells in _wiki_spells).
-
-  **3 fix-pack patches landed during smoke (apps-script only — no rc2 needed):**
-    - 3c5ea6d: bank coin protection — flip setWarningOnly(true) so script owner sees the prompt (was strict mode → owner is default editor → no UX); auto-call protectBankCoinCells from saveBankCoin so first-save-creates-rows immediately gets protection (closed lazy-creation gap).
-    - b9482a6: missing on-demand menu items for refreshWikiSpells/refreshWikiGearTier/monitorCellCount (plan 04-04 added them to installTriggers but missed onOpen menu).
-    - 9319c6b: wiki-spell parser handles all 4 P1999 template variants — {{SpellRow}} (CLR/PAL/NEC/MAG/ENC, 5 classes), {{RadSpellRow}} (WIZ/SHM/RNG/SHD, 4 classes), {{RadSpellRow2}} (DRU only, 1 class), {{Template:SongRow}} with inline |level=N (BRD only, 1 class). Live sanity-check confirmed all 11 caster classes parse: 1,562 expected spells across the workbook (vs 784 broken). Pre-fix _wiki_spells only had 5 classes; post-fix has 11.
-
-  **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
-
-  **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
-- **Resume file:** none — milestone v1.0 SHIPPED. Next work is v1.0.1 / v2 backlog (deferred items listed in 05-05-SUMMARY.md §Deferred backlog).
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 31/31 plans complete (all 5 phases SHIPPED; milestone v1.0 COMPLETE)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-11 — Milestone v1.0.1 started
 
 ### Phase 5 SHIPPED (2026-05-11)
 
 **Ship signal:** `ship: phase-5-shipped, distinct-recent: 1, distinct-active: 1` (user, 2026-05-11)
 
 **Sequence of ship-day events:**
+
 1. 05-01 → 05-04 plans executed by gsd-executor sequential waves (commits c85586b → 6e0bce0). 297/297 vitest green at wave-4 boundary; trigger count 7→10; Path A (schema_version=3) held end-to-end.
 2. 05-05 Task 1 (Pages site source + README D-12 shrink) shipped via commit df8c2fd.
 3. Scope reduction recorded 2026-05-11 mid-execution: instructional PNGs + SmartScreen GIF dropped from D-10; Pages site is text-only. Commit 482f19d stripped image refs from install.md + troubleshooting.md + dev.md, removed docs/assets/.gitkeep, updated 05-CONTEXT.md §Scope Changes + 05-05-PLAN.md Task 2 (Steps A/B/D struck) + 05-05-SUMMARY.md.
@@ -210,6 +193,7 @@ the GitHub Actions release stub.
    - User authorizes ship via reply: `ship: phase-5-shipped` / `ship: hold, reason: <reason>` / `ship: smoke-regression-investigate` (only valid if count ≤ 1).
 
 **On `ship: phase-5-shipped`:**
+
 - Bump STATE.md status to `phase-5-shipped`, completed_phases=5, percent=100.
 - Tick ROADMAP.md Phase 5 box + 05-05 row.
 - Mark REQUIREMENTS.md DOC-01, DOC-02, DOC-03 as ✓ Complete (Plan 05-05).

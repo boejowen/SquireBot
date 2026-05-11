@@ -53,17 +53,19 @@
 
 | REQ-ID | Phase | Plan(s) |
 |--------|-------|---------|
-| INST-06 | TBD | TBD |
-| ADMIN-01 | TBD | TBD |
-| ADMIN-02 | TBD | TBD |
-| ADMIN-03 | TBD | TBD |
-| TEST-01 | TBD | TBD |
-| TEST-02 | TBD | TBD |
-| SEARCH-05 | TBD | TBD |
-| DOC-04 | TBD | TBD |
+| INST-06 | Phase 6 | TBD |
+| ADMIN-01 | Phase 7 | TBD |
+| ADMIN-02 | Phase 7 | TBD |
+| ADMIN-03 | Phase 7 | TBD |
+| TEST-01 | Phase 8 | TBD |
+| TEST-02 | Phase 8 | TBD |
+| SEARCH-05 | Phase 8 | TBD |
+| DOC-04 | Phase 8 | TBD |
 
-> Traceability column is filled in by the roadmapper after phase mapping.
+> Traceability column filled by roadmapper 2026-05-11. Plan column will be filled by `/gsd-plan-phase` for each phase.
+
+**Coverage check (2026-05-11):** 8/8 requirements mapped to exactly one phase. No orphans. No duplicates.
 
 ---
 
-*Defined: 2026-05-11 at v1.0.1 milestone start. 8 requirements across 5 carry-over features.*
+*Defined: 2026-05-11 at v1.0.1 milestone start. 8 requirements across 5 carry-over features. Phase mapping locked 2026-05-11.*

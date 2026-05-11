@@ -27,7 +27,7 @@
 // the script editor's Run dropdown. Re-running is safe.
 
 import { log } from '../lib/log';
-import { protectBankCoinCells } from '../lib/migrations';
+import { protectBankCoinCells, protectBankToonName, hideAllSystemTabs } from '../lib/migrations';
 
 const SQUIREBOT_HANDLERS = [
   'onChange',
@@ -37,6 +37,7 @@ const SQUIREBOT_HANDLERS = [
   'refreshWikiSpells',
   'refreshWikiGearTier',
   'monitorCellCount',
+  'weeklySchemaHealthcheck',  // NEW 05-01
 ];
 
 export function installTriggers(): void {
@@ -84,28 +85,46 @@ export function installTriggers(): void {
     .atHour(3)
     .inTimezone('America/Los_Angeles')
     .create();
+  // Phase 5 plan 05-01: schema healthcheck rides the same Sun-03:00 PT
+  // window as monitorCellCount. Both touch independent KV rows in
+  // _meta/_status so no contention; Apps Script may fire them back-to-back
+  // inside the same hour window.
+  ScriptApp.newTrigger('weeklySchemaHealthcheck')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.SUNDAY)
+    .atHour(3)
+    .inTimezone('America/Los_Angeles')
+    .create();
 
   // Step 3: defensive re-apply of bank-coin cell protection. Idempotent
   // — protectBankCoinCells skips already-protected cells by description
   // match. Also handles workbooks migrated before plan 04-04 shipped.
   protectBankCoinCells();
+  // Phase 5 plan 05-01: same idempotent shape, single-cell protection on
+  // _meta.bank_toon_name. Skip-if-row-missing — lazy-created by saveBankCoin.
+  protectBankToonName();
+  // Phase 5 plan 05-01: every install hides any _-prefixed tab that is
+  // currently visible. Idempotent via isSheetHidden() short-circuit.
+  hideAllSystemTabs();
 
-  log('info', 'installTriggers', { deleted, created: 7 });
+  log('info', 'installTriggers', { deleted, created: 8 });
 
   SpreadsheetApp.getUi().alert(
     [
-      'SquireBot triggers installed (7 total).',
+      'SquireBot triggers installed (8 total).',
       '',
       '• onChange: rebuilds view + bank + spell_check + gear_check (debounced 10s)',
       '• 1h backstop: catches missed onChange events',
       '• Daily 03:00 PT: refreshPigparse',
       '• Sunday 03:00 PT: monitorCellCount (10M cell-cap watchdog)',
+      '• Sunday 03:00 PT: weeklySchemaHealthcheck (expected-tab watchdog)',
       '• Sunday 04:00 PT: refreshWikiItems',
       '• Sunday 04:00 PT: refreshWikiSpells',
       '• Sunday 05:00 PT: refreshWikiGearTier',
       '',
-      'Bank coin cells in _meta are now protected. Use SquireBot →',
-      'Set Bank Coin… to update them.',
+      'Bank coin + bank-toon-name cells in _meta are now protected, and',
+      'all system (_-prefixed) tabs are hidden. Use SquireBot → Set Bank',
+      'Coin… to update them.',
     ].join('\n'),
   );
 }

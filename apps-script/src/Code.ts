@@ -9,12 +9,16 @@
 // more.
 
 import { setTheme } from './lib/themes';
-import { migrateToV2, migrateToV3, protectBankCoinCells } from './lib/migrations';
+import {
+  migrateToV2, migrateToV3, protectBankCoinCells,
+  protectBankToonName, hideAllSystemTabs,
+} from './lib/migrations';
 import { refreshPigparse } from './triggers/refreshPigparse';
 import { refreshWikiItems } from './triggers/refreshWikiItems';
 import { refreshWikiSpells } from './triggers/refreshWikiSpells';
 import { refreshWikiGearTier } from './triggers/refreshWikiGearTier';
 import { monitorCellCount } from './triggers/monitorCellCount';
+import { weeklySchemaHealthcheck } from './triggers/weeklySchemaHealthcheck';
 import { onChange } from './triggers/onChange';
 import { onOpen, showThemePickerModal } from './triggers/onOpen';
 import { installTriggers } from './triggers/installTriggers';
@@ -36,8 +40,9 @@ import { buildGearCheck } from './tabs/buildGearCheck';
 export {
   setTheme,
   migrateToV2, migrateToV3, protectBankCoinCells,
+  protectBankToonName, hideAllSystemTabs,
   refreshPigparse, refreshWikiItems, refreshWikiSpells, refreshWikiGearTier,
-  monitorCellCount,
+  monitorCellCount, weeklySchemaHealthcheck,
   onChange, onOpen, showThemePickerModal,
   showCharInfoSidebar, getCharsForForm, saveCharInfo,
   showBankCoinSidebar, getBankCoinForForm, saveBankCoin,

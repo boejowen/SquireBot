@@ -49,6 +49,10 @@ const TRIGGER_GLOBALS = [
   'saveBankCoin',        // google.script.run callback from sidebar
   'monitorCellCount',
   'protectBankCoinCells',  // callable from script editor for retro re-apply
+  // Phase 5 plan 05-01:
+  'weeklySchemaHealthcheck',
+  'protectBankToonName',
+  'hideAllSystemTabs',
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

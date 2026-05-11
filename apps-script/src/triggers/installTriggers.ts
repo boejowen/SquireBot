@@ -28,6 +28,7 @@
 
 import { log } from '../lib/log';
 import { protectBankCoinCells, protectBankToonName, hideAllSystemTabs } from '../lib/migrations';
+import { prewarmSearchCache } from '../lib/searchIndex';
 
 const SQUIREBOT_HANDLERS = [
   'onChange',
@@ -127,6 +128,16 @@ export function installTriggers(): void {
   // Phase 5 plan 05-01: every install hides any _-prefixed tab that is
   // currently visible. Idempotent via isSheetHidden() short-circuit.
   hideAllSystemTabs();
+
+  // Phase 5 plan 05-03: warm the per-`inv:Char` search cache as the
+  // last install step so the first user search after install runs warm
+  // (~200ms) rather than cold (~3s). Best-effort — the search lib's 60s
+  // TTL is the real freshness contract; this is a latency optimization.
+  try {
+    prewarmSearchCache();
+  } catch (e) {
+    log('warn', 'installTriggers', { prewarmFailed: String(e) });
+  }
 
   log('info', 'installTriggers', { deleted, created: 10 });
 

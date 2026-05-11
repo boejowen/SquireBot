@@ -57,6 +57,12 @@ const TRIGGER_GLOBALS = [
   'weeklyStaleCharArchive',
   'weeklyEvictionArchive',
   'moveCharToArchive',
+  // Phase 5 plan 05-03:
+  'showSearchSidebar',
+  'getSearchInitialData',
+  'runSearch',
+  'pushRecentSearchCall',
+  'prewarmSearchCache',
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

@@ -35,6 +35,13 @@ import {
   getBankCoinForForm,
   saveBankCoin,
 } from './triggers/showBankCoinSidebar';
+import {
+  showSearchSidebar,
+  getSearchInitialData,
+  runSearch,
+  pushRecentSearchCall,
+} from './triggers/showSearchSidebar';
+import { prewarmSearchCache } from './lib/searchIndex';
 import { buildView } from './tabs/buildView';
 import { buildBank } from './tabs/buildBank';
 import { buildSpellCheck } from './tabs/buildSpellCheck';
@@ -50,6 +57,8 @@ export {
   onChange, onOpen, showThemePickerModal,
   showCharInfoSidebar, getCharsForForm, saveCharInfo,
   showBankCoinSidebar, getBankCoinForForm, saveBankCoin,
+  showSearchSidebar, getSearchInitialData, runSearch, pushRecentSearchCall,
+  prewarmSearchCache,
   installTriggers,
   buildView, buildBank, buildSpellCheck, buildGearCheck,
 };

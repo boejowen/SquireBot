@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: phase-5-in-progress
-last_updated: "2026-05-11T04:34:00Z"
+last_updated: "2026-05-11T04:52:00Z"
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 31
-  completed_plans: 27
-  percent: 87
+  completed_plans: 28
+  percent: 90
 ---
 
 # State: SquireBot
@@ -31,7 +31,7 @@ Phase: 1 (End-to-End Thin Slice) — ✅ SHIPPED (v0.1.0)
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — ✅ SHIPPED (v0.3.0)
 Phase: 4 (Differentiator Features) — ✅ SHIPPED (v0.4.0 — 2026-05-11)
-Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (1/5 plans complete: 05-01 SHIPPED 2026-05-11)
+Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (2/5 plans complete: 05-01 + 05-02 SHIPPED 2026-05-11)
 
 - **Phase:** 4 — Differentiator Features ✓ SHIPPED as v0.4.0
 - **Plan:** All 4 plans (04-01..04) landed; v0.4.0 tag pushed; live smoke PASS
@@ -48,16 +48,19 @@ Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (1/5 plans 
   **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
 
   **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
-- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-02-PLAN.md` — next plan in the sequential 05-01 → 05-05 execution chain (05-01 shipped 2026-05-11).
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 27/31 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5: 05-01 shipped, 05-02..05 pending)
+- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-03-PLAN.md` — next plan in the sequential 05-01 → 05-05 execution chain (05-01 + 05-02 shipped 2026-05-11).
+- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 28/31 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5: 05-01 + 05-02 shipped, 05-03..05 pending)
 
 ### Phase 5 plan execution log
 
 | Phase-Plan | Name | Duration | Tasks | Commits | Completed |
 |------------|------|----------|-------|---------|-----------|
 | 05-01 | Schema healthcheck + tab hide + bank-toon-name protect | ~20min | 3 | c85586b, ae57d61, a9562b6 | 2026-05-11 |
+| 05-02 | Archive lib + weeklyStaleCharArchive + weeklyEvictionArchive | ~7min | 3 | 32f8cfa, 434adf6, ab10732, 4c3b339, 2530de3 | 2026-05-11 |
 
 **05-01 outcomes:** OPS-06 (weekly Sun-03:00 PT tab-by-id verification) live; `_meta.expected_sheet_ids` is the new sheet-id source-of-truth (lazy-backfilled, resilient to user renames per Pitfall P7); `_meta.last_error` `kind='tab_missing'` envelope wired to the existing watcher heartbeat tray-red signal. `protectBankToonName` (warning-only Range.protect) + `hideAllSystemTabs` (idempotent `_`-prefixed sweep) wired into `installTriggers` (trigger count 7 → 8). schema_version=3 unchanged; WatcherMaxSchemaVersion=3 untouched; no watcher rebuild required. 229/229 vitest green, npm run build TRIGGER_GLOBALS CI assertion passes.
+
+**05-02 outcomes:** VIEW-05 + DOC-02 back-end live. `lib/archive.moveCharToArchive(charName, reason)` is the shared lock-guarded helper (LockService.getDocumentLock().tryLock(30000), Pitfall P6 mitigation: read `last_seen` INSIDE the lock). `weeklyStaleCharArchive` (Sun 06:00 PT) scans `_char_owner.last_seen` and archives every char older than 90 days; `weeklyEvictionArchive` (Sun 06:00 PT) consumes `_meta.eviction_log` entries with grace-expired entries atomically per-entry (failed entries retry next week; idempotency in `moveCharToArchive` prevents double-archive). New hidden `_archive` tab lazy-created with 7-col schema (archived_at, char_name, tab_type, row_count, uploaded_at, reason, snapshot_json). `_meta.archive_log` audit-trail KV row added (append-only JSON array). Trigger count 8 → 10. schema_version=3 unchanged; WatcherMaxSchemaVersion=3 untouched; Path A held end-to-end. 246/246 vitest green (+17 tests), npm run build TRIGGER_GLOBALS CI assertion passes. 05-04 (eviction sidebar) is the upcoming PRODUCER of `_meta.eviction_log` entries that this plan's archiver consumes after the 30-day grace.
 
 ### Phase 5 Planning Artifacts (2026-05-11)
 

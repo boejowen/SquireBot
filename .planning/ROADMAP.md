@@ -93,7 +93,7 @@
   5. README documents install flow, SmartScreen walkthrough (with screenshots/video link), OAuth flow, EQ folder picker, and the "tray turned red, what now?" recovery; onboarding screenshots and a short SmartScreen video are linked from the download page; all 12 guildies are installed and writing data.
 **Plans**: 5 plans
 - [x] 05-01-PLAN.md — System tab hide + bank_toon_name protect + weekly schema healthcheck (OPS-06) ✅ SHIPPED 2026-05-11 (3 commits c85586b, ae57d61, a9562b6; 229/229 tests green; trigger count 7→8; schema_version=3 unchanged)
-- [ ] 05-02-PLAN.md — Archive lib + weeklyStaleCharArchive + weeklyEvictionArchive cron (VIEW-05)
+- [x] 05-02-PLAN.md — Archive lib + weeklyStaleCharArchive + weeklyEvictionArchive cron (VIEW-05) ✅ SHIPPED 2026-05-11 (5 commits 32f8cfa, 434adf6, ab10732, 4c3b339, 2530de3; 246/246 tests green; trigger count 8→10; schema_version=3 unchanged; Path A held)
 - [ ] 05-03-PLAN.md — Cross-character search sidebar (SEARCH-01..04, TIP-04)
 - [ ] 05-04-PLAN.md — Eviction sidebar + DOC-02 runbook (DOC-02)
 - [ ] 05-05-PLAN.md — Jekyll Pages site + README shrink + 12-guildie rollout smoke (DOC-01, DOC-03)

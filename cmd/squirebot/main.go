@@ -166,6 +166,32 @@ func main() {
 	// Background goroutine: wizard (if needed) then watcher loop.
 	go app.RunApp(ctx, cfg, bc, trayCtl)
 
+	// Plan 06 (INST-06): named-event shutdown listener. Blocks on
+	// Local\SquireBot-Shutdown; on signal, funnels through the SAME path
+	// as the tray's Quit menu (cancel() + systray.Quit()). Idempotent —
+	// double-fire (tray Quit + installer --quit racing) is harmless
+	// because systray.Quit is internally idempotent and cancel() on an
+	// already-cancelled ctx is a no-op. Goroutine exits on either signal
+	// OR ctx.Done so it cannot leak when shutdown comes from another path.
+	//
+	// Per D-03: no drain coordination. In-flight batchUpdate calls
+	// observe ctx cancellation through the existing mutex-funneled
+	// sheet.Client retry envelope and abandon. WATCH-09 catch-up
+	// re-uploads any missed file changes on next launch.
+	go func() {
+		select {
+		case <-system.WaitForShutdown(ctx):
+			slog.Info("shutdown signal received — cancelling root context")
+			cancel()
+			systray.Quit()
+		case <-ctx.Done():
+			// Normal shutdown from another path (tray Quit, OS signal).
+			// WaitForShutdown's internal goroutine also observes ctx.Done
+			// and cleans up its event handle via defer.
+			return
+		}
+	}()
+
 	slog.Info("squirebot starting",
 		"version", Version,
 		"pid", os.Getpid(),

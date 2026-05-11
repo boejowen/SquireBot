@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
-status: planning
-last_updated: "2026-05-11T16:00:00.000Z"
+status: ready_to_execute
+last_updated: "2026-05-11T22:00:00.000Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 5
+  completed_plans: 1
+  percent: 20
 ---
 
 # State: SquireBot
@@ -31,10 +31,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: Not started (Phase 6 next)
-Plan: —
-Status: v1.0.1 roadmap landed; awaiting `/gsd-plan-phase 6`
-Last activity: 2026-05-11 — v1.0.1 ROADMAP.md written, 8/8 requirements mapped
+Phase: 6 — Installer Overwrite-Running Shim (in execution, 1/5 plans complete)
+Plan: 06-01 SHIPPED (commit a705f4e); 06-02 next (main.go wiring, Wave 2)
+Status: Wave 1 partial — Plan 06-01 (Go-side shutdown-signal package) shipped; Plan 06-04 (docs, Wave 1 parallel) still TODO
+Last activity: 2026-05-11 — Plan 06-01 executed; internal/system package + 5 tests green; signatures locked for Plan 06-02
 
 ### v1.0.1 Phase Plan (2026-05-11)
 
@@ -62,9 +62,9 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 |--------|-------|
 | Phases planned (v1.0.1) | 3 / 3 |
 | Phases complete (v1.0.1) | 0 / 3 |
-| Plans complete (v1.0.1) | 0 / 0 (no plans yet) |
+| Plans complete (v1.0.1) | 1 / 5 (Phase 6) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
-| Requirements complete (v1.0.1) | 0 / 8 |
+| Requirements complete (v1.0.1) | 0 / 8 (INST-06 partial — Go primitive shipped, wiring + NSIS + release pending) |
 | Active blockers | 0 |
 | Milestone v1.0 final | 69/69 effective requirements; 5/5 phases; 31/31 plans (archived) |
 
@@ -99,6 +99,8 @@ None. v1.0 shipped clean; v1.0.1 is planning-stage. Phase 6 is unblocked and rea
 
 ### Last Session Summary
 
+**2026-05-11 (Phase 6 Plan 01 executed):** Shipped INST-06 Go-side primitive — new `internal/system` package with paired build-tag files (`shutdown_signal_windows.go` + `shutdown_signal_other.go` + `doc.go` + `shutdown_signal_windows_test.go`). `SignalShutdown()` opens-or-creates a `Local\SquireBot-Shutdown` named event and SetEvents it (OpenEvent then CreateEvent-on-ERROR_FILE_NOT_FOUND fallback for fire-and-forget semantics). `WaitForShutdown(ctx)` returns a channel that closes on signal OR ctx-cancel via a watchdog goroutine. 5 Windows-only tests pass (round-trip, no-listener no-op, ctx-cancel cleanup, idempotency, late-listener-loses-signal contract). No `go.mod` changes — `golang.org/x/sys v0.43.0` is already a direct dep. No `slog` calls (signal side runs before `logging.Setup`). Single commit `a705f4e`. Signatures locked for Plan 06-02 to consume verbatim.
+
 **2026-05-11 (v1.0.1 milestone open + roadmap):** v1.0 shipped clean as tag `v1.0.0`. Milestone v1.0.1 Installer + Permissions Hardening opened the same day. v1.0.1 REQUIREMENTS.md defined 8 requirements across 5 carry-over features (INST-06, ADMIN-01..03, TEST-01/02, SEARCH-05, DOC-04). v1.0.1 ROADMAP.md mapped all 8 requirements onto 3 phases:
 
 - Phase 6 (Installer Overwrite-Running Shim) — INST-06 only, Go + NSIS, ships watcher v1.0.1 binary
@@ -111,7 +113,7 @@ Schema impact NONE across all 3 phases. 100% requirement coverage validated. REQ
 
 ### Next Action
 
-**Plan Phase 6 — Installer Overwrite-Running Shim.** Run `/gsd-plan-phase 6` to decompose INST-06 into executable plans. Expected scope: small (1–2 plans) — NSIS pre-install detection script + watcher graceful-shutdown signal handling + release CI bump + troubleshooting.md workaround removal. Output binary: tag `v1.0.1`.
+**Continue Phase 6 — Plan 06-02 (main.go wiring) is next.** Plan 06-01 shipped the Go-side `internal/system` package with `SignalShutdown()` + `WaitForShutdown(ctx)` (commit `a705f4e`). Plan 06-02 wires those into `cmd/squirebot/main.go` (new `--quit` flag handler block + listener goroutine that funnels through the existing `cancel()` + `systray.Quit()` shutdown path). Plan 06-04 (docs, Wave 1 parallel with 06-01) is also still TODO and can run independently. Plans 06-03 (NSIS shim) and 06-05 (release tag) depend on 06-02.
 
 After Phase 6 ships, plan Phase 7 (apps-script admin allowlist). After Phase 7 ships, plan Phase 8 (test infra + persistence + docs).
 

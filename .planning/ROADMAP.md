@@ -42,7 +42,12 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
   3. Post-install the new watcher binary autostarts (or is launched by the installer) and successfully resumes writes to the same workbook with no token re-auth required
   4. `docs/troubleshooting.md` no longer instructs users to manually stop the tray app before reinstalling (the manual workaround block is removed)
   5. Watcher binary v1.0.1 is built, tagged, and published on GitHub Releases; the `latest.json` manifest is updated so existing watchers can self-update to it
-**Plans**: TBD
+**Plans**: 5 plans
+  - [x] 06-01-shutdown-signal-package-PLAN.md -- internal/system package: SignalShutdown + WaitForShutdown (Windows named event, paired build-tag files + Windows-only round-trip tests). Wave 1. **SHIPPED 2026-05-11** (commit `a705f4e`; 5/5 tests pass; SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-01-SUMMARY.md`).
+  - [ ] 06-02-main-go-wiring-PLAN.md -- cmd/squirebot/main.go: --quit CLI flag handler + named-event listener goroutine wired through cancel()+systray.Quit(). Wave 2.
+  - [ ] 06-03-nsis-preinstall-shim-PLAN.md -- installer/squirebot.nsi: version-gated ExecWait --quit + 10s poll loop + taskkill /F fallback at top of Section Install. Wave 3.
+  - [ ] 06-04-docs-update-PLAN.md -- docs/troubleshooting.md: delete manual-stop section; docs/build-and-install.md: add Manual debug aids subsection documenting --quit. Wave 1 (parallel with Plan 01).
+  - [ ] 06-05-release-tag-PLAN.md -- git tag v1.0.1 + CI verification + GitHub Release smoke + end-to-end UAT (v1.0.0 -> v1.0.1 upgrade on clean Win11 VM). Wave 4 (ship gate).
 **Ship gate**: tag `v1.0.1` (watcher binary release)
 
 ### Phase 7: Admin Allowlist + Eviction Enforcement
@@ -78,11 +83,11 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 | Milestone | Phases | Plans Complete | Status | Completed |
 |-----------|--------|----------------|--------|-----------|
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
-| v1.0.1 | 3 | 0/0 | 🚧 Planning | — |
+| v1.0.1 | 3 | 1/5 | 🚧 In progress | — |
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Installer Overwrite-Running Shim | 0/0 | Not started | — |
+| 6. Installer Overwrite-Running Shim | 1/5 | In progress | — |
 | 7. Admin Allowlist + Eviction Enforcement | 0/0 | Not started | — |
 | 8. Test Infra + Persistence + Docs Backfill | 0/0 | Not started | — |
 

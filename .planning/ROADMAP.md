@@ -26,7 +26,7 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 
 ### 🚧 v1.0.1 — Installer + Permissions Hardening (in progress)
 
-- [ ] **Phase 6: Installer Overwrite-Running Shim** — NSIS detects + gracefully stops a running watcher before file overwrite, retires manual stop workaround; ships as watcher v1.0.1 binary release
+- [x] **Phase 6: Installer Overwrite-Running Shim** — NSIS detects + gracefully stops a running watcher before file overwrite, retires manual stop workaround; ships as watcher v1.0.1 binary release. **SHIPPED 2026-05-11** as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) (CI run 1m55s; AUTH-03 PRODUCTION gate held; end-user clean-VM UAT deferred as a follow-up).
 - [ ] **Phase 7: Admin Allowlist + Eviction Enforcement** — `_meta.guild_admins` row + bootstrap; eviction sidebar refuses non-admins by code; admin-management UX with owner-floor lockout protection
 - [ ] **Phase 8: Test Infra + Persistence + Docs Backfill** — JSDOM in vitest + ≥1 sidebar inline-JS test per shipping sidebar; SEARCH recent-MRU migrated to PropertiesService; 8 missing Phase 3+4 SUMMARY.md files backfilled
 
@@ -46,8 +46,8 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
   - [x] 06-01-shutdown-signal-package-PLAN.md -- internal/system package: SignalShutdown + WaitForShutdown (Windows named event, paired build-tag files + Windows-only round-trip tests). Wave 1. **SHIPPED 2026-05-11** (commit `a705f4e`; 5/5 tests pass; SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-01-SUMMARY.md`).
   - [x] 06-02-main-go-wiring-PLAN.md -- cmd/squirebot/main.go: --quit CLI flag handler + named-event listener goroutine wired through cancel()+systray.Quit(). Wave 2. **SHIPPED 2026-05-11** (commits `5256382` + `a36e72f`; 13 tests pass; SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-02-SUMMARY.md`).
   - [x] 06-03-nsis-preinstall-shim-PLAN.md -- installer/squirebot.nsi: version-gated ExecWait --quit + 10s poll loop + taskkill /F fallback at top of Section Install. Wave 3. **SHIPPED 2026-05-11** (commit `9a179bd`; +99 NSIS lines; 14/14 acceptance greps PASS; NSIS local build deferred to CI; SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-03-SUMMARY.md`).
-  - [ ] 06-04-docs-update-PLAN.md -- docs/troubleshooting.md: delete manual-stop section; docs/build-and-install.md: add Manual debug aids subsection documenting --quit. Wave 1 (parallel with Plan 01).
-  - [ ] 06-05-release-tag-PLAN.md -- git tag v1.0.1 + CI verification + GitHub Release smoke + end-to-end UAT (v1.0.0 -> v1.0.1 upgrade on clean Win11 VM). Wave 4 (ship gate).
+  - [x] 06-04-docs-update-PLAN.md -- docs/troubleshooting.md: delete manual-stop section; docs/build-and-install.md: add Manual debug aids subsection documenting --quit. Wave 1 (parallel with Plan 01). **SHIPPED 2026-05-11** (commit `4465836`; SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-04-SUMMARY.md`).
+  - [x] 06-05-release-tag-PLAN.md -- git tag v1.0.1 + CI verification + GitHub Release smoke + end-to-end UAT (v1.0.0 -> v1.0.1 upgrade on clean Win11 VM). Wave 4 (ship gate). **SHIPPED 2026-05-11** as tag `v1.0.1` at commit `265bbd9` (CI run [25686757380](https://github.com/boejowen/SquireBot/actions/runs/25686757380), 1m55s success; Release [`v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) with installer+binary+latest.json published; UAT deferred; SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-05-SUMMARY.md`).
 **Ship gate**: tag `v1.0.1` (watcher binary release)
 
 ### Phase 7: Admin Allowlist + Eviction Enforcement
@@ -83,11 +83,11 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 | Milestone | Phases | Plans Complete | Status | Completed |
 |-----------|--------|----------------|--------|-----------|
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
-| v1.0.1 | 3 | 3/5 | 🚧 In progress | — |
+| v1.0.1 | 3 | 5/5 (Phase 6 only) | 🚧 In progress (1/3 phases) | — |
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Installer Overwrite-Running Shim | 3/5 | In progress | — |
+| 6. Installer Overwrite-Running Shim | 5/5 | ✅ Shipped as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) (UAT deferred) | 2026-05-11 |
 | 7. Admin Allowlist + Eviction Enforcement | 0/0 | Not started | — |
 | 8. Test Infra + Persistence + Docs Backfill | 0/0 | Not started | — |
 

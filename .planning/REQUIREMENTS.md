@@ -12,7 +12,7 @@
 
 ### Installer (INST-06)
 
-- [ ] **INST-06**: Installer cleanly upgrades over a running watcher. NSIS pre-install step detects `squirebot.exe` in the user session, signals it to exit gracefully (with a fallback hard-kill on timeout), confirms process is gone, then proceeds with file overwrite. User is not asked to manually stop the tray app first; the existing manual workaround in `docs/troubleshooting.md` is removed when this lands.
+- [x] **INST-06**: Installer cleanly upgrades over a running watcher. NSIS pre-install step detects `squirebot.exe` in the user session, signals it to exit gracefully (with a fallback hard-kill on timeout), confirms process is gone, then proceeds with file overwrite. User is not asked to manually stop the tray app first; the existing manual workaround in `docs/troubleshooting.md` is removed when this lands. **SHIPPED 2026-05-11 as tag [`v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1); end-user v1.0.0 → v1.0.1 UAT on clean Win11 VM still deferred.**
 
 ### Admin permissions (ADMIN-01..03)
 
@@ -53,7 +53,7 @@
 
 | REQ-ID | Phase | Plan(s) |
 |--------|-------|---------|
-| INST-06 | Phase 6 | 06-01 (shipped), 06-02 (shipped), 06-03 (shipped), 06-04 (TODO), 06-05 (TODO ship gate) |
+| INST-06 | Phase 6 | 06-01 (shipped), 06-02 (shipped), 06-03 (shipped), 06-04 (shipped), 06-05 (shipped — tag `v1.0.1` 2026-05-11; UAT deferred) |
 | ADMIN-01 | Phase 7 | TBD |
 | ADMIN-02 | Phase 7 | TBD |
 | ADMIN-03 | Phase 7 | TBD |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
-status: ready_to_execute
-last_updated: "2026-05-11T23:30:00.000Z"
+status: phase6_shipped_awaiting_uat
+last_updated: "2026-05-11T17:50:00.000Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 3
-  percent: 60
+  completed_plans: 5
+  percent: 100
 ---
 
 # State: SquireBot
@@ -31,10 +31,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 6 — Installer Overwrite-Running Shim (in execution, 3/5 plans complete)
-Plan: 06-03 SHIPPED (commit 9a179bd); 06-04 (docs) and 06-05 (release tag) next
-Status: Wave 3 complete — Plans 06-01 (Go primitive), 06-02 (main.go wiring), 06-03 (NSIS pre-install shim) all shipped. Plan 06-04 (docs) is the remaining source-side work; Plan 06-05 (v1.0.1 tag + release) is the ship gate.
-Last activity: 2026-05-11 — Plan 06-03 executed; installer/squirebot.nsi gained 99 lines (WordFunc.nsh include + StrContains helper + INST-06 pre-install shim block). All 14 acceptance-criteria greps PASS. NSIS local-build verification deferred to CI (toolchain not installed locally).
+Phase: 6 — Installer Overwrite-Running Shim (SHIPPED 5/5 plans; awaiting end-user UAT)
+Plan: 06-05 SHIPPED — tag `v1.0.1` pushed, CI green (run 25686757380, 1m55s), GitHub Release [`v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) published with installer + bare binary + latest.json; AUTH-03 PRODUCTION gate held.
+Status: Phase 6 source-complete + shipped. End-user v1.0.0 → v1.0.1 upgrade UAT on clean Win11 VM is the one remaining INST-06 verification step (Task 4 of 06-05 — deferred per plan checkpoint format). Next phase to plan: Phase 7 (apps-script admin allowlist).
+Last activity: 2026-05-11 — Plan 06-05 executed; tag `v1.0.1` (annotated, object `c11d711`) pushed to origin; release workflow ran 17 steps green in 1m55s; 4 release assets published (installer `38a447bf...`, bare binary `4707c92d...`, latest.json `eb8ad937...`, plus permalink alias `SquireBot-Setup.exe`); latest.json verified version=1.0.1 + fresh sha256s + working URLs.
 
 ### v1.0.1 Phase Plan (2026-05-11)
 
@@ -61,10 +61,10 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 | Metric | Value |
 |--------|-------|
 | Phases planned (v1.0.1) | 3 / 3 |
-| Phases complete (v1.0.1) | 0 / 3 |
-| Plans complete (v1.0.1) | 3 / 5 (Phase 6) |
+| Phases complete (v1.0.1) | 1 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`) |
+| Plans complete (v1.0.1) | 5 / 5 (Phase 6) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
-| Requirements complete (v1.0.1) | 0 / 8 (INST-06 source-complete — Go primitive + main.go wiring + NSIS shim all shipped; docs edit + v1.0.1 binary release remain) |
+| Requirements complete (v1.0.1) | 1 / 8 (INST-06 source-complete + binary shipped as v1.0.1; end-user clean-VM upgrade UAT deferred) |
 | Active blockers | 0 |
 | Milestone v1.0 final | 69/69 effective requirements; 5/5 phases; 31/31 plans (archived) |
 
@@ -99,6 +99,10 @@ None. v1.0 shipped clean; v1.0.1 is planning-stage. Phase 6 is unblocked and rea
 
 ### Last Session Summary
 
+**2026-05-11 (Phase 6 Plan 05 executed — Phase 6 SHIPPED as v1.0.1):** Pushed tag `v1.0.1` (annotated, message "Phase 6 (INST-06): installer overwrite-running shim. Watcher binary v1.0.1 release.") to origin at master HEAD commit `265bbd9`. Release workflow run [25686757380](https://github.com/boejowen/SquireBot/actions/runs/25686757380) completed in 1m55s with all 17 steps green — AUTH-03 PRODUCTION consent_screen gate held (release.yml:136). GitHub Release [v1.0.1](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) published with 4 assets: `SquireBot-Setup-1.0.1.exe` (sha256 `38a447bf1d79813861276d2480bd53451fdda66eaf4be24a8f88e2d9ac43fbc4`), `squirebot.exe` bare binary (sha256 `4707c92db98b3b748efb574927a5b8c8e7773ceec0e2a7c826ea6683d0cf4389`), `latest.json` (version=1.0.1, fresh sha256s, working URLs verified via curl HEAD), and the versionless permalink alias `SquireBot-Setup.exe`. D-06 (latest.json schema unchanged) and D-07 (tag = `v1.0.1`) honored. Phase 6 source-complete + shipped. **Task 4 — end-user v1.0.0 → v1.0.1 upgrade UAT on clean Win11 VM — is DEFERRED**; until that runs, INST-06 is "shipped-pending-UAT" rather than fully verified. Single planning commit captures this state. SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-05-SUMMARY.md`.
+
+**2026-05-11 (Phase 6 Plan 04 executed):** Retired the "Installer won't overwrite a running SquireBot" section from `docs/troubleshooting.md` (-479 bytes) and appended a `### Manual debug aids` subsection to `docs/build-and-install.md` (+995 bytes) documenting `squirebot.exe --quit` with cross-reference to Plan 06 / INST-06. Pure docs change, zero code impact. Single commit `4465836`. SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-04-SUMMARY.md`.
+
 **2026-05-11 (Phase 6 Plan 03 executed):** Shipped INST-06 NSIS pre-install shim — `installer/squirebot.nsi` gained 99 lines (WordFunc.nsh include + inlined StrContains helper + pre-install shim block at top of `Section "Install"`). Reads `DisplayVersion` from HKCU, gates against `1.0.1` via `${VersionCompare}`; on `>= 1.0.1` runs `ExecWait '"$INSTDIR\squirebot.exe" --quit'` then polls `tasklist /FI` via bundled `nsExec::Exec` for up to 40 iterations × 250ms = 10s hard cap; always falls back to `taskkill /IM /F` (verbatim from uninstaller). Honors D-01..D-05: no new plugins (nsExec is bundled), `RequestExecutionLevel user` preserved, post-install `Exec` line untouched, autostart Run-key untouched. All 14 acceptance-criteria greps PASS. NSIS toolchain not installed locally — `makensis` build verification deferred to CI per the plan's fallback clause. Single commit `9a179bd`.
 
 **2026-05-11 (Phase 6 Plan 02 executed):** Shipped INST-06 main.go wiring — `--quit` CLI flag handler block + named-event listener goroutine in `cmd/squirebot/main.go`. CLI handler placed before `update.Apply()`, uses stderr-only logging, exits 0 on every branch. Listener goroutine funnels through `cancel()` + `systray.Quit()` (no `os.Exit`). 2 commits (`5256382` feat, `a36e72f` feat) + docs commit `80b61f7`. CLI contract `squirebot.exe --quit` now safe for the NSIS shim to invoke.
@@ -117,9 +121,11 @@ Schema impact NONE across all 3 phases. 100% requirement coverage validated. REQ
 
 ### Next Action
 
-**Continue Phase 6 — Plan 06-04 (docs edit) and Plan 06-05 (v1.0.1 release tag) remain.** Plans 06-01, 06-02, 06-03 all shipped (commits `a705f4e`, `5256382`+`a36e72f`, `9a179bd`). Plan 06-04 deletes the "Installer won't overwrite a running SquireBot" section from `docs/troubleshooting.md` and optionally adds a `--quit` debug-aid note to `docs/build-and-install.md`; can run independently. Plan 06-05 is the ship-gate: `git tag v1.0.1` + push, triggers `.github/workflows/release.yml` which compiles the NSIS installer, produces sha256s + `latest.json`, and creates the GitHub Release. The NSIS source change from 06-03 will be authoritatively compiled by CI at that point.
+**Phase 6 SHIPPED as `v1.0.1` 2026-05-11.** Next actions, in priority order:
 
-After Phase 6 ships, plan Phase 7 (apps-script admin allowlist). After Phase 7 ships, plan Phase 8 (test infra + persistence + docs).
+1. **End-user UAT (deferred Task 4 of Plan 06-05):** install `SquireBot-Setup-1.0.1.exe` over an existing v1.0.0 install on a clean Win11 VM (or daily-driver); verify the installer runs to completion without any "please close SquireBot" dialog, tray flickers + reappears as v1.0.1, workbook heartbeats continue, no token re-auth. After UAT passes, append confirmation to `06-05-SUMMARY.md` and STATE.md. Until then, INST-06 is "shipped-pending-UAT".
+2. **Plan Phase 7** (apps-script admin allowlist + eviction enforcement) — ADMIN-01/02/03. Use `/gsd-plan-phase 7`.
+3. **After Phase 7 ships, plan Phase 8** (test infra + persistence + docs backfill).
 
 **Independent of v1.0.1:** Day-10 token-survival check fires automatically 2026-05-13T15:00:00Z (routine `trig_01Uog2muQ22CBsjZfqPiSH9r`).
 

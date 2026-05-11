@@ -6,3 +6,6 @@ plugins:
 title: SquireBot
 description: A small Windows app that streams your EverQuest inventory and spellbook into your guild's shared workbook.
 show_downloads: false
+# Pretty permalinks: install.md -> /install/, troubleshooting.md -> /troubleshooting/, dev.md -> /dev/.
+# Required because index.md links to "/install/" via relative_url; without this Jekyll outputs install.html and the link 404s.
+permalink: pretty

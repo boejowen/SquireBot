@@ -40,7 +40,7 @@ Phase 5 is the **last phase before milestone v1.0 ships**. Phase 4 made the work
   - Separate `/troubleshooting` page (linked from install): tray-red causes, ErrSchemaTooNew, drive.file propagation, log-folder location
   - PNG screenshots + a single annotated GIF (no audio) of the SmartScreen walkthrough, all in `/docs/assets/`
   - README.md becomes a short pointer to the Pages site (not the long doc itself)
-- **Distribution success criterion** (ROADMAP §93): "all 12 guildies are installed and writing data" — this is an outcome, not a code task. Track via `_char_owner` `owner_email` distinct count + heartbeat freshness; phase doesn't ship until 12 distinct emails have written within the last 7 days.
+- **Distribution success criterion** (ROADMAP §93, **scope-reduced by user 2026-05-11 during plan revision**): the literal "12 guildies" figure is an **upper estimate** of who might install SquireBot, not a hard floor. The phase ships when a meaningful core of the guild is writing data — even "only a handful" is acceptable per explicit user statement. Track via `_char_owner` `owner_email` distinct count + heartbeat freshness for visibility, but **do not gate Phase-5-shipped on hitting 12**. The plan emits a distribution **report** (N of ~12 emails writing in last 7 days, with any notable gaps), and shipping is the user's call, not an automated GREEN/YELLOW threshold. Below 12 is fine; below 4 is worth a sanity-check question to the user. Recorded as an authorized scope reduction so future audits don't re-flag this as a unilateral planner-side change.
 
 **Out of scope (deferred to v2):**
 
@@ -78,7 +78,7 @@ Phase 5 is the **last phase before milestone v1.0 ships**. Phase 4 made the work
 ### Onboarding docs + assets
 
 - **D-09: Doc platform — GitHub Pages with Jekyll.** Site at `boejowen.github.io/SquireBot`. Source under `/docs` in the repo (Jekyll picks it up automatically when Pages is enabled in repo settings → Source: Deploy from a branch → main + `/docs`). Custom theme + CSS available; planner picks a minimal/readable theme (Cayman, Slate, or similar — defer to docs-writer).
-- **D-10: Asset host — in repo at `/docs/assets/`.** PNG screenshots + a single annotated GIF (no audio) for the SmartScreen walkthrough. Self-hosted, no external dependencies (no YouTube). GIF size budget: ≤5 MB to keep repo bloat tolerable; if longer than that, planner should propose a workaround.
+- **D-10: Asset host — N/A (text-only docs).** ~~PNG screenshots + a single annotated GIF (no audio) for the SmartScreen walkthrough~~. **DROPPED by user 2026-05-11 mid-execution of plan 05-05** after Task 1 (Pages site source + README shrink) shipped: user decided the instructional images/GIF were not worth the capture overhead. Pages site is text-only. `docs/assets/` directory removed. SmartScreen walkthrough text in `install.md` describes the dialog elements ("`More info` link near the top" / "expands to reveal a `Run anyway` button") in enough detail to navigate without a screenshot.
 - **D-11: Recovery doc — separate `/troubleshooting` page on the Pages site.** Linked from the install page. Structured by symptom (tray turned red → check log → match against known causes). Owns the "what now?" recovery copy. NOT inline at the bottom of the install page.
 - **D-12: README.md — becomes short pointer to Pages.** Strip the existing tech-overview content (move to `docs/dev.md` or similar). New README structure: 1-paragraph "what is SquireBot," install link → `https://boejowen.github.io/SquireBot/install`, contributor link → `docs/dev.md`. Keeps GitHub's default landing page guildie-friendly without forcing a long scroll.
 
@@ -92,6 +92,7 @@ Phase 5 is the **last phase before milestone v1.0 ships**. Phase 4 made the work
 
 ### Scope Changes (vs. ROADMAP/REQUIREMENTS originals)
 
+- **Instructional images + SmartScreen GIF — DROPPED by user 2026-05-11 mid-execution of plan 05-05.** Task 1 (Pages site source + README shrink) had already shipped; the user decided the capture work (clean Win11 box + ScreenToGif + 6 PNG screenshots + annotated SmartScreen GIF) was not worth the effort for a 12-guildie audience. Pages docs are text-only. D-10 superseded. Plan 05-05 Task 2 reduced to "enable GitHub Pages" only — Steps A (PNG capture) and B (GIF record) struck. `docs/assets/` directory removed. DOC-01 and DOC-03 ship as text-only artifacts; that is acceptable per user direction.
 - **SEARCH-03 — staleness inline on search results — DROPPED by user during discuss.** User explicitly said *"No need to indicate sync times"* when shown the row-shape preview. Two paths the planner can take:
   1. Drop SEARCH-03 from the v1 acceptance criteria entirely. Update REQUIREMENTS.md to mark SEARCH-03 as deferred-to-v2 with a note.
   2. Keep SEARCH-03 but satisfy it on a different surface: the existing `view` and `bank` tabs already have a `Last Synced` column populated by Phase 3's builders, so staleness IS visible — just not in the search sidebar specifically. Argue this satisfies SEARCH-03's spirit ("results show staleness") even if not its letter ("inline").

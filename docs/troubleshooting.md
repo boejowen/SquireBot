@@ -14,8 +14,6 @@ The most common cause is an OAuth token failure (`invalid_grant`). Under the Tes
 2. If the tray stays red after reauthorizing, open `%LOCALAPPDATA%\SquireBot\squirebot.log` and read the most recent `ERROR` line.
 3. If the error mentions `invalid_grant` after a Reauthorize, your Google account may have revoked the app at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions) — restore the grant and try again.
 
-![Tray icon in red error state](assets/tray-red.png)
-
 ## Workbook isn't updating
 
 1. Check the tray color first. Red is auth; orange is a Sheets API problem; green means the watcher thinks it is fine.

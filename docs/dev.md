@@ -31,10 +31,6 @@ For local development:
 - Watcher: `go build ./cmd/squirebot` from the repo root. Live-debug with VS Code's Go extension; the wizard flow runs against a sandbox workbook.
 - Apps Script: `cd apps-script && npm install && npm run build` produces `dist/Code.js`. `npm test` runs vitest. Deploy via `npx clasp push` from a workbook-owner machine (see the deploy runbook above).
 
-## Screenshot redaction for docs
-
-If you regenerate any onboarding screenshots, blur or crop any visible PII (guildie emails, character names, OAuth client IDs). Prefer a synthetic test character on a fresh workbook over a real guildie's view. Pages assets are public.
-
 ## Legacy README notes
 
 Earlier versions of `README.md` shipped a long-form tray-menu reference plus filesystem layout. The full content is preserved in git history; the canonical replacement is `CLAUDE.md` for stack/architecture details and `docs/build-and-install.md` for the tray-menu and uninstall flow. The shrunk README is intentional per CONTEXT.md D-12.

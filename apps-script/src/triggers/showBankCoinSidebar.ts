@@ -13,6 +13,7 @@
 // is the supported entry point.
 
 import { log } from '../lib/log';
+import { protectBankCoinCells } from '../lib/migrations';
 import { readMetaRows, writeMetaRow } from '../lib/sheet-helpers';
 import { buildBank } from '../tabs/buildBank';
 
@@ -62,6 +63,12 @@ export function saveBankCoin(coin: BankCoinForm): void {
   } finally {
     lock.releaseLock();
   }
+  // protectBankCoinCells acquires no lock and is idempotent — closes
+  // the lazy-creation gap where bank_coin_* rows didn't exist when
+  // migrateToV3 / installTriggers ran. First save creates them; this
+  // call protects them immediately. Re-runs are no-ops via description
+  // match.
+  protectBankCoinCells();
   // buildBank acquires its own lock — invoke outside the lock above so
   // we don't risk recursive contention.
   buildBank();

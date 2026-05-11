@@ -140,9 +140,15 @@ export function protectBankCoinCells(): void {
       .find((p) => p.getRange().getA1Notation() === cellA1
                 && p.getDescription() === BANK_COIN_PROTECTION_DESCRIPTION);
     if (existing) { skipped++; continue; }
+    // setWarningOnly(true) — show the "are you sure?" prompt on direct
+    // edits but allow the user to dismiss it. The script owner is a
+    // default editor of any setWarningOnly(false) protection so a strict
+    // protection here would be invisible to them (no prompt, edit
+    // succeeds). Warning-only is the intended UX: nudge users toward
+    // SquireBot → Set Bank Coin… without locking out emergency edits.
     cell.protect()
       .setDescription(BANK_COIN_PROTECTION_DESCRIPTION)
-      .setWarningOnly(false);
+      .setWarningOnly(true);
     added++;
   }
   log('info', 'protectBankCoinCells', { added, skipped });

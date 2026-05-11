@@ -112,4 +112,23 @@ describe('saveBankCoin', () => {
     expect(ppRows.length).toBe(1);
     expect(ppRows[0][1]).toBe('200');
   });
+
+  it('first save creates 4 protections (closes lazy-creation gap)', () => {
+    // _meta has only schema_version — no bank_coin_* rows yet.
+    // protectBankCoinCells called from migrateToV3 / installTriggers
+    // would be a no-op at this point. saveBankCoin must apply protection
+    // itself after creating the rows; otherwise the user gets no
+    // protection warning until they manually re-run Install Triggers.
+    expect(state.sheets.get('_meta')!.protections).toBeUndefined();
+    saveBankCoin({ pp: 1000, gp: 0, sp: 0, cp: 0 });
+    const meta = state.sheets.get('_meta')!;
+    expect(meta.protections?.length).toBe(4);
+    expect(meta.protections?.every((p) => p.warningOnly)).toBe(true);
+  });
+
+  it('second save does not duplicate protections (idempotent)', () => {
+    saveBankCoin({ pp: 100, gp: 0, sp: 0, cp: 0 });
+    saveBankCoin({ pp: 200, gp: 0, sp: 0, cp: 0 });
+    expect(state.sheets.get('_meta')!.protections?.length).toBe(4);
+  });
 });

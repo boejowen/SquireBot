@@ -219,7 +219,7 @@ describe('protectBankCoinCells', () => {
   let state: MockState;
   beforeEach(() => { state = resetMocks(); });
 
-  it('applies 4 protections when all bank_coin_* rows exist', () => {
+  it('applies 4 warning-only protections when all bank_coin_* rows exist', () => {
     seedMeta(state, [
       ['schema_version', '3'],
       ['bank_coin_pp', '0'], ['bank_coin_gp', '0'],
@@ -228,7 +228,10 @@ describe('protectBankCoinCells', () => {
     protectBankCoinCells();
     const meta = state.sheets.get('_meta')!;
     expect(meta.protections?.length).toBe(4);
-    expect(meta.protections?.every((p) => !p.warningOnly)).toBe(true);
+    // warningOnly MUST be true — strict (false) protections silently
+    // allow the script owner (default editor) to edit without prompt,
+    // defeating the UX. Live smoke 2026-05-10 confirmed this.
+    expect(meta.protections?.every((p) => p.warningOnly)).toBe(true);
     expect(meta.protections?.every((p) =>
       p.description === 'SquireBot bank coin — edit via SquireBot menu')).toBe(true);
   });

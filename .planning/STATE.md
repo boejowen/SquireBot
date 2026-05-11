@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-5-code-complete
-last_updated: "2026-05-11T05:35:00Z"
+status: phase-5-shipped
+last_updated: "2026-05-11T15:00:00Z"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 31
   completed_plans: 31
   percent: 100
@@ -15,7 +15,7 @@ progress:
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-05-11 (Phase 5 plan 05-05 Task 1 CODE-COMPLETE — Jekyll Pages site source + README D-12 shrink landed; Tasks 2 + 3 PENDING USER ACTION; Phase 5 SHIP gate is user-pending)
+**Last updated:** 2026-05-11 (Phase 5 SHIPPED as v1.0.0 — DOC-02 fake-guildie eviction smoke PASS, Pages site live at https://boejowen.github.io/SquireBot/, distribution report landed, milestone v1.0 COMPLETE)
 
 ## Project Reference
 
@@ -31,7 +31,7 @@ Phase: 1 (End-to-End Thin Slice) — ✅ SHIPPED (v0.1.0)
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — ✅ SHIPPED (v0.3.0)
 Phase: 4 (Differentiator Features) — ✅ SHIPPED (v0.4.0 — 2026-05-11)
-Phase: 5 (Search + Onboarding + Privacy Polish) — 🟡 CODE-COMPLETE / SHIP-PENDING (5/5 plans landed Task-1-wise: 05-01 + 05-02 + 05-03 + 05-04 + 05-05 Task 1 all shipped 2026-05-11; 05-05 Tasks 2 + 3 are USER ACTION REQUIRED handoffs — asset capture + Pages enable + DOC-02 fake-guildie smoke + distribution report + user ship authorization)
+Phase: 5 (Search + Onboarding + Privacy Polish) — ✅ SHIPPED as v1.0.0 (2026-05-11; milestone v1.0 COMPLETE)
 
 - **Phase:** 4 — Differentiator Features ✓ SHIPPED as v0.4.0
 - **Plan:** All 4 plans (04-01..04) landed; v0.4.0 tag pushed; live smoke PASS
@@ -48,8 +48,25 @@ Phase: 5 (Search + Onboarding + Privacy Polish) — 🟡 CODE-COMPLETE / SHIP-PE
   **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
 
   **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
-- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-05-SUMMARY.md` — Phase 5 Task 1 complete; USER ACTION REQUIRED for Tasks 2 + 3 (asset capture + Pages enable + fake-guildie smoke + distribution report + ship authorization). See SUMMARY's "What's deferred to USER ACTION" section for step-by-step checklists.
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 31/31 plans code-complete (Phases 1+2+3+4 SHIPPED; Phase 5 all 5 plans' code landed; Phase 5 SHIP gate is user-pending pending Task 2 + Task 3 user actions)
+- **Resume file:** none — milestone v1.0 SHIPPED. Next work is v1.0.1 / v2 backlog (deferred items listed in 05-05-SUMMARY.md §Deferred backlog).
+- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 31/31 plans complete (all 5 phases SHIPPED; milestone v1.0 COMPLETE)
+
+### Phase 5 SHIPPED (2026-05-11)
+
+**Ship signal:** `ship: phase-5-shipped, distinct-recent: 1, distinct-active: 1` (user, 2026-05-11)
+
+**Sequence of ship-day events:**
+1. 05-01 → 05-04 plans executed by gsd-executor sequential waves (commits c85586b → 6e0bce0). 297/297 vitest green at wave-4 boundary; trigger count 7→10; Path A (schema_version=3) held end-to-end.
+2. 05-05 Task 1 (Pages site source + README D-12 shrink) shipped via commit df8c2fd.
+3. Scope reduction recorded 2026-05-11 mid-execution: instructional PNGs + SmartScreen GIF dropped from D-10; Pages site is text-only. Commit 482f19d stripped image refs from install.md + troubleshooting.md + dev.md, removed docs/assets/.gitkeep, updated 05-CONTEXT.md §Scope Changes + 05-05-PLAN.md Task 2 (Steps A/B/D struck) + 05-05-SUMMARY.md.
+4. Pages enabled by user (Settings → Pages → main /docs). First `pages-build-deployment` workflow served `/install/` and `/troubleshooting/` as 404 due to Jekyll default permalinks → fixed via commit 8d1e332 adding `permalink: pretty` to docs/_config.yml. Second deployment served all four pages cleanly.
+5. clasp-push deployed apps-script Phase-5 bundle to RiverFAIL VanFRAUD dev workbook (bundle 158KB; 28 globals registered; `Evict Guildie…` menu item visible between `Search…` and `Set Theme…`; Install Triggers reports 10 triggers).
+6. DOC-02 fake-guildie eviction smoke executed end-to-end against the dev workbook (seed → sidebar preview → Evict → simulate grace-expiry edit → manual weeklyEvictionArchive run → verify 7-point checklist → recovery test → cleanup). All 7 checkpoints PASS. Archive snapshot non-destructive; un-evict path works.
+7. `_phase5DistributionProbe` ran against `_char_owner`: N=1 (last_seen<7d), M=1 (distinct active emails), only writer is boejowen@gmail.com. Single-writer count is expected dev-workbook state (no guildies onboarded yet); rollout is a v1.0.1 / post-ship activity per CONTEXT.md §Scope Changes 2026-05-11.
+8. Distribution report committed at `docs/phase5-distribution.md` (commit b668e75).
+9. User authorized ship via `ship: phase-5-shipped`. STATE.md flipped to `phase-5-shipped`; REQUIREMENTS.md DOC-01/02/03 marked ✓ Complete (local-only); ROADMAP.md Phase 4 + Phase 5 boxes ticked; 05-05 plan ticked. Tagged `phase5-complete` and `v1.0.0`; tags pushed.
+
+**Milestone v1.0 verdict:** COMPLETE. Functionally validated end-to-end (DOC-02 smoke PASS, Pages site live, watcher v0.4.0 + apps-script Phase-5 bundle deployed on dev workbook). Guild rollout deferred to v1.0.1 / post-ship; the Phase 5 deliverables (search sidebar, eviction workflow, archive backend, onboarding docs) are the prerequisites for that rollout.
 
 ### Phase 5 plan execution log
 

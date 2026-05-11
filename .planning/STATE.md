@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
 status: ready_to_execute
-last_updated: "2026-05-11T22:00:00.000Z"
+last_updated: "2026-05-11T23:30:00.000Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
-  percent: 20
+  completed_plans: 3
+  percent: 60
 ---
 
 # State: SquireBot
@@ -31,10 +31,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 6 — Installer Overwrite-Running Shim (in execution, 1/5 plans complete)
-Plan: 06-01 SHIPPED (commit a705f4e); 06-02 next (main.go wiring, Wave 2)
-Status: Wave 1 partial — Plan 06-01 (Go-side shutdown-signal package) shipped; Plan 06-04 (docs, Wave 1 parallel) still TODO
-Last activity: 2026-05-11 — Plan 06-01 executed; internal/system package + 5 tests green; signatures locked for Plan 06-02
+Phase: 6 — Installer Overwrite-Running Shim (in execution, 3/5 plans complete)
+Plan: 06-03 SHIPPED (commit 9a179bd); 06-04 (docs) and 06-05 (release tag) next
+Status: Wave 3 complete — Plans 06-01 (Go primitive), 06-02 (main.go wiring), 06-03 (NSIS pre-install shim) all shipped. Plan 06-04 (docs) is the remaining source-side work; Plan 06-05 (v1.0.1 tag + release) is the ship gate.
+Last activity: 2026-05-11 — Plan 06-03 executed; installer/squirebot.nsi gained 99 lines (WordFunc.nsh include + StrContains helper + INST-06 pre-install shim block). All 14 acceptance-criteria greps PASS. NSIS local-build verification deferred to CI (toolchain not installed locally).
 
 ### v1.0.1 Phase Plan (2026-05-11)
 
@@ -62,9 +62,9 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 |--------|-------|
 | Phases planned (v1.0.1) | 3 / 3 |
 | Phases complete (v1.0.1) | 0 / 3 |
-| Plans complete (v1.0.1) | 1 / 5 (Phase 6) |
+| Plans complete (v1.0.1) | 3 / 5 (Phase 6) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
-| Requirements complete (v1.0.1) | 0 / 8 (INST-06 partial — Go primitive shipped, wiring + NSIS + release pending) |
+| Requirements complete (v1.0.1) | 0 / 8 (INST-06 source-complete — Go primitive + main.go wiring + NSIS shim all shipped; docs edit + v1.0.1 binary release remain) |
 | Active blockers | 0 |
 | Milestone v1.0 final | 69/69 effective requirements; 5/5 phases; 31/31 plans (archived) |
 
@@ -99,6 +99,10 @@ None. v1.0 shipped clean; v1.0.1 is planning-stage. Phase 6 is unblocked and rea
 
 ### Last Session Summary
 
+**2026-05-11 (Phase 6 Plan 03 executed):** Shipped INST-06 NSIS pre-install shim — `installer/squirebot.nsi` gained 99 lines (WordFunc.nsh include + inlined StrContains helper + pre-install shim block at top of `Section "Install"`). Reads `DisplayVersion` from HKCU, gates against `1.0.1` via `${VersionCompare}`; on `>= 1.0.1` runs `ExecWait '"$INSTDIR\squirebot.exe" --quit'` then polls `tasklist /FI` via bundled `nsExec::Exec` for up to 40 iterations × 250ms = 10s hard cap; always falls back to `taskkill /IM /F` (verbatim from uninstaller). Honors D-01..D-05: no new plugins (nsExec is bundled), `RequestExecutionLevel user` preserved, post-install `Exec` line untouched, autostart Run-key untouched. All 14 acceptance-criteria greps PASS. NSIS toolchain not installed locally — `makensis` build verification deferred to CI per the plan's fallback clause. Single commit `9a179bd`.
+
+**2026-05-11 (Phase 6 Plan 02 executed):** Shipped INST-06 main.go wiring — `--quit` CLI flag handler block + named-event listener goroutine in `cmd/squirebot/main.go`. CLI handler placed before `update.Apply()`, uses stderr-only logging, exits 0 on every branch. Listener goroutine funnels through `cancel()` + `systray.Quit()` (no `os.Exit`). 2 commits (`5256382` feat, `a36e72f` feat) + docs commit `80b61f7`. CLI contract `squirebot.exe --quit` now safe for the NSIS shim to invoke.
+
 **2026-05-11 (Phase 6 Plan 01 executed):** Shipped INST-06 Go-side primitive — new `internal/system` package with paired build-tag files (`shutdown_signal_windows.go` + `shutdown_signal_other.go` + `doc.go` + `shutdown_signal_windows_test.go`). `SignalShutdown()` opens-or-creates a `Local\SquireBot-Shutdown` named event and SetEvents it (OpenEvent then CreateEvent-on-ERROR_FILE_NOT_FOUND fallback for fire-and-forget semantics). `WaitForShutdown(ctx)` returns a channel that closes on signal OR ctx-cancel via a watchdog goroutine. 5 Windows-only tests pass (round-trip, no-listener no-op, ctx-cancel cleanup, idempotency, late-listener-loses-signal contract). No `go.mod` changes — `golang.org/x/sys v0.43.0` is already a direct dep. No `slog` calls (signal side runs before `logging.Setup`). Single commit `a705f4e`. Signatures locked for Plan 06-02 to consume verbatim.
 
 **2026-05-11 (v1.0.1 milestone open + roadmap):** v1.0 shipped clean as tag `v1.0.0`. Milestone v1.0.1 Installer + Permissions Hardening opened the same day. v1.0.1 REQUIREMENTS.md defined 8 requirements across 5 carry-over features (INST-06, ADMIN-01..03, TEST-01/02, SEARCH-05, DOC-04). v1.0.1 ROADMAP.md mapped all 8 requirements onto 3 phases:
@@ -113,7 +117,7 @@ Schema impact NONE across all 3 phases. 100% requirement coverage validated. REQ
 
 ### Next Action
 
-**Continue Phase 6 — Plan 06-02 (main.go wiring) is next.** Plan 06-01 shipped the Go-side `internal/system` package with `SignalShutdown()` + `WaitForShutdown(ctx)` (commit `a705f4e`). Plan 06-02 wires those into `cmd/squirebot/main.go` (new `--quit` flag handler block + listener goroutine that funnels through the existing `cancel()` + `systray.Quit()` shutdown path). Plan 06-04 (docs, Wave 1 parallel with 06-01) is also still TODO and can run independently. Plans 06-03 (NSIS shim) and 06-05 (release tag) depend on 06-02.
+**Continue Phase 6 — Plan 06-04 (docs edit) and Plan 06-05 (v1.0.1 release tag) remain.** Plans 06-01, 06-02, 06-03 all shipped (commits `a705f4e`, `5256382`+`a36e72f`, `9a179bd`). Plan 06-04 deletes the "Installer won't overwrite a running SquireBot" section from `docs/troubleshooting.md` and optionally adds a `--quit` debug-aid note to `docs/build-and-install.md`; can run independently. Plan 06-05 is the ship-gate: `git tag v1.0.1` + push, triggers `.github/workflows/release.yml` which compiles the NSIS installer, produces sha256s + `latest.json`, and creates the GitHub Release. The NSIS source change from 06-03 will be authoritatively compiled by CI at that point.
 
 After Phase 6 ships, plan Phase 7 (apps-script admin allowlist). After Phase 7 ships, plan Phase 8 (test infra + persistence + docs).
 

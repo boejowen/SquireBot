@@ -53,7 +53,7 @@
 
 | REQ-ID | Phase | Plan(s) |
 |--------|-------|---------|
-| INST-06 | Phase 6 | TBD |
+| INST-06 | Phase 6 | 06-01 (shipped), 06-02 (shipped), 06-03 (shipped), 06-04 (TODO), 06-05 (TODO ship gate) |
 | ADMIN-01 | Phase 7 | TBD |
 | ADMIN-02 | Phase 7 | TBD |
 | ADMIN-03 | Phase 7 | TBD |

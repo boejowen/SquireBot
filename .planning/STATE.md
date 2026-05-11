@@ -20,7 +20,7 @@ progress:
 ## Project Reference
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.
-- **Current focus:** Phase 5 (final phase) — unplanned; eligible to start /gsd-discuss-phase 5
+- **Current focus:** Phase 5 (final phase) — CONTEXT captured 2026-05-11; ready for /gsd-plan-phase 5
 - **Mode:** yolo
 - **Granularity:** coarse
 - **Total v1 phases:** 5
@@ -48,7 +48,7 @@ Phase: 5 (final phase) — 🔵 UNPLANNED
   **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
 
   **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
-- **Resume file:** (none — Phase 4 closed; Phase 5 awaits /gsd-discuss-phase 5).
+- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-CONTEXT.md` — Phase 5 ready for /gsd-plan-phase 5.
 - **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 26/~28 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5 unplanned)
 
 ## Performance Metrics

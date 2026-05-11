@@ -78,3 +78,18 @@ export function isClassAbbrev(s: unknown): s is ClassAbbrev {
 export function isRaceAbbrev(s: unknown): s is RaceAbbrev {
   return typeof s === 'string' && (RACES as readonly string[]).includes(s);
 }
+
+// Phase 5 plan 05-03: P99-known inventory slot vocabulary for the search
+// sidebar's Slot filter dropdown. Per CONTEXT D-01 and PATTERNS §eq-constants
+// the hardcoded list is the chosen default over the scrape-from-data
+// alternative — simpler for tests and stable across workbooks. The slot
+// filter does `loc.toUpperCase().startsWith(slotFilterUpper)` against the
+// `inv:*` Location column (Assumption A2 per RESEARCH).
+export const INVENTORY_SLOTS = [
+  'HEAD', 'CHEST', 'EAR1', 'EAR2', 'ARMS', 'WRIST1', 'WRIST2',
+  'LEGS', 'FEET', 'HANDS', 'NECK', 'FINGER1', 'FINGER2',
+  'SHOULDERS', 'BACK', 'WAIST', 'RANGE', 'AMMO', 'PRIMARY', 'SECONDARY',
+  'FACE',
+  'GENERAL', 'BANK', 'HELD', 'CURSOR',
+] as const;
+export type InventorySlot = typeof INVENTORY_SLOTS[number];

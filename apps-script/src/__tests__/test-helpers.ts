@@ -31,6 +31,9 @@ export interface MockState {
   sleepCalls: number[];
   appendedRowsLog: Array<{ sheet: string; row: unknown[] }>;
   setValuesLog: Array<{ sheet: string; range: string; values: unknown[][] }>;
+  // Phase 5 plan 05-03: real Map-backed CacheService mock with TTL.
+  // Tests use vi.setSystemTime to advance Date.now() and trigger expiry.
+  cache: Map<string, { value: string; expiresAt: number }>;
 }
 
 export function makeSheet(name: string, headers: string[], dataRows: unknown[][] = []): FakeSheet {
@@ -337,10 +340,41 @@ export function installAppsScriptMocks(state: MockState): void {
     newBlob: (s: string) => ({ getBytes: () => Array.from(s).map((c) => c.charCodeAt(0)) }),
   };
 
+  // Phase 5 plan 05-03: Map-backed TTL-respecting CacheService mock.
+  // Replaces the prior no-op stub. searchIndex.ts uses get/put/putAll/getAll/
+  // remove/removeAll — all five methods honored. TTL is evaluated against
+  // Date.now() so tests can use vi.useFakeTimers + vi.setSystemTime to
+  // exercise expiry. Missing keys are omitted from getAll output (not
+  // returned as null) — mirrors real CacheService.getAll() behavior.
   (globalThis as Record<string, unknown>).CacheService = {
     getDocumentCache: () => ({
-      get: () => null,
-      put: () => {},
+      get(key: string) {
+        const e = state.cache.get(key);
+        if (!e) return null;
+        if (Date.now() > e.expiresAt) { state.cache.delete(key); return null; }
+        return e.value;
+      },
+      put(key: string, value: string, ttlSec: number) {
+        state.cache.set(key, { value, expiresAt: Date.now() + ttlSec * 1000 });
+      },
+      putAll(values: Record<string, string>, ttlSec: number) {
+        const exp = Date.now() + ttlSec * 1000;
+        for (const [k, v] of Object.entries(values)) {
+          state.cache.set(k, { value: v, expiresAt: exp });
+        }
+      },
+      getAll(keys: string[]) {
+        const out: Record<string, string> = {};
+        for (const k of keys) {
+          const e = state.cache.get(k);
+          if (!e) continue;
+          if (Date.now() > e.expiresAt) { state.cache.delete(k); continue; }
+          out[k] = e.value;
+        }
+        return out;
+      },
+      remove(key: string) { state.cache.delete(key); },
+      removeAll(keys: string[]) { for (const k of keys) state.cache.delete(k); },
     }),
   };
 
@@ -367,6 +401,7 @@ export function newMockState(): MockState {
     sleepCalls: [],
     appendedRowsLog: [],
     setValuesLog: [],
+    cache: new Map(),
   };
 }
 

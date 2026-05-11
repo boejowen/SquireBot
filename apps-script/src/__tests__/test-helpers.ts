@@ -231,7 +231,12 @@ export function installAppsScriptMocks(state: MockState): void {
       alert: () => {},
       createMenu: () => menuBuilder,
       showModalDialog: () => {},
-      showSidebar: () => {},
+      // Phase 5 plan 05-03: capture the served HtmlOutput so tests can
+      // assert sidebar title/width/body without intercepting
+      // SpreadsheetApp.getUi() itself.
+      showSidebar: (output: unknown) => {
+        (state as MockState & { lastSidebar?: unknown }).lastSidebar = output;
+      },
     }),
     newConditionalFormatRule: () => makeRuleBuilder(),
     ProtectionType: { RANGE: 'RANGE', SHEET: 'SHEET' },
@@ -378,11 +383,18 @@ export function installAppsScriptMocks(state: MockState): void {
     }),
   };
 
+  // Phase 5 plan 05-03: HtmlService mock returns a fluent builder so
+  // setTitle/setWidth/setHeight chain in any order. The `_html` and
+  // `_title`/`_width` getters let tests assert the served HTML and
+  // sidebar metadata without intercepting showSidebar() itself.
   (globalThis as Record<string, unknown>).HtmlService = {
-    createHtmlOutput: (html: string) => ({
-      setWidth: () => ({ setHeight: () => ({}) }),
-      _html: html,
-    }),
+    createHtmlOutput: (html: string) => {
+      const out: Record<string, unknown> = { _html: html };
+      out.setTitle = (t: string) => { out._title = t; return out; };
+      out.setWidth = (w: number) => { out._width = w; return out; };
+      out.setHeight = (h: number) => { out._height = h; return out; };
+      return out;
+    },
   };
 
   // eslint-disable-next-line no-console

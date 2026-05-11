@@ -18,6 +18,7 @@ export function onOpen(): void {
     .addSeparator()
     .addItem('Set Character Info…', 'showCharInfoSidebar')
     .addItem('Set Bank Coin…', 'showBankCoinSidebar')
+    .addItem('Search…', 'showSearchSidebar')
     .addItem('Set Theme…', 'showThemePickerModal')
     .addSeparator()
     .addItem('Run Migration (v=3)', 'migrateToV3')

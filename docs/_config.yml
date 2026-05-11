@@ -1,0 +1,8 @@
+# Jekyll config for the SquireBot onboarding site (GitHub Pages).
+# Phase 5 plan 05-05 D-09: theme is GitHub-official Cayman (allowlist-vetted).
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
+title: SquireBot
+description: A small Windows app that streams your EverQuest inventory and spellbook into your guild's shared workbook.
+show_downloads: false

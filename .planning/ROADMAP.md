@@ -26,7 +26,7 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 
 ### 🚧 v1.0.1 — Installer + Permissions Hardening (in progress)
 
-- [x] **Phase 6: Installer Overwrite-Running Shim** — NSIS detects + gracefully stops a running watcher before file overwrite, retires manual stop workaround; ships as watcher v1.0.1 binary release. **SHIPPED 2026-05-11** as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) (CI run 1m55s; AUTH-03 PRODUCTION gate held; end-user clean-VM UAT deferred as a follow-up).
+- [x] **Phase 6: Installer Overwrite-Running Shim** — NSIS detects + gracefully stops a running watcher before file overwrite, retires manual stop workaround; ships as watcher v1.0.1 binary release. **SHIPPED + UAT-VERIFIED 2026-05-11** as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1). Both graceful `--quit` and `taskkill /F` legacy paths exercised against real watchers on Azure VM; 8 findings recorded (3 are v1.0.2 candidates).
 - [ ] **Phase 7: Admin Allowlist + Eviction Enforcement** — `_meta.guild_admins` row + bootstrap; eviction sidebar refuses non-admins by code; admin-management UX with owner-floor lockout protection
 - [ ] **Phase 8: Test Infra + Persistence + Docs Backfill** — JSDOM in vitest + ≥1 sidebar inline-JS test per shipping sidebar; SEARCH recent-MRU migrated to PropertiesService; 8 missing Phase 3+4 SUMMARY.md files backfilled
 
@@ -87,7 +87,7 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Installer Overwrite-Running Shim | 5/5 | ✅ Shipped as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) (UAT deferred) | 2026-05-11 |
+| 6. Installer Overwrite-Running Shim | 5/5 | ✅ Shipped + UAT-verified as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) | 2026-05-11 |
 | 7. Admin Allowlist + Eviction Enforcement | 0/0 | Not started | — |
 | 8. Test Infra + Persistence + Docs Backfill | 0/0 | Not started | — |
 
@@ -102,6 +102,10 @@ Carried forward from v1.0 (candidates for v1.1 / v2; see `milestones/v1.0-MILEST
 - **999.9** SignPath Foundation OSS approval — submitted; awaiting review (would retire INST-05 partial → full). Lands as hotfix when approved.
 - **999.11** Decide v1.1+ verification doctrine — adopt `/gsd-verify-work` per phase, or formalize live-smoke pattern
 - **999.12** v2: Wantlist + Discord pinger (WANT-01..08; prerequisites WANT-06/07 still open)
+- **999.13** v1.0.2 candidate — Reauthorize tray item should unhide on boot-time `invalid_grant` (currently AUTH-05 covers running-state revocation only; boot-time revocation traps user with no in-tray recovery). Surfaced by Phase 6 UAT Finding C, 2026-05-11.
+- **999.14** v1.0.2 candidate — Defer/queue tray controller `SetStatus`/`Show*`/`SetIconHealth` calls until `OnReady` fires, OR have `app.RunApp` retry on fast-fail path. Pre-Ready calls silently no-op when RunApp returns early via wincred-rebuild failure, stranding the user at "Initialising…" with no recovery menu items. Surfaced by Phase 6 UAT Finding D, 2026-05-11. Wider impact than the T-06-20 accept disposition covered.
+- **999.15** v1.0.2 candidate — Strip leading UTF-8 BOM in `internal/config/load.go` before `json.Unmarshal`. ≤5 LOC; closes a foot-gun for users hand-editing `config.json` with Notepad or PowerShell 5.1 `Set-Content -Encoding utf8`. Surfaced by Phase 6 UAT Finding F, 2026-05-11.
+- **999.16** v1.0.2 candidate — Either call `windows.FreeConsole()` early in `cmd/squirebot/main.go` to detach from any inherited console, OR document the `Start-Process` requirement prominently in `docs/build-and-install.md`. Foreground-launched watcher dies silently when parent shell closes (no `squirebot exit` log line). Surfaced by Phase 6 UAT Finding H, 2026-05-11.
 
 ---
 

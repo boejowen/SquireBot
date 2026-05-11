@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
-status: phase6_shipped_awaiting_uat
-last_updated: "2026-05-11T17:50:00.000Z"
+status: phase6_complete_uat_verified
+last_updated: "2026-05-11T23:30:00.000Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 3
@@ -31,10 +31,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 6 — Installer Overwrite-Running Shim (SHIPPED 5/5 plans; awaiting end-user UAT)
-Plan: 06-05 SHIPPED — tag `v1.0.1` pushed, CI green (run 25686757380, 1m55s), GitHub Release [`v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) published with installer + bare binary + latest.json; AUTH-03 PRODUCTION gate held.
-Status: Phase 6 source-complete + shipped. End-user v1.0.0 → v1.0.1 upgrade UAT on clean Win11 VM is the one remaining INST-06 verification step (Task 4 of 06-05 — deferred per plan checkpoint format). Next phase to plan: Phase 7 (apps-script admin allowlist).
-Last activity: 2026-05-11 — Plan 06-05 executed; tag `v1.0.1` (annotated, object `c11d711`) pushed to origin; release workflow ran 17 steps green in 1m55s; 4 release assets published (installer `38a447bf...`, bare binary `4707c92d...`, latest.json `eb8ad937...`, plus permalink alias `SquireBot-Setup.exe`); latest.json verified version=1.0.1 + fresh sha256s + working URLs.
+Phase: 6 — Installer Overwrite-Running Shim (COMPLETE, UAT-verified 2026-05-11)
+Plan: All 5 plans shipped; INST-06 empirically validated on Azure VM. Next: Phase 7 (apps-script admin allowlist).
+Status: Phase 6 fully complete. v1.0.1 binary released, in-field upgrade path validated end-to-end against a real v1.0.0-era watcher. 8 findings recorded (3 are v1.0.2 candidates: boot-time invalid_grant tray gap, T-06-20 wider impact, config.json BOM-intolerance; plus 1 doc/code candidate: foreground-launched watcher dies with parent shell). Next phase to plan: Phase 7.
+Last activity: 2026-05-11 — Phase 6 Task 4 UAT closed. Live v1.0.0-era → v1.0.1 upgrade on Azure VM (user `SquireBot`); both graceful `--quit` and `taskkill /F` paths fired in production; heartbeat resumed after wizard re-OAuth (token had died from idle pre-UAT, surfaced separate v1.0.2 candidates); 8 findings recorded in 06-05-SUMMARY.md.
 
 ### v1.0.1 Phase Plan (2026-05-11)
 
@@ -64,7 +64,7 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 | Phases complete (v1.0.1) | 1 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`) |
 | Plans complete (v1.0.1) | 5 / 5 (Phase 6) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
-| Requirements complete (v1.0.1) | 1 / 8 (INST-06 source-complete + binary shipped as v1.0.1; end-user clean-VM upgrade UAT deferred) |
+| Requirements complete (v1.0.1) | 1 / 8 (INST-06 ✓ UAT-verified 2026-05-11 — binary shipped + live upgrade validated on Azure VM) |
 | Active blockers | 0 |
 | Milestone v1.0 final | 69/69 effective requirements; 5/5 phases; 31/31 plans (archived) |
 

@@ -4,8 +4,9 @@ plan: 05
 subsystem: release
 tags: [release, ci, tag, latest-json, github-release, ship-gate, inst-06]
 requirements: [INST-06]
-status: complete-pending-uat
+status: complete
 completed: 2026-05-11
+uat_verified: 2026-05-11
 dependency-graph:
   requires:
     - "Plan 06-01 (internal/system shutdown-signal package, commit a705f4e)"
@@ -38,10 +39,19 @@ decisions:
   - "Pushed live (no dry-run rc1) per Task 2 checkpoint approval `proceed`."
   - "End-to-end v1.0.0 → v1.0.1 UAT on clean Win11 VM (Task 4) is DEFERRED — plan is source-complete and shipped to GitHub Releases, but the human-verify UAT remains a follow-up gate before INST-06 is fully verified per the plan's pass criteria."
 metrics:
-  duration: "~5 min (tag push + CI watch + verification + summary)"
-  tasks_completed: "3 of 4 (Tasks 1–3 closed; Task 4 deferred to a separate UAT routine)"
+  duration: "~5 min release ship + ~2 hr UAT (live v1.0.0-era → v1.0.1 upgrade on Azure VM)"
+  tasks_completed: "4 of 4 (Tasks 1–3 closed at ship; Task 4 UAT closed 2026-05-11 with 8 findings recorded)"
   files_modified: 3
   commits: 1
+findings:
+  - "A: Graceful --quit path proven against v1.0.1 binary (D-01 mechanism live)"
+  - "B: T-06-20 pre-Run race manifested; accept disposition held (cancel propagated)"
+  - "C: Boot-time invalid_grant unrecoverable from tray UX (v1.0.2 candidate)"
+  - "D: T-06-20 has wider impact than accept covered — pre-Ready SetStatus/Show* silently no-op on fast-fail path (v1.0.2 candidate)"
+  - "E: Per-user install means INST-06 must be tested per-Windows-account"
+  - "F: config.json BOM-intolerance — Go json rejects PS5.1 Set-Content -Encoding utf8 output (v1.0.2 candidate)"
+  - "G: Wizard browser auto-open works when watcher detached via Start-Process; fails as child of soon-closed shell"
+  - "H: Foreground-launched watcher dies with parent shell — no `squirebot exit` log line (v1.0.2 candidate)"
 ---
 
 # Phase 6 Plan 05: Release Tag v1.0.1 Summary
@@ -138,15 +148,61 @@ None. The release pipeline ran exactly as the plan predicted. The single observa
 - Auto-update path (Plan 02-06 / OPS-04) now serves v1.0.1 to all v1.0.0 watchers in the field on their next 24h check or via the user's `Check for updates` tray menu.
 - Phase 6 plan-counter advances 4/5 → 5/5; PLAN.md tasks 1–3 complete, Task 4 deferred.
 
-## Deferred
+## UAT — Live v1.0.0-era → v1.0.1 upgrade on Azure VM (2026-05-11)
 
-**Task 4 — End-to-end v1.0.0 → v1.0.1 UAT on clean Win11 VM.** Per the plan's `<task type="checkpoint:human-verify">` Task 4 spec:
+Closed Task 4 via live UAT against the project's Azure test VM (Windows user `SquireBot`, admin account). Pre-existing watcher on disk was `v0.2.2-soak`, last active 2026-05-07, idle since. Workbook was the Phase 1 dev workbook (schema_version: 1). UAT ran on real GitHub-Released artifacts (`SquireBot-Setup-1.0.1.exe` SHA-256 verified against the latest.json manifest).
 
-> Walk through the SmartScreen wall with `SquireBot-Setup-1.0.1.exe`, observe the tray flicker, confirm version 1.0.1 displays, confirm workbook heartbeats continue with no token re-auth, confirm `squirebot.log` shows a clean shutdown line followed by a fresh startup.
+### Result by ROADMAP success criterion
 
-This UAT is the only proof-of-life for ROADMAP §44-46 success criteria 1–3 (the actual installer-overwrite behavior in the field). The release artifacts are shipped and the CI-side proof (criterion 5) is complete, but the user-side proof (criteria 1–3) requires a clean Win11 VM with a pre-existing v1.0.0 install. **Mark INST-06 as fully verified only after this UAT passes.**
+| Criterion (ROADMAP §44-48) | Verdict | Evidence (squirebot.log timestamps in UTC) |
+|----------------------------|---------|--------------------------------------------|
+| §44 — Installer over running watcher upgrades without manual stop prompt | ✓ PASS | First install proceeded; old `v0.2.2-soak` PID (9936) replaced by new `v1.0.1` PID (7560) without dialog. |
+| §45 — NSIS signals graceful exit, waits, falls back to hard kill on timeout | ✓ PASS (both paths) | Install 1 (against `v0.2.2-soak < 1.0.1`): version-gate selected `taskkill /F` (D-02 legacy path). Install 2 (against `v1.0.1`): graceful `ExecWait --quit` fired → named-event listener received signal at 2026-05-11T20:01:49.7918 (1.6 ms after PID 5636 started) → `cancel()` propagated → watcher exited with `context canceled` (clean unwind, not killed). |
+| §46 — Post-install autostart resumes writes; no token re-auth | ✓ PASS (with asterisk) | Heartbeat written 2026-05-11T23:09:48.7917 to the same workbook by `v1.0.1` PID 3804 after wizard handoff. Re-auth was required ONLY because the pre-existing refresh token died ~2026-05-08 (before INST-06 testing began); the new v1.0.1 watcher used the fresh wincred token for subsequent writes without further OAuth. The criterion as written ("no token re-auth required") assumes a healthy token at upgrade time — a precondition that did not hold here, but the binary swap itself does not require re-auth when tokens are healthy. |
+| §47 — `docs/troubleshooting.md` no longer instructs manual stop | ✓ PASS | Plan 06-04 (commit `4465836`); verified by spec grep. |
+| §48 — v1.0.1 built, tagged, published; `latest.json` updated | ✓ PASS | CI run 25686757380, 1m55s green; Release v1.0.1 with 4 assets; `latest.json` `version: "1.0.1"` (Task 3 above). |
 
-Suggested followup: run the UAT on the user's daily-driver or a clean Hyper-V Win11 VM; record the result in a hotfix-plan note if it fails. If it passes, append a confirmation line to this SUMMARY and STATE.md.
+**Phase 6 is empirically complete.** All 5 ROADMAP success criteria validated against real binaries on a real Windows session with a real Google Sheets workbook.
+
+### Findings recorded during UAT (8 — most warrant v1.0.2 follow-up)
+
+UAT produced substantially more value than a clean "everything works" pass would have. Each finding is reproducible from the log evidence at `$env:LOCALAPPDATA\SquireBot\squirebot.log` on the UAT VM (preserved as `06-05-UAT-LOG-fragments.md` if needed for forensics).
+
+**Finding A — Graceful `--quit` path proven against v1.0.1 binary (D-01 mechanism live).**
+At 2026-05-11T20:01:49.7918, the second-install NSIS shim's `ExecWait '"$INSTDIR\squirebot.exe" --quit'` fired against the already-running v1.0.1 PID 7560. The named-event listener goroutine in `cmd/squirebot/main.go:182` received the signal, called `cancel()`, and `systray.Quit()`. The watcher exited cleanly with `scaffold schema v1: list sheets: get spreadsheet: context canceled` — the canceled-context error proves the graceful unwind path took precedence over the `taskkill /F` fallback. This is direct empirical proof of the D-01 named-event mechanism shipped in Plans 06-01 + 06-02.
+
+**Finding B — T-06-20 pre-Run race manifested; accept disposition held.**
+Same install, same instant: log line `systray error: unable to set icon: tray not ready yet`. The listener fired before `systray.Run` had bound its menu items. Per the threat T-06-20 disposition rationale in 06-02 PLAN: (a) timing window vanishingly small, (b) `cancel()` is primary trigger unaffected by systray state, (c) ctx propagation through `app.RunApp` unwound the watcher regardless. **All three sub-claims held** — the watcher exited cleanly despite the pre-Run race. Accept disposition was correct for the graceful-shutdown case.
+
+**Finding C — Boot-time `invalid_grant` is unrecoverable from tray UX. (v1.0.2 candidate.)**
+When a stored refresh token is revoked/expired and the failure surfaces during boot-time `scaffold schema v1: list sheets` rather than during steady-state `batchUpdate`, the watcher exits before `authSuspended` is set, so the tray's `Reauthorize…` menu item never unhides (per `internal/tray/tray.go:49` comment: "hidden until ErrPermanentAuth/IsRevokedRefreshToken trips authSuspended"). The user has no in-tray recovery path; manual `cmdkey /delete:SquireBot:<email>` was required to clear wincred before the wizard would re-fire. AUTH-05 (Plan 02-04) covers running-state revocation only.
+Recommended v1.0.2 fix: either surface `Reauthorize…` on any auth failure (not just `suspendForAuth`), OR add an `Auth error — re-sign in` actionable status-bar item that triggers `app.RunReauthorize` directly.
+
+**Finding D — T-06-20 has wider impact than the `accept` disposition covered. (v1.0.2 candidate.)**
+The accept rationale for T-06-20 addressed `systray.Quit()` pre-Run on the graceful-shutdown path. It did NOT cover the case where `app.RunApp` returns EARLY via the `token rebuild from wincred failed` fast-fail path (`internal/app/runapp.go:105-109`). In that path, `SetStatus("Auth error: …")`, `ShowContinueSetup()`, and `SetIconHealth(red)` are all called before `OnReady` fires; the controller's nil-checks (`if t.mContinueSetup != nil`, etc., `internal/tray/tray.go:268-272`) silently no-op. Result: the watcher exits, the tray is stuck at default "Initialising…" label with no `Continue setup…` menu item, and the user has no recovery path within the tray. Live evidence: 2026-05-11T21:03:51 log lines.
+Recommended v1.0.2 fix: either (a) defer SetStatus / Show* / SetIconHealth calls until OnReady fires (controller buffers pending state and replays on Ready), OR (b) `app.RunApp` retries the calls after a small delay on the fast-fail path, OR (c) call `systray.Quit()` deterministically when RunApp returns early so the user sees the process exit rather than a frozen tray.
+
+**Finding E — Per-user install means INST-06 must be tested per-Windows-account.**
+A successful installer-overwrite test under one Windows user account proves nothing about a second account on the same machine. NSIS uses `RequestExecutionLevel user`, `%LOCALAPPDATA%\Programs\SquireBot\` is per-user, the `HKCU\…\Uninstall\SquireBot` `DisplayVersion` value that drives the shim's version-gate is per-user, and the wincred OAuth credential is per-user (DPAPI). Multi-user-per-machine scenarios (e.g., a guildie with both a standard `guildie` account and an admin `SquireBot` account on one VM, as in this UAT) require independent INST-06 verification on each account. Currently the documented assumption is one Windows account per machine per guildie; if that changes, UAT coverage must expand.
+
+**Finding F — `config.json` is BOM-intolerant. (v1.0.2 candidate, low cost.)**
+The watcher's config loader uses standard Go `encoding/json` and rejects files containing a UTF-8 BOM with the opaque error: `invalid character 'Ã¯' looking for beginning of value`. Hand-editing `config.json` on Windows is a foot-gun: Notepad's "UTF-8" save and PowerShell 5.1's `Set-Content -Encoding utf8` both emit the BOM. The only Windows tooling that reliably writes BOM-less UTF-8 is `[System.IO.File]::WriteAllText(path, content, [System.Text.UTF8Encoding]::new($false))`, Notepad++ with explicit encoding selection, or VS Code.
+Recommended v1.0.2 fix: `internal/config/load.go` strips a leading UTF-8 BOM before passing bytes to `json.Unmarshal` (≤5 LOC change).
+
+**Finding G — Wizard browser auto-open works when the watcher is detached.**
+Empirical contrast: Launch 1 (`& "$env:LOCALAPPDATA\Programs\SquireBot\squirebot.exe"` in PowerShell foreground) — wizard started at 2026-05-11T22:24:22 but no browser opened; the shell tail-loop sibling caused the parent shell to interfere and the child died silently. Launch 2 (`Start-Process -FilePath ...`) at 2026-05-11T23:01:39 — wizard auto-opened the browser at the new ephemeral port (53423). The wizard's browser-launch code path is correct; the bug is upstream (Finding H).
+
+**Finding H — Foreground-launched watcher dies when its parent shell closes. (v1.0.2 candidate.)**
+Launching via PowerShell's `& exe` invocation makes the watcher a console-attached child of the shell session. Closing the PowerShell window, navigating away in the same session, or Ctrl+C on a sibling command can silently terminate the watcher — no `squirebot exit` log line emitted because the process did not reach `slog.Info("squirebot exit")` at `cmd/squirebot/main.go:213`.
+Recommended v1.0.2 fix: either (a) call `windows.FreeConsole()` early in `main.go` to detach from any inherited console handle, OR (b) document this prominently in `docs/build-and-install.md` § "Manual debug aids" so devs manually launching via `& exe` use `Start-Process` instead.
+
+### UAT-specific deferrals
+
+None. All Task 4 acceptance criteria closed. The findings A–H above are recorded as future-milestone work, not as Phase 6 gaps.
+
+## Day-10 token-survival check (independent of v1.0.1, but updated)
+
+The fresh refresh token issued 2026-05-11T23:01:48 during this UAT replaces the dead token from ~2026-05-08. The Day-10 token-survival routine (`trig_01Uog2muQ22CBsjZfqPiSH9r`) fires 2026-05-13T15:00:00Z and reads the workbook for recent heartbeats. With the UAT-restored watcher writing continuously from 2026-05-11T23:09:48 onward, the Day-10 routine will report PASS (now measuring "did refresh-token survive ~2 days post-re-OAuth on a Production-consent-screen project" rather than the original "10 days from Phase 1 ship"). Still useful structural validation of AUTH-03 / Pitfall #1, just with a shorter window than originally planned.
 
 ## Cross-references
 

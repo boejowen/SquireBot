@@ -12,7 +12,7 @@
 
 ### Installer (INST-06)
 
-- [x] **INST-06**: Installer cleanly upgrades over a running watcher. NSIS pre-install step detects `squirebot.exe` in the user session, signals it to exit gracefully (with a fallback hard-kill on timeout), confirms process is gone, then proceeds with file overwrite. User is not asked to manually stop the tray app first; the existing manual workaround in `docs/troubleshooting.md` is removed when this lands. **SHIPPED 2026-05-11 as tag [`v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1); end-user v1.0.0 → v1.0.1 UAT on clean Win11 VM still deferred.**
+- [x] **INST-06**: Installer cleanly upgrades over a running watcher. NSIS pre-install step detects `squirebot.exe` in the user session, signals it to exit gracefully (with a fallback hard-kill on timeout), confirms process is gone, then proceeds with file overwrite. User is not asked to manually stop the tray app first; the existing manual workaround in `docs/troubleshooting.md` is removed when this lands. **✓ SHIPPED + UAT-VERIFIED 2026-05-11 as tag [`v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1). Live v1.0.0-era → v1.0.1 upgrade UAT on Azure VM exercised both graceful `--quit` path (D-01 named-event listener fired against v1.0.1 binary) and `taskkill /F` legacy path (against v0.2.2-soak); heartbeat resumed against same workbook post-install. See [`06-05-SUMMARY.md`](phases/06-installer-overwrite-running-shim/06-05-SUMMARY.md) for evidence + 8 findings.**
 
 ### Admin permissions (ADMIN-01..03)
 

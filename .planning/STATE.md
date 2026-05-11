@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-code-complete
-last_updated: "2026-05-10T23:50:00Z"
+status: phase-4-shipped
+last_updated: "2026-05-11T02:40:00Z"
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 26
   completed_plans: 26
   percent: 90
@@ -15,31 +15,41 @@ progress:
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-05-09 (Phase 2 shipped as v0.2.0 + v0.2.1; Phase 3 plan 03-01 landed)
+**Last updated:** 2026-05-11 (Phase 4 SHIPPED as v0.4.0 after live smoke + 3 fix-pack patches)
 
 ## Project Reference
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.
-- **Current focus:** Phase 3 (Apps Script Enrichment Foundation) — context captured; research pending
+- **Current focus:** Phase 5 (final phase) — unplanned; eligible to start /gsd-discuss-phase 5
 - **Mode:** yolo
 - **Granularity:** coarse
 - **Total v1 phases:** 5
 
 ## Current Position
 
+Phase: 1 (End-to-End Thin Slice) — ✅ SHIPPED (v0.1.0)
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
-Phase: 3 (Apps Script Enrichment Foundation) — 🔵 CONTEXT CAPTURED — research next
+Phase: 3 (Apps Script Enrichment Foundation) — ✅ SHIPPED (v0.3.0)
+Phase: 4 (Differentiator Features) — ✅ SHIPPED (v0.4.0 — 2026-05-11)
+Phase: 5 (final phase) — 🔵 UNPLANNED
 
-- **Phase:** 4 — Differentiator Features ✓ CODE-COMPLETE (Plans 04-01..04 all landed)
-- **Plan:** 04-04 done; Phase 4 CODE-COMPLETE
+- **Phase:** 4 — Differentiator Features ✓ SHIPPED as v0.4.0
+- **Plan:** All 4 plans (04-01..04) landed; v0.4.0 tag pushed; live smoke PASS
 - **Node:** — (none yet)
-- **Status:** Plan 04-04 landed 2026-05-10. showBankCoinSidebar (manual coin entry — /outputfile inventory has no coin data) + getBankCoinForForm + saveBankCoin (writes 4 _meta rows + bank_coin_last_updated; lazy row creation; fires buildBank). buildBank prepends COIN row at row 2; inventory shifts to row 3+. protectBankCoinCells applies Range.protect to _meta.bank_coin_pp/gp/sp/cp (idempotent via description match); wired into migrateToV3 success path + installTriggers defensive re-apply. monitorCellCount weekly watchdog (Sun 03:00 PT) sums getLastRow*getLastColumn across all sheets, writes _status.cell_count, alarms at 5M (50% of 10M cap) with structured cell_count_threshold JSON to _meta.last_error + _status.last_error + top-5 sheets. installTriggers extended 4→7 (added refreshWikiSpells Sun 04:00, refreshWikiGearTier Sun 05:00, monitorCellCount Sun 03:00). onOpen menu adds 'Set Bank Coin…'. Code.ts exports 23 fns; build.mjs TRIGGER_GLOBALS 18→23. docs/apps-script-deploy.md updated (v0.4.0 prereq + migrateToV3 + 7 triggers + Set Bank Coin step + Set Character Info step + Range.protect smoke check + v0.4.0 schema-version row). 204/204 vitest tests pass across 21 test files (+25 from 04-04: 11 sidebar + 5 protect + 4 monitor + 3 installTriggers + 2 buildBank coin row). dist/Code.js 23/23 globals.
+- **Status:** v0.4.0 promoted from v0.4.0-rc1 on 2026-05-11T02:36:11Z (CI run 25647367282 success, 2m). Watcher binary unchanged from rc1 (Version string differs: "0.4.0" vs "0.4.0-rc1" → different SHA but same source). Apps-script HEAD at commit 9319c6b is what's deployed via clasp.
 
-  **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests.
+  **Live smoke test on dev box (2026-05-10) — PASS for all 6 steps:** installer + tray green, version=0.4.0-rc1 confirmed in heartbeat log, ErrSchemaTooNew startup gate fires correctly with clear user-facing message, migrateToV3 runs cleanly + Install Triggers reports 7 triggers + bank-coin protect, Range.protect warning prompt fires on direct edit, gear_check populates with proper OK/MISSING/OTHER status, spell_check populates with 359 rows across all 11 caster classes (1,562 spells in _wiki_spells).
 
-  **Next:** ship watcher v0.4.0 (Go side — bump WatcherMaxSchemaVersion 2→3 in internal/sheet/client.go + tag); end-to-end smoke test on live workbook; then Phase 5.
-- **Resume file:** Watcher v0.4.0 tag + smoke test; then `.planning/phases/05-...-PLAN.md` (not yet authored).
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 26/~28 plans complete (Phase 1 + 2 + 3 done; Phase 4 CODE-COMPLETE; Phase 5 unplanned)
+  **3 fix-pack patches landed during smoke (apps-script only — no rc2 needed):**
+    - 3c5ea6d: bank coin protection — flip setWarningOnly(true) so script owner sees the prompt (was strict mode → owner is default editor → no UX); auto-call protectBankCoinCells from saveBankCoin so first-save-creates-rows immediately gets protection (closed lazy-creation gap).
+    - b9482a6: missing on-demand menu items for refreshWikiSpells/refreshWikiGearTier/monitorCellCount (plan 04-04 added them to installTriggers but missed onOpen menu).
+    - 9319c6b: wiki-spell parser handles all 4 P1999 template variants — {{SpellRow}} (CLR/PAL/NEC/MAG/ENC, 5 classes), {{RadSpellRow}} (WIZ/SHM/RNG/SHD, 4 classes), {{RadSpellRow2}} (DRU only, 1 class), {{Template:SongRow}} with inline |level=N (BRD only, 1 class). Live sanity-check confirmed all 11 caster classes parse: 1,562 expected spells across the workbook (vs 784 broken). Pre-fix _wiki_spells only had 5 classes; post-fix has 11.
+
+  **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
+
+  **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
+- **Resume file:** (none — Phase 4 closed; Phase 5 awaits /gsd-discuss-phase 5).
+- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 26/~28 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5 unplanned)
 
 ## Performance Metrics
 

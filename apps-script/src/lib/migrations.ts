@@ -153,3 +153,71 @@ export function protectBankCoinCells(): void {
   }
   log('info', 'protectBankCoinCells', { added, skipped });
 }
+
+// protectBankToonName applies Range.protect to the single _meta row
+// holding bank_toon_name. Clones the shape of protectBankCoinCells for
+// a single cell (Phase 5 plan 05-01).
+//
+// Idempotent: re-running is a no-op once the protection is present.
+// Identifies its own protection by description string. Skip-if-row-missing
+// — bank_toon_name is created lazily by the Set Bank Coin… sidebar, so
+// installTriggers' defensive re-application will pick it up later.
+//
+// Wired from:
+//   - installTriggers (defensive re-application — same call site as
+//     protectBankCoinCells; safe on every run).
+const BANK_TOON_NAME_DESC =
+  'Edit only via SquireBot → Set Bank Coin… (sets the bank-toon name used by the bank view and search).';
+
+export function protectBankToonName(): void {
+  const sheet = getActiveSpreadsheet().getSheetByName('_meta');
+  if (!sheet) {
+    log('warn', 'protectBankToonName', { skipped: '_meta_missing' });
+    return;
+  }
+  const meta = readMetaRows('_meta');
+  const row = meta.find((r) => r.key === 'bank_toon_name');
+  if (!row) {
+    log('info', 'protectBankToonName', { skipped: 'row_not_set' });
+    return;
+  }
+  const cell = sheet.getRange(row.rowIndex, 2);  // column B (value)
+  const cellA1 = cell.getA1Notation();
+  const existing = sheet.getProtections(SpreadsheetApp.ProtectionType.RANGE)
+    .find((p) => p.getRange().getA1Notation() === cellA1
+              && p.getDescription() === BANK_TOON_NAME_DESC);
+  if (existing) {
+    log('info', 'protectBankToonName', { skipped: 'already_protected' });
+    return;
+  }
+  // setWarningOnly(true) — show the "are you sure?" prompt on direct
+  // edits but allow the user to dismiss it. The script owner is a
+  // default editor of any setWarningOnly(false) protection so a strict
+  // protection here would be invisible to them (no prompt, edit
+  // succeeds). Warning-only is the intended UX: nudge users toward
+  // SquireBot → Set Bank Coin… without locking out emergency edits.
+  cell.protect()
+    .setDescription(BANK_TOON_NAME_DESC)
+    .setWarningOnly(true);
+  log('info', 'protectBankToonName', { added: 1 });
+}
+
+// hideAllSystemTabs iterates every sheet whose name starts with `_` and
+// hides it (idempotent via isSheetHidden). Generalizes the Phase 4
+// scaffold's per-tab hide so future-added dimension tabs ride the same
+// install-time hook. Does not acquire the document lock — hideSheet()
+// does not contend with normal writes (Phase 5 plan 05-01).
+//
+// Wired from:
+//   - installTriggers (defensive re-application after every install).
+export function hideAllSystemTabs(): void {
+  const ss = getActiveSpreadsheet();
+  let hidden = 0;
+  for (const sheet of ss.getSheets()) {
+    if (!sheet.getName().startsWith('_')) continue;
+    if (sheet.isSheetHidden()) continue;  // idempotent
+    sheet.hideSheet();
+    hidden++;
+  }
+  log('info', 'hideAllSystemTabs', { hidden });
+}

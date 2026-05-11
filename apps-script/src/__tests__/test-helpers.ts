@@ -52,6 +52,14 @@ export function installAppsScriptMocks(state: MockState): void {
       getLastRow: () => s.values.length,
       getLastColumn: () => (s.values[0]?.length ?? 0),
       getMaxRows: () => Math.max(s.values.length, 1000),
+      // Phase 5 plan 05-01: hide/show + sheet-id mocks used by
+      // hideAllSystemTabs() (migrations.ts) and weeklySchemaHealthcheck()
+      // (triggers/weeklySchemaHealthcheck.ts). getSheetId returns a stable
+      // deterministic hash of the sheet name so tests can predict IDs.
+      isSheetHidden: () => Boolean((s as FakeSheet & { _hidden?: boolean })._hidden),
+      hideSheet: () => { (s as FakeSheet & { _hidden?: boolean })._hidden = true; },
+      showSheet: () => { (s as FakeSheet & { _hidden?: boolean })._hidden = false; },
+      getSheetId: () => s.name.split('').reduce((h, c) => h * 31 + c.charCodeAt(0), 0) | 0,
       getRange(rowOrA1: number | string, col?: number, numRows?: number, numCols?: number) {
         if (typeof rowOrA1 === 'string') {
           throw new Error('A1 notation not supported in mock');

@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { migrateToV2, protectBankCoinCells } from '../lib/migrations';
+import {
+  migrateToV2, protectBankCoinCells, protectBankToonName, hideAllSystemTabs,
+} from '../lib/migrations';
 import { resetMocks, seedMeta, makeSheet, type MockState } from './test-helpers';
 
 describe('migrateToV2', () => {
@@ -260,5 +262,94 @@ describe('protectBankCoinCells', () => {
   it('is a no-op when _meta sheet missing', () => {
     // No _meta sheet seeded.
     expect(() => protectBankCoinCells()).not.toThrow();
+  });
+});
+
+// Phase 5 plan 05-01: protectBankToonName clones protectBankCoinCells's
+// shape for the single _meta.bank_toon_name cell. Same warning-only
+// rationale; same idempotency-by-description-match guard.
+describe('protectBankToonName', () => {
+  const BANK_TOON_DESC =
+    'Edit only via SquireBot → Set Bank Coin… (sets the bank-toon name used by the bank view and search).';
+
+  let state: MockState;
+  beforeEach(() => { state = resetMocks(); });
+
+  it('applies 1 warning-only protection when bank_toon_name row exists', () => {
+    seedMeta(state, [
+      ['schema_version', '3'],
+      ['bank_toon_name', 'Findom'],
+    ]);
+    protectBankToonName();
+    const meta = state.sheets.get('_meta')!;
+    expect(meta.protections?.length).toBe(1);
+    expect(meta.protections![0].warningOnly).toBe(true);
+    expect(meta.protections![0].description).toBe(BANK_TOON_DESC);
+  });
+
+  it('is idempotent: re-running does not add duplicate protections', () => {
+    seedMeta(state, [
+      ['schema_version', '3'],
+      ['bank_toon_name', 'Findom'],
+    ]);
+    protectBankToonName();
+    protectBankToonName();
+    protectBankToonName();
+    expect(state.sheets.get('_meta')!.protections?.length).toBe(1);
+  });
+
+  it('is a no-op when bank_toon_name row is not yet set (lazy creation)', () => {
+    seedMeta(state, [['schema_version', '3']]);
+    protectBankToonName();
+    const meta = state.sheets.get('_meta')!;
+    // protections may be undefined or empty array — either is fine.
+    expect((meta.protections ?? []).length).toBe(0);
+  });
+
+  it('is a no-op when _meta sheet missing', () => {
+    expect(() => protectBankToonName()).not.toThrow();
+  });
+});
+
+// Phase 5 plan 05-01: hideAllSystemTabs iterates getSheets() and hides
+// any `_`-prefixed tab not already hidden. Idempotent via isSheetHidden().
+describe('hideAllSystemTabs', () => {
+  let state: MockState;
+  beforeEach(() => { state = resetMocks(); });
+
+  it('hides all _-prefixed tabs; leaves visible tabs visible', () => {
+    state.sheets.set('_meta', makeSheet('_meta', ['key', 'value']));
+    state.sheets.set('_char_owner', makeSheet('_char_owner', ['char_name']));
+    state.sheets.set('view', makeSheet('view', ['Char']));
+    state.sheets.set('bank', makeSheet('bank', ['Char']));
+
+    hideAllSystemTabs();
+
+    expect((state.sheets.get('_meta') as never as { _hidden?: boolean })._hidden).toBe(true);
+    expect((state.sheets.get('_char_owner') as never as { _hidden?: boolean })._hidden).toBe(true);
+    expect((state.sheets.get('view') as never as { _hidden?: boolean })._hidden).toBeFalsy();
+    expect((state.sheets.get('bank') as never as { _hidden?: boolean })._hidden).toBeFalsy();
+  });
+
+  it('is idempotent: a second call when _meta is already hidden hides nothing new', () => {
+    state.sheets.set('_meta', makeSheet('_meta', ['key', 'value']));
+    state.sheets.set('view', makeSheet('view', ['Char']));
+
+    hideAllSystemTabs();
+    // capture pre-state then run again — should still be hidden, no errors.
+    expect((state.sheets.get('_meta') as never as { _hidden?: boolean })._hidden).toBe(true);
+    expect(() => hideAllSystemTabs()).not.toThrow();
+    expect((state.sheets.get('_meta') as never as { _hidden?: boolean })._hidden).toBe(true);
+  });
+
+  it('is a no-op when no _-prefixed tabs exist', () => {
+    state.sheets.set('view', makeSheet('view', ['Char']));
+    state.sheets.set('bank', makeSheet('bank', ['Char']));
+    state.sheets.set('gear_check', makeSheet('gear_check', ['Char']));
+
+    expect(() => hideAllSystemTabs()).not.toThrow();
+    expect((state.sheets.get('view') as never as { _hidden?: boolean })._hidden).toBeFalsy();
+    expect((state.sheets.get('bank') as never as { _hidden?: boolean })._hidden).toBeFalsy();
+    expect((state.sheets.get('gear_check') as never as { _hidden?: boolean })._hidden).toBeFalsy();
   });
 });

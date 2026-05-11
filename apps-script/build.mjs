@@ -63,6 +63,11 @@ const TRIGGER_GLOBALS = [
   'runSearch',
   'pushRecentSearchCall',
   'prewarmSearchCache',
+  // Phase 5 plan 05-04:
+  'showEvictionSidebar',
+  'getEvictionEmails',
+  'previewEviction',
+  'commitEviction',
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

@@ -19,6 +19,7 @@ export function onOpen(): void {
     .addItem('Set Character Info…', 'showCharInfoSidebar')
     .addItem('Set Bank Coin…', 'showBankCoinSidebar')
     .addItem('Search…', 'showSearchSidebar')
+    .addItem('Evict Guildie…', 'showEvictionSidebar')
     .addItem('Set Theme…', 'showThemePickerModal')
     .addSeparator()
     .addItem('Run Migration (v=3)', 'migrateToV3')

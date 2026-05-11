@@ -41,6 +41,12 @@ import {
   runSearch,
   pushRecentSearchCall,
 } from './triggers/showSearchSidebar';
+import {
+  showEvictionSidebar,
+  getEvictionEmails,
+  previewEviction,
+  commitEviction,
+} from './triggers/showEvictionSidebar';
 import { prewarmSearchCache } from './lib/searchIndex';
 import { buildView } from './tabs/buildView';
 import { buildBank } from './tabs/buildBank';
@@ -58,6 +64,7 @@ export {
   showCharInfoSidebar, getCharsForForm, saveCharInfo,
   showBankCoinSidebar, getBankCoinForForm, saveBankCoin,
   showSearchSidebar, getSearchInitialData, runSearch, pushRecentSearchCall,
+  showEvictionSidebar, getEvictionEmails, previewEviction, commitEviction,
   prewarmSearchCache,
   installTriggers,
   buildView, buildBank, buildSpellCheck, buildGearCheck,

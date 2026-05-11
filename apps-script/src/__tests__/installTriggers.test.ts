@@ -123,4 +123,29 @@ describe('installTriggers', () => {
     expect(state.triggers.find((t) => t.handler === 'weeklySchemaHealthcheck'))
       .toBeDefined();
   });
+
+  // Phase 5 plan 05-04: eviction sidebar adds NO new time-driven
+  // trigger — its callbacks (showEvictionSidebar / commitEviction)
+  // live in TRIGGER_GLOBALS (build-side) but NEVER in SQUIREBOT_HANDLERS
+  // (time-trigger-side). Handler count stays at 10.
+  it('eviction-sidebar callbacks do NOT appear in SQUIREBOT_HANDLERS (05-04)', () => {
+    installTriggers();
+    expect(state.triggers.length).toBe(10);
+    const handlers = state.triggers.map((t) => t.handler);
+    expect(handlers).not.toContain('showEvictionSidebar');
+    expect(handlers).not.toContain('commitEviction');
+    expect(handlers).not.toContain('getEvictionEmails');
+    expect(handlers).not.toContain('previewEviction');
+  });
+
+  // Cumulative-survival gate (05-04): all prior Phase-5 handler entries
+  // from 05-01 + 05-02 must still register after 05-04 wires the
+  // eviction sidebar into the build.
+  it('05-01..05-02 handler entries survive 05-04 wiring (cumulative-survival)', () => {
+    installTriggers();
+    const handlers = state.triggers.map((t) => t.handler);
+    expect(handlers).toContain('weeklySchemaHealthcheck');  // 05-01
+    expect(handlers).toContain('weeklyStaleCharArchive');   // 05-02
+    expect(handlers).toContain('weeklyEvictionArchive');    // 05-02
+  });
 });

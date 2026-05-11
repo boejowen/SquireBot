@@ -359,3 +359,23 @@ If your local build behaves differently from a CI tag-push build, that is
 a regression. Most likely root causes: (a) different `oauth-config.json`
 contents, (b) different NSIS version, (c) different Go toolchain version
 (CI uses `go-version: '1.24'`).
+
+---
+
+### Manual debug aids
+
+These flags are not used by end users; they are intended for iterating on a local
+rebuild without going through Task Manager.
+
+- **`squirebot.exe --quit`** — signals a running watcher to shut down gracefully
+  via a Windows named event (`Local\SquireBot-Shutdown`). The watcher's listener
+  goroutine observes the signal and invokes the same `cancel() + systray.Quit()`
+  shutdown path that the tray Quit menu uses. Exits 0 within ~1s regardless of
+  whether a watcher is currently running (signal-with-no-listener is a benign
+  no-op).
+  - Use when: iterating on a local rebuild and you want the previous tray
+    instance gone before launching the new one without killing via Task Manager.
+  - The NSIS installer's pre-install shim uses the same flag to upgrade over a
+    running watcher (Plan 06 / INST-06).
+  - Does NOT delete config or credentials. For that, use the NSIS uninstaller
+    and answer "Yes" to the wipe prompt (`--uninstall-wipe-credentials`).

@@ -46,13 +46,3 @@ Any editor of the workbook can right-click a tab and choose `Unhide sheet`. The 
 ## I need to remove a guildie
 
 See the [Eviction runbook](https://github.com/boejowen/SquireBot/blob/main/docs/eviction-runbook.md). Short version: `SquireBot → Evict Guildie…`, select the email, confirm. A 30-day grace period applies before the chars are auto-archived; un-evict is a manual `_char_owner.is_removed = FALSE` cell edit before grace expires.
-
-## Installer won't overwrite a running SquireBot
-
-NSIS installers cannot replace a `.exe` that is currently running. If the installer fails silently or reports a file-in-use error:
-
-1. Right-click the tray icon and select `Quit`.
-2. Confirm SquireBot is no longer running (Task Manager → Details → look for `squirebot.exe`).
-3. Re-run the installer.
-
-A future v1.0.x release may add a quit-and-relaunch shim, but the manual stop-then-install path is the current workaround.

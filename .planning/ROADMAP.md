@@ -91,7 +91,12 @@
   3. A weekly Apps Script healthcheck verifies all expected tabs exist by ID and writes any missing-tab errors to `_meta.last_error`; characters with `inventory_mtime > 90d` are auto-archived to a hidden `_archive` tab.
   4. The eviction workflow is tested end-to-end on a fake guildie account: their email is removed from workbook share → all their characters are marked `is_removed` via the sidebar → 30-day grace observed → archive is automatic. Documented in DOC-02.
   5. README documents install flow, SmartScreen walkthrough (with screenshots/video link), OAuth flow, EQ folder picker, and the "tray turned red, what now?" recovery; onboarding screenshots and a short SmartScreen video are linked from the download page; all 12 guildies are installed and writing data.
-**Plans**: TBD
+**Plans**: 5 plans
+- [x] 05-01-PLAN.md — System tab hide + bank_toon_name protect + weekly schema healthcheck (OPS-06) ✅ SHIPPED 2026-05-11 (3 commits c85586b, ae57d61, a9562b6; 229/229 tests green; trigger count 7→8; schema_version=3 unchanged)
+- [ ] 05-02-PLAN.md — Archive lib + weeklyStaleCharArchive + weeklyEvictionArchive cron (VIEW-05)
+- [ ] 05-03-PLAN.md — Cross-character search sidebar (SEARCH-01..04, TIP-04)
+- [ ] 05-04-PLAN.md — Eviction sidebar + DOC-02 runbook (DOC-02)
+- [ ] 05-05-PLAN.md — Jekyll Pages site + README shrink + 12-guildie rollout smoke (DOC-01, DOC-03)
 **UI hint**: yes
 **Research flag**: not needed (standard sidebar/HtmlService/onboarding patterns; SUMMARY.md confidence HIGH).
 

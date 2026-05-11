@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-4-shipped
-last_updated: "2026-05-11T02:40:00Z"
+status: phase-5-in-progress
+last_updated: "2026-05-11T04:34:00Z"
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 26
-  completed_plans: 26
-  percent: 90
+  total_plans: 31
+  completed_plans: 27
+  percent: 87
 ---
 
 # State: SquireBot
@@ -31,7 +31,7 @@ Phase: 1 (End-to-End Thin Slice) — ✅ SHIPPED (v0.1.0)
 Phase: 2 (Watcher Robustness + Schema Lock) — ✅ SHIPPED (v0.2.0 → v0.2.1 wizard fix)
 Phase: 3 (Apps Script Enrichment Foundation) — ✅ SHIPPED (v0.3.0)
 Phase: 4 (Differentiator Features) — ✅ SHIPPED (v0.4.0 — 2026-05-11)
-Phase: 5 (final phase) — 🔵 UNPLANNED
+Phase: 5 (Search + Onboarding + Privacy Polish) — 🟢 IN PROGRESS (1/5 plans complete: 05-01 SHIPPED 2026-05-11)
 
 - **Phase:** 4 — Differentiator Features ✓ SHIPPED as v0.4.0
 - **Plan:** All 4 plans (04-01..04) landed; v0.4.0 tag pushed; live smoke PASS
@@ -48,8 +48,29 @@ Phase: 5 (final phase) — 🔵 UNPLANNED
   **Phase 4 deferred to Phase 5:** bank-coin permission lock (only bank-toon-owner can use sidebar), polished theme picker UI, cross-character search sidebar, system-tab hide, weekly schema healthcheck, eviction workflow, stale-char auto-archive, sidebar HTML inline-JS unit tests, installer-driven upgrade UX (current installer can't overwrite running .exe — workaround: stop process first; possible fix: bundle a quit-then-install shim).
 
   **Next:** /gsd-discuss-phase 5 to capture context for the final phase. After Phase 5 ships, milestone v1.0 complete.
-- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-CONTEXT.md` — Phase 5 ready for /gsd-plan-phase 5.
-- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 26/~28 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5 unplanned)
+- **Resume file:** `.planning/phases/05-search-onboarding-privacy-polish/05-02-PLAN.md` — next plan in the sequential 05-01 → 05-05 execution chain (05-01 shipped 2026-05-11).
+- **Progress:** ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 27/31 plans complete (Phases 1+2+3+4 SHIPPED; Phase 5: 05-01 shipped, 05-02..05 pending)
+
+### Phase 5 plan execution log
+
+| Phase-Plan | Name | Duration | Tasks | Commits | Completed |
+|------------|------|----------|-------|---------|-----------|
+| 05-01 | Schema healthcheck + tab hide + bank-toon-name protect | ~20min | 3 | c85586b, ae57d61, a9562b6 | 2026-05-11 |
+
+**05-01 outcomes:** OPS-06 (weekly Sun-03:00 PT tab-by-id verification) live; `_meta.expected_sheet_ids` is the new sheet-id source-of-truth (lazy-backfilled, resilient to user renames per Pitfall P7); `_meta.last_error` `kind='tab_missing'` envelope wired to the existing watcher heartbeat tray-red signal. `protectBankToonName` (warning-only Range.protect) + `hideAllSystemTabs` (idempotent `_`-prefixed sweep) wired into `installTriggers` (trigger count 7 → 8). schema_version=3 unchanged; WatcherMaxSchemaVersion=3 untouched; no watcher rebuild required. 229/229 vitest green, npm run build TRIGGER_GLOBALS CI assertion passes.
+
+### Phase 5 Planning Artifacts (2026-05-11)
+
+| File | Purpose |
+|------|---------|
+| 05-CONTEXT.md | 12 LOCKED decisions D-01..D-12 + scope reductions (SEARCH-03 row-staleness deferred, "12 guildies" relaxed to "even a handful is fine" per user 2026-05-11) |
+| 05-DISCUSSION-LOG.md | Discussion record from /gsd-discuss-phase |
+| 05-UI-SPEC.md | UI design contract (6/6 dimensions PASS) — 300px sidebar, 4-pt spacing, theme-aware via CSS custom properties from `apps-script/src/lib/themes.ts` |
+| 05-RESEARCH.md | Technical research (12 pitfalls catalogued, schema-impact Path A — NO WatcherMaxSchemaVersion bump) |
+| 05-PATTERNS.md | 24 files classified with analog `path:line` references — sidebar 3-function shape from showCharInfoSidebar.ts, weekly-trigger `_meta.last_error` envelope from monitorCellCount.ts |
+| 05-01-PLAN.md → 05-05-PLAN.md | 5 sequential plans (wave 1 protections+healthcheck → wave 5 onboarding+rollout) |
+
+**Plan checker verdict (iteration 2/3):** VERIFICATION PASSED — 4 blockers + 6 warnings from iteration 1 all resolved.
 
 ## Performance Metrics
 

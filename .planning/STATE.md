@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-5-shipped
-last_updated: "2026-05-11T15:00:00Z"
+status: milestone-v1.0-complete
+last_updated: "2026-05-11T16:30:00Z"
 progress:
   total_phases: 5
   completed_phases: 5
@@ -19,11 +19,13 @@ progress:
 
 ## Project Reference
 
+See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close)
+
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.
-- **Current focus:** Phase 5 (final phase) — CONTEXT captured 2026-05-11; ready for /gsd-plan-phase 5
+- **Current focus:** Milestone v1.0 COMPLETE (2026-05-11); next milestone undefined. Start via `/gsd-new-milestone` when ready.
 - **Mode:** yolo
 - **Granularity:** coarse
-- **Total v1 phases:** 5
+- **Total v1 phases:** 5 (all shipped)
 
 ## Current Position
 
@@ -169,7 +171,11 @@ Decisions surfaced and locked during initialization (recorded in `PROJECT.md` Ke
 
 ### Active Blockers
 
-None.
+None. Milestone v1.0 SHIPPED 2026-05-11; no carry-over blockers. Tech debt acknowledged in `.planning/milestones/v1.0-MILESTONE-AUDIT.md` (documentation-only; no quality risks).
+
+### v1.0.1 / v1.1+ Backlog (carried in ROADMAP.md)
+
+Twelve items captured in `.planning/ROADMAP.md` § Backlog (999.1 through 999.12). Highlights: installer overwrite-running shim, SignPath OSS approval (in flight), sidebar inline-JS unit tests, PropertiesService recent-query persistence, v2 Wantlist + Discord pinger (WANT-01..08 with open prerequisites). See backlog for full list.
 
 ## Session Continuity
 

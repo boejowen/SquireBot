@@ -66,6 +66,82 @@ func TestPreReady_EnqueuesNotDrops(t *testing.T) {
 	// No panic.
 }
 
+// TestPreReady_FIFOOrder verifies that queued actions retain insertion
+// order so paired Show*/Hide* calls replay last-write-wins. Plan 09-01.
+func TestPreReady_FIFOOrder(t *testing.T) {
+	c := NewController(Config{})
+	c.SetIconHealth(HealthRed)
+	c.ShowReauthorize()
+	c.SetStatus("auth error")
+	c.HideReauthorize()
+	c.SetStatus("recovered")
+
+	snap := c.pendingSnapshot()
+	if len(snap) != 5 {
+		t.Fatalf("pendingSnapshot len = %d, want 5", len(snap))
+	}
+	wantKinds := []actionKind{
+		actIconHealth, actShowReauthorize, actStatus, actHideReauthorize, actStatus,
+	}
+	for i, w := range wantKinds {
+		if snap[i].kind != w {
+			t.Errorf("snap[%d].kind = %v, want %v", i, snap[i].kind, w)
+		}
+	}
+	if snap[0].health != HealthRed {
+		t.Errorf("snap[0].health = %v, want HealthRed", snap[0].health)
+	}
+	if snap[2].status != "auth error" {
+		t.Errorf("snap[2].status = %q, want %q", snap[2].status, "auth error")
+	}
+	if snap[4].status != "recovered" {
+		t.Errorf("snap[4].status = %q, want %q", snap[4].status, "recovered")
+	}
+}
+
+// TestSimulateReady_DrainsQueue verifies simulateReady empties the queue
+// and flips isReady. Plan 09-01.
+func TestSimulateReady_DrainsQueue(t *testing.T) {
+	c := NewController(Config{})
+	c.SetStatus("queued before ready")
+	c.SetIconHealth(HealthRed)
+	if len(c.pendingSnapshot()) != 2 {
+		t.Fatalf("pre-ready len = %d, want 2", len(c.pendingSnapshot()))
+	}
+	if c.isReady() {
+		t.Fatal("isReady() = true before simulateReady; want false")
+	}
+
+	c.simulateReady()
+
+	if !c.isReady() {
+		t.Error("isReady() = false after simulateReady; want true")
+	}
+	if got := c.pendingSnapshot(); len(got) != 0 {
+		t.Errorf("post-drain pending len = %d, want 0", len(got))
+	}
+}
+
+// TestPostReady_ExecutesLive verifies that after OnReady (here simulated),
+// subsequent mutator calls do NOT append to the pending queue. Plan 09-01.
+func TestPostReady_ExecutesLive(t *testing.T) {
+	c := NewController(Config{})
+	c.simulateReady() // skip the queued phase entirely
+
+	c.SetStatus("live")
+	c.SetIconHealth(HealthGreen)
+	c.ShowReauthorize()
+	c.SetSpreadsheetID("ssid-123")
+
+	if got := c.pendingSnapshot(); len(got) != 0 {
+		t.Errorf("post-ready pending len = %d, want 0 (live execution should not enqueue)", len(got))
+	}
+	// SetSpreadsheetID always writes the field regardless of readiness.
+	if c.SpreadsheetID() != "ssid-123" {
+		t.Errorf("SpreadsheetID() = %q, want %q", c.SpreadsheetID(), "ssid-123")
+	}
+}
+
 func TestHealthConstants(t *testing.T) {
 	if HealthGreen == HealthRed {
 		t.Fatal("HealthGreen == HealthRed")

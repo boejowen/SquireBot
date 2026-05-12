@@ -235,6 +235,17 @@ func (t *Controller) OnReady() {
 	systray.AddSeparator()
 	t.mQuit = systray.AddMenuItem(plan[6].Label, plan[6].Tooltip) // Quit
 
+	// Plan 09-01 / OPS-06: drain any mutator calls queued before OnReady.
+	// Must run AFTER all systray.AddMenuItem calls (so the *MenuItem fields
+	// are non-nil) and BEFORE go t.loop() (so the loop starts in a stable
+	// state). The flag flip + drain run under t.mu in a single critical
+	// section so concurrent SetStatus/SetIconHealth/etc. either land in the
+	// queue (and are drained here) or land live (after we release t.mu).
+	t.mu.Lock()
+	t.ready = true
+	t.drainPending()
+	t.mu.Unlock()
+
 	go t.loop()
 }
 
@@ -437,4 +448,14 @@ func (t *Controller) isReady() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.ready
+}
+
+// simulateReady is a TEST-ONLY helper that flips the ready flag and drains
+// the pending queue. Mirrors OnReady's drain block exactly. Allows offline
+// tests to exercise the drain code path without a live systray. Plan 09-01.
+func (t *Controller) simulateReady() {
+	t.mu.Lock()
+	t.ready = true
+	t.drainPending()
+	t.mu.Unlock()
 }

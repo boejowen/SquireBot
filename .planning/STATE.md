@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
 status: phase7_in_progress
-last_updated: "2026-05-12T02:13:00.000Z"
+last_updated: "2026-05-12T02:30:00.000Z"
 last_activity: 2026-05-12
-resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-02-admin-mgmt-sidebar-PLAN.md
+resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-03-eviction-guard-onopen-smoke-PLAN.md
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
-  percent: 75.0
+  completed_plans: 7
+  percent: 87.5
 ---
 
 # State: SquireBot
@@ -32,10 +32,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 7 — Admin Allowlist + Eviction Enforcement (IN PROGRESS — Plan 01 SHIPPED 2026-05-12)
-Plan: 1 of 3 complete (Wave 1). Commits `dfc3533` (test RED) + `8780222` (feat GREEN). admin.ts policy module + 20-scenario vitest suite both landed; full apps-script suite 317/317 GREEN; typecheck clean; verification hook 5 grep gates all PASS (schema_version untouched, WatcherMaxSchemaVersion=3 unchanged).
-Status: Plans 02 + 03 unblocked (Wave 2). Both can import from `'../lib/admin'`. Next: `/gsd-execute-phase 7` to run Plans 02 + 03 in parallel, OR resume single-plan execution.
-Last activity: 2026-05-12 — Plan 07-01 executed. Created `apps-script/src/lib/admin.ts` (357 lines, 9 public exports matching the <interfaces> contract byte-for-byte) + `apps-script/src/__tests__/admin.test.ts` (462 lines, 20 named tests T1–T20). Zero deviations from plan. SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-01-SUMMARY.md`.
+Phase: 7 — Admin Allowlist + Eviction Enforcement (IN PROGRESS — Plans 01 + 02 SHIPPED 2026-05-12)
+Plan: 2 of 3 complete (Wave 1 + half of Wave 2). Plan 02 commits: `2ea0cd2` (trigger) + `a5d3cb4` (test + helpers) + `d84d684` (Code.ts + build.mjs wiring). showAdminMgmtSidebar trigger (263 LOC) + 7-test vitest suite (219 LOC) + 5 new globals lifted to Apps Script top-level. Full apps-script suite 317→324 GREEN; typecheck + build clean; verification hook 5 grep gates still PASS (schema_version untouched, WatcherMaxSchemaVersion=3 unchanged).
+Status: Plan 03 (eviction-guard + onOpen + clasp-push smoke) is the only remaining plan. It will modify `showEvictionSidebar.ts` (admin guards), `onOpen.ts` (lazy bootstrap call + 2 new menu items), reseed eviction-sidebar tests with `_meta.guild_admins`, and ship the dev-workbook smoke (the ship gate). Next: `/clear` then `/gsd-execute-phase 7` (Plan 03 only — sequential continuation).
+Last activity: 2026-05-12 — Plan 07-02 executed. Created `apps-script/src/triggers/showAdminMgmtSidebar.ts` (263 lines, 4 exports: opener + 3 google.script.run callbacks matching the <interfaces> contract byte-for-byte) + `apps-script/src/__tests__/adminMgmtSidebar.test.ts` (219 lines, 7 named tests TS1–TS7). Modified `apps-script/src/Code.ts` (+12 lines: 2 import blocks + 5 new export entries), `apps-script/build.mjs` (+6 lines: 5 new TRIGGER_GLOBALS entries with section comment), and `apps-script/src/__tests__/test-helpers.ts` (+20 lines: alertCalls capture + ButtonSet/Button enums + alert mock body). Two minor deviations documented (build.mjs added scope per Rule 3; "exactly 2" Code.ts grep matches 3 due to import-path string overlap — spirit honored). SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-02-SUMMARY.md`.
 
 **Phase 7 plan-phase completed 2026-05-12** (prior history): 3 PLAN.md files: 07-01-admin-policy-module-PLAN.md (wave 1, lib/admin.ts + tests, 20 unit-test scenarios T1–T20), 07-02-admin-mgmt-sidebar-PLAN.md (wave 2, showAdminMgmtSidebar.ts + tests + Code.ts re-exports), 07-03-eviction-guard-onopen-smoke-PLAN.md (wave 2, eviction sidebar admin-guard + onOpen lazy bootstrap + 2 new menu items + clasp-push interactive smoke against dev workbook).
 
@@ -65,7 +65,7 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 |--------|-------|
 | Phases planned (v1.0.1) | 3 / 3 |
 | Phases complete (v1.0.1) | 1 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`) |
-| Plans complete (v1.0.1) | 6 / 8 (Phase 6: 5/5; Phase 7: 1/3 — plan 07-01 shipped 2026-05-12) |
+| Plans complete (v1.0.1) | 7 / 8 (Phase 6: 5/5; Phase 7: 2/3 — plans 07-01 + 07-02 shipped 2026-05-12) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
 | Requirements complete (v1.0.1) | 1 / 8 (INST-06 ✓ UAT-verified 2026-05-11 — binary shipped + live upgrade validated on Azure VM) |
 | Active blockers | 0 |
@@ -86,6 +86,8 @@ Decisions locked at milestone open and roadmap creation:
 7. **(Plan 07-01) admin.ts cloned the eviction-sidebar lock+audit-log envelope verbatim.** Per D-05, addAdmin/removeAdmin use the same shape as commitEviction. Identical idiom prevents drift; future readers reach for the eviction-sidebar example and find the admin module already follows it. (Plan 07-01 SUMMARY, 2026-05-12.)
 8. **(Plan 07-01) bootstrapGuildAdmins is the documented exception that returns `{reason:'lock_busy'}` silently.** Per D-01, onOpen MUST NOT throw or the menu breaks for everyone. The lock-busy branch logs a warn and returns the enum instead of throwing. The next workbook open retries idempotently. (Plan 07-01 SUMMARY, 2026-05-12.)
 9. **(Plan 07-01) Per-test getOwner override lives in admin.test.ts, NOT in test-helpers.ts.** Only 4 tests need `SpreadsheetApp.getActiveSpreadsheet().getOwner()` (T15/T17/T18/T19); a 7-line helper at the top of admin.test.ts wraps the base mock per-test. test-helpers.ts surface unchanged. Plan 02's adminMgmtSidebar.test.ts may need to extend test-helpers for `getUi().alert(...)` capture — that decision belongs to Plan 02. (Plan 07-01 SUMMARY, 2026-05-12.)
+10. **(Plan 07-02) test-helpers extended minimally for alert capture.** Per Plan 02's deferred Plan 01 decision: 3 additive changes to `test-helpers.ts` (alertCalls field, alert mock body, ButtonSet/Button enums on getUi()). Backward-compatible — full suite stayed 317→324 GREEN with no existing test broken. Lib-alias imports in `showAdminMgmtSidebar.ts` (libGetAdminList/libAddAdmin/libRemoveAdmin) resolve the wrappers-export-the-same-names contract from CONTEXT.md §canonical_refs. (Plan 07-02 SUMMARY, 2026-05-12.)
+11. **(Plan 07-02) build.mjs TRIGGER_GLOBALS list update is a load-bearing scope addition for every plan that adds Apps Script globals.** The Phase 3 d0a2645-style sync assertion fires at build time and blocks the build if Code.ts and TRIGGER_GLOBALS diverge. Plan 02's plan text didn't enumerate `build.mjs` in `<files>`, but the assertion is non-negotiable. Future plans adding new google.script.run callbacks or menu-item-targeted globals must update both Code.ts AND TRIGGER_GLOBALS. (Plan 07-02 SUMMARY, 2026-05-12.)
 
 ### Decisions Log (v1.0, mirrored for continuity)
 
@@ -104,6 +106,8 @@ None. v1.0 shipped clean; v1.0.1 is planning-stage. Phase 6 is unblocked and rea
 ## Session Continuity
 
 ### Last Session Summary
+
+**2026-05-12 (Phase 7 Plan 02 executed — admin-mgmt sidebar shipped):** Created `apps-script/src/triggers/showAdminMgmtSidebar.ts` (263 lines, 4 exports: opener admin-gated with getUi().alert non-admin path + 3 google.script.run callbacks getAdminList/addAdmin/removeAdmin) + `apps-script/src/__tests__/adminMgmtSidebar.test.ts` (219 lines, 7 named tests TS1–TS7 covering required scenarios + bonus floor self-removal + empty-Session fail-closed). Modified `apps-script/src/Code.ts` (+12 lines: 2 import blocks for the 4 sidebar exports + bootstrapGuildAdminsManual from lib/admin, plus 5 new entries in the export footer), `apps-script/build.mjs` (+6 lines: TRIGGER_GLOBALS extended with the 5 new names under a Phase 7 plan 07-02 section comment), `apps-script/src/__tests__/test-helpers.ts` (+20 lines: alertCalls capture field, getUi().alert mock body that pushes args + returns 'OK' sentinel, ButtonSet/Button enums on getUi()). 3 commits, all autonomous: `2ea0cd2` (trigger), `a5d3cb4` (test + helpers), `d84d684` (Code.ts + build wiring). Full apps-script suite went 317→324 GREEN; typecheck clean; build clean (`dist/Code.js` contains all 5 new top-level globals as verified via grep). Verification hook 5 grep gates still PASS (admin-mgmt sidebar has 0 schema_version references; migrations.ts schema_version writes unchanged at 1 line; WatcherMaxSchemaVersion=3 unchanged in client.go). Two minor deviations documented (build.mjs scope addition per Rule 3 — the d0a2645-style sync assertion is non-negotiable; "exactly 2 lines" Code.ts grep matches 3 because the import-path string also matches the regex — spirit of 1 import + 1 export honored). ZERO breaking changes — Plan 03 can now wire the menu items + onOpen lazy bootstrap + clasp-push smoke. SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-02-SUMMARY.md`.
 
 **2026-05-12 (Phase 7 Plan 01 executed — admin policy module shipped):** Created `apps-script/src/lib/admin.ts` (357 lines, 9 public exports: normalizeEmail, getAdminList, isAdmin, requireAdminOrThrow, addAdmin, removeAdmin, bootstrapGuildAdmins, bootstrapGuildAdminsManual, appendAdminLogEntry) + `apps-script/src/__tests__/admin.test.ts` (462 lines, 20 named tests T1–T20). 2 commits, TDD discipline followed (RED `dfc3533` → GREEN `8780222`). All 20 tests PASS on first GREEN run; full apps-script suite went 297→317 GREEN; typecheck clean. Verification hook 5 grep gates all PASS: `admin.ts` has 0 schema_version references, `migrations.ts` schema_version writes unchanged at 9 lines, `WatcherMaxSchemaVersion=3` unchanged in `internal/sheet/client.go`. ZERO deviations from the `<interfaces>` contract — Plans 02 + 03 can import the 9 exports verbatim. Owner-floor lockout (D-04), fail-closed empty-email (D-06), bootstrap-must-not-throw (D-01) all enforced and tested. Test-helpers.ts UNCHANGED — per-test getOwner override lives in admin.test.ts only. SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-01-SUMMARY.md`.
 
@@ -131,9 +135,9 @@ Schema impact NONE across all 3 phases. 100% requirement coverage validated. REQ
 
 ### Next Action
 
-**Phase 7 PLANNED 2026-05-12.** Next actions, in priority order:
+**Phase 7 IN PROGRESS — 2/3 plans shipped 2026-05-12.** Next actions, in priority order:
 
-1. **Execute Phase 7** — `/clear` then `/gsd-execute-phase 7`. Wave 1 runs Plan 01 (lib/admin.ts policy module + 20 unit tests) alone. Wave 2 runs Plans 02 (admin-mgmt sidebar) and 03 (eviction guards + onOpen + clasp-push smoke) in parallel. Smoke step in Plan 03 is a `checkpoint:human-verify` requiring workbook-owner interactive verification against the dev workbook (the ship gate).
+1. **Execute Plan 07-03** — `/clear` then `/gsd-execute-phase 7` (sequential continuation; 03 is the only remaining plan in Phase 7). It will: (a) modify `apps-script/src/triggers/showEvictionSidebar.ts` to insert admin guards in the opener + 3 callbacks (`getEvictionEmails`, `previewEviction`, `commitEviction`), (b) modify `apps-script/src/triggers/onOpen.ts` to add a lazy `bootstrapGuildAdmins()` call at the top + 2 new menu items ("Manage Admins…" between Evict Guildie and Set Theme; "Initialize Admin Allowlist (manual)" under a new sub-separator), (c) reseed the existing `showEvictionSidebar.test.ts` tests with `_meta.guild_admins=['officer@example.com']` so the post-guard tests stay green, (d) `clasp push` to the dev workbook + interactive 5-hook smoke (the ship gate — checkpoint:human-verify).
 2. **After Phase 7 ships, plan Phase 8** (test infra + persistence + docs backfill).
 
 **Independent of v1.0.1:** Day-10 token-survival check fires automatically 2026-05-13T15:00:00Z (routine `trig_01Uog2muQ22CBsjZfqPiSH9r`).

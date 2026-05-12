@@ -62,7 +62,7 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
   5. `_meta.schema_version` remains at 3 and `WatcherMaxSchemaVersion` remains at 3 (the `guild_admins` row is an extend-only `_meta` addition; no migration, no watcher rebuild)
 **Plans**: 3 plans
   - [x] 07-01-admin-policy-module-PLAN.md -- apps-script/src/lib/admin.ts policy primitives (normalizeEmail, getAdminList, isAdmin, requireAdminOrThrow, addAdmin, removeAdmin, bootstrapGuildAdmins, bootstrapGuildAdminsManual, appendAdminLogEntry) + 20-scenario vitest unit suite. Wave 1. **SHIPPED 2026-05-12** (commits `dfc3533` test + `8780222` feat; 357 LOC admin.ts + 462 LOC admin.test.ts; 20/20 tests PASS; full suite 297→317 GREEN; typecheck clean; verification hook 5 schema_version untouched; SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-01-SUMMARY.md`).
-  - [ ] 07-02-admin-mgmt-sidebar-PLAN.md -- apps-script/src/triggers/showAdminMgmtSidebar.ts (300px HtmlService sidebar, 3 google.script.run callbacks, owner-floor enforcement) + 5+ vitest suite + Code.ts re-exports for the 5 new globals. Wave 2 (parallel with 07-03).
+  - [x] 07-02-admin-mgmt-sidebar-PLAN.md -- apps-script/src/triggers/showAdminMgmtSidebar.ts (300px HtmlService sidebar, 3 google.script.run callbacks, owner-floor enforcement) + 7-test vitest suite + Code.ts + build.mjs TRIGGER_GLOBALS re-exports for the 5 new globals. Wave 2 (parallel with 07-03). **SHIPPED 2026-05-12** (commits `2ea0cd2` trigger + `a5d3cb4` test+helpers + `d84d684` Code.ts+build wiring; 263 LOC sidebar + 219 LOC test; full suite 317→324 GREEN; typecheck + build clean; all 5 new globals lifted to dist/Code.js; verification hook 5 schema_version untouched; SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-02-SUMMARY.md`).
   - [ ] 07-03-eviction-guard-onopen-smoke-PLAN.md -- showEvictionSidebar admin guard (opener + 3 callbacks); onOpen lazy bootstrap + 2 new menu items; eviction-sidebar tests reseeded; clasp push + dev-workbook 5-hook smoke. Wave 2 (parallel with 07-02). Ship gate.
 **UI hint**: yes
 **Ship gate**: `clasp push` of the apps-script bundle to the dev workbook + admin-management UX smoke
@@ -86,12 +86,12 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 | Milestone | Phases | Plans Complete | Status | Completed |
 |-----------|--------|----------------|--------|-----------|
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
-| v1.0.1 | 3 | 6/8 (Phase 6 + Plan 07-01) | 🚧 In progress (1/3 phases shipped; Phase 7 in progress) | — |
+| v1.0.1 | 3 | 7/8 (Phase 6 + Plans 07-01..02) | 🚧 In progress (1/3 phases shipped; Phase 7 in progress) | — |
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Installer Overwrite-Running Shim | 5/5 | ✅ Shipped + UAT-verified as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) | 2026-05-11 |
-| 7. Admin Allowlist + Eviction Enforcement | 1/3 | 🚧 In progress (Plan 07-01 shipped 2026-05-12) | — |
+| 7. Admin Allowlist + Eviction Enforcement | 2/3 | 🚧 In progress (Plans 07-01 + 07-02 shipped 2026-05-12) | — |
 | 8. Test Infra + Persistence + Docs Backfill | 0/0 | Not started | — |
 
 ## Backlog

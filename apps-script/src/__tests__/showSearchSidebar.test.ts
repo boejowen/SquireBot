@@ -120,12 +120,9 @@ describe('getSearchInitialData', () => {
   });
 
   it('Test 4 — returns chars (sorted, is_removed filtered) + slots + recent', async () => {
-    // Pre-seed recent cache.
-    (state as MockState & { cache: Map<string, { value: string; expiresAt: number }> })
-      .cache.set('squirebot:search:recent', {
-        value: JSON.stringify(['q1', 'q2']),
-        expiresAt: Date.now() + 60_000,
-      });
+    // Pre-seed recent MRU via PropertiesService user-scope (SEARCH-05 migrated MRU
+    // off CacheService in Plan 08-03; see apps-script/src/lib/searchIndex.ts:355).
+    state.userProperties.set('squirebot:search:recent', JSON.stringify(['q1', 'q2']));
     const { getSearchInitialData } = await loadTrigger();
     const out = getSearchInitialData();
     expect(out.chars).toEqual(['Abulus', 'Findom', 'Slampeach']);
@@ -155,14 +152,14 @@ describe('runSearch + pushRecentSearchCall passthroughs', () => {
     expect(typeof out.durationMs).toBe('number');
   });
 
-  it('Test 6 — pushRecentSearchCall populates CacheService.recent', async () => {
+  it('Test 6 — pushRecentSearchCall populates PropertiesService user-scope recent', async () => {
     const { pushRecentSearchCall } = await loadTrigger();
     pushRecentSearchCall('q1');
     pushRecentSearchCall('q2');
-    const cache = (state as MockState & { cache: Map<string, { value: string; expiresAt: number }> }).cache;
-    const raw = cache.get('squirebot:search:recent');
+    // SEARCH-05 (Plan 08-03) — MRU is per-user persistent, not document cache.
+    const raw = state.userProperties.get('squirebot:search:recent');
     expect(raw).toBeDefined();
-    expect(JSON.parse(raw!.value)).toEqual(['q2', 'q1']);
+    expect(JSON.parse(raw!)).toEqual(['q2', 'q1']);
   });
 });
 

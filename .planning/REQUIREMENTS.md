@@ -54,9 +54,9 @@
 | REQ-ID | Phase | Plan(s) |
 |--------|-------|---------|
 | INST-06 | Phase 6 | 06-01 (shipped), 06-02 (shipped), 06-03 (shipped), 06-04 (shipped), 06-05 (shipped — tag `v1.0.1` 2026-05-11; UAT deferred) |
-| ADMIN-01 | Phase 7 | TBD |
-| ADMIN-02 | Phase 7 | TBD |
-| ADMIN-03 | Phase 7 | TBD |
+| ADMIN-01 | Phase 7 | 07-01 (partial — bootstrap primitive shipped 2026-05-12; onOpen wiring in 07-03), 07-03 (TBD) |
+| ADMIN-02 | Phase 7 | 07-03 (TBD — eviction sidebar admin guard) |
+| ADMIN-03 | Phase 7 | 07-01 (partial — add/remove/floor policy shipped 2026-05-12), 07-02 (TBD — admin-mgmt sidebar UX) |
 | TEST-01 | Phase 8 | TBD |
 | TEST-02 | Phase 8 | TBD |
 | SEARCH-05 | Phase 8 | TBD |

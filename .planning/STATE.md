@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
-status: phase7_planned
-last_updated: "2026-05-12T02:00:00.000Z"
+status: phase7_in_progress
+last_updated: "2026-05-12T02:13:00.000Z"
 last_activity: 2026-05-12
-resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-01-admin-policy-module-PLAN.md
+resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-02-admin-mgmt-sidebar-PLAN.md
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
-  percent: 62.5
+  completed_plans: 6
+  percent: 75.0
 ---
 
 # State: SquireBot
@@ -32,10 +32,12 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 7 — Admin Allowlist + Eviction Enforcement (PLANNED 2026-05-12; ready for /gsd-execute-phase)
-Plan: 3 plans authored + plan-check PASSED clean (zero revisions). Commit `7c3b361 docs(07): plan Phase 7 admin allowlist + eviction enforcement`. Pattern-mapper produced 07-PATTERNS.md with 7/7 file analogs; planner used CONTEXT.md D-01..D-06 + UI-SPEC verbatim; plan-checker verified all 5 ROADMAP success criteria, all 6 decisions, all threat models present (STRIDE registers, ASVS L1 zero-high), wave dependencies correct (Plan 01 wave 1 → Plans 02+03 wave 2 parallel with zero file-overlap), and spot-checked 18+ line-number citations against actuals.
-Status: Phase 7 plans ready for execution. Next: `/gsd-execute-phase 7`.
-Last activity: 2026-05-12 — Phase 7 plan-phase completed. 3 PLAN.md files: 07-01-admin-policy-module-PLAN.md (wave 1, lib/admin.ts + tests, 20 unit-test scenarios T1–T20), 07-02-admin-mgmt-sidebar-PLAN.md (wave 2, showAdminMgmtSidebar.ts + tests + Code.ts re-exports), 07-03-eviction-guard-onopen-smoke-PLAN.md (wave 2, eviction sidebar admin-guard + onOpen lazy bootstrap + 2 new menu items + clasp-push interactive smoke against dev workbook).
+Phase: 7 — Admin Allowlist + Eviction Enforcement (IN PROGRESS — Plan 01 SHIPPED 2026-05-12)
+Plan: 1 of 3 complete (Wave 1). Commits `dfc3533` (test RED) + `8780222` (feat GREEN). admin.ts policy module + 20-scenario vitest suite both landed; full apps-script suite 317/317 GREEN; typecheck clean; verification hook 5 grep gates all PASS (schema_version untouched, WatcherMaxSchemaVersion=3 unchanged).
+Status: Plans 02 + 03 unblocked (Wave 2). Both can import from `'../lib/admin'`. Next: `/gsd-execute-phase 7` to run Plans 02 + 03 in parallel, OR resume single-plan execution.
+Last activity: 2026-05-12 — Plan 07-01 executed. Created `apps-script/src/lib/admin.ts` (357 lines, 9 public exports matching the <interfaces> contract byte-for-byte) + `apps-script/src/__tests__/admin.test.ts` (462 lines, 20 named tests T1–T20). Zero deviations from plan. SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-01-SUMMARY.md`.
+
+**Phase 7 plan-phase completed 2026-05-12** (prior history): 3 PLAN.md files: 07-01-admin-policy-module-PLAN.md (wave 1, lib/admin.ts + tests, 20 unit-test scenarios T1–T20), 07-02-admin-mgmt-sidebar-PLAN.md (wave 2, showAdminMgmtSidebar.ts + tests + Code.ts re-exports), 07-03-eviction-guard-onopen-smoke-PLAN.md (wave 2, eviction sidebar admin-guard + onOpen lazy bootstrap + 2 new menu items + clasp-push interactive smoke against dev workbook).
 
 ### v1.0.1 Phase Plan (2026-05-11)
 
@@ -63,7 +65,7 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 |--------|-------|
 | Phases planned (v1.0.1) | 3 / 3 |
 | Phases complete (v1.0.1) | 1 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`) |
-| Plans complete (v1.0.1) | 5 / 5 (Phase 6) |
+| Plans complete (v1.0.1) | 6 / 8 (Phase 6: 5/5; Phase 7: 1/3 — plan 07-01 shipped 2026-05-12) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
 | Requirements complete (v1.0.1) | 1 / 8 (INST-06 ✓ UAT-verified 2026-05-11 — binary shipped + live upgrade validated on Azure VM) |
 | Active blockers | 0 |
@@ -81,6 +83,9 @@ Decisions locked at milestone open and roadmap creation:
 4. **Ship-gate model = single ship gate per phase.** Phase 6 ships a binary release; Phase 7 + Phase 8 each ship via `clasp push` of the apps-script bundle to the dev workbook. (Roadmap, 2026-05-11.)
 5. **Owner-floor lockout protection on ADMIN-03.** Workbook owner email cannot be removed from `_meta.guild_admins` by anyone other than the owner themselves. (REQUIREMENTS.md ADMIN-03.)
 6. **SEARCH-05 = PropertiesService per-user scope, NOT Document scope.** Recent-3 MRU is per-guildie state, not workbook-shared state. Migrating from CacheService to PropertiesService keeps the same scope semantics. (REQUIREMENTS.md SEARCH-05.)
+7. **(Plan 07-01) admin.ts cloned the eviction-sidebar lock+audit-log envelope verbatim.** Per D-05, addAdmin/removeAdmin use the same shape as commitEviction. Identical idiom prevents drift; future readers reach for the eviction-sidebar example and find the admin module already follows it. (Plan 07-01 SUMMARY, 2026-05-12.)
+8. **(Plan 07-01) bootstrapGuildAdmins is the documented exception that returns `{reason:'lock_busy'}` silently.** Per D-01, onOpen MUST NOT throw or the menu breaks for everyone. The lock-busy branch logs a warn and returns the enum instead of throwing. The next workbook open retries idempotently. (Plan 07-01 SUMMARY, 2026-05-12.)
+9. **(Plan 07-01) Per-test getOwner override lives in admin.test.ts, NOT in test-helpers.ts.** Only 4 tests need `SpreadsheetApp.getActiveSpreadsheet().getOwner()` (T15/T17/T18/T19); a 7-line helper at the top of admin.test.ts wraps the base mock per-test. test-helpers.ts surface unchanged. Plan 02's adminMgmtSidebar.test.ts may need to extend test-helpers for `getUi().alert(...)` capture — that decision belongs to Plan 02. (Plan 07-01 SUMMARY, 2026-05-12.)
 
 ### Decisions Log (v1.0, mirrored for continuity)
 
@@ -99,6 +104,8 @@ None. v1.0 shipped clean; v1.0.1 is planning-stage. Phase 6 is unblocked and rea
 ## Session Continuity
 
 ### Last Session Summary
+
+**2026-05-12 (Phase 7 Plan 01 executed — admin policy module shipped):** Created `apps-script/src/lib/admin.ts` (357 lines, 9 public exports: normalizeEmail, getAdminList, isAdmin, requireAdminOrThrow, addAdmin, removeAdmin, bootstrapGuildAdmins, bootstrapGuildAdminsManual, appendAdminLogEntry) + `apps-script/src/__tests__/admin.test.ts` (462 lines, 20 named tests T1–T20). 2 commits, TDD discipline followed (RED `dfc3533` → GREEN `8780222`). All 20 tests PASS on first GREEN run; full apps-script suite went 297→317 GREEN; typecheck clean. Verification hook 5 grep gates all PASS: `admin.ts` has 0 schema_version references, `migrations.ts` schema_version writes unchanged at 9 lines, `WatcherMaxSchemaVersion=3` unchanged in `internal/sheet/client.go`. ZERO deviations from the `<interfaces>` contract — Plans 02 + 03 can import the 9 exports verbatim. Owner-floor lockout (D-04), fail-closed empty-email (D-06), bootstrap-must-not-throw (D-01) all enforced and tested. Test-helpers.ts UNCHANGED — per-test getOwner override lives in admin.test.ts only. SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-01-SUMMARY.md`.
 
 **2026-05-12 (Phase 7 discuss-phase completed):** Phase 7 (Admin Allowlist + Eviction Enforcement) context gathered via `/gsd-discuss-phase 7`. Four phase-specific gray areas were surfaced (bootstrap mechanism, storage shape + owner-floor tracking, non-admin failure UX, admin-management UX shape); the user delegated all four to Claude with "make whichever choice(s) that will make the end-user experience as simple as possible" — same play as Phase 6. Six locked decisions emerged (D-01 through D-06 in CONTEXT.md). New code surfaces planned: `apps-script/src/lib/admin.ts` (policy primitives), `apps-script/src/triggers/showAdminMgmtSidebar.ts` (300px sidebar matching v1.0 sidebar patterns), plus admin-guards inserted into the existing `showEvictionSidebar.ts` opener + all three callbacks, lazy `bootstrapGuildAdmins()` call from `onOpen`, and two new menu items in `onOpen.ts`. No schema bump (`_meta.guild_admins`, `_meta.workbook_owner_floor`, `_meta.admin_log` are extend-only row additions). No watcher rebuild. Estimated 3-4 plans. CONTEXT.md + DISCUSSION-LOG.md at `.planning/phases/07-admin-allowlist-eviction-enforcement/` committed (`e168be5`).
 

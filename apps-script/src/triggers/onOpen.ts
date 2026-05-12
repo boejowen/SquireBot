@@ -1,10 +1,27 @@
-// onOpen — Phase 3 plan 03-04 task 5.
+// onOpen — Phase 3 plan 03-04 task 5; Phase 7 plan 07-03 added lazy
+// admin-bootstrap + 2 new menu items (Manage Admins…, Initialize
+// Admin Allowlist (manual)).
 //
-// Adds the SquireBot custom menu when the workbook opens. Phase 3 ships
-// a minimal theme picker modal; Phase 5 will replace it with the
-// polished 6-tile picker per docs/design/mockups/eq-aesthetic-picker.html.
+// Adds the SquireBot custom menu when the workbook opens. Phase 3
+// shipped a minimal theme picker modal; Phase 5 replaced it with the
+// polished picker. Phase 7 adds the admin-allowlist surface.
+
+import { bootstrapGuildAdmins } from '../lib/admin';
+import { log } from '../lib/log';
 
 export function onOpen(): void {
+  // Phase 7 plan 07-03 (D-01): lazy admin bootstrap on every workbook
+  // open. Errors NEVER throw out of onOpen (would break the menu for
+  // everyone). bootstrapGuildAdmins is idempotent + lock-wrapped
+  // internally + returns silently with reason='lock_busy' on contention
+  // — the wrapping try/catch is belt-and-suspenders for unexpected
+  // primitive failures.
+  try {
+    bootstrapGuildAdmins();
+  } catch (err) {
+    log('warn', 'onOpen.bootstrap_failed', { error: String(err) });
+  }
+
   SpreadsheetApp.getUi()
     .createMenu('SquireBot')
     .addItem('Install Triggers', 'installTriggers')
@@ -20,10 +37,13 @@ export function onOpen(): void {
     .addItem('Set Bank Coin…', 'showBankCoinSidebar')
     .addItem('Search…', 'showSearchSidebar')
     .addItem('Evict Guildie…', 'showEvictionSidebar')
+    .addItem('Manage Admins…', 'showAdminMgmtSidebar')
     .addItem('Set Theme…', 'showThemePickerModal')
     .addSeparator()
     .addItem('Run Migration (v=3)', 'migrateToV3')
     .addItem('Run Migration (v=2 legacy)', 'migrateToV2')
+    .addSeparator()
+    .addItem('Initialize Admin Allowlist (manual)', 'bootstrapGuildAdminsManual')
     .addToUi();
 }
 

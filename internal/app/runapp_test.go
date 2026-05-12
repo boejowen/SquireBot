@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,7 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/tray"
 	"github.com/boejowen/SquireBot/internal/watch"
 )
 
@@ -223,5 +228,58 @@ func TestRescanCatchUp_MissingFolderIsSkipped(t *testing.T) {
 
 	if got := atomic.LoadInt64(&fired); got != 1 {
 		t.Errorf("expected 1 callback (Good only), got %d", got)
+	}
+}
+
+// TestApplyBootAuthError_Revoked verifies AUTH-07 boot classification: when
+// buildTokenSourceFromWincred returns an error matching
+// auth.IsRevokedRefreshToken, applyBootAuthError returns bootAuthRevoked.
+// Plan 09-04. Phase 6 UAT Finding C.
+func TestApplyBootAuthError_Revoked(t *testing.T) {
+	// Synthetic revoked-token error. Matches auth.IsRevokedRefreshToken
+	// via the oauth2 RetrieveError + ErrorCode "invalid_grant" path
+	// (see internal/auth/refresh.go IsRevokedRefreshToken).
+	revokedErr := &oauth2.RetrieveError{ErrorCode: "invalid_grant"}
+
+	c := tray.NewController(tray.Config{})
+	got := applyBootAuthError(c, revokedErr)
+	if got != bootAuthRevoked {
+		t.Errorf("applyBootAuthError(revoked) = %v, want bootAuthRevoked", got)
+	}
+}
+
+// TestApplyBootAuthError_NonRevoked verifies that a wincred-rebuild error
+// that does NOT match the revoked classifier routes to the ContinueSetup
+// path (bootAuthOther). Plan 09-04.
+func TestApplyBootAuthError_NonRevoked(t *testing.T) {
+	otherErr := errors.New("wincred read failed: target not found")
+	c := tray.NewController(tray.Config{})
+	got := applyBootAuthError(c, otherErr)
+	if got != bootAuthOther {
+		t.Errorf("applyBootAuthError(other) = %v, want bootAuthOther", got)
+	}
+}
+
+// TestApplyBootAuthError_TableDriven exercises both branches in one place
+// for traceability — mirrors the TestNeedsWizard pattern at runapp_test.go:45-68.
+// Plan 09-04.
+func TestApplyBootAuthError_TableDriven(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bootAuthClassification
+	}{
+		{"revoked-oauth2-retrieveerror", &oauth2.RetrieveError{ErrorCode: "invalid_grant"}, bootAuthRevoked},
+		{"non-revoked-generic", errors.New("wincred load failed"), bootAuthOther},
+		{"non-revoked-wrapped", fmt.Errorf("rebuild: %w", errors.New("io error")), bootAuthOther},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := tray.NewController(tray.Config{})
+			got := applyBootAuthError(c, tc.err)
+			if got != tc.want {
+				t.Errorf("applyBootAuthError(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
 	}
 }

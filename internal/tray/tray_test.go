@@ -46,16 +46,24 @@ func TestSetSpreadsheetID_Mutates(t *testing.T) {
 	}
 }
 
-// SetStatus / SetIconHealth / ShowContinueSetup / HideContinueSetup are
-// no-ops when the underlying systray menu items are nil (i.e., before
-// OnReady has been called). Verify they don't panic.
-func TestMutators_SafeBeforeOnReady(t *testing.T) {
+// TestPreReady_EnqueuesNotDrops verifies that mutator calls made before
+// OnReady are queued (not silently dropped). Plan 09-01 / OPS-06. Replaces
+// the original no-panic-only smoke assertion with a positive enqueue check.
+func TestPreReady_EnqueuesNotDrops(t *testing.T) {
 	c := NewController(Config{})
 	c.SetStatus("hello")
 	c.SetIconHealth(HealthGreen)
 	c.SetIconHealth(HealthRed)
 	c.ShowContinueSetup()
 	c.HideContinueSetup()
+	c.ShowReauthorize()
+	c.HideReauthorize()
+	c.SetSpreadsheetID("abc")
+	snap := c.pendingSnapshot()
+	if len(snap) != 8 {
+		t.Fatalf("pending = %d entries, want 8", len(snap))
+	}
+	// No panic.
 }
 
 func TestHealthConstants(t *testing.T) {

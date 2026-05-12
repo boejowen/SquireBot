@@ -318,68 +318,96 @@ func (t *Controller) loop() {
 // (triggered by mQuit's onQuit) is what tears down background work.
 func (t *Controller) OnExit() {}
 
-// SetStatus updates the disabled top menu label. Goroutine-safe.
+// SetStatus updates the disabled top menu label. Goroutine-safe. Pre-Ready
+// calls are queued and replayed by OnReady. Plan 09-01 / OPS-06.
 func (t *Controller) SetStatus(s string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actStatus, status: s})
+		return
+	}
 	if t.mStatus != nil {
 		t.mStatus.SetTitle(s)
 	}
 }
 
-// SetIconHealth swaps the tray icon between green (normal) and red
-// (Setup needed / error). Phase 5 will produce distinct red art; for
-// now red == green visually.
+// SetIconHealth swaps the tray icon between green (normal) and red. Pre-Ready
+// calls are queued. Plan 09-01 / OPS-06.
 func (t *Controller) SetIconHealth(h Health) {
-	switch h {
-	case HealthGreen:
-		if len(t.iconGreen) > 0 {
-			systray.SetIcon(t.iconGreen)
-		}
-	case HealthRed:
-		if len(t.iconRed) > 0 {
-			systray.SetIcon(t.iconRed)
-		}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actIconHealth, health: h})
+		return
 	}
+	t.applyIconHealthLocked(h)
 }
 
-// ShowContinueSetup makes the Continue setup… item visible. D-07.
+// ShowContinueSetup makes the Continue setup… item visible. D-07. Pre-Ready
+// calls are queued. Plan 09-01 / OPS-06.
 func (t *Controller) ShowContinueSetup() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actShowContinueSetup})
+		return
+	}
 	if t.mContinueSetup != nil {
 		t.mContinueSetup.Show()
 	}
 }
 
-// HideContinueSetup hides the Continue setup… item.
+// HideContinueSetup hides the Continue setup… item. Pre-Ready calls are queued. Plan 09-01.
 func (t *Controller) HideContinueSetup() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actHideContinueSetup})
+		return
+	}
 	if t.mContinueSetup != nil {
 		t.mContinueSetup.Hide()
 	}
 }
 
 // ShowReauthorize makes the Reauthorize… item visible. Plan 02-04
-// (AUTH-05): the watcher calls this after observing
-// sheet.ErrPermanentAuth or auth.IsRevokedRefreshToken — the click
-// re-runs the OAuth loopback flow against the existing email.
+// (AUTH-05) + AUTH-07 boot path. Pre-Ready calls are queued. Plan 09-01 / OPS-06.
 func (t *Controller) ShowReauthorize() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actShowReauthorize})
+		return
+	}
 	if t.mReauthorize != nil {
 		t.mReauthorize.Show()
 	}
 }
 
-// HideReauthorize hides the Reauthorize… item. Called after a
-// successful re-auth restores the live TokenSource.
+// HideReauthorize hides the Reauthorize… item. Pre-Ready calls are queued. Plan 09-01.
 func (t *Controller) HideReauthorize() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actHideReauthorize})
+		return
+	}
 	if t.mReauthorize != nil {
 		t.mReauthorize.Hide()
 	}
 }
 
-// SetSpreadsheetID updates the workbook URL the Open Workbook handler
-// builds at click time. Called by runApp after a successful pick or
-// after Change Workbook…
+// SetSpreadsheetID updates the cached spreadsheet ID. Plan 09-01 / OPS-06:
+// the in-memory field is always kept current; if pre-Ready, the assignment is
+// also queued so the drain path is symmetric with the other mutators.
 func (t *Controller) SetSpreadsheetID(id string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.spreadsheetID = id
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actSetSpreadsheetID, spreadsheetID: id})
+	}
 }
 
 // SpreadsheetID returns the currently-tracked spreadsheet ID

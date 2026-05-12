@@ -190,6 +190,16 @@ const SIDEBAR_BODY = String.raw`
     </div>
     <script>
       function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+      // escapeAttr — escapes for HTML attribute contexts (lib WR-01 fix).
+      // The textContent-based escapeHtml above does NOT escape " or ',
+      // so it cannot safely interpolate into attribute values. Use this
+      // helper for every attribute-context interpolation (data-email,
+      // aria-label, title, etc.). T-07-02-03 XSS hardening.
+      function escapeAttr(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
       var state = { admins: [], floor: '', callerEmail: '' };
       function setMsg(text, cls) { var m = document.getElementById('msg'); m.textContent = text; m.className = cls || ''; }
       function routeError(err) {
@@ -214,7 +224,7 @@ const SIDEBAR_BODY = String.raw`
             var annotation = isFloor ? ' (owner)' : '';
             var tooltip = isFloor ? ' title="This is the workbook owner. The owner-floor lockout protection prevents anyone else from removing this email."' : '';
             var btn = showRemove
-              ? '<button class="remove-btn" aria-label="Remove admin ' + escapeHtml(email) + '" data-email="' + escapeHtml(email) + '">Remove</button>'
+              ? '<button class="remove-btn" aria-label="Remove admin ' + escapeAttr(email) + '" data-email="' + escapeAttr(email) + '">Remove</button>'
               : '';
             return '<li' + tooltip + '><span>' + escapeHtml(email) + escapeHtml(annotation) + '</span>' + btn + '</li>';
           }).join('');

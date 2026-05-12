@@ -144,7 +144,13 @@ export function addAdmin(
 ): { added: boolean; alreadyExists?: boolean } {
   requireAdminOrThrow(callerEmail);
   const target = normalizeEmail(email);
-  if (!target || target.indexOf('@') === -1) {
+  // Stricter validation than just '@' — reject characters that would let
+  // a crafted email break out of HTML attribute / event-handler contexts
+  // in the admin-mgmt sidebar (WR-01 belt-and-suspenders alongside the
+  // sidebar's escapeAttr helper). Allows the conservative subset of
+  // RFC 5321 chars actually used in practice: alphanumerics, dot, dash,
+  // underscore, plus, percent, at-sign.
+  if (!target || !/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(target)) {
     throw new Error('invalid_email');
   }
 

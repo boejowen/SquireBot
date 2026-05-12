@@ -146,14 +146,14 @@ export function addAdmin(
   email: string,
   callerEmail: string,
 ): { added: boolean; alreadyExists?: boolean } {
-  requireAdminOrThrow(callerEmail);
+  // Cheap input validation BEFORE the lock — no point holding the lock
+  // for a guaranteed-throw. Stricter than just '@' to reject characters
+  // that would let a crafted email break out of HTML attribute /
+  // event-handler contexts in the admin-mgmt sidebar (WR-01
+  // belt-and-suspenders alongside the sidebar's escapeAttr helper).
+  // Allows the conservative subset of RFC 5321 chars actually used in
+  // practice: alphanumerics, dot, dash, underscore, plus, percent, @.
   const target = normalizeEmail(email);
-  // Stricter validation than just '@' — reject characters that would let
-  // a crafted email break out of HTML attribute / event-handler contexts
-  // in the admin-mgmt sidebar (WR-01 belt-and-suspenders alongside the
-  // sidebar's escapeAttr helper). Allows the conservative subset of
-  // RFC 5321 chars actually used in practice: alphanumerics, dot, dash,
-  // underscore, plus, percent, at-sign.
   if (!target || !/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(target)) {
     throw new Error('invalid_email');
   }
@@ -163,6 +163,12 @@ export function addAdmin(
     throw new Error('addAdmin: lock_busy');
   }
   try {
+    // Authorize UNDER the lock (WR-04 — close TOCTOU window). A prior
+    // outside-the-lock check would let an admin who was JUST removed
+    // get one final write through. The owner-floor protection inside
+    // removeAdmin already re-reads _meta under the lock for the same
+    // reason; do the same here for the admin gate.
+    requireAdminOrThrow(callerEmail);
     const { admins } = getAdminList();
     if (admins.indexOf(target) !== -1) {
       log('info', 'addAdmin', { email: target, callerEmail, alreadyExists: true });
@@ -192,7 +198,6 @@ export function removeAdmin(
   email: string,
   callerEmail: string,
 ): { removed: boolean; notFound?: boolean } {
-  requireAdminOrThrow(callerEmail);
   const target = normalizeEmail(email);
   if (!target) {
     throw new Error('invalid_email');
@@ -203,6 +208,8 @@ export function removeAdmin(
     throw new Error('removeAdmin: lock_busy');
   }
   try {
+    // Authorize UNDER the lock (WR-04 — close TOCTOU window).
+    requireAdminOrThrow(callerEmail);
     const { admins, floor } = getAdminList();
     const normalizedCaller = normalizeEmail(callerEmail);
 

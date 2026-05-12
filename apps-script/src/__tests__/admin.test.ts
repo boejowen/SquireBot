@@ -427,6 +427,100 @@ describe('admin.ts', () => {
   });
 
   // -------------------------------------------------------------------
+  describe('bootstrapGuildAdminsManual', () => {
+    // WR-03 fix: cover the three branches of the menu-item entrypoint
+    // (empty Session, OK_CANCEL cancel, happy path). Pre-fix this
+    // wrapper had zero test coverage and would have crashed with
+    // "toast is not a function" because the test-helpers SpreadsheetApp
+    // proxy did not stub toast.
+
+    it('T21 bootstrapGuildAdminsManual_emptySession_alertsAndReturnsNoWrites', () => {
+      const logSpy = vi.spyOn(logModule, 'log').mockImplementation(() => {});
+      seedMeta(state, []);
+      installSessionMock('');  // empty Session
+
+      admin.bootstrapGuildAdminsManual();
+
+      // Alert shown with the "Could not determine your email" copy.
+      expect(state.alertCalls).toHaveLength(1);
+      expect(state.alertCalls[0].title).toBe('Initialize Admin Allowlist');
+      expect(state.alertCalls[0].body).toMatch(/Could not determine your email/);
+
+      // No writes happened, no toasts shown.
+      const meta = state.sheets.get('_meta')!;
+      expect(meta.values.find((r) => r[0] === 'guild_admins')).toBeUndefined();
+      expect(state.toastCalls).toHaveLength(0);
+
+      // warn log emitted with skipped='session_email_empty'.
+      expect(logSpy).toHaveBeenCalledWith(
+        'warn',
+        'bootstrapGuildAdminsManual',
+        expect.objectContaining({ skipped: 'session_email_empty' }),
+      );
+      logSpy.mockRestore();
+    });
+
+    it('T22 bootstrapGuildAdminsManual_userCancels_noWritesNoToast', () => {
+      const logSpy = vi.spyOn(logModule, 'log').mockImplementation(() => {});
+      seedMeta(state, []);
+      installSessionMock('owner@x.com');
+      state.alertReturn = 'CANCEL';  // user clicks Cancel on the OK_CANCEL dialog
+
+      admin.bootstrapGuildAdminsManual();
+
+      // Exactly one alert shown (the OK_CANCEL confirmation).
+      expect(state.alertCalls).toHaveLength(1);
+      expect(state.alertCalls[0].body).toMatch(/About to add owner@x\.com/);
+
+      // No writes, no toast — bootstrap was never called.
+      const meta = state.sheets.get('_meta')!;
+      expect(meta.values.find((r) => r[0] === 'guild_admins')).toBeUndefined();
+      expect(state.toastCalls).toHaveLength(0);
+
+      // info log emitted with cancelled=true.
+      expect(logSpy).toHaveBeenCalledWith(
+        'info',
+        'bootstrapGuildAdminsManual',
+        expect.objectContaining({ cancelled: true }),
+      );
+      logSpy.mockRestore();
+    });
+
+    it('T23 bootstrapGuildAdminsManual_happyPath_writesSeedAndToasts', () => {
+      seedMeta(state, []);
+      installSessionMock('owner@x.com');
+      // Session-derived seed; getOwner() override is not needed because
+      // bootstrapGuildAdmins({seedEmail}) bypasses the getOwner() path.
+
+      admin.bootstrapGuildAdminsManual();
+
+      // OK_CANCEL confirmation alert was shown.
+      expect(state.alertCalls).toHaveLength(1);
+
+      // _meta written with the seed.
+      const meta = state.sheets.get('_meta')!;
+      const adminsRow = meta.values.find((r) => r[0] === 'guild_admins')!;
+      expect(adminsRow[1]).toBe(JSON.stringify(['owner@x.com']));
+      const floorRow = meta.values.find((r) => r[0] === 'workbook_owner_floor')!;
+      expect(floorRow[1]).toBe('owner@x.com');
+
+      // admin_log entry with initiated_by='manual_fallback'.
+      const logRow = meta.values.find((r) => r[0] === 'admin_log')!;
+      const list = JSON.parse(String(logRow[1])) as Array<Record<string, unknown>>;
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({
+        action: 'bootstrap',
+        email: 'owner@x.com',
+        initiated_by: 'manual_fallback',
+      });
+
+      // Success toast shown.
+      expect(state.toastCalls).toHaveLength(1);
+      expect(state.toastCalls[0]).toMatch(/initialized with owner@x\.com/);
+    });
+  });
+
+  // -------------------------------------------------------------------
   describe('appendAdminLogEntry (driven via addAdmin)', () => {
     it('T20 appendAdminLogEntry_malformedExisting_startsFreshAndWarns', () => {
       // appendAdminLogEntry is module-private (WR-02 — only the three

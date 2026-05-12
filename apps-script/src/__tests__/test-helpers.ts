@@ -41,6 +41,15 @@ export interface MockState {
   // value (e.g., bootstrapGuildAdminsManual OK_CANCEL flow) get a
   // truthy-but-distinguishable value.
   alertCalls: Array<{ title: string; body: string; buttonSet: unknown }>;
+  // Phase 7 WR-03 fix: alert() now also accepts an override return value
+  // so tests can simulate a CANCEL response from an OK_CANCEL dialog.
+  // Default 'OK' is preserved when this is unset/null.
+  alertReturn?: 'OK' | 'CANCEL' | 'YES' | 'NO' | null;
+  // Phase 7 WR-03 fix: SpreadsheetApp.getActiveSpreadsheet().toast(msg)
+  // now stubbed (was missing — bootstrapGuildAdminsManual calls toast on
+  // three branches and any test exercising the success path crashed
+  // with "toast is not a function").
+  toastCalls: string[];
 }
 
 export function makeSheet(name: string, headers: string[], dataRows: unknown[][] = []): FakeSheet {
@@ -233,20 +242,28 @@ export function installAppsScriptMocks(state: MockState): void {
         return makeSheetProxy(s, state);
       },
       getSheets: () => Array.from(state.sheets.values()).map((s) => makeSheetProxy(s, state)),
+      // Phase 7 WR-03 fix: toast(msg) capture so tests covering
+      // bootstrapGuildAdminsManual's success / already-initialized /
+      // failure branches can assert the user-facing copy without
+      // crashing with "toast is not a function".
+      toast: (msg?: unknown) => {
+        state.toastCalls.push(String(msg ?? ''));
+      },
     }),
     getUi: () => ({
       // Phase 7 plan 07-02: capture alert(title, body, buttonSet) calls
-      // into state.alertCalls. Returns 'OK' as a sentinel — most v1.x
-      // call sites pass ButtonSet.OK and ignore the return; the
+      // into state.alertCalls. Returns 'OK' by default — most v1.x call
+      // sites pass ButtonSet.OK and ignore the return. The
       // bootstrapGuildAdminsManual OK_CANCEL flow compares against
-      // ui.Button.OK (also 'OK' below), so this sentinel works for both.
+      // ui.Button.OK / CANCEL; tests that need to simulate a CANCEL
+      // response set state.alertReturn = 'CANCEL' before the call.
       alert: (title?: unknown, body?: unknown, buttonSet?: unknown) => {
         state.alertCalls.push({
           title: String(title ?? ''),
           body: String(body ?? ''),
           buttonSet,
         });
-        return 'OK';
+        return state.alertReturn ?? 'OK';
       },
       createMenu: () => menuBuilder,
       showModalDialog: () => {},
@@ -438,6 +455,8 @@ export function newMockState(): MockState {
     setValuesLog: [],
     cache: new Map(),
     alertCalls: [],
+    alertReturn: null,
+    toastCalls: [],
   };
 }
 

@@ -249,7 +249,7 @@ function themeStyleBlock(theme: Theme | null): string {
     </style>`;
 }
 
-function buildSidebarHtml(theme: Theme | null): string {
+export function buildSidebarHtml(theme: Theme | null): string {
   const tokens = themeStyleBlock(theme);
   // For sheets-default still emit the spacing scale + neutral fallback
   // color tokens so the body CSS has reasonable defaults.

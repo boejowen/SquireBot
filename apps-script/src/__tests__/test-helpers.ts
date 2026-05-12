@@ -34,6 +34,13 @@ export interface MockState {
   // Phase 5 plan 05-03: real Map-backed CacheService mock with TTL.
   // Tests use vi.setSystemTime to advance Date.now() and trigger expiry.
   cache: Map<string, { value: string; expiresAt: number }>;
+  // Phase 7 plan 07-02: capture SpreadsheetApp.getUi().alert(title, body,
+  // buttonSet) calls so tests can assert non-admin failure modal copy
+  // (D-03). Each entry records the three positional args passed to alert.
+  // The mock returns 'OK' as a sentinel so callers reading the return
+  // value (e.g., bootstrapGuildAdminsManual OK_CANCEL flow) get a
+  // truthy-but-distinguishable value.
+  alertCalls: Array<{ title: string; body: string; buttonSet: unknown }>;
 }
 
 export function makeSheet(name: string, headers: string[], dataRows: unknown[][] = []): FakeSheet {
@@ -228,7 +235,19 @@ export function installAppsScriptMocks(state: MockState): void {
       getSheets: () => Array.from(state.sheets.values()).map((s) => makeSheetProxy(s, state)),
     }),
     getUi: () => ({
-      alert: () => {},
+      // Phase 7 plan 07-02: capture alert(title, body, buttonSet) calls
+      // into state.alertCalls. Returns 'OK' as a sentinel — most v1.x
+      // call sites pass ButtonSet.OK and ignore the return; the
+      // bootstrapGuildAdminsManual OK_CANCEL flow compares against
+      // ui.Button.OK (also 'OK' below), so this sentinel works for both.
+      alert: (title?: unknown, body?: unknown, buttonSet?: unknown) => {
+        state.alertCalls.push({
+          title: String(title ?? ''),
+          body: String(body ?? ''),
+          buttonSet,
+        });
+        return 'OK';
+      },
       createMenu: () => menuBuilder,
       showModalDialog: () => {},
       // Phase 5 plan 05-03: capture the served HtmlOutput so tests can
@@ -237,6 +256,10 @@ export function installAppsScriptMocks(state: MockState): void {
       showSidebar: (output: unknown) => {
         (state as MockState & { lastSidebar?: unknown }).lastSidebar = output;
       },
+      // Phase 7 plan 07-02: ButtonSet + Button enums used by
+      // bootstrapGuildAdminsManual (lib/admin) and any future callers.
+      ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL', YES_NO: 'YES_NO' },
+      Button: { OK: 'OK', CANCEL: 'CANCEL', YES: 'YES', NO: 'NO' },
     }),
     newConditionalFormatRule: () => makeRuleBuilder(),
     ProtectionType: { RANGE: 'RANGE', SHEET: 'SHEET' },
@@ -414,6 +437,7 @@ export function newMockState(): MockState {
     appendedRowsLog: [],
     setValuesLog: [],
     cache: new Map(),
+    alertCalls: [],
   };
 }
 

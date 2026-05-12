@@ -259,6 +259,75 @@ func TestLoad_MissingMtimeMapsAreInitialized(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Plan 09-03 (CONFIG-01) tests: UTF-8 BOM tolerance in Load().
+// ---------------------------------------------------------------------------
+
+// TestLoad_StripsUTF8BOM: a config.json hand-edited with Notepad or
+// PowerShell 5.1 `Set-Content -Encoding utf8` is prefixed with a UTF-8 BOM
+// (\xEF\xBB\xBF). Load() MUST strip the leading BOM before json.Unmarshal so
+// the file still parses cleanly — closes the documented foot-gun where
+// guildies see `invalid character 'ï' looking for beginning of value`.
+func TestLoad_StripsUTF8BOM(t *testing.T) {
+	p := withTempConfig(t)
+	body := `{
+  "version": 1,
+  "eq_folder": "C:\\P99",
+  "spreadsheet_id": "abc123",
+  "google_email": "g@example.com",
+  "log_level": "info"
+}`
+	// Prefix with the UTF-8 BOM bytes.
+	bom := []byte{0xEF, 0xBB, 0xBF}
+	full := append(bom, []byte(body)...)
+	if err := os.WriteFile(p, full, 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load with BOM-prefixed config should not error; got: %v", err)
+	}
+	if c == nil {
+		t.Fatal("Load returned nil config")
+	}
+	if c.Version != 1 {
+		t.Errorf("Version = %d; want 1", c.Version)
+	}
+	if c.EQFolder != `C:\P99` {
+		t.Errorf("EQFolder = %q; want C:\\P99", c.EQFolder)
+	}
+	if c.SpreadsheetID != "abc123" {
+		t.Errorf("SpreadsheetID = %q; want abc123", c.SpreadsheetID)
+	}
+	if c.GoogleEmail != "g@example.com" {
+		t.Errorf("GoogleEmail = %q; want g@example.com", c.GoogleEmail)
+	}
+	if c.LogLevel != "info" {
+		t.Errorf("LogLevel = %q; want info", c.LogLevel)
+	}
+}
+
+// TestLoad_BOMPrefixedInvalidJSONStillErrors: scope-discipline guard — the
+// BOM strip MUST NOT over-broadly mask other corruption. A file containing
+// only the BOM (no JSON body) is still invalid and Load() must error.
+func TestLoad_BOMPrefixedInvalidJSONStillErrors(t *testing.T) {
+	p := withTempConfig(t)
+	// BOM only — no JSON body. After stripping the BOM the unmarshal target
+	// is the empty string, which json.Unmarshal rejects as unexpected EOF.
+	bom := []byte{0xEF, 0xBB, 0xBF}
+	if err := os.WriteFile(p, bom, 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	c, err := Load()
+	if err == nil {
+		t.Fatalf("Load on BOM-only file should error; got config %+v", c)
+	}
+	// Verify the wrapper "config load <path>:" prefix is preserved.
+	if !strings.Contains(err.Error(), "config load") {
+		t.Errorf("error message missing expected prefix; got: %v", err)
+	}
+}
+
 // TestPathPointsUnderLOCALAPPDATA confirms the default path resolver uses
 // %LOCALAPPDATA% (not hardcoded). This is a smoke test of pathFn=defaultPath.
 func TestPathPointsUnderLOCALAPPDATA(t *testing.T) {

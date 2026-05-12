@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
-status: phase7_context_gathered
-last_updated: "2026-05-12T00:30:00.000Z"
+status: phase7_planned
+last_updated: "2026-05-12T02:00:00.000Z"
 last_activity: 2026-05-12
-resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-CONTEXT.md
+resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-01-admin-policy-module-PLAN.md
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 5
+  total_plans: 8
   completed_plans: 5
-  percent: 100
+  percent: 62.5
 ---
 
 # State: SquireBot
@@ -32,10 +32,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 7 — Admin Allowlist + Eviction Enforcement (CONTEXT gathered 2026-05-12; ready for /gsd-plan-phase)
-Plan: None yet. Phase 6 fully shipped + UAT-verified 2026-05-11. Phase 7 CONTEXT.md captures 6 locked decisions across the 4 gray areas presented; user delegated all four to Claude with the same "simplest end-user experience" directive used in Phase 6.
-Status: Phase 7 context captured. CONTEXT.md + DISCUSSION-LOG.md committed as `docs(07): capture phase context`. Awaiting `/gsd-plan-phase 7`.
-Last activity: 2026-05-12 — Phase 7 discuss-phase completed. Six locked decisions: D-01 lazy onOpen bootstrap + manual-fallback menu item; D-02 JSON array (`_meta.guild_admins`) + separate single-email row (`_meta.workbook_owner_floor`) + JSON-array audit log (`_meta.admin_log`); D-03 Apps Script modal alert for non-admins; D-04 dedicated `showAdminMgmtSidebar` + new "Manage Admins…" menu item; D-05 central `apps-script/src/lib/admin.ts` policy module; D-06 fail-closed auth + soft-fallback audit-log identity. No schema bump, no watcher rebuild. Estimated 3-4 plans.
+Phase: 7 — Admin Allowlist + Eviction Enforcement (PLANNED 2026-05-12; ready for /gsd-execute-phase)
+Plan: 3 plans authored + plan-check PASSED clean (zero revisions). Commit `7c3b361 docs(07): plan Phase 7 admin allowlist + eviction enforcement`. Pattern-mapper produced 07-PATTERNS.md with 7/7 file analogs; planner used CONTEXT.md D-01..D-06 + UI-SPEC verbatim; plan-checker verified all 5 ROADMAP success criteria, all 6 decisions, all threat models present (STRIDE registers, ASVS L1 zero-high), wave dependencies correct (Plan 01 wave 1 → Plans 02+03 wave 2 parallel with zero file-overlap), and spot-checked 18+ line-number citations against actuals.
+Status: Phase 7 plans ready for execution. Next: `/gsd-execute-phase 7`.
+Last activity: 2026-05-12 — Phase 7 plan-phase completed. 3 PLAN.md files: 07-01-admin-policy-module-PLAN.md (wave 1, lib/admin.ts + tests, 20 unit-test scenarios T1–T20), 07-02-admin-mgmt-sidebar-PLAN.md (wave 2, showAdminMgmtSidebar.ts + tests + Code.ts re-exports), 07-03-eviction-guard-onopen-smoke-PLAN.md (wave 2, eviction sidebar admin-guard + onOpen lazy bootstrap + 2 new menu items + clasp-push interactive smoke against dev workbook).
 
 ### v1.0.1 Phase Plan (2026-05-11)
 
@@ -124,9 +124,9 @@ Schema impact NONE across all 3 phases. 100% requirement coverage validated. REQ
 
 ### Next Action
 
-**Phase 7 CONTEXT GATHERED 2026-05-12.** Next actions, in priority order:
+**Phase 7 PLANNED 2026-05-12.** Next actions, in priority order:
 
-1. **Plan Phase 7** — `/gsd-plan-phase 7` (or `/gsd-plan-phase 7 --skip-research` — research optional per CONTEXT.md, all patterns are already in the codebase). CONTEXT.md at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-CONTEXT.md` has 6 locked decisions, full canonical_refs, code_context, and verification_hooks. Estimated 3-4 plans.
+1. **Execute Phase 7** — `/clear` then `/gsd-execute-phase 7`. Wave 1 runs Plan 01 (lib/admin.ts policy module + 20 unit tests) alone. Wave 2 runs Plans 02 (admin-mgmt sidebar) and 03 (eviction guards + onOpen + clasp-push smoke) in parallel. Smoke step in Plan 03 is a `checkpoint:human-verify` requiring workbook-owner interactive verification against the dev workbook (the ship gate).
 2. **After Phase 7 ships, plan Phase 8** (test infra + persistence + docs backfill).
 
 **Independent of v1.0.1:** Day-10 token-survival check fires automatically 2026-05-13T15:00:00Z (routine `trig_01Uog2muQ22CBsjZfqPiSH9r`).

@@ -258,3 +258,15 @@ func TestOnCheckUpdatesCallback_Wired(t *testing.T) {
 		t.Errorf("calls = %d, want 1", calls)
 	}
 }
+
+// TestPendingAction_Zero verifies the type scaffolding from Plan 09-01 Task 1:
+// a freshly-constructed Controller has ready=false and an empty pending queue.
+func TestPendingAction_Zero(t *testing.T) {
+	c := NewController(Config{})
+	if c.isReady() {
+		t.Error("freshly constructed Controller should not be ready")
+	}
+	if snap := c.pendingSnapshot(); len(snap) != 0 {
+		t.Errorf("pendingSnapshot() = %d entries, want 0", len(snap))
+	}
+}

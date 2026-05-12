@@ -76,6 +76,28 @@ const (
 	HealthRed
 )
 
+// actionKind tags a deferred mutator call queued before OnReady. Plan 09-01 (OPS-06).
+type actionKind int
+
+const (
+	actStatus actionKind = iota
+	actIconHealth
+	actShowContinueSetup
+	actHideContinueSetup
+	actShowReauthorize
+	actHideReauthorize
+	actSetSpreadsheetID
+)
+
+// pendingAction is a single deferred mutator call. Only one payload field
+// is meaningful per kind (the others stay zero-valued). Plan 09-01.
+type pendingAction struct {
+	kind          actionKind
+	status        string // actStatus
+	health        Health // actIconHealth
+	spreadsheetID string // actSetSpreadsheetID
+}
+
 // Config bundles the construction-time inputs to NewController.
 type Config struct {
 	IconGreen        []byte
@@ -99,6 +121,11 @@ type Controller struct {
 	iconRed       []byte
 	logDir        string
 	spreadsheetID string
+
+	// OPS-06 / Plan 09-01: queue-and-replay so pre-OnReady mutator calls
+	// are not silently dropped. Both fields are guarded by t.mu (above).
+	ready   bool
+	pending []pendingAction
 
 	mStatus         *systray.MenuItem
 	mWorkbook       *systray.MenuItem
@@ -129,6 +156,56 @@ func NewController(c Config) *Controller {
 		onCheckUpdates:   c.OnCheckUpdates,
 		onReauthorize:    c.OnReauthorize,
 		onQuit:           c.OnQuit,
+	}
+}
+
+// drainPending replays every queued mutator call against the now-live
+// menu items, in FIFO insertion order. The caller MUST hold t.mu.
+// Plan 09-01 / OPS-06.
+func (t *Controller) drainPending() {
+	for _, a := range t.pending {
+		switch a.kind {
+		case actStatus:
+			if t.mStatus != nil {
+				t.mStatus.SetTitle(a.status)
+			}
+		case actIconHealth:
+			t.applyIconHealthLocked(a.health)
+		case actShowContinueSetup:
+			if t.mContinueSetup != nil {
+				t.mContinueSetup.Show()
+			}
+		case actHideContinueSetup:
+			if t.mContinueSetup != nil {
+				t.mContinueSetup.Hide()
+			}
+		case actShowReauthorize:
+			if t.mReauthorize != nil {
+				t.mReauthorize.Show()
+			}
+		case actHideReauthorize:
+			if t.mReauthorize != nil {
+				t.mReauthorize.Hide()
+			}
+		case actSetSpreadsheetID:
+			t.spreadsheetID = a.spreadsheetID
+		}
+	}
+	t.pending = nil
+}
+
+// applyIconHealthLocked performs the systray icon swap. Caller MUST hold
+// t.mu. Plan 09-01 / OPS-06.
+func (t *Controller) applyIconHealthLocked(h Health) {
+	switch h {
+	case HealthGreen:
+		if len(t.iconGreen) > 0 {
+			systray.SetIcon(t.iconGreen)
+		}
+	case HealthRed:
+		if len(t.iconRed) > 0 {
+			systray.SetIcon(t.iconRed)
+		}
 	}
 }
 
@@ -315,3 +392,21 @@ func (t *Controller) SpreadsheetID() string {
 
 // LogDir returns the directory the "Open log folder" item targets.
 func (t *Controller) LogDir() string { return t.logDir }
+
+// pendingSnapshot returns a copy of the pending-action queue for tests.
+// Plan 09-01 / OPS-06 — test surface only; not called from production.
+func (t *Controller) pendingSnapshot() []pendingAction {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]pendingAction, len(t.pending))
+	copy(out, t.pending)
+	return out
+}
+
+// isReady reports whether OnReady has run and drained the queue.
+// Plan 09-01 / OPS-06 — test surface only.
+func (t *Controller) isReady() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.ready
+}

@@ -126,7 +126,7 @@ export function saveCharInfo(chars: CharInfoRow[]): SaveCharInfoResult {
   }
 }
 
-function buildSidebarHtml(): string {
+export function buildSidebarHtml(): string {
   // Inline JSON of class/race lists so the client-side dropdown
   // renderer doesn't need a separate google.script.run round-trip.
   const classOptions = JSON.stringify(['', ...CLASSES]);

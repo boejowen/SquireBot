@@ -74,7 +74,7 @@ export function saveBankCoin(coin: BankCoinForm): void {
   buildBank();
 }
 
-function buildSidebarHtml(): string {
+export function buildSidebarHtml(): string {
   return `
 <div style="font-family:Arial,sans-serif;padding:12px;font-size:13px">
   <h3 style="margin-top:0">Bank Coin</h3>

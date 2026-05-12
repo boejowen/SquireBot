@@ -47,6 +47,13 @@ import {
   previewEviction,
   commitEviction,
 } from './triggers/showEvictionSidebar';
+import {
+  showAdminMgmtSidebar,
+  getAdminList,
+  addAdmin,
+  removeAdmin,
+} from './triggers/showAdminMgmtSidebar';
+import { bootstrapGuildAdminsManual } from './lib/admin';
 import { prewarmSearchCache } from './lib/searchIndex';
 import { buildView } from './tabs/buildView';
 import { buildBank } from './tabs/buildBank';
@@ -65,6 +72,8 @@ export {
   showBankCoinSidebar, getBankCoinForForm, saveBankCoin,
   showSearchSidebar, getSearchInitialData, runSearch, pushRecentSearchCall,
   showEvictionSidebar, getEvictionEmails, previewEviction, commitEviction,
+  showAdminMgmtSidebar, getAdminList, addAdmin, removeAdmin,
+  bootstrapGuildAdminsManual,
   prewarmSearchCache,
   installTriggers,
   buildView, buildBank, buildSpellCheck, buildGearCheck,

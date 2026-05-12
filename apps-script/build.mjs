@@ -68,6 +68,12 @@ const TRIGGER_GLOBALS = [
   'getEvictionEmails',
   'previewEviction',
   'commitEviction',
+  // Phase 7 plan 07-02 (admin allowlist + eviction enforcement):
+  'showAdminMgmtSidebar',
+  'getAdminList',           // google.script.run callback from sidebar
+  'addAdmin',               // google.script.run callback from sidebar
+  'removeAdmin',            // google.script.run callback from sidebar
+  'bootstrapGuildAdminsManual', // menu item: "Initialize Admin Allowlist (manual)"
 ];
 
 // CI assertion: Code.ts exports MUST match TRIGGER_GLOBALS exactly.

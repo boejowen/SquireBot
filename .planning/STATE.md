@@ -29,10 +29,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
 
 ## Current Position
 
-Phase: Not started (roadmap landed; next is `/gsd-discuss-phase 9` or `/gsd-plan-phase 9`)
+Phase: 9 — Watcher Robustness Polish (context gathered 2026-05-12; next is `/gsd-plan-phase 9`)
 Plan: —
-Status: Roadmap approved; awaiting phase kickoff
-Last activity: 2026-05-12 — Milestone v1.0.2 roadmap approved (2 phases, 6 requirements mapped)
+Status: Context locked; awaiting plan creation
+Last activity: 2026-05-12 — Phase 9 CONTEXT.md + DISCUSSION-LOG.md committed (c13809e). 8 decisions locked under user-supplied "simplest, most invisible end-user experience" tiebreaker: OPS-06 queue-and-replay, OPS-07 FreeConsole, AUTH-07 rebuild-error classification, CONFIG-01 bytes.TrimPrefix BOM strip, 5-plan structure (4 REQ plans + release tag) with Wave 1 parallel / Wave 2 AUTH-07 / Wave 3 release.
 
 ### v1.0.2 Phase Plan (2026-05-12)
 
@@ -118,7 +118,7 @@ None. Both milestones shipped clean.
 
 ### Next Action
 
-REQUIREMENTS.md + ROADMAP.md being created in-flight under the active `/gsd-new-milestone` workflow. After roadmap approval, the next step is `/gsd-discuss-phase 9` (first v1.0.2 phase) or `/gsd-plan-phase 9` to skip discussion.
+`/clear` then `/gsd-plan-phase 9` — Phase 9 context locked at `.planning/phases/09-watcher-robustness-polish/09-CONTEXT.md`. Planner reads CONTEXT.md + 8 decisions + canonical refs (Phase 6 UAT findings C/D/F/H, Phase 6 release plan 06-05 template, watcher source files for tray/main/runapp/config) and produces 5 PLANs.
 
 ---
 

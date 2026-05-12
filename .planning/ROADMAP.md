@@ -60,7 +60,10 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
   3. An admin can open the admin-management UI and add another guildie's email to the allowlist; the new admin's eviction calls succeed immediately on next sidebar invocation
   4. An admin can remove another admin from the allowlist, but the workbook-owner email cannot be removed by anyone other than the owner themselves (owner-floor lockout protection)
   5. `_meta.schema_version` remains at 3 and `WatcherMaxSchemaVersion` remains at 3 (the `guild_admins` row is an extend-only `_meta` addition; no migration, no watcher rebuild)
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 07-01-admin-policy-module-PLAN.md -- apps-script/src/lib/admin.ts policy primitives (normalizeEmail, getAdminList, isAdmin, requireAdminOrThrow, addAdmin, removeAdmin, bootstrapGuildAdmins, bootstrapGuildAdminsManual, appendAdminLogEntry) + 20-scenario vitest unit suite. Wave 1.
+  - [ ] 07-02-admin-mgmt-sidebar-PLAN.md -- apps-script/src/triggers/showAdminMgmtSidebar.ts (300px HtmlService sidebar, 3 google.script.run callbacks, owner-floor enforcement) + 5+ vitest suite + Code.ts re-exports for the 5 new globals. Wave 2 (parallel with 07-03).
+  - [ ] 07-03-eviction-guard-onopen-smoke-PLAN.md -- showEvictionSidebar admin guard (opener + 3 callbacks); onOpen lazy bootstrap + 2 new menu items; eviction-sidebar tests reseeded; clasp push + dev-workbook 5-hook smoke. Wave 2 (parallel with 07-02). Ship gate.
 **UI hint**: yes
 **Ship gate**: `clasp push` of the apps-script bundle to the dev workbook + admin-management UX smoke
 
@@ -88,7 +91,7 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Installer Overwrite-Running Shim | 5/5 | ✅ Shipped + UAT-verified as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) | 2026-05-11 |
-| 7. Admin Allowlist + Eviction Enforcement | 0/0 | Not started | — |
+| 7. Admin Allowlist + Eviction Enforcement | 0/3 | Planned | — |
 | 8. Test Infra + Persistence + Docs Backfill | 0/0 | Not started | — |
 
 ## Backlog

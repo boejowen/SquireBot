@@ -27,7 +27,7 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 ### 🚧 v1.0.1 — Installer + Permissions Hardening (in progress)
 
 - [x] **Phase 6: Installer Overwrite-Running Shim** — NSIS detects + gracefully stops a running watcher before file overwrite, retires manual stop workaround; ships as watcher v1.0.1 binary release. **SHIPPED + UAT-VERIFIED 2026-05-11** as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1). Both graceful `--quit` and `taskkill /F` legacy paths exercised against real watchers on Azure VM; 8 findings recorded (3 are v1.0.2 candidates).
-- [ ] **Phase 7: Admin Allowlist + Eviction Enforcement** — `_meta.guild_admins` row + bootstrap; eviction sidebar refuses non-admins by code; admin-management UX with owner-floor lockout protection
+- [x] **Phase 7: Admin Allowlist + Eviction Enforcement** — `_meta.guild_admins` row + bootstrap; eviction sidebar refuses non-admins by code; admin-management UX with owner-floor lockout protection. **SHIPPED + UAT-VERIFIED 2026-05-12** via `clasp push` to dev workbook (script ID `1Y9Uiw-QWgLQRIKGnQxmXKoi2oUwekk1CbUQfjO6jjNloXXz0QPn3YwCT`); 5/5 verification hooks PASS in dev-workbook smoke. Latent v1.0 OAuth-scope bug (missing `userinfo.email`) surfaced and retired inline (commit `544bef8`); side effect closes v1.0 `initiated_by='unknown'` audit-log silent fallback.
 - [ ] **Phase 8: Test Infra + Persistence + Docs Backfill** — JSDOM in vitest + ≥1 sidebar inline-JS test per shipping sidebar; SEARCH recent-MRU migrated to PropertiesService; 8 missing Phase 3+4 SUMMARY.md files backfilled
 
 ## Phase Details
@@ -63,9 +63,9 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 **Plans**: 3 plans
   - [x] 07-01-admin-policy-module-PLAN.md -- apps-script/src/lib/admin.ts policy primitives (normalizeEmail, getAdminList, isAdmin, requireAdminOrThrow, addAdmin, removeAdmin, bootstrapGuildAdmins, bootstrapGuildAdminsManual, appendAdminLogEntry) + 20-scenario vitest unit suite. Wave 1. **SHIPPED 2026-05-12** (commits `dfc3533` test + `8780222` feat; 357 LOC admin.ts + 462 LOC admin.test.ts; 20/20 tests PASS; full suite 297→317 GREEN; typecheck clean; verification hook 5 schema_version untouched; SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-01-SUMMARY.md`).
   - [x] 07-02-admin-mgmt-sidebar-PLAN.md -- apps-script/src/triggers/showAdminMgmtSidebar.ts (300px HtmlService sidebar, 3 google.script.run callbacks, owner-floor enforcement) + 7-test vitest suite + Code.ts + build.mjs TRIGGER_GLOBALS re-exports for the 5 new globals. Wave 2 (parallel with 07-03). **SHIPPED 2026-05-12** (commits `2ea0cd2` trigger + `a5d3cb4` test+helpers + `d84d684` Code.ts+build wiring; 263 LOC sidebar + 219 LOC test; full suite 317→324 GREEN; typecheck + build clean; all 5 new globals lifted to dist/Code.js; verification hook 5 schema_version untouched; SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-02-SUMMARY.md`).
-  - [~] 07-03-eviction-guard-onopen-smoke-PLAN.md -- showEvictionSidebar admin guard (opener + 3 callbacks); onOpen lazy bootstrap + 2 new menu items; eviction-sidebar tests reseeded; clasp push + dev-workbook 5-hook smoke. Wave 2 (parallel with 07-02). Ship gate. **CODE-COMPLETE-PENDING-SMOKE 2026-05-12** (commits `1937fd0` test-seed + `7f7ffb0` eviction guards + `c3c0033` onOpen wiring; full suite 324/324 GREEN; typecheck + build clean; dist/Code.js contains all Phase 7 surface; awaiting user `clasp push` + 5-hook dev-workbook smoke before Phase 7 ship verdict; INTERIM SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-SUMMARY.md`).
+  - [x] 07-03-eviction-guard-onopen-smoke-PLAN.md -- showEvictionSidebar admin guard (opener + 3 callbacks); onOpen lazy bootstrap + 2 new menu items; eviction-sidebar tests reseeded; clasp push + dev-workbook 5-hook smoke. Wave 2 (parallel with 07-02). Ship gate. **SHIPPED + UAT-VERIFIED 2026-05-12** (commits `1937fd0` test-seed + `7f7ffb0` eviction guards + `c3c0033` onOpen wiring + `2d03581` interim docs + `544bef8` mid-smoke OAuth scope fix; full suite 324/324 GREEN; typecheck + build clean; dist/Code.js + dist/appsscript.json deployed to dev workbook script ID `1Y9Uiw-QWgLQRIKGnQxmXKoi2oUwekk1CbUQfjO6jjNloXXz0QPn3YwCT`; 5/5 verification hooks PASS in dev-workbook smoke; latent v1.0 manifest gap retired; FINAL SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-SUMMARY.md`; smoke evidence at `07-03-SMOKE.md`).
 **UI hint**: yes
-**Ship gate**: `clasp push` of the apps-script bundle to the dev workbook + admin-management UX smoke
+**Ship gate**: `clasp push` of the apps-script bundle to the dev workbook + admin-management UX smoke ✅ COMPLETE
 
 ### Phase 8: Test Infra + Persistence + Docs Backfill
 **Goal**: The safety net under shipping sidebars is real (every sidebar has an executable test), recent-search MRU survives the CacheService TTL, and the Phase 3+4 documentation debt from v1.0 is closed
@@ -86,13 +86,13 @@ Full details in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md).
 | Milestone | Phases | Plans Complete | Status | Completed |
 |-----------|--------|----------------|--------|-----------|
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
-| v1.0.1 | 3 | 7/8 (Phase 6 + Plans 07-01..02) | 🚧 In progress (1/3 phases shipped; Phase 7 in progress) | — |
+| v1.0.1 | 3 | 8/8 currently planned (Phase 6 + Phase 7; Phase 8 plans TBD) | 🚧 In progress (2/3 phases shipped; Phase 8 next) | — |
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 6. Installer Overwrite-Running Shim | 5/5 | ✅ Shipped + UAT-verified as [tag `v1.0.1`](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) | 2026-05-11 |
-| 7. Admin Allowlist + Eviction Enforcement | 2/3 | 🚧 In progress (Plans 07-01 + 07-02 shipped 2026-05-12) | — |
-| 8. Test Infra + Persistence + Docs Backfill | 0/0 | Not started | — |
+| 7. Admin Allowlist + Eviction Enforcement | 3/3 | ✅ Shipped + UAT-verified via dev-workbook 5-hook smoke (5/5 PASS) | 2026-05-12 |
+| 8. Test Infra + Persistence + Docs Backfill | 0/0 | Not started — `/gsd-plan-phase 8` next | — |
 
 ## Backlog
 

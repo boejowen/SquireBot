@@ -16,9 +16,9 @@
 
 ### Admin permissions (ADMIN-01..03)
 
-- [ ] **ADMIN-01**: `_meta.guild_admins` row maintains the authorized-officer email list for the workbook. Bootstrap: on first installer run the workbook owner's email is auto-added; idempotent on subsequent runs (no duplicates).
-- [ ] **ADMIN-02**: Evict Guildie sidebar reads `_meta.guild_admins` and refuses to commit eviction for non-admin invokers. Non-admins see a clear "not authorized" message and the action is a safe no-op (no write, no `_meta.eviction_log` envelope appended).
-- [ ] **ADMIN-03**: Admin management UX (menu item or sidebar) lets an existing admin add or remove other admin emails. Workbook-owner-floor enforced: the original owner email cannot be removed by anyone other than themselves (prevents lockout).
+- [x] **ADMIN-01**: `_meta.guild_admins` row maintains the authorized-officer email list for the workbook. Bootstrap: on first installer run the workbook owner's email is auto-added; idempotent on subsequent runs (no duplicates). **✓ SHIPPED + UAT-VERIFIED 2026-05-12.** Bootstrap primitive shipped in Plan 07-01 (`bootstrapGuildAdmins`); lazy `onOpen` call-site shipped in Plan 07-03; dev-workbook Hook 1 PASS confirmed `_meta.guild_admins=["boejowen@gmail.com"]` + `_meta.workbook_owner_floor=boejowen@gmail.com` + `_meta.admin_log` bootstrap entry on first open; second open did NOT append duplicate (idempotent).
+- [x] **ADMIN-02**: Evict Guildie sidebar reads `_meta.guild_admins` and refuses to commit eviction for non-admin invokers. Non-admins see a clear "not authorized" message and the action is a safe no-op (no write, no `_meta.eviction_log` envelope appended). **✓ SHIPPED + UAT-VERIFIED 2026-05-12.** Eviction sidebar admin-gated at opener + 3 callbacks (`getEvictionEmails`, `previewEviction`, `commitEviction`) shipped in Plan 07-03; dev-workbook Hook 2 PASS confirmed non-admin saw "Not authorized" modal + zero `_char_owner` flips + zero `eviction_log` appends.
+- [x] **ADMIN-03**: Admin management UX (menu item or sidebar) lets an existing admin add or remove other admin emails. Workbook-owner-floor enforced: the original owner email cannot be removed by anyone other than themselves (prevents lockout). **✓ SHIPPED + UAT-VERIFIED 2026-05-12.** `showAdminMgmtSidebar` UX shipped in Plan 07-02; owner-floor enforcement shipped in Plan 07-01 (`removeAdmin` server-side throw `'owner_floor_protected'`) + Plan 07-02 (client-side Remove-button suppression); dev-workbook Hooks 3 + 4 PASS confirmed peer-add round-trip + visual owner-floor lockout (joseph.bowen2 non-floor admin saw boejowen@gmail.com row with `(owner)` annotation and NO Remove button).
 
 ### Sidebar test coverage (TEST-01..02)
 
@@ -53,10 +53,10 @@
 
 | REQ-ID | Phase | Plan(s) |
 |--------|-------|---------|
-| INST-06 | Phase 6 | 06-01 (shipped), 06-02 (shipped), 06-03 (shipped), 06-04 (shipped), 06-05 (shipped — tag `v1.0.1` 2026-05-11; UAT deferred) |
-| ADMIN-01 | Phase 7 | 07-01 (partial — bootstrap primitive shipped 2026-05-12; onOpen wiring in 07-03), 07-03 (TBD) |
-| ADMIN-02 | Phase 7 | 07-03 (TBD — eviction sidebar admin guard) |
-| ADMIN-03 | Phase 7 | 07-01 (partial — add/remove/floor policy shipped 2026-05-12), 07-02 (TBD — admin-mgmt sidebar UX) |
+| INST-06 | Phase 6 | 06-01 (shipped), 06-02 (shipped), 06-03 (shipped), 06-04 (shipped), 06-05 (shipped — tag `v1.0.1` 2026-05-11; UAT-verified Azure VM) |
+| ADMIN-01 | Phase 7 | 07-01 (shipped 2026-05-12 — bootstrap primitive), 07-03 (shipped 2026-05-12 — onOpen lazy bootstrap + smoke Hook 1 PASS) |
+| ADMIN-02 | Phase 7 | 07-03 (shipped 2026-05-12 — eviction sidebar admin guard + smoke Hook 2 PASS) |
+| ADMIN-03 | Phase 7 | 07-01 (shipped 2026-05-12 — add/remove/floor policy), 07-02 (shipped 2026-05-12 — admin-mgmt sidebar UX + smoke Hooks 3 + 4 PASS) |
 | TEST-01 | Phase 8 | TBD |
 | TEST-02 | Phase 8 | TBD |
 | SEARCH-05 | Phase 8 | TBD |

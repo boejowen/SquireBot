@@ -23,7 +23,7 @@
 ### Sidebar test coverage (TEST-01..02)
 
 - [ ] **TEST-01**: vitest is configured with JSDOM environment for sidebar HTML+JS tests. Setup is wired into `apps-script/vitest.config.ts` so `npm test` exercises sidebar JS on every PR (no separate command).
-- [ ] **TEST-02**: Every shipping sidebar (Search, Eviction, Bank-Coin, Char-Info, Theme Picker) has at least one unit test covering its inline-JS interaction code — DOM event handlers, payload assembly, "Did you mean?" rendering, error display. Coverage assertion: each sidebar HTML file has a co-located `__tests__/*-sidebar.test.ts` companion.
+- [ ] **TEST-02**: Every shipping sidebar (Search, Eviction, Bank-Coin, Char-Info, Admin-Mgmt) has at least one unit test covering its inline-JS interaction code — DOM event handlers, payload assembly, "Did you mean?" rendering, error display. Coverage assertion: each sidebar HTML file has a co-located `__tests__/*Sidebar(.inline)?.test.ts` companion. (Historical correction: the original TEST-02 wording listed the theme-selector modal as a sidebar; `showThemePickerModal` in `onOpen.ts:52-77` is actually a `showModalDialog`, NOT a sidebar. The 5th sidebar is Admin-Mgmt, which has trigger-call coverage via `adminMgmtSidebar.test.ts` from Phase 7; admin-mgmt inline-JS tests deferred to v1.1.)
 
 ### Search persistence (SEARCH-05)
 

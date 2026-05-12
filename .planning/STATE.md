@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: — Robustness Polish
-status: planning
-last_updated: "2026-05-12T21:00:00.000Z"
-last_activity: "2026-05-12 — v1.0.2 Robustness Polish milestone opened. Scope: 6 backlog items (999.13–999.18) → AUTH-07 + OPS-06 + CONFIG-01 + OPS-07 + TEST-03 + TEST-04. No schema change (schema_version stays at 3, WatcherMaxSchemaVersion stays at 3). SignPath OSS approval (999.9) excluded — treated as hotfix-when-approved. v1.1/v2 candidates deferred. PROJECT.md updated; REQUIREMENTS.md + ROADMAP.md pending."
+status: in_progress
+last_updated: "2026-05-12T23:30:00.000Z"
+last_activity: "2026-05-12 — Phase 9 Wave 1 executed (3/5 plans done): 09-01 tray pre-Ready queue (OPS-06; +5 tests, 16/16 tray green), 09-02 FreeConsole detach (OPS-07; LazySystemDLL fallback because windows.FreeConsole isn't exported in golang.org/x/sys/windows v0.43.0), 09-03 config BOM strip (CONFIG-01; +2 tests, 12/12 config green). All 3 worktrees merged to master; full repo go test ./... green across 16 packages. WatcherMaxSchemaVersion still 3. Next: Wave 2 plan 09-04 (AUTH-07 boot-time invalid_grant; depends on 09-01 queue)."
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 5
+  completed_plans: 3
+  percent: 30
 ---
 
 # State: SquireBot
@@ -29,10 +29,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
 
 ## Current Position
 
-Phase: 9 — Watcher Robustness Polish (context gathered 2026-05-12; next is `/gsd-plan-phase 9`)
-Plan: —
-Status: Context locked; awaiting plan creation
-Last activity: 2026-05-12 — Phase 9 CONTEXT.md + DISCUSSION-LOG.md committed (c13809e). 8 decisions locked under user-supplied "simplest, most invisible end-user experience" tiebreaker: OPS-06 queue-and-replay, OPS-07 FreeConsole, AUTH-07 rebuild-error classification, CONFIG-01 bytes.TrimPrefix BOM strip, 5-plan structure (4 REQ plans + release tag) with Wave 1 parallel / Wave 2 AUTH-07 / Wave 3 release.
+Phase: 9 — Watcher Robustness Polish (Wave 1/3 complete 2026-05-12; Wave 2 next)
+Plan: 3/5 complete (09-01, 09-02, 09-03 shipped; 09-04 next, 09-05 release-tag last)
+Status: In progress — Wave 1 merged, full test suite green; ready to dispatch Wave 2 (09-04 AUTH-07)
+Last activity: 2026-05-12 — Wave 1 (parallel: 09-01 tray queue, 09-02 FreeConsole, 09-03 BOM strip) complete. 3 worktree branches merged to master (c058d91 HEAD). go test ./... green (16/16 packages). 09-02 deviation noted: golang.org/x/sys/windows.FreeConsole not exported in v0.43.0; used canonical LazySystemDLL("kernel32.dll").NewProc("FreeConsole").Call() instead — documented in 09-02-SUMMARY.md.
 
 ### v1.0.2 Phase Plan (2026-05-12)
 

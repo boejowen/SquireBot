@@ -497,3 +497,127 @@ export function seedMeta(state: MockState, rows: Array<[string, string]>): void 
 beforeEach(() => {
   vi.restoreAllMocks();
 });
+
+// ----------------------------------------------------------------------------
+// Phase 8 plan 08-01 (D-04): mountSidebar(html) JSDOM helper for TEST-02
+// sidebar inline-JS tests. Parses a SIDEBAR_BODY string, installs a
+// controllable google.script.run Proxy mock BEFORE re-executing inline
+// <script> blocks (init() runs immediately at the bottom of each sidebar's
+// inline JS and reads window.google synchronously), then returns the realm
+// plus dispatch helpers so tests can resolve enqueued call promises FIFO.
+//
+// JSDOM gotcha: per HTML5 spec, <script> tags inserted via innerHTML do NOT
+// execute. We work around this by extracting <script> textContent, then
+// recreating each as a fresh script element appended to document.head.
+// See https://www.ghinda.net/article/script-tags/ and JSDOM issue #426.
+// ----------------------------------------------------------------------------
+
+export interface MountedSidebar {
+  document: Document;
+  window: Window & typeof globalThis;
+  runCalls: Array<{ method: string; args: unknown[] }>;
+  dispatchRunCall: (method: string, payload: unknown) => void;
+  failRunCall: (method: string, error: { message: string }) => void;
+  getPendingCalls: () => Array<{ method: string; args: unknown[] }>;
+}
+
+export function mountSidebar(html: string): MountedSidebar {
+  // 1. Reset the body.
+  document.body.innerHTML = '';
+
+  // 2. Parse the HTML into a detached <template> so the browser parser
+  //    splits <script> nodes from the rest without executing them.
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+
+  // 3. Walk the parsed fragment, separating script nodes from the rest.
+  const scripts: HTMLScriptElement[] = [];
+  const frag = document.createDocumentFragment();
+  Array.from(tpl.content.childNodes).forEach((node) => {
+    if (node.nodeName === 'SCRIPT') {
+      scripts.push(node as HTMLScriptElement);
+    } else {
+      frag.appendChild(node.cloneNode(true));
+    }
+  });
+  document.body.appendChild(frag);
+
+  // 4. Build the google.script.run fluent mock. The chain shape is
+  //    `.withSuccessHandler(s).withFailureHandler(f).METHOD(args)` but any
+  //    handler is optional (Search's pushRecentSearchCall is fire-and-forget).
+  //    Each terminal METHOD invocation enqueues a record so dispatch can
+  //    resolve handlers FIFO.
+  const runCalls: Array<{ method: string; args: unknown[] }> = [];
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  const pendingByMethod = new Map<string, Array<{ success?: Function; failure?: Function }>>();
+
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  function makeChain(handlers: { success?: Function; failure?: Function }): unknown {
+    return new Proxy({}, {
+      get(_t, prop: string) {
+        if (prop === 'withSuccessHandler') {
+          // eslint-disable-next-line @typescript-eslint/ban-types
+          return (fn: Function) => makeChain({ ...handlers, success: fn });
+        }
+        if (prop === 'withFailureHandler') {
+          // eslint-disable-next-line @typescript-eslint/ban-types
+          return (fn: Function) => makeChain({ ...handlers, failure: fn });
+        }
+        // Terminal method invocation.
+        return (...args: unknown[]) => {
+          runCalls.push({ method: prop, args });
+          const queue = pendingByMethod.get(prop) ?? [];
+          queue.push(handlers);
+          pendingByMethod.set(prop, queue);
+        };
+      },
+    });
+  }
+
+  (window as unknown as Record<string, unknown>).google = {
+    script: { run: makeChain({}), host: { close: () => { /* no-op for sidebars */ } } },
+  };
+
+  // 5. Re-create script elements with .textContent set then append to head --
+  //    this is the canonical workaround for HTML5's no-exec-via-innerHTML rule.
+  scripts.forEach((orig) => {
+    const s = document.createElement('script');
+    if (orig.textContent) s.textContent = orig.textContent;
+    document.head.appendChild(s);
+  });
+
+  function dispatchRunCall(method: string, payload: unknown): void {
+    const queue = pendingByMethod.get(method);
+    if (!queue || queue.length === 0) {
+      throw new Error(`mountSidebar.dispatchRunCall: no pending ${method} call`);
+    }
+    const next = queue.shift()!;
+    if (next.success) next.success(payload);
+  }
+
+  function failRunCall(method: string, error: { message: string }): void {
+    const queue = pendingByMethod.get(method);
+    if (!queue || queue.length === 0) {
+      throw new Error(`mountSidebar.failRunCall: no pending ${method} call`);
+    }
+    const next = queue.shift()!;
+    if (next.failure) next.failure(error);
+  }
+
+  function getPendingCalls(): Array<{ method: string; args: unknown[] }> {
+    const out: Array<{ method: string; args: unknown[] }> = [];
+    pendingByMethod.forEach((queue, method) => {
+      queue.forEach(() => out.push({ method, args: [] }));
+    });
+    return out;
+  }
+
+  return {
+    document,
+    window: window as Window & typeof globalThis,
+    runCalls,
+    dispatchRunCall,
+    failRunCall,
+    getPendingCalls,
+  };
+}

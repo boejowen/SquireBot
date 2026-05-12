@@ -52,6 +52,16 @@ import (
 // adds a parallel charNameSpellbookRE for "<Char>-Spellbook.txt".
 var charNameRE = regexp.MustCompile(`^(.+)-Inventory\.txt$`)
 
+// bootAuthClassification distinguishes a revoked-refresh-token boot error
+// (Reauthorize path) from any other rebuild failure (ContinueSetup path).
+// Plan 09-04 / AUTH-07.
+type bootAuthClassification int
+
+const (
+	bootAuthOther bootAuthClassification = iota
+	bootAuthRevoked
+)
+
 // charNameSpellbookRE extracts <Char> from "<Char>-Spellbook.txt".
 // Mirrors charNameRE for the WATCH-02 spellbook handler.
 var charNameSpellbookRE = regexp.MustCompile(`^(.+)-Spellbook\.txt$`)
@@ -98,14 +108,14 @@ func RunApp(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *
 	}
 
 	// Watcher path. If we came through the wizard, ts is live; otherwise
-	// (skip-wizard cold start) we rebuild it from wincred.
+	// (skip-wizard cold start) we rebuild it from wincred. AUTH-07 (Plan
+	// 09-04): classify the rebuild error so revoked refresh tokens surface
+	// the Reauthorize path instead of ContinueSetup. Pre-Ready tray calls
+	// are buffered by Plan 09-01 (OPS-06).
 	if ts == nil {
 		built, err := buildTokenSourceFromWincred(ctx, cfg, bc)
 		if err != nil {
-			slog.Error("token rebuild from wincred failed", "err", err)
-			t.SetStatus(fmt.Sprintf("Auth error: %v", err))
-			t.SetIconHealth(tray.HealthRed)
-			t.ShowContinueSetup()
+			_ = applyBootAuthError(t, err)
 			return
 		}
 		ts = built
@@ -619,6 +629,42 @@ func isPermanentAuthErr(err error) bool {
 		return true
 	}
 	return auth.IsRevokedRefreshToken(err)
+}
+
+// applyBootAuthError handles a cold-start buildTokenSourceFromWincred
+// failure. If the error matches the revoked-refresh-token classifier
+// (same one AUTH-05 uses), it mirrors AUTH-05's canonical
+// SetIconHealth(Red) + SetStatus + ShowReauthorize tray triple
+// (suspendForAuth, runapp.go ~lines 628-637) so the user sees a clickable
+// Reauthorize from boot. Otherwise it preserves the original
+// ContinueSetup-style recovery (red icon + raw error in status + wizard
+// re-entry).
+//
+// Plan 09-01 (OPS-06) buffers these pre-Ready tray calls so they replay
+// in OnReady — the tray menu opens already in the auth-error state.
+//
+// Returns the classification so unit tests can assert which branch ran
+// without depending on tray internals.
+//
+// Plan 09-04 / AUTH-07. Phase 6 UAT Finding C.
+func applyBootAuthError(t *tray.Controller, err error) bootAuthClassification {
+	slog.Error("token rebuild from wincred failed", "err", err)
+	if auth.IsRevokedRefreshToken(err) {
+		// AUTH-07: boot-time invalid_grant. Mirror AUTH-05's
+		// suspendForAuth triple exactly so the running-state and
+		// boot-time recovery UX are identical.
+		t.SetIconHealth(tray.HealthRed)
+		t.SetStatus("Reauthorize: refresh token died. Click Reauthorize…")
+		t.ShowReauthorize()
+		return bootAuthRevoked
+	}
+	// Non-revoked wincred breakage (corrupted credential, machine
+	// migration, etc.) — route to wizard re-entry per the original
+	// pre-AUTH-07 behavior.
+	t.SetStatus(fmt.Sprintf("Auth error: %v", err))
+	t.SetIconHealth(tray.HealthRed)
+	t.ShowContinueSetup()
+	return bootAuthOther
 }
 
 // suspendForAuth trips authSuspended, turns the tray red, surfaces the

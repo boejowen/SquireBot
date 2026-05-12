@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-12T21:00:00.000Z"
 last_activity: "2026-05-12 — v1.0.2 Robustness Polish milestone opened. Scope: 6 backlog items (999.13–999.18) → AUTH-07 + OPS-06 + CONFIG-01 + OPS-07 + TEST-03 + TEST-04. No schema change (schema_version stays at 3, WatcherMaxSchemaVersion stays at 3). SignPath OSS approval (999.9) excluded — treated as hotfix-when-approved. v1.1/v2 candidates deferred. PROJECT.md updated; REQUIREMENTS.md + ROADMAP.md pending."
 progress:
-  total_phases: 0
+  total_phases: 2
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -29,10 +29,24 @@ See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap landed; next is `/gsd-discuss-phase 9` or `/gsd-plan-phase 9`)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-12 — Milestone v1.0.2 started
+Status: Roadmap approved; awaiting phase kickoff
+Last activity: 2026-05-12 — Milestone v1.0.2 roadmap approved (2 phases, 6 requirements mapped)
+
+### v1.0.2 Phase Plan (2026-05-12)
+
+| Phase | Name | Requirements | Stack | Ship gate | Status |
+|-------|------|--------------|-------|-----------|--------|
+| 9 | Watcher Robustness Polish | AUTH-07, OPS-06, OPS-07, CONFIG-01 | Go (watcher) | watcher v1.0.2 binary release | Not started |
+| 10 | Apps Script Test Quality | TEST-03, TEST-04 | Apps Script | `clasp push` of apps-script bundle + green CI | Not started |
+
+**Sequencing rationale:**
+
+1. Phase 9 first because it produces the binary release that tags the milestone (`v1.0.2`). Mirrors v1.0.1's Phase 6 ship-gate pattern. Independent of apps-script work.
+2. Phase 10 second because it's apps-script-only (no schema impact); naturally bundles with Phase 9 ship for a single coherent v1.0.2 milestone close.
+
+**Schema impact:** NONE across both phases. `_meta.schema_version` stays at 3; `WatcherMaxSchemaVersion` stays at 3 (the watcher binary rebuild in Phase 9 is for new robustness fixes, not for schema reasons — same shape as v1.0.1 Phase 6).
 
 **Shipped to date:**
 

@@ -52,16 +52,16 @@
 
 | REQ-ID | Phase | Plan(s) | Status |
 |--------|-------|---------|--------|
-| AUTH-07 | (TBD) | (filled by `/gsd-plan-phase`) | Pending |
-| OPS-06 | (TBD) | (filled by `/gsd-plan-phase`) | Pending |
-| OPS-07 | (TBD) | (filled by `/gsd-plan-phase`) | Pending |
-| CONFIG-01 | (TBD) | (filled by `/gsd-plan-phase`) | Pending |
-| TEST-03 | (TBD) | (filled by `/gsd-plan-phase`) | Pending |
-| TEST-04 | (TBD) | (filled by `/gsd-plan-phase`) | Pending |
+| AUTH-07 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
+| OPS-06 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
+| OPS-07 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
+| CONFIG-01 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
+| TEST-03 | Phase 10 (Apps Script Test Quality) | (filled by `/gsd-plan-phase 10`) | Pending |
+| TEST-04 | Phase 10 (Apps Script Test Quality) | (filled by `/gsd-plan-phase 10`) | Pending |
 
-> Phase column to be filled by the roadmapper in `/gsd-new-milestone` step 10. Plan column filled by `/gsd-plan-phase` per phase.
+> Phase column filled by roadmapper at v1.0.2 milestone open (2026-05-12). Plan column will be filled by `/gsd-plan-phase` per phase.
 
-**Coverage check (2026-05-12, requirements-stage):** 6/6 requirements defined; mapping to phases pending roadmap creation.
+**Coverage check (2026-05-12, roadmap-stage):** 6/6 requirements mapped to exactly one phase. No orphans. No duplicates. Phase 9 = 4 REQs (Go-side); Phase 10 = 2 REQs (apps-script-side).
 
 ---
 

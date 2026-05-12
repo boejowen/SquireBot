@@ -113,11 +113,15 @@ function resolveInitiatedBy(): string {
   return 'unknown';
 }
 
-/** Internal helper. Reads _meta.admin_log, defensively parses JSON
+/** Module-private helper. Reads _meta.admin_log, defensively parses JSON
  * (malformed → fresh array + warn log), pushes the entry, writes back.
  * NOT lock-wrapped on its own — caller is responsible for holding the
- * lock when called inside add/remove/bootstrap. */
-export function appendAdminLogEntry(entry: AdminLogEntry): void {
+ * lock when called inside add/remove/bootstrap. Intentionally NOT
+ * exported (WR-02): every external caller would have to remember to
+ * acquire the document lock first, and the type system can't enforce
+ * that contract. The three lock-wrapped mutators in this file are the
+ * only legitimate callers. */
+function appendAdminLogEntry(entry: AdminLogEntry): void {
   const meta = readMetaRows('_meta');
   const row = meta.find((r) => r.key === 'admin_log');
   let list: AdminLogEntry[] = [];

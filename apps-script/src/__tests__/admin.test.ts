@@ -427,28 +427,35 @@ describe('admin.ts', () => {
   });
 
   // -------------------------------------------------------------------
-  describe('appendAdminLogEntry', () => {
+  describe('appendAdminLogEntry (driven via addAdmin)', () => {
     it('T20 appendAdminLogEntry_malformedExisting_startsFreshAndWarns', () => {
+      // appendAdminLogEntry is module-private (WR-02 — only the three
+      // lock-wrapped mutators may call it). We exercise its
+      // malformed-JSON-recovery branch indirectly via addAdmin instead
+      // of calling it directly.
       const logSpy = vi.spyOn(logModule, 'log').mockImplementation(() => {});
-      seedMeta(state, [['admin_log', '{ broken json']]);
+      seedMeta(state, [
+        ['guild_admins', JSON.stringify(['y@y.com'])],
+        ['workbook_owner_floor', 'y@y.com'],
+        ['admin_log', '{ broken json'],
+      ]);
+      installSessionMock('y@y.com');
 
-      admin.appendAdminLogEntry({
-        at: '2026-05-11T00:00:00.000Z',
-        action: 'add',
-        email: 'x@x.com',
-        initiated_by: 'y@y.com',
-      });
+      const result = admin.addAdmin('x@x.com', 'y@y.com');
+      expect(result).toEqual({ added: true });
 
       const meta = state.sheets.get('_meta')!;
       const logRow = meta.values.find((r) => r[0] === 'admin_log')!;
       const list = JSON.parse(String(logRow[1])) as Array<Record<string, unknown>>;
+      // Fresh array — malformed pre-existing JSON was dropped, only the
+      // new addAdmin entry survives.
       expect(list).toHaveLength(1);
       expect(list[0]).toMatchObject({
         action: 'add',
         email: 'x@x.com',
         initiated_by: 'y@y.com',
-        at: '2026-05-11T00:00:00.000Z',
       });
+      expect(String(list[0].at)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
       // warn log emitted with malformedExistingLog: true.
       expect(logSpy).toHaveBeenCalledWith(

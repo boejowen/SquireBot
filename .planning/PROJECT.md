@@ -10,26 +10,11 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 ## Current State
 
-**Shipped: v1.0.0 (2026-05-11).** Five phases, 31 plans, 11 days kickoff to ship. Watcher v0.4.0 binary + Apps Script Phase-5 bundle deployed via clasp to the dev workbook. Tag `v1.0.0` pushed; Pages onboarding site live at https://boejowen.github.io/SquireBot/. See `.planning/MILESTONES.md` and `.planning/milestones/v1.0-ROADMAP.md` for the full v1.0 record.
+**Shipped: v1.0.1 (2026-05-12).** v1.0 shipped 2026-05-11 (five phases, 31 plans, 11 days kickoff to ship); v1.0.1 patch shipped 2026-05-12 (three phases, 12 plans, 2 calendar days). Watcher binary tag `v1.0.1` pushed 2026-05-11 (Phase 6 ship gate); Apps Script Phase 7+8 bundles deployed via `clasp push` to the dev workbook 2026-05-12. Pages onboarding site live at https://boejowen.github.io/SquireBot/. See `.planning/MILESTONES.md` and `.planning/milestones/v1.0.1-ROADMAP.md` for the full v1.0.1 record (v1.0 archive lives alongside).
 
-**What's working end-to-end (verified):** Installer → OAuth → watcher → inv/spell landing tabs → daily PigParse + weekly wiki enrichment → consolidated `view` + `gear_check` + `spell_check` + `bank` tabs with cell-note tooltips and conditional Last-Synced formatting → cross-character search sidebar → lock-guarded eviction workflow with 30-day grace → text-only Pages onboarding site. All cumulative tests pass (297/297 vitest, full Go test suite). Schema at `_meta.schema_version = 3`; watcher's `WatcherMaxSchemaVersion = 3`; ErrSchemaTooNew startup gate verified.
+**What's working end-to-end (verified):** Installer → OAuth → watcher → inv/spell landing tabs → daily PigParse + weekly wiki enrichment → consolidated `view` + `gear_check` + `spell_check` + `bank` tabs with cell-note tooltips and conditional Last-Synced formatting → cross-character search sidebar (recent-3 MRU now durable per-user) → code-enforced officer-only eviction sidebar with admin-management UX + owner-floor lockout protection → 30-day grace + lazy archive → text-only Pages onboarding site → installer cleanly upgrades over a running watcher (NSIS pre-install shim). All cumulative tests pass (336/336 vitest, full Go test suite). Schema at `_meta.schema_version = 3`; watcher's `WatcherMaxSchemaVersion = 3` (untouched by v1.0.1); ErrSchemaTooNew startup gate verified.
 
-**Current milestone: v1.0.1 Installer + Permissions Hardening** (started 2026-05-11) — retire v1.0 carry-over debt: harden installer upgrade path, enforce officer-only eviction by code, pay down sidebar test + documentation debt. SignPath OSS approval (999.9) tracked separately as a hotfix when the Foundation review lands. See `## Current Milestone` below for scope.
-
-## Current Milestone: v1.0.1 Installer + Permissions Hardening
-
-**Goal:** Retire v1.0 carry-over debt: harden the installer upgrade path, enforce officer-only eviction by code, and pay down sidebar test + documentation debt — without changing any user-facing data flow.
-
-**Target features:**
-- Installer overwrite-running shim (NSIS detects running watcher, gracefully stops it, then upgrades — replaces the manual workaround in `docs/troubleshooting.md`)
-- `_meta.guild_admins` allowlist (Evict Guildie sidebar enforces officer-only by code; bootstrap + admin-management UX scoped during phase)
-- Sidebar inline-JS unit tests (JSDOM in vitest; cover search + eviction + bank-coin + char-info sidebar JS currently shipping untested)
-- PropertiesService recent-query persistence (migrate Search recent-3 MRU from CacheService 25-min TTL → durable PropertiesService)
-- SUMMARY.md backfill for the 8 Phase 3 + Phase 4 plans missing summaries
-
-**Out of scope this milestone (explicitly deferred):**
-- SignPath Foundation OSS approval (999.9) — third-party timeline; lands as a hotfix when approved
-- Bank-coin permission lock (999.1) — eviction enforcement was prioritized; bank-coin remains social-convention-gated for this cycle
+**Next milestone:** TBD. v1.0.1 surfaced 4 v1.0.2 candidates during Phase 6 UAT (999.13–999.16 — tray/config foot-guns) plus 2 follow-on items from Phase 8 (999.17–999.18 — Admin-Mgmt inline-JS coverage + advisory test-quality findings). Plus carry-overs from v1.0 (999.1, 999.2, 999.7, 999.9 SignPath, 999.11, 999.12 v2 Wantlist + Discord pinger). Run `/gsd-new-milestone` to scope.
 
 ## Requirements
 
@@ -57,21 +42,25 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 See `milestones/v1.0-REQUIREMENTS.md` for the full 69-REQ-ID reconciliation.
 
+**v1.0.1 — Installer + Permissions Hardening (shipped 2026-05-12)**
+
+- ✓ Installer overwrite-running shim (NSIS pre-install detects running watcher, `--quit` IPC, 10s poll, `taskkill /F` fallback) — INST-06, v1.0.1
+- ✓ `_meta.guild_admins` allowlist — code-enforced officer-only eviction (ADMIN-01..03), v1.0.1
+- ✓ Sidebar inline-JS unit tests via JSDOM (5/5 shipping sidebars covered) — TEST-01, TEST-02, v1.0.1
+- ✓ PropertiesService recent-query persistence (Search sidebar MRU now durable per-user) — SEARCH-05, v1.0.1
+- ✓ SUMMARY.md backfill for Phase 3 + 4 (documentation debt) — DOC-04, v1.0.1
+
+See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
+
 ### Active
 
-<!-- v1.0.1 Installer + Permissions Hardening scope. See .planning/REQUIREMENTS.md for full REQ-ID list once defined. -->
+<!-- Next milestone TBD. Run /gsd-new-milestone to scope. -->
 
-**v1.0.1 — Installer + Permissions Hardening (in progress)**
+_None active. v1.0.1 closed 2026-05-12. Backlog candidates (v1.0.2 patches surfaced during v1.0.1 execution, v1.1 polish, v2 Discord) live in `.planning/ROADMAP.md` § Backlog._
 
-- [ ] Installer overwrite-running shim (NSIS) — retires manual stop-process workaround
-- [ ] `_meta.guild_admins` allowlist — code-enforced officer-only eviction
-- [ ] Sidebar inline-JS unit tests via JSDOM
-- [ ] PropertiesService recent-query persistence (Search sidebar)
-- [ ] SUMMARY.md backfill for Phase 3 + 4 (documentation debt)
+### v1.0 Partials / Waivers (user-authorized; still tracked post-v1.0.1)
 
-### v1.0 Partials / Waivers (user-authorized; v1.0.1 candidates)
-
-- ⚠ **INST-05** (SmartScreen video) — shipped text-only; SignPath OSS approval in flight could retire the partial to full
+- ⚠ **INST-05** (SmartScreen video) — shipped text-only; SignPath OSS approval (999.9) still in flight could retire the partial to full
 - ⚠ **SEARCH-03** (inline staleness in search results) — shipped via Path 2 (existing view/bank Last Synced + search-button cache-freshness tooltip); user explicitly chose this over inline
 - — **ENRICH-09** (PigParse + wiki courtesy emails) — waived; politeFetch throttling sufficient
 
@@ -114,7 +103,7 @@ See `milestones/v1.0-REQUIREMENTS.md` for the full 69-REQ-ID reconciliation.
 - **Existing community tools** (for inspiration / non-overlap): EQHTML and "P99 Inventory Parser" both read these same files but render local-only views. SquireBot's differentiator is *guild-wide aggregation*, *progression checklists vs. wiki tiers*, and *price awareness*.
 - **External data sources:** P1999 MediaWiki API (`https://wiki.project1999.com/api.php`) + PigParse REST (`https://pigparse.azurewebsites.net`, Swagger at `/swagger/index.html`). Both are community-run and well-mannered citizens via the shared `politeFetch()` helper (User-Agent, ETag/If-Modified-Since, CacheService, exponential backoff, 1s sleep between wiki requests).
 - **Sheet as primary UI:** the workbook does the heavy lifting (lookups, search, tooltips). Apps Script handles the dynamic bits (cross-character search sidebar, eviction sidebar, bank-coin sidebar, char-info sidebar, theme picker). The watcher stays small (~14k LOC Go; ~12 MB binary).
-- **Codebase at v1.0 ship:** ~14k LOC Go (watcher; `cmd/squirebot` + `internal/{auth,config,eqfind,heartbeat,oauth,sheet,system,tray,update,watch,wincred,wizard}`) + ~11k LOC TypeScript (`apps-script/src/{lib,triggers,tabs,__tests__,__fixtures__}`); 203 commits since project init; 297 vitest tests passing.
+- **Codebase at v1.0.1 ship:** 14,507 LOC Go (watcher; `cmd/squirebot` + `internal/{auth,config,eqfind,heartbeat,oauth,sheet,system,tray,update,watch,wincred,wizard}` — v1.0.1 added `internal/system` Windows named-event IPC package for installer shim) + 13,266 LOC TypeScript (`apps-script/src/{lib,triggers,tabs,sidebars,__tests__,__fixtures__}` — v1.0.1 added `lib/admin.ts` policy module + `triggers/showAdminMgmtSidebar.ts` + 8 retroactive Phase 3+4 SUMMARY.md files); 266 commits since project init; 336 vitest tests passing.
 
 ## Constraints
 
@@ -143,6 +132,11 @@ See `milestones/v1.0-REQUIREMENTS.md` for the full 69-REQ-ID reconciliation.
 | **EV code-signing certs no longer grant instant SmartScreen reputation** | Microsoft removed the perk March 2024; EV ≡ OV on UX. Default = unsigned + walkthrough; SignPath OSS in parallel. | ✓ Locked (saved buying an EV cert; updated STACK.md + PITFALLS.md #2) |
 | **Phase 5 D-12 Path A — no `WatcherMaxSchemaVersion` bump for Phase 5** | Phase 5 was apps-script-only; held schema_version=3 end-to-end. | ✓ Good (no watcher rebuild required for v1.0; deploy was clasp push only) |
 | **Instructional images + SmartScreen GIF DROPPED 2026-05-11** (mid-execution of Phase 5 plan 05-05) | Capture overhead not worth it for a 12-guildie audience; text-only walkthrough satisfies the documentation spirit. | ✓ Good (saved ~60 min of one-time capture work + ongoing maintenance of binary assets) |
+| **v1.0.1: No schema bump across all 3 phases** | `_meta.guild_admins`, `_meta.workbook_owner_floor`, `_meta.admin_log` are extend-only row additions; SEARCH-05 PropertiesService swap is a persistence-layer change, not a tab schema change | ✓ Good (no migration logic; no watcher rebuild for schema reasons; binary v1.0.1 rebuild was for NSIS install path only) |
+| **v1.0.1 ADMIN-03: Owner-floor lockout protection** | Workbook owner email cannot be removed from `_meta.guild_admins` by anyone other than themselves; prevents catastrophic peer-admin lockout | ✓ Locked + UAT-verified live in dev workbook (Hook 4 PASS) |
+| **v1.0.1 SEARCH-05: PropertiesService per-user, NOT Document scope** | Recent-3 MRU is per-guildie state, not workbook-shared state; migrating from CacheService keeps the same scope semantics while gaining durability across the 25-min TTL | ✓ Good |
+| **v1.0.1 mid-smoke: Apps Script manifest must declare `userinfo.email` under consumer @gmail.com** | Without it, `Session.getEffectiveUser().getEmail()` silently returns empty; broke every Phase 7 admin guard during dev-workbook Hook 3; retired latent v1.0 `initiated_by='unknown'` audit-log silent fallback | ✓ Locked (commit `544bef8`; non-sensitive scope; future rule: any future scope addition stays non-sensitive so the consent screen does not require Production-consent re-review) |
+| **v1.0.1: TRIGGER_GLOBALS ↔ Code.ts sync assertion is load-bearing for every plan that adds Apps Script globals** | The Phase 3 `d0a2645`-style sync assertion fires at build time and blocks the build if the two lists diverge; surfaced as a "minor deviation" during Plan 07-02 because the plan text didn't enumerate `build.mjs` in its `<files>` block but the assertion is non-negotiable | ✓ Locked (future plans adding `google.script.run` callbacks must update both `Code.ts` AND `build.mjs` TRIGGER_GLOBALS) |
 
 ## Evolution
 
@@ -156,12 +150,12 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections (done for v1.0 → 2026-05-11)
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
+1. Full review of all sections (done for v1.0 → 2026-05-11, v1.0.1 → 2026-05-12)
+2. Core Value check — still the right priority? (✓ unchanged at v1.0.1; "what's missing, where is it in the guild" still the load-bearing question)
+3. Audit Out of Scope — reasons still valid? (✓ unchanged at v1.0.1; v1.0 Out of Scope items all still valid)
 4. Update Context with current state
 5. Mark Key Decisions outcomes (✓ Good / ⚠️ Revisit / — Pending)
 
 ---
 
-*Last updated: 2026-05-11 — v1.0.1 Installer + Permissions Hardening started.*
+*Last updated: 2026-05-12 — v1.0.1 Installer + Permissions Hardening shipped.*

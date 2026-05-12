@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
-status: phase7_in_progress
-last_updated: "2026-05-12T02:30:00.000Z"
+status: phase7_awaiting_smoke
+last_updated: "2026-05-12T02:42:00.000Z"
 last_activity: 2026-05-12
 resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-03-eviction-guard-onopen-smoke-PLAN.md
 progress:
@@ -32,10 +32,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 7 — Admin Allowlist + Eviction Enforcement (IN PROGRESS — Plans 01 + 02 SHIPPED 2026-05-12)
-Plan: 2 of 3 complete (Wave 1 + half of Wave 2). Plan 02 commits: `2ea0cd2` (trigger) + `a5d3cb4` (test + helpers) + `d84d684` (Code.ts + build.mjs wiring). showAdminMgmtSidebar trigger (263 LOC) + 7-test vitest suite (219 LOC) + 5 new globals lifted to Apps Script top-level. Full apps-script suite 317→324 GREEN; typecheck + build clean; verification hook 5 grep gates still PASS (schema_version untouched, WatcherMaxSchemaVersion=3 unchanged).
-Status: Plan 03 (eviction-guard + onOpen + clasp-push smoke) is the only remaining plan. It will modify `showEvictionSidebar.ts` (admin guards), `onOpen.ts` (lazy bootstrap call + 2 new menu items), reseed eviction-sidebar tests with `_meta.guild_admins`, and ship the dev-workbook smoke (the ship gate). Next: `/clear` then `/gsd-execute-phase 7` (Plan 03 only — sequential continuation).
-Last activity: 2026-05-12 — Plan 07-02 executed. Created `apps-script/src/triggers/showAdminMgmtSidebar.ts` (263 lines, 4 exports: opener + 3 google.script.run callbacks matching the <interfaces> contract byte-for-byte) + `apps-script/src/__tests__/adminMgmtSidebar.test.ts` (219 lines, 7 named tests TS1–TS7). Modified `apps-script/src/Code.ts` (+12 lines: 2 import blocks + 5 new export entries), `apps-script/build.mjs` (+6 lines: 5 new TRIGGER_GLOBALS entries with section comment), and `apps-script/src/__tests__/test-helpers.ts` (+20 lines: alertCalls capture + ButtonSet/Button enums + alert mock body). Two minor deviations documented (build.mjs added scope per Rule 3; "exactly 2" Code.ts grep matches 3 due to import-path string overlap — spirit honored). SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-02-SUMMARY.md`.
+Phase: 7 — Admin Allowlist + Eviction Enforcement (CODE-COMPLETE-AWAITING-SMOKE — Plans 01 + 02 + 03-source SHIPPED 2026-05-12)
+Plan: 2.7 of 3 complete (Plans 01 + 02 + Plan 03 Tasks 1–3; Task 4 = clasp-push smoke is the final gate). Plan 03 commits: `1937fd0` (test seed staging) + `7f7ffb0` (eviction guards) + `c3c0033` (onOpen wiring). showEvictionSidebar admin-gated at opener + 3 callbacks; onOpen lazy bootstraps admin allowlist + adds 2 new menu items (Manage Admins…, Initialize Admin Allowlist (manual)). Full apps-script suite stays 324/324 GREEN; typecheck + build clean; dist/Code.js contains all Phase 7 surface (5 new globals + both menu labels + eviction guard alert copy + lazy bootstrapGuildAdmins call). Hook 5 grep gates still PASS.
+Status: Plan 03 Task 4 (clasp push to dev workbook + interactive 5-hook smoke) is the only remaining work. The user (workbook owner) holds clasp OAuth credentials and runs the smoke per the runbook in `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-eviction-guard-onopen-smoke-PLAN.md` Task 4. Once 5/5 hooks PASS, Phase 7 = SHIPPED + UAT-verified, STATE advances to phase_7_complete, and Phase 8 (test infra + persistence + docs backfill) opens. If a hook fails, classify as either trivial-fix (patch + republish in this plan scope) or follow-up plan (gap-plan via `/gsd-plan-phase 7 --gaps`).
+Last activity: 2026-05-12 — Plan 07-03 Tasks 1–3 executed. Modified `apps-script/src/triggers/showEvictionSidebar.ts` (+1 import line for `isAdmin`/`requireAdminOrThrow`/`normalizeEmail` from `'../lib/admin'`; opener gets normalizeEmail(Session.getEffectiveUser) → isAdmin → getUi().alert non-admin path; getEvictionEmails/previewEviction/commitEviction each get requireAdminOrThrow as FIRST statement). Modified `apps-script/src/triggers/onOpen.ts` (+2 imports for `bootstrapGuildAdmins` + `log` — first imports ever in this file; +6 lines try/catch lazy bootstrap at top of onOpen; +1 line `Manage Admins…` menu item between Evict Guildie and Set Theme; +2 lines separator + `Initialize Admin Allowlist (manual)` menu item after Run Migration v=2 legacy). Modified `apps-script/src/__tests__/showEvictionSidebar.test.ts` (added `seedMetaWithAdmins(state, adminEmails, extraRows?, floor?)` helper; all 4 beforeEach blocks switched from `seedMeta(state, [['schema_version','3']])` to `seedMetaWithAdmins(state, ['officer@example.com'])`; Test 11 uses extraRows arg; Test 12 reframed per Rule 1 — pre-Phase-7 it asserted initiated_by='unknown' soft-fallback, post-Phase-7 the same Session call drives the admin guard FIRST and fail-closes empty, so the test now asserts the new auth boundary). Two minor deviations documented (Rule 1 Test 12 reframe; Rule 3 `Manage Admins…` matches 2 lines in onOpen.ts because of file-header doc comment — spirit honored). INTERIM SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-SUMMARY.md`.
 
 **Phase 7 plan-phase completed 2026-05-12** (prior history): 3 PLAN.md files: 07-01-admin-policy-module-PLAN.md (wave 1, lib/admin.ts + tests, 20 unit-test scenarios T1–T20), 07-02-admin-mgmt-sidebar-PLAN.md (wave 2, showAdminMgmtSidebar.ts + tests + Code.ts re-exports), 07-03-eviction-guard-onopen-smoke-PLAN.md (wave 2, eviction sidebar admin-guard + onOpen lazy bootstrap + 2 new menu items + clasp-push interactive smoke against dev workbook).
 
@@ -64,8 +64,8 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 | Metric | Value |
 |--------|-------|
 | Phases planned (v1.0.1) | 3 / 3 |
-| Phases complete (v1.0.1) | 1 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`) |
-| Plans complete (v1.0.1) | 7 / 8 (Phase 6: 5/5; Phase 7: 2/3 — plans 07-01 + 07-02 shipped 2026-05-12) |
+| Phases complete (v1.0.1) | 1 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`; Phase 7 code-complete-pending-smoke 2026-05-12) |
+| Plans complete (v1.0.1) | 7 / 8 (Phase 6: 5/5; Phase 7: 2/3 fully shipped + Plan 03 code-complete-pending-smoke 2026-05-12) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
 | Requirements complete (v1.0.1) | 1 / 8 (INST-06 ✓ UAT-verified 2026-05-11 — binary shipped + live upgrade validated on Azure VM) |
 | Active blockers | 0 |

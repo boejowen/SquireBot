@@ -506,10 +506,26 @@ beforeEach(() => {
 // inline JS and reads window.google synchronously), then returns the realm
 // plus dispatch helpers so tests can resolve enqueued call promises FIFO.
 //
-// JSDOM gotcha: per HTML5 spec, <script> tags inserted via innerHTML do NOT
-// execute. We work around this by extracting <script> textContent, then
-// recreating each as a fresh script element appended to document.head.
-// See https://www.ghinda.net/article/script-tags/ and JSDOM issue #426.
+// JSDOM gotcha #1: per HTML5 spec, <script> tags inserted via innerHTML do
+// NOT execute. We work around this by extracting <script> textContent and
+// executing it ourselves.
+//
+// JSDOM gotcha #2 (Plan 08-02 RED-phase finding): vitest's `jsdom` test
+// environment evaluates JSDOM-attached inline <script> elements via
+// `vm.runInContext` AGAINST A DIFFERENT VM CONTEXT from the test realm.
+// Writes from the inline script (e.g. `window.foo = 1`) do NOT appear on
+// the test-side `window`, and the script's `google` binding cannot see
+// the test-side stub installed via `window.google = ...`. Two windows,
+// one document. Symptomatic error: `ReferenceError: google is not defined`
+// even after the helper sets `window.google` first.
+//
+// Mitigation: indirect-eval (`(0, eval)(src)`) executes the script in the
+// TEST realm's global scope, so `document`, `window`, and the pre-set
+// `google` all resolve to the test-side bindings. Top-level `function` /
+// `var` declarations from the sidebar (e.g. `submit()`, `init()`,
+// `currentEmail`) become properties of the test-realm globalThis, which
+// vitest's jsdom env aliases to `window` — exactly what the inline JS
+// expects in a real Apps Script HtmlService iframe.
 // ----------------------------------------------------------------------------
 
 export interface MountedSidebar {
@@ -578,12 +594,26 @@ export function mountSidebar(html: string): MountedSidebar {
     script: { run: makeChain({}), host: { close: () => { /* no-op for sidebars */ } } },
   };
 
-  // 5. Re-create script elements with .textContent set then append to head --
-  //    this is the canonical workaround for HTML5's no-exec-via-innerHTML rule.
+  // 5. Execute each inline script's source in the TEST realm's global scope
+  //    via indirect eval. See JSDOM gotcha #2 in the helper-block header:
+  //    appending <script> elements to document.head runs them in a separate
+  //    JSDOM vm context whose `window` is NOT the test-side `window` and
+  //    whose `google` binding cannot see the stub installed two lines above.
+  //    Indirect eval `(0, eval)(src)` evaluates source as a Program in the
+  //    surrounding realm — top-level `var` / `function` declarations attach
+  //    to the test-realm globalThis (which is `window` under vitest jsdom),
+  //    so subsequent event handlers fire the same `submit()` / `init()` /
+  //    `onEmailChange()` the sidebar bundle declares.
+  //
+  //    Security note: this helper is test-only and never bundled into
+  //    dist/Code.js (esbuild's entry is src/Code.ts, which does NOT import
+  //    test-helpers). The eval risk is bounded to trusted fixture HTML
+  //    authored in the apps-script/src/triggers/show*Sidebar.ts files.
   scripts.forEach((orig) => {
-    const s = document.createElement('script');
-    if (orig.textContent) s.textContent = orig.textContent;
-    document.head.appendChild(s);
+    const src = orig.textContent || '';
+    if (!src.trim()) return;
+    // eslint-disable-next-line no-eval
+    (0, eval)(src);
   });
 
   function dispatchRunCall(method: string, payload: unknown): void {

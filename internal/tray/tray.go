@@ -76,6 +76,28 @@ const (
 	HealthRed
 )
 
+// actionKind tags a deferred mutator call queued before OnReady. Plan 09-01 (OPS-06).
+type actionKind int
+
+const (
+	actStatus actionKind = iota
+	actIconHealth
+	actShowContinueSetup
+	actHideContinueSetup
+	actShowReauthorize
+	actHideReauthorize
+	actSetSpreadsheetID
+)
+
+// pendingAction is a single deferred mutator call. Only one payload field
+// is meaningful per kind (the others stay zero-valued). Plan 09-01.
+type pendingAction struct {
+	kind          actionKind
+	status        string // actStatus
+	health        Health // actIconHealth
+	spreadsheetID string // actSetSpreadsheetID
+}
+
 // Config bundles the construction-time inputs to NewController.
 type Config struct {
 	IconGreen        []byte
@@ -99,6 +121,11 @@ type Controller struct {
 	iconRed       []byte
 	logDir        string
 	spreadsheetID string
+
+	// OPS-06 / Plan 09-01: queue-and-replay so pre-OnReady mutator calls
+	// are not silently dropped. Both fields are guarded by t.mu (above).
+	ready   bool
+	pending []pendingAction
 
 	mStatus         *systray.MenuItem
 	mWorkbook       *systray.MenuItem
@@ -132,6 +159,56 @@ func NewController(c Config) *Controller {
 	}
 }
 
+// drainPending replays every queued mutator call against the now-live
+// menu items, in FIFO insertion order. The caller MUST hold t.mu.
+// Plan 09-01 / OPS-06.
+func (t *Controller) drainPending() {
+	for _, a := range t.pending {
+		switch a.kind {
+		case actStatus:
+			if t.mStatus != nil {
+				t.mStatus.SetTitle(a.status)
+			}
+		case actIconHealth:
+			t.applyIconHealthLocked(a.health)
+		case actShowContinueSetup:
+			if t.mContinueSetup != nil {
+				t.mContinueSetup.Show()
+			}
+		case actHideContinueSetup:
+			if t.mContinueSetup != nil {
+				t.mContinueSetup.Hide()
+			}
+		case actShowReauthorize:
+			if t.mReauthorize != nil {
+				t.mReauthorize.Show()
+			}
+		case actHideReauthorize:
+			if t.mReauthorize != nil {
+				t.mReauthorize.Hide()
+			}
+		case actSetSpreadsheetID:
+			t.spreadsheetID = a.spreadsheetID
+		}
+	}
+	t.pending = nil
+}
+
+// applyIconHealthLocked performs the systray icon swap. Caller MUST hold
+// t.mu. Plan 09-01 / OPS-06.
+func (t *Controller) applyIconHealthLocked(h Health) {
+	switch h {
+	case HealthGreen:
+		if len(t.iconGreen) > 0 {
+			systray.SetIcon(t.iconGreen)
+		}
+	case HealthRed:
+		if len(t.iconRed) > 0 {
+			systray.SetIcon(t.iconRed)
+		}
+	}
+}
+
 // OnReady is the systray.Run callback that builds the menu. systray
 // itself is not test-friendly (needs a desktop session), so unit tests
 // assert MenuPlan() instead of running this function. Order MUST match
@@ -157,6 +234,17 @@ func (t *Controller) OnReady() {
 	t.mReauthorize.Hide()                                                   // surfaced only when authSuspended is true
 	systray.AddSeparator()
 	t.mQuit = systray.AddMenuItem(plan[6].Label, plan[6].Tooltip) // Quit
+
+	// Plan 09-01 / OPS-06: drain any mutator calls queued before OnReady.
+	// Must run AFTER all systray.AddMenuItem calls (so the *MenuItem fields
+	// are non-nil) and BEFORE go t.loop() (so the loop starts in a stable
+	// state). The flag flip + drain run under t.mu in a single critical
+	// section so concurrent SetStatus/SetIconHealth/etc. either land in the
+	// queue (and are drained here) or land live (after we release t.mu).
+	t.mu.Lock()
+	t.ready = true
+	t.drainPending()
+	t.mu.Unlock()
 
 	go t.loop()
 }
@@ -241,68 +329,96 @@ func (t *Controller) loop() {
 // (triggered by mQuit's onQuit) is what tears down background work.
 func (t *Controller) OnExit() {}
 
-// SetStatus updates the disabled top menu label. Goroutine-safe.
+// SetStatus updates the disabled top menu label. Goroutine-safe. Pre-Ready
+// calls are queued and replayed by OnReady. Plan 09-01 / OPS-06.
 func (t *Controller) SetStatus(s string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actStatus, status: s})
+		return
+	}
 	if t.mStatus != nil {
 		t.mStatus.SetTitle(s)
 	}
 }
 
-// SetIconHealth swaps the tray icon between green (normal) and red
-// (Setup needed / error). Phase 5 will produce distinct red art; for
-// now red == green visually.
+// SetIconHealth swaps the tray icon between green (normal) and red. Pre-Ready
+// calls are queued. Plan 09-01 / OPS-06.
 func (t *Controller) SetIconHealth(h Health) {
-	switch h {
-	case HealthGreen:
-		if len(t.iconGreen) > 0 {
-			systray.SetIcon(t.iconGreen)
-		}
-	case HealthRed:
-		if len(t.iconRed) > 0 {
-			systray.SetIcon(t.iconRed)
-		}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actIconHealth, health: h})
+		return
 	}
+	t.applyIconHealthLocked(h)
 }
 
-// ShowContinueSetup makes the Continue setup… item visible. D-07.
+// ShowContinueSetup makes the Continue setup… item visible. D-07. Pre-Ready
+// calls are queued. Plan 09-01 / OPS-06.
 func (t *Controller) ShowContinueSetup() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actShowContinueSetup})
+		return
+	}
 	if t.mContinueSetup != nil {
 		t.mContinueSetup.Show()
 	}
 }
 
-// HideContinueSetup hides the Continue setup… item.
+// HideContinueSetup hides the Continue setup… item. Pre-Ready calls are queued. Plan 09-01.
 func (t *Controller) HideContinueSetup() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actHideContinueSetup})
+		return
+	}
 	if t.mContinueSetup != nil {
 		t.mContinueSetup.Hide()
 	}
 }
 
 // ShowReauthorize makes the Reauthorize… item visible. Plan 02-04
-// (AUTH-05): the watcher calls this after observing
-// sheet.ErrPermanentAuth or auth.IsRevokedRefreshToken — the click
-// re-runs the OAuth loopback flow against the existing email.
+// (AUTH-05) + AUTH-07 boot path. Pre-Ready calls are queued. Plan 09-01 / OPS-06.
 func (t *Controller) ShowReauthorize() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actShowReauthorize})
+		return
+	}
 	if t.mReauthorize != nil {
 		t.mReauthorize.Show()
 	}
 }
 
-// HideReauthorize hides the Reauthorize… item. Called after a
-// successful re-auth restores the live TokenSource.
+// HideReauthorize hides the Reauthorize… item. Pre-Ready calls are queued. Plan 09-01.
 func (t *Controller) HideReauthorize() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actHideReauthorize})
+		return
+	}
 	if t.mReauthorize != nil {
 		t.mReauthorize.Hide()
 	}
 }
 
-// SetSpreadsheetID updates the workbook URL the Open Workbook handler
-// builds at click time. Called by runApp after a successful pick or
-// after Change Workbook…
+// SetSpreadsheetID updates the cached spreadsheet ID. Plan 09-01 / OPS-06:
+// the in-memory field is always kept current; if pre-Ready, the assignment is
+// also queued so the drain path is symmetric with the other mutators.
 func (t *Controller) SetSpreadsheetID(id string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.spreadsheetID = id
+	if !t.ready {
+		t.pending = append(t.pending, pendingAction{kind: actSetSpreadsheetID, spreadsheetID: id})
+	}
 }
 
 // SpreadsheetID returns the currently-tracked spreadsheet ID
@@ -315,3 +431,31 @@ func (t *Controller) SpreadsheetID() string {
 
 // LogDir returns the directory the "Open log folder" item targets.
 func (t *Controller) LogDir() string { return t.logDir }
+
+// pendingSnapshot returns a copy of the pending-action queue for tests.
+// Plan 09-01 / OPS-06 — test surface only; not called from production.
+func (t *Controller) pendingSnapshot() []pendingAction {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := make([]pendingAction, len(t.pending))
+	copy(out, t.pending)
+	return out
+}
+
+// isReady reports whether OnReady has run and drained the queue.
+// Plan 09-01 / OPS-06 — test surface only.
+func (t *Controller) isReady() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.ready
+}
+
+// simulateReady is a TEST-ONLY helper that flips the ready flag and drains
+// the pending queue. Mirrors OnReady's drain block exactly. Allows offline
+// tests to exercise the drain code path without a live systray. Plan 09-01.
+func (t *Controller) simulateReady() {
+	t.mu.Lock()
+	t.ready = true
+	t.drainPending()
+	t.mu.Unlock()
+}

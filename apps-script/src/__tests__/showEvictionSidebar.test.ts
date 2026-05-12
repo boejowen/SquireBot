@@ -46,11 +46,35 @@ function installSessionMock(email: string | null): void {
   };
 }
 
+// Phase 7 plan 07-03: seed _meta.guild_admins + _meta.workbook_owner_floor
+// alongside schema_version so the post-guard eviction sidebar (opener +
+// getEvictionEmails/previewEviction/commitEviction callbacks) admits the
+// test's installSessionMock-mocked caller. Mirrors what bootstrapGuildAdmins
+// would write on first open. seedMeta REPLACES the entire _meta sheet, so
+// this helper is the single seeder for these tests; callers that need extra
+// rows (Test 11 — pre-existing eviction_log) should use seedMetaWithAdmins
+// with the extra rows in one call.
+function seedMetaWithAdmins(
+  state: MockState,
+  adminEmails: string[],
+  extraRows: Array<[string, string]> = [],
+  floor?: string,
+): void {
+  const normalized = adminEmails.map((e) => e.toLowerCase().trim()).sort();
+  const rows: Array<[string, string]> = [
+    ['schema_version', '3'],
+    ['guild_admins', JSON.stringify(normalized)],
+    ['workbook_owner_floor', (floor ?? normalized[0] ?? '').toLowerCase().trim()],
+    ...extraRows,
+  ];
+  seedMeta(state, rows);
+}
+
 describe('showEvictionSidebar — open + width + title + body', () => {
   let state: MockState;
   beforeEach(() => {
     state = resetMocks();
-    seedMeta(state, [['schema_version', '3']]);
+    seedMetaWithAdmins(state, ['officer@example.com']);
     installSessionMock('officer@example.com');
   });
 
@@ -72,7 +96,7 @@ describe('getEvictionEmails', () => {
   let state: MockState;
   beforeEach(() => {
     state = resetMocks();
-    seedMeta(state, [['schema_version', '3']]);
+    seedMetaWithAdmins(state, ['officer@example.com']);
     installSessionMock('officer@example.com');
   });
 
@@ -101,7 +125,7 @@ describe('previewEviction', () => {
   let state: MockState;
   beforeEach(() => {
     state = resetMocks();
-    seedMeta(state, [['schema_version', '3']]);
+    seedMetaWithAdmins(state, ['officer@example.com']);
     installSessionMock('officer@example.com');
   });
 
@@ -138,7 +162,7 @@ describe('commitEviction', () => {
   let state: MockState;
   beforeEach(() => {
     state = resetMocks();
-    seedMeta(state, [['schema_version', '3']]);
+    seedMetaWithAdmins(state, ['officer@example.com']);
     installSessionMock('officer@example.com');
   });
 
@@ -243,8 +267,7 @@ describe('commitEviction', () => {
       { at: '2026-04-15T00:00:00Z', email: 'old2@x', initiated_by: 'oldofficer@example.com',
         grace_until: '2026-05-15T00:00:00Z', chars: ['OldChar2'], reason: 'evicted' },
     ];
-    seedMeta(state, [
-      ['schema_version', '3'],
+    seedMetaWithAdmins(state, ['officer@example.com'], [
       ['eviction_log', JSON.stringify(existing)],
     ]);
     state.sheets.set('_char_owner', makeSheet('_char_owner', CHAR_OWNER_HEADERS, [

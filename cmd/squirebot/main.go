@@ -97,6 +97,17 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Plan 09-02 (OPS-07): detach from any inherited console. Must run AFTER
+	// the --uninstall-wipe-credentials, --quit, and update.Apply short-circuit
+	// blocks above (those paths write to stderr that NSIS / parent process
+	// captures), but BEFORE logging.Setup so subsequent slog writes target
+	// only the lumberjack-backed log file. Closing the launching shell no
+	// longer kills the watcher. Safe (no-op) when the process has no
+	// console (e.g., launched via Explorer double-click). See
+	// console_windows.go / console_other.go for the build-tagged
+	// implementations.
+	_ = freeConsole()
+
 	log, logDir := logging.Setup()
 	slog.SetDefault(log)
 

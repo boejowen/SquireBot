@@ -379,3 +379,14 @@ rebuild without going through Task Manager.
     running watcher (Plan 06 / INST-06).
   - Does NOT delete config or credentials. For that, use the NSIS uninstaller
     and answer "Yes" to the wipe prompt (`--uninstall-wipe-credentials`).
+
+### Foreground launch (cmd / PowerShell)
+
+> **Foreground launch (cmd.exe / PowerShell):** `squirebot.exe` calls
+> `FreeConsole()` immediately on startup (after the `--uninstall-wipe-credentials`,
+> `--quit`, and auto-update short-circuits), so it detaches from any
+> inherited console. You can launch it from a foreground shell with `&
+> .\squirebot.exe` (PowerShell) or `squirebot.exe` (cmd) and the watcher
+> will keep running even after you close the shell. No `Start-Process`
+> wrapper required. To see live structured-log output instead, tail the
+> log file under `%LOCALAPPDATA%\SquireBot\logs\`. — Plan 09-02 / OPS-07

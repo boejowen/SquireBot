@@ -22,16 +22,16 @@
 
 ### Sidebar test coverage (TEST-01..02)
 
-- [ ] **TEST-01**: vitest is configured with JSDOM environment for sidebar HTML+JS tests. Setup is wired into `apps-script/vitest.config.ts` so `npm test` exercises sidebar JS on every PR (no separate command).
-- [ ] **TEST-02**: Every shipping sidebar (Search, Eviction, Bank-Coin, Char-Info, Admin-Mgmt) has at least one unit test covering its inline-JS interaction code — DOM event handlers, payload assembly, "Did you mean?" rendering, error display. Coverage assertion: each sidebar HTML file has a co-located `__tests__/*Sidebar(.inline)?.test.ts` companion. (Historical correction: the original TEST-02 wording listed the theme-selector modal as a sidebar; `showThemePickerModal` in `onOpen.ts:52-77` is actually a `showModalDialog`, NOT a sidebar. The 5th sidebar is Admin-Mgmt, which has trigger-call coverage via `adminMgmtSidebar.test.ts` from Phase 7; admin-mgmt inline-JS tests deferred to v1.1.)
+- [x] **TEST-01**: vitest is configured with JSDOM environment for sidebar HTML+JS tests. Setup is wired into `apps-script/vitest.config.ts` so `npm test` exercises sidebar JS on every PR (no separate command). **✓ SHIPPED 2026-05-12.** `apps-script/vitest.config.ts` declares `environment: 'jsdom'`; jsdom@^24 installed as devDep; `mountSidebar()` helper landed in `test-helpers.ts` (Plan 08-01); 327/327 baseline GREEN under JSDOM with zero per-test environment annotations.
+- [x] **TEST-02**: Every shipping sidebar (Search, Eviction, Bank-Coin, Char-Info, Admin-Mgmt) has at least one unit test covering its inline-JS interaction code — DOM event handlers, payload assembly, "Did you mean?" rendering, error display. Coverage assertion: each sidebar HTML file has a co-located `__tests__/*Sidebar(.inline)?.test.ts` companion. (Historical correction: the original TEST-02 wording listed the theme-selector modal as a sidebar; `showThemePickerModal` in `onOpen.ts:52-77` is actually a `showModalDialog`, NOT a sidebar. The 5th sidebar is Admin-Mgmt, which has trigger-call coverage via `adminMgmtSidebar.test.ts` from Phase 7; admin-mgmt inline-JS tests deferred to v1.1.) **✓ SHIPPED 2026-05-12.** 4 net-new inline-JS test files landed (searchSidebar/evictionSidebar/bankCoinSidebar/charInfoSidebar `.inline.test.ts`, 2 cases each = 8 new tests) + Admin-Mgmt covered by Phase 7's adminMgmtSidebar.test.ts → 5/5 sidebars. `buildSidebarHtml` exported from all 4 sidebar triggers. mountSidebar hardened with indirect-eval + nested-script extraction (Plan 08-02).
 
 ### Search persistence (SEARCH-05)
 
-- [ ] **SEARCH-05**: Recent search query MRU persists across CacheService 25-min TTL. Migrated from CacheService to per-user PropertiesService scope; the user's last 3 queries reappear when the sidebar is reopened the next day (or the next week). MRU eviction still capped at 3 entries.
+- [x] **SEARCH-05**: Recent search query MRU persists across CacheService 25-min TTL. Migrated from CacheService to per-user PropertiesService scope; the user's last 3 queries reappear when the sidebar is reopened the next day (or the next week). MRU eviction still capped at 3 entries. **✓ SHIPPED 2026-05-12.** `searchIndex.ts:365,375` use `PropertiesService.getUserProperties()`; no dual-write (D-06 clear-and-replace); per-`inv:Char` enrichment CacheService still in use at 2 surviving sites (prewarmSearchCache, runSearch); new `vi.useFakeTimers()` 25-min persistence test landed in `searchIndex.test.ts` (Plan 08-03).
 
 ### Documentation debt (DOC-04)
 
-- [ ] **DOC-04**: Each Phase 3 and Phase 4 plan that shipped without a SUMMARY.md gets a backfilled SUMMARY.md following the existing Phase 5 template (Decisions, Outcomes, Deferred). Source: phase artifacts + git log + STATE.md execution-log tables. 8 plans total (Phase 3 = 4 plans, Phase 4 = 4 plans).
+- [x] **DOC-04**: Each Phase 3 and Phase 4 plan that shipped without a SUMMARY.md gets a backfilled SUMMARY.md following the existing Phase 5 template (Decisions, Outcomes, Deferred). Source: phase artifacts + git log + STATE.md execution-log tables. 8 plans total (Phase 3 = 4 plans, Phase 4 = 4 plans). **✓ SHIPPED 2026-05-12.** All 8 retroactive SUMMARY.md files landed under `.planning/phases/03-apps-script-enrichment-foundation/` (03-01..03-04) and `.planning/phases/04-differentiator-features/` (04-01..04-04); each follows the Phase 5 template byte-for-byte (all 11 frontmatter keys); every `metrics.commits` SHA resolves via `git cat-file -e` (0 invented hashes); line counts range 119-242 (all ≥50). v1.0 milestone audit's documentation-debt line item retired (Plan 08-04).
 
 ---
 
@@ -57,10 +57,10 @@
 | ADMIN-01 | Phase 7 | 07-01 (shipped 2026-05-12 — bootstrap primitive), 07-03 (shipped 2026-05-12 — onOpen lazy bootstrap + smoke Hook 1 PASS) |
 | ADMIN-02 | Phase 7 | 07-03 (shipped 2026-05-12 — eviction sidebar admin guard + smoke Hook 2 PASS) |
 | ADMIN-03 | Phase 7 | 07-01 (shipped 2026-05-12 — add/remove/floor policy), 07-02 (shipped 2026-05-12 — admin-mgmt sidebar UX + smoke Hooks 3 + 4 PASS) |
-| TEST-01 | Phase 8 | TBD |
-| TEST-02 | Phase 8 | TBD |
-| SEARCH-05 | Phase 8 | TBD |
-| DOC-04 | Phase 8 | TBD |
+| TEST-01 | Phase 8 | 08-01 (shipped 2026-05-12 — vitest+jsdom infra + mountSidebar) |
+| TEST-02 | Phase 8 | 08-02 (shipped 2026-05-12 — 4 inline-JS test files + buildSidebarHtml exports + REQUIREMENTS.md correction) |
+| SEARCH-05 | Phase 8 | 08-03 (shipped 2026-05-12 — MRU swap from CacheService to PropertiesService.getUserProperties) |
+| DOC-04 | Phase 8 | 08-04 (shipped 2026-05-12 — 8 retroactive Phase 3+4 SUMMARY.md backfills) |
 
 > Traceability column filled by roadmapper 2026-05-11. Plan column will be filled by `/gsd-plan-phase` for each phase.
 

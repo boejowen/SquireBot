@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0.1
-milestone_name: Installer + Permissions Hardening
-status: phase7_complete
-last_updated: "2026-05-12T18:00:00.000Z"
-last_activity: 2026-05-12
-resume_file: .planning/phases/08-test-infra-persistence-docs-backfill/
+milestone_name: — Installer + Permissions Hardening
+status: phase8_complete
+last_updated: "2026-05-12T17:30:00.000Z"
+last_activity: "2026-05-12 — Phase 8 SHIPPED. 4 plans (2 waves): 08-01 vitest+jsdom infra + mountSidebar helper, 08-02 4 sidebar inline-JS test files + buildSidebarHtml exports + REQUIREMENTS.md TEST-02 correction, 08-03 searchIndex MRU migrated to PropertiesService.getUserProperties (CacheService still used for 2 per-inv:Char enrichment sites), 08-04 8 retroactive Phase 3+4 SUMMARY.md backfills. 336/336 vitest green. Verifier PASSED 5/5 must-haves. Code review: 0 critical, 4 warning, 6 info (test-quality only). Schema gates untouched. Wave-1 merge required a manual retry after initial git merge silently no-op'd; mid-stream regression in showSearchSidebar.test.ts Tests 4/6 fixed inline (commit `ec68e3f`). Last commit `e87b26f`. TEST-01, TEST-02, SEARCH-05, DOC-04 all closed. v1.0.1 milestone now at 3/3 phases shipped — ready for `/gsd-complete-milestone`. Phase 7 closed. Plan 07-03 Task 4 dev-workbook smoke executed by workbook owner (boejowen@gmail.com) against dev workbook (script ID `1Y9Uiw-QWgLQRIKGnQxmXKoi2oUwekk1CbUQfjO6jjNloXXz0QPn3YwCT`). All 5 verification hooks from 07-CONTEXT.md §verification_hooks PASS: (1) `_meta.guild_admins` + `workbook_owner_floor` + `admin_log` written on first open; second open did not append duplicate bootstrap entry. (2) Non-admin saw "Not authorized" modal + zero `_char_owner` flips + zero `eviction_log` appends + zero `admin_log` appends (allowlist temporarily set to `["someone-else@example.com"]` then restored). (3) Owner added `joseph.bowen2@gmail.com` via Manage Admins sidebar + shared workbook as Editor; joseph.bowen2 in second browser session opened Evict Guildie successfully (after Google OAuth re-consent dialog including new userinfo.email scope). (4) joseph.bowen2 (non-floor admin) opened Manage Admins → boejowen@gmail.com row had `(owner)` annotation and NO Remove button (client-side suppression confirmed); only joseph.bowen2's own row had Remove. (5) `migrations.ts` writeMetaRow schema_version='3' unchanged (1 line); `client.go` WatcherMaxSchemaVersion=3 unchanged (1 line). Significant Rule 3 deviation surfaced and fixed inline: original `apps-script/appsscript.json` was missing `https://www.googleapis.com/auth/userinfo.email` scope — under consumer @gmail.com `Session.getEffectiveUser().getEmail()` silently returned empty, so every Phase 7 admin guard fail-closed. Fixed in commit `544bef8`; non-sensitive scope (no Production-consent change required). Side effect: retires latent v1.0 bug where every eviction's `initiated_by` audit-log field silently wrote `'unknown'` across the entire v1.0 release. Final SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-SUMMARY.md`; smoke evidence at `07-03-SMOKE.md`. Modified `apps-script/src/triggers/showEvictionSidebar.ts` (+1 import line for `isAdmin`/`requireAdminOrThrow`/`normalizeEmail` from `'../lib/admin'`; opener gets normalizeEmail(Session.getEffectiveUser) → isAdmin → getUi().alert non-admin path; getEvictionEmails/previewEviction/commitEviction each get requireAdminOrThrow as FIRST statement). Modified `apps-script/src/triggers/onOpen.ts` (+2 imports for `bootstrapGuildAdmins` + `log` — first imports ever in this file; +6 lines try/catch lazy bootstrap at top of onOpen; +1 line `Manage Admins…` menu item between Evict Guildie and Set Theme; +2 lines separator + `Initialize Admin Allowlist (manual)` menu item after Run Migration v=2 legacy). Modified `apps-script/src/__tests__/showEvictionSidebar.test.ts` (added `seedMetaWithAdmins(state, adminEmails, extraRows?, floor?)` helper; all 4 beforeEach blocks switched from `seedMeta(state, [['schema_version','3']])` to `seedMetaWithAdmins(state, ['officer@example.com'])`; Test 11 uses extraRows arg; Test 12 reframed per Rule 1 — pre-Phase-7 it asserted initiated_by='unknown' soft-fallback, post-Phase-7 the same Session call drives the admin guard FIRST and fail-closes empty, so the test now asserts the new auth boundary). Two minor deviations documented (Rule 1 Test 12 reframe; Rule 3 `Manage Admins…` matches 2 lines in onOpen.ts because of file-header doc comment — spirit honored). INTERIM SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-SUMMARY.md`."
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
-  percent: 100.0
+  completed_phases: 3
+  total_plans: 12
+  completed_plans: 12
+  percent: 100
 ---
 
 # State: SquireBot
@@ -32,9 +31,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 7 — Admin Allowlist + Eviction Enforcement (SHIPPED + UAT-VERIFIED 2026-05-12). v1.0.1 milestone now at 2/3 phases shipped.
-Plan: 3 of 3 complete (07-01 ✓ 2026-05-12, 07-02 ✓ 2026-05-12, 07-03 ✓ 2026-05-12 — all 4 tasks including clasp-push + 5-hook dev-workbook smoke 5/5 PASS). Plan 03 commits: `1937fd0` (test seed staging) + `7f7ffb0` (eviction guards) + `c3c0033` (onOpen wiring) + `2d03581` (interim docs) + `544bef8` (mid-smoke OAuth scope fix — Rule 3, retired latent v1.0 manifest gap). Bundle live on dev workbook script ID `1Y9Uiw-QWgLQRIKGnQxmXKoi2oUwekk1CbUQfjO6jjNloXXz0QPn3YwCT`. ADMIN-01, ADMIN-02, ADMIN-03 all closed. Schema impact zero (`_meta.schema_version=3`, `WatcherMaxSchemaVersion=3` both untouched).
-Status: Phase 7 closed. Next: Phase 8 (Test Infra + Persistence + Docs Backfill — TEST-01, TEST-02, SEARCH-05, DOC-04). Phase 8 planning is unblocked; invoke `/gsd-plan-phase 8` (or `/gsd-discuss-phase 8` first if a research/discussion pass is wanted).
+Phase: 8 — Test Infra + Persistence + Docs Backfill (SHIPPED 2026-05-12). v1.0.1 milestone now at 3/3 phases shipped.
+Plan: 4 of 4 complete (08-01 ✓, 08-02 ✓, 08-03 ✓, 08-04 ✓ — all 2026-05-12). Wave-1 commits: 08-01 `53433d1`+`48c47a8`+`98b0fb1`+`4801284`, 08-03 `a326187`+`a21e448`+`4e67360`, 08-04 `3fecfa6`+`8f71a9f`+`be9cef9`. Wave-1 merge required a manual retry (`e7aa420` for 08-01, `858d8da` for 08-03; 08-04 landed directly on master via Windows worktree quirk). Mid-stream test regression in `showSearchSidebar.test.ts` Tests 4/6 fixed inline as `ec68e3f`. Wave-2 commits: 08-02 `e7320cc`+`c0a6606`+`1e4eb26`+`be37ae2`+`1a2fc21`+`77d4fcb`+`ff6a01e`, merged as `e87b26f`. **Verifier PASSED 5/5 must-haves**; **code review: 0 critical, 4 warning, 6 info** (test-quality only, none blocking). **336/336 vitest tests green** (baseline 327 + 1 TTL-elapse + 8 inline-JS). Build clean; dist/Code.js still emits all sidebar trigger globals. Schema gates untouched (`_meta.schema_version='3'` 1× in migrations.ts; `WatcherMaxSchemaVersion=3` in client.go). TEST-01, TEST-02, SEARCH-05, DOC-04 all closed.
+Status: Phase 8 closed. v1.0.1 milestone is fully shipped (3/3 phases). Next: `/gsd-complete-milestone` to archive v1.0.1, write MILESTONE-AUDIT.md, and open the next milestone (or pause).
 Last activity: 2026-05-12 — Phase 7 closed. Plan 07-03 Task 4 dev-workbook smoke executed by workbook owner (boejowen@gmail.com) against dev workbook (script ID `1Y9Uiw-QWgLQRIKGnQxmXKoi2oUwekk1CbUQfjO6jjNloXXz0QPn3YwCT`). All 5 verification hooks from 07-CONTEXT.md §verification_hooks PASS: (1) `_meta.guild_admins` + `workbook_owner_floor` + `admin_log` written on first open; second open did not append duplicate bootstrap entry. (2) Non-admin saw "Not authorized" modal + zero `_char_owner` flips + zero `eviction_log` appends + zero `admin_log` appends (allowlist temporarily set to `["someone-else@example.com"]` then restored). (3) Owner added `joseph.bowen2@gmail.com` via Manage Admins sidebar + shared workbook as Editor; joseph.bowen2 in second browser session opened Evict Guildie successfully (after Google OAuth re-consent dialog including new userinfo.email scope). (4) joseph.bowen2 (non-floor admin) opened Manage Admins → boejowen@gmail.com row had `(owner)` annotation and NO Remove button (client-side suppression confirmed); only joseph.bowen2's own row had Remove. (5) `migrations.ts` writeMetaRow schema_version='3' unchanged (1 line); `client.go` WatcherMaxSchemaVersion=3 unchanged (1 line). Significant Rule 3 deviation surfaced and fixed inline: original `apps-script/appsscript.json` was missing `https://www.googleapis.com/auth/userinfo.email` scope — under consumer @gmail.com `Session.getEffectiveUser().getEmail()` silently returned empty, so every Phase 7 admin guard fail-closed. Fixed in commit `544bef8`; non-sensitive scope (no Production-consent change required). Side effect: retires latent v1.0 bug where every eviction's `initiated_by` audit-log field silently wrote `'unknown'` across the entire v1.0 release. Final SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-SUMMARY.md`; smoke evidence at `07-03-SMOKE.md`. Modified `apps-script/src/triggers/showEvictionSidebar.ts` (+1 import line for `isAdmin`/`requireAdminOrThrow`/`normalizeEmail` from `'../lib/admin'`; opener gets normalizeEmail(Session.getEffectiveUser) → isAdmin → getUi().alert non-admin path; getEvictionEmails/previewEviction/commitEviction each get requireAdminOrThrow as FIRST statement). Modified `apps-script/src/triggers/onOpen.ts` (+2 imports for `bootstrapGuildAdmins` + `log` — first imports ever in this file; +6 lines try/catch lazy bootstrap at top of onOpen; +1 line `Manage Admins…` menu item between Evict Guildie and Set Theme; +2 lines separator + `Initialize Admin Allowlist (manual)` menu item after Run Migration v=2 legacy). Modified `apps-script/src/__tests__/showEvictionSidebar.test.ts` (added `seedMetaWithAdmins(state, adminEmails, extraRows?, floor?)` helper; all 4 beforeEach blocks switched from `seedMeta(state, [['schema_version','3']])` to `seedMetaWithAdmins(state, ['officer@example.com'])`; Test 11 uses extraRows arg; Test 12 reframed per Rule 1 — pre-Phase-7 it asserted initiated_by='unknown' soft-fallback, post-Phase-7 the same Session call drives the admin guard FIRST and fail-closes empty, so the test now asserts the new auth boundary). Two minor deviations documented (Rule 1 Test 12 reframe; Rule 3 `Manage Admins…` matches 2 lines in onOpen.ts because of file-header doc comment — spirit honored). INTERIM SUMMARY at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-03-SUMMARY.md`.
 
 **Phase 7 plan-phase completed 2026-05-12** (prior history): 3 PLAN.md files: 07-01-admin-policy-module-PLAN.md (wave 1, lib/admin.ts + tests, 20 unit-test scenarios T1–T20), 07-02-admin-mgmt-sidebar-PLAN.md (wave 2, showAdminMgmtSidebar.ts + tests + Code.ts re-exports), 07-03-eviction-guard-onopen-smoke-PLAN.md (wave 2, eviction sidebar admin-guard + onOpen lazy bootstrap + 2 new menu items + clasp-push interactive smoke against dev workbook).
@@ -45,7 +44,7 @@ Last activity: 2026-05-12 — Phase 7 closed. Plan 07-03 Task 4 dev-workbook smo
 |-------|------|--------------|-------|-----------|--------|
 | 6 | Installer Overwrite-Running Shim | INST-06 | Go + NSIS | watcher v1.0.1 binary release | ✅ SHIPPED 2026-05-11 (tag `v1.0.1`) |
 | 7 | Admin Allowlist + Eviction Enforcement | ADMIN-01, ADMIN-02, ADMIN-03 | Apps Script | `clasp push` of apps-script bundle | ✅ SHIPPED 2026-05-12 (5/5 hooks PASS) |
-| 8 | Test Infra + Persistence + Docs Backfill | TEST-01, TEST-02, SEARCH-05, DOC-04 | Apps Script + docs | `clasp push` + green CI + milestone retrospective | Not started — `/gsd-plan-phase 8` next |
+| 8 | Test Infra + Persistence + Docs Backfill | TEST-01, TEST-02, SEARCH-05, DOC-04 | Apps Script + docs | `clasp push` + green CI + milestone retrospective | ✅ SHIPPED 2026-05-12 (336/336 vitest GREEN; verifier 5/5; code review 0 critical) |
 
 **Sequencing rationale:**
 
@@ -64,10 +63,10 @@ Milestone v1.0 complete. 5/5 phases shipped. 69/69 effective requirements covere
 | Metric | Value |
 |--------|-------|
 | Phases planned (v1.0.1) | 3 / 3 |
-| Phases complete (v1.0.1) | 2 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`; Phase 7 SHIPPED + UAT-verified 2026-05-12) |
-| Plans complete (v1.0.1) | 8 / 8 currently planned (Phase 6: 5/5; Phase 7: 3/3 fully shipped — Phase 8 plans TBD) |
+| Phases complete (v1.0.1) | 3 / 3 (Phase 6 shipped 2026-05-11 as `v1.0.1`; Phase 7 shipped + UAT-verified 2026-05-12; Phase 8 shipped 2026-05-12) |
+| Plans complete (v1.0.1) | 12 / 12 (Phase 6: 5/5; Phase 7: 3/3; Phase 8: 4/4) |
 | Requirements mapped (v1.0.1) | 8 / 8 |
-| Requirements complete (v1.0.1) | 4 / 8 (INST-06 ✓ UAT-verified 2026-05-11; ADMIN-01 + ADMIN-02 + ADMIN-03 ✓ UAT-verified 2026-05-12 via dev-workbook 5-hook smoke) |
+| Requirements complete (v1.0.1) | 8 / 8 (INST-06 ✓; ADMIN-01..03 ✓; TEST-01, TEST-02, SEARCH-05, DOC-04 ✓ verifier-validated 2026-05-12) |
 | Active blockers | 0 |
 | Milestone v1.0 final | 69/69 effective requirements; 5/5 phases; 31/31 plans (archived) |
 
@@ -139,10 +138,12 @@ Schema impact NONE across all 3 phases. 100% requirement coverage validated. REQ
 
 ### Next Action
 
-**Phase 7 SHIPPED + UAT-VERIFIED 2026-05-12.** v1.0.1 milestone now at 2/3 phases shipped (Phase 6 ✓, Phase 7 ✓, Phase 8 unstarted). Next actions, in priority order:
+**Phase 8 SHIPPED 2026-05-12.** v1.0.1 milestone is fully shipped (3/3 phases; 12/12 plans; 8/8 requirements). Next actions, in priority order:
 
-1. **Plan Phase 8** — `/clear` then either `/gsd-discuss-phase 8` (for a context-gathering pass on TEST-01/02 + SEARCH-05 + DOC-04) or `/gsd-plan-phase 8` directly (the four requirements are well-scoped per REQUIREMENTS.md and ROADMAP.md Phase 8 success criteria). Phase 8 ships via `clasp push` of the apps-script bundle + green CI + milestone retrospective. Estimated 4–6 plans (one per requirement plus a possible JSDOM infra plan as a wave-1 prerequisite for TEST-02).
-2. **After Phase 8 ships, close v1.0.1 milestone** — same pattern as v1.0 close: archive ROADMAP/REQUIREMENTS to `.planning/milestones/v1.0.1-*.md`, write `MILESTONE-AUDIT.md`, update PROJECT.md + MILESTONES.md, decide next milestone (or pause).
+1. **Close v1.0.1 milestone** — `/clear` then `/gsd-complete-milestone`. Archive ROADMAP/REQUIREMENTS to `.planning/milestones/v1.0.1-*.md`, write `MILESTONE-AUDIT.md` (review the 4 advisory test-quality warnings from `08-REVIEW.md` for inclusion), update PROJECT.md + MILESTONES.md, decide next milestone (or pause).
+2. **Optional pre-milestone-close work**:
+   - `/gsd-code-review-fix 08` — auto-fix the 4 advisory test-quality warnings (mountSidebar realm leak, weak assertions, leaked pending mock call). None are blocking; defer to v1.0.2 if scope-conscious.
+   - `clasp push` of the apps-script bundle to the dev workbook to deploy the Phase 8 work (sidebar tests are local-only; the SEARCH-05 MRU migration is the only user-facing behavior change and should ship before milestone close).
 
 **Independent of v1.0.1:** Day-10 token-survival check fires automatically 2026-05-13T15:00:00Z (routine `trig_01Uog2muQ22CBsjZfqPiSH9r`).
 

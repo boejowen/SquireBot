@@ -351,11 +351,20 @@ export function runSearch(query: string, charFilter: string, slotFilter: string)
 }
 
 // --- Recent searches ----------------------------------------------------
+// SEARCH-05 (Phase 8 plan 08-03): per-user persistent MRU via Apps Script
+// PropertiesService (user scope). KEY_RECENT and the JSON-encoded string-
+// array storage shape are unchanged; only the storage backend swaps from
+// the prior document-scoped CacheService (25-min default eviction) to the
+// per-user properties store (durable across sessions). D-06 clear-and-
+// replace: no dual-write, no cache backfill. Worst-case UX is one empty
+// recent[] on a guildie's first search after v1.0.1 ships.
+// CACHE_TTL_SECONDS is NOT deleted -- prewarmSearchCache and runSearch
+// still consume it for the per-`inv:Char` enrichment cache.
 
 export function getRecentSearches(): string[] {
-  const cache = CacheService.getDocumentCache();
-  if (!cache) return [];
-  const raw = cache.get(KEY_RECENT);
+  const props = PropertiesService.getUserProperties();
+  if (!props) return [];
+  const raw = props.getProperty(KEY_RECENT);
   if (!raw) return [];
   try { return JSON.parse(raw) as string[]; } catch { return []; }
 }
@@ -363,11 +372,11 @@ export function getRecentSearches(): string[] {
 export function pushRecentSearch(query: string): void {
   const q = (query || '').trim();
   if (!q) return;
-  const cache = CacheService.getDocumentCache();
-  if (!cache) return;
+  const props = PropertiesService.getUserProperties();
+  if (!props) return;
   const current = getRecentSearches().filter((x) => x !== q);
   const next = [q, ...current].slice(0, RECENT_LIMIT);
-  cache.put(KEY_RECENT, JSON.stringify(next), CACHE_TTL_SECONDS);
+  props.setProperty(KEY_RECENT, JSON.stringify(next));
 }
 
 // --- Exposed for the sidebar dropdown -----------------------------------

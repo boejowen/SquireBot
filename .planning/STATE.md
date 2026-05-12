@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: — (v1.0.1 closed; next milestone undefined)
-status: between_milestones
-last_updated: "2026-05-12T20:45:00.000Z"
-last_activity: "2026-05-12 — v1.0.1 milestone SHIPPED + ARCHIVED. 3 phases (6, 7, 8), 12 plans, 8/8 requirements complete. Archive at .planning/milestones/v1.0.1-*.md. Binary tag v1.0.1 pushed 2026-05-11 by Phase 6; Phases 7+8 deployed via clasp push to dev workbook 2026-05-12. RETROSPECTIVE.md appended; PROJECT.md evolved (Current State now reflects v1.0.1 ship; v1.0.1 reqs moved to Validated; 5 new Key Decisions added). REQUIREMENTS.md removed via git rm (fresh for next milestone). ROADMAP.md collapsed to milestone-archive form with Backlog preserved (12 backlog entries; v1.0.1 added 6 new ones — 999.13–999.18). Next milestone TBD; candidates include v1.0.2 patch (999.13–999.18 + SignPath when ready), v1.1 polish (999.1, 999.2, 999.7, 999.11), or v2 (999.12 Wantlist + Discord pinger). Open follow-up: Day-10 token-survival check fires 2026-05-13T15:00:00Z via routine trig_01Uog2muQ22CBsjZfqPiSH9r."
+milestone: v1.0.2
+milestone_name: — Robustness Polish
+status: planning
+last_updated: "2026-05-12T21:00:00.000Z"
+last_activity: "2026-05-12 — v1.0.2 Robustness Polish milestone opened. Scope: 6 backlog items (999.13–999.18) → AUTH-07 + OPS-06 + CONFIG-01 + OPS-07 + TEST-03 + TEST-04. No schema change (schema_version stays at 3, WatcherMaxSchemaVersion stays at 3). SignPath OSS approval (999.9) excluded — treated as hotfix-when-approved. v1.1/v2 candidates deferred. PROJECT.md updated; REQUIREMENTS.md + ROADMAP.md pending."
 progress:
   total_phases: 0
   completed_phases: 0
@@ -16,20 +16,23 @@ progress:
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-05-12 (v1.0.1 milestone closed; archive landed; next milestone undefined)
+**Last updated:** 2026-05-12 (v1.0.2 Robustness Polish opened — 6 backlog items, no schema change)
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-05-12 after v1.0.1 close — Current State now reflects v1.0.1 ship)
+See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.
-- **Current focus:** Between milestones. v1.0 (5 phases) and v1.0.1 (3 phases) both shipped and archived. Next milestone TBD — run `/gsd-new-milestone` to scope.
+- **Current focus:** Milestone v1.0.2 Robustness Polish — close 4 watcher robustness gaps (AUTH-07 boot-time Reauthorize, OPS-06 tray controller queueing, CONFIG-01 BOM strip, OPS-07 console-detach) + 2 apps-script test-quality items (TEST-03 Admin-Mgmt inline-JS, TEST-04 Phase 8 advisory fixes). Patch-shaped milestone; no schema bump; no new user-facing features.
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-No active milestone. Run `/gsd-new-milestone` to scope the next one.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-12 — Milestone v1.0.2 started
 
 **Shipped to date:**
 
@@ -78,6 +81,8 @@ None. Both milestones shipped clean.
 
 ### Last Session Summary
 
+**2026-05-12 (v1.0.2 milestone OPENED via `/gsd-new-milestone`):** Scoped a patch milestone from the backlog. User selected all 4 Go-side v1.0.2 candidates (999.13 AUTH-07 boot-time Reauthorize, 999.14 OPS-06 tray controller queueing, 999.15 CONFIG-01 BOM strip, 999.16 OPS-07 console-detach OR docs) + both apps-script test-quality items (999.17 TEST-03 Admin-Mgmt inline-JS, 999.18 TEST-04 Phase 8 advisory fixes). SignPath OSS (999.9) excluded — treated as hotfix-when-approved per third-party-gated timeline. Schema impact: NONE (mirrors v1.0.1 shape). PROJECT.md updated with Current Milestone section + Active checkboxes; STATE.md reset to planning mode. REQUIREMENTS.md + ROADMAP.md still pending in this same workflow.
+
 **2026-05-12 (v1.0.1 milestone CLOSED via `/gsd-complete-milestone`):** v1.0.1 archive landed. Created `.planning/milestones/v1.0.1-ROADMAP.md` (full phase details, decisions, deferred items) and `.planning/milestones/v1.0.1-REQUIREMENTS.md` (8/8 reconciliation, traceability table, v1.0.2 candidates surfaced during execution). ROADMAP.md collapsed v1.0.1 into milestone-archive form with Backlog preserved + 2 new entries (999.17 Admin-Mgmt inline-JS tests; 999.18 Phase 8 advisory test-quality findings). MILESTONES.md appended v1.0.1 entry with stats (3 phases, 12 plans, 63 commits, 2 days). PROJECT.md evolved: Current State now reflects v1.0.1 ship; v1.0.1 reqs moved into Validated section; 5 new Key Decisions appended (no schema bump, owner-floor lockout, SEARCH-05 per-user PropertiesService, manifest `userinfo.email` requirement, TRIGGER_GLOBALS sync assertion load-bearing); footer updated to 2026-05-12. RETROSPECTIVE.md appended v1.0.1 milestone section before the existing Cross-Milestone Trends section; trends tables updated (decision quality, phase velocity, test coverage trajectory, watcher + TS LOC trajectory, tags shipped); new "Milestone Sizing Heuristic" section added with patch-vs-minor bounds emerging from the 2 data points. STATE.md reset to between-milestones state (this file). REQUIREMENTS.md removed via `git rm` (fresh for next milestone). Audit skipped per yolo-mode close (phase verifier already PASSED 5/5 must-haves on Phase 8 + dev-workbook 5-hook smoke on Phase 7 provided sufficient signal). Binary tag `v1.0.1` already exists from Phase 6 ship; not re-tagged at milestone close.
 
 ### Files of Record
@@ -99,8 +104,8 @@ None. Both milestones shipped clean.
 
 ### Next Action
 
-Run `/gsd-new-milestone` to scope the next milestone, OR pause and let the day-10 token-survival check fire (2026-05-13T15:00:00Z) for additional v1.0 structural validation before deciding direction.
+REQUIREMENTS.md + ROADMAP.md being created in-flight under the active `/gsd-new-milestone` workflow. After roadmap approval, the next step is `/gsd-discuss-phase 9` (first v1.0.2 phase) or `/gsd-plan-phase 9` to skip discussion.
 
 ---
 
-*State initialized: 2026-04-30 after roadmap creation. v1.0 milestone COMPLETE: 2026-05-11. v1.0.1 milestone COMPLETE: 2026-05-12. Between milestones as of: 2026-05-12.*
+*State initialized: 2026-04-30 after roadmap creation. v1.0 milestone COMPLETE: 2026-05-11. v1.0.1 milestone COMPLETE: 2026-05-12. v1.0.2 milestone OPENED: 2026-05-12.*

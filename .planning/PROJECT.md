@@ -14,7 +14,30 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **What's working end-to-end (verified):** Installer → OAuth → watcher → inv/spell landing tabs → daily PigParse + weekly wiki enrichment → consolidated `view` + `gear_check` + `spell_check` + `bank` tabs with cell-note tooltips and conditional Last-Synced formatting → cross-character search sidebar (recent-3 MRU now durable per-user) → code-enforced officer-only eviction sidebar with admin-management UX + owner-floor lockout protection → 30-day grace + lazy archive → text-only Pages onboarding site → installer cleanly upgrades over a running watcher (NSIS pre-install shim). All cumulative tests pass (336/336 vitest, full Go test suite). Schema at `_meta.schema_version = 3`; watcher's `WatcherMaxSchemaVersion = 3` (untouched by v1.0.1); ErrSchemaTooNew startup gate verified.
 
-**Next milestone:** TBD. v1.0.1 surfaced 4 v1.0.2 candidates during Phase 6 UAT (999.13–999.16 — tray/config foot-guns) plus 2 follow-on items from Phase 8 (999.17–999.18 — Admin-Mgmt inline-JS coverage + advisory test-quality findings). Plus carry-overs from v1.0 (999.1, 999.2, 999.7, 999.9 SignPath, 999.11, 999.12 v2 Wantlist + Discord pinger). Run `/gsd-new-milestone` to scope.
+**Current milestone: v1.0.2 Robustness Polish** (started 2026-05-12) — closes 4 watcher robustness gaps surfaced by v1.0.1 Phase 6 UAT + 2 test-quality items from v1.0.1 Phase 8 review. No new user-facing features, no schema change, no third-party gating. See `## Current Milestone` below for scope.
+
+## Current Milestone: v1.0.2 Robustness Polish
+
+**Goal:** Close 4 v1.0.1-UAT-surfaced robustness gaps in the Go watcher + 2 test-quality items in the apps-script suite — no new user-facing features, no schema change, no third-party gating.
+
+**Target items (6, all from `.planning/ROADMAP.md` § Backlog):**
+
+*Go / watcher / installer:*
+- 999.13 (AUTH-07): Reauthorize tray item unhides on boot-time `invalid_grant` (extends v1.0 AUTH-05 which only covered running-state revocation)
+- 999.14 (OPS-06): Tray controller calls queued until `OnReady` fires (or RunApp retry on fast-fail path) — closes pre-Ready no-op trap
+- 999.15 (CONFIG-01): Strip leading UTF-8 BOM in `internal/config/load.go` before `json.Unmarshal` — closes Notepad/PowerShell hand-edit foot-gun
+- 999.16 (OPS-07): Either `windows.FreeConsole()` early in `cmd/squirebot/main.go`, OR document `Start-Process` requirement prominently — closes foreground-shell-close silent death
+
+*Apps-script / tests:*
+- 999.17 (TEST-03): Admin-Mgmt sidebar inline-JS test coverage (extends v1.0.1 TEST-02 sidebar coverage to 5/5 with inline-JS — currently 4/5 inline-JS + trigger-call only for Admin-Mgmt)
+- 999.18 (TEST-04): Phase 8 advisory test-quality fixes (`mountSidebar` realm leak, weak assertions, leaked pending mock call — 0 critical + 4 warning + 6 info per `08-REVIEW.md`)
+
+**Out of scope this milestone (explicitly deferred):**
+- SignPath Foundation OSS approval (999.9) — third-party-gated; lands as a hotfix when approved, NOT as a v1.0.2 phase
+- All v1.1 polish candidates (999.1 bank-coin permission lock, 999.2 theme picker tile UI, 999.7 inline SIDEBAR_BODY extraction, 999.11 verification doctrine decision)
+- v2 Wantlist + Discord pinger (999.12 / WANT-01..08; Raid Alliance Discord bot invites still unnegotiated)
+
+**Schema impact:** None. `_meta.schema_version` stays at 3. `WatcherMaxSchemaVersion` stays at 3 (the watcher binary rebuild in this milestone is for new robustness fixes, not for schema reasons — same shape as v1.0.1's Phase 6).
 
 ## Requirements
 
@@ -54,9 +77,16 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 
 ### Active
 
-<!-- Next milestone TBD. Run /gsd-new-milestone to scope. -->
+<!-- v1.0.2 Robustness Polish scope. See .planning/REQUIREMENTS.md for full REQ-ID list. -->
 
-_None active. v1.0.1 closed 2026-05-12. Backlog candidates (v1.0.2 patches surfaced during v1.0.1 execution, v1.1 polish, v2 Discord) live in `.planning/ROADMAP.md` § Backlog._
+**v1.0.2 — Robustness Polish (in progress)**
+
+- [ ] Boot-time invalid_grant Reauthorize recovery (AUTH-07)
+- [ ] Tray controller pre-Ready call queue / RunApp retry (OPS-06)
+- [ ] UTF-8 BOM strip in config loader (CONFIG-01)
+- [ ] Foreground-shell-close silent death fix (OPS-07)
+- [ ] Admin-Mgmt sidebar inline-JS test coverage (TEST-03)
+- [ ] Phase 8 advisory test-quality fixes (TEST-04)
 
 ### v1.0 Partials / Waivers (user-authorized; still tracked post-v1.0.1)
 
@@ -158,4 +188,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-12 — v1.0.1 Installer + Permissions Hardening shipped.*
+*Last updated: 2026-05-12 — v1.0.2 Robustness Polish started.*

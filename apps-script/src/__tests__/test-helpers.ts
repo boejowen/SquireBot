@@ -25,6 +25,10 @@ export interface MockState {
   lockHeld: boolean;
   lockTryLockReturn: boolean;
   properties: Map<string, string>;
+  // Phase 8 plan 08-01 (D-04 / D-05): SEARCH-05 per-user MRU scope. A
+  // SEPARATE Map so getUserProperties() writes do not bleed into the
+  // document-scope tests that already passed in Phases 1-7.
+  userProperties: Map<string, string>;
   triggers: Array<{ handler: string; type: string }>;
   fetchResponses: Map<string, { status: number; body: string; headers?: Record<string, string> }>;
   fetchCalls: Array<{ url: string; opts?: unknown }>;
@@ -295,6 +299,22 @@ export function installAppsScriptMocks(state: MockState): void {
       setProperty: (k: string, v: string) => { state.properties.set(k, v); },
       deleteProperty: (k: string) => { state.properties.delete(k); },
     }),
+    // Phase 8 plan 08-01 (D-04 / D-05): per-user scope, backed by a SEPARATE
+    // Map so SEARCH-05's getUserProperties() writes don't bleed into the
+    // document-scope tests that already passed in Phases 1-7. getScriptProperties
+    // aliases the same per-user Map for the rare current consumer; no test
+    // currently distinguishes the two and the production code never reads
+    // script-scope, so the alias is safe.
+    getUserProperties: () => ({
+      getProperty: (k: string) => state.userProperties.get(k) ?? null,
+      setProperty: (k: string, v: string) => { state.userProperties.set(k, v); },
+      deleteProperty: (k: string) => { state.userProperties.delete(k); },
+    }),
+    getScriptProperties: () => ({
+      getProperty: (k: string) => state.userProperties.get(k) ?? null,
+      setProperty: (k: string, v: string) => { state.userProperties.set(k, v); },
+      deleteProperty: (k: string) => { state.userProperties.delete(k); },
+    }),
   };
 
   // newTrigger returns a fluent builder. Each terminal create() pushes
@@ -447,6 +467,7 @@ export function newMockState(): MockState {
     lockHeld: false,
     lockTryLockReturn: true,
     properties: new Map(),
+    userProperties: new Map(),
     triggers: [],
     fetchResponses: new Map(),
     fetchCalls: [],

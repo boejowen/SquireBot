@@ -7,6 +7,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,6 +59,10 @@ func Load() (*Config, error) {
 		}
 		return nil, fmt.Errorf("config load %s: %w", p, err)
 	}
+	// CONFIG-01 (Plan 09-03): strip a leading UTF-8 BOM. Notepad and PowerShell 5.1
+	// `Set-Content -Encoding utf8` both write a BOM by default; encoding/json does
+	// not auto-strip it and would reject the file with "invalid character 'ï'".
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 	var c Config
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil, fmt.Errorf("config load %s: %w", p, err)

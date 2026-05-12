@@ -198,8 +198,13 @@ export function removeAdmin(
   email: string,
   callerEmail: string,
 ): { removed: boolean; notFound?: boolean } {
+  // WR-05 — symmetric input validation with addAdmin. Without the '@'
+  // check, a malformed email silently returned {removed:false,
+  // notFound:true} and the caller's UI showed a misleading success
+  // toast for what was actually a typo / bug. Validate first so the
+  // sidebar's routeError path surfaces the real problem.
   const target = normalizeEmail(email);
-  if (!target) {
+  if (!target || target.indexOf('@') === -1) {
     throw new Error('invalid_email');
   }
 

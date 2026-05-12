@@ -37,6 +37,7 @@
 import { log } from '../lib/log';
 import { getActiveTheme, THEMES, type Theme } from '../lib/themes';
 import { getActiveSpreadsheet, readMetaRows, writeMetaRow } from '../lib/sheet-helpers';
+import { isAdmin, requireAdminOrThrow, normalizeEmail } from '../lib/admin';
 
 const CHAR_OWNER = '_char_owner';
 const COL_CHAR_NAME = 1;
@@ -48,15 +49,40 @@ const GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 export function showEvictionSidebar(): void {
   const themeKey = getActiveTheme();
   const theme = THEMES[themeKey];
+  // Phase 7 plan 07-03 (D-03): admin-gate the opener BEFORE building the
+  // sidebar HTML. Non-admin → modal alert + return (no sidebar opens; no
+  // state for them to recover from). Server-side guards on each callback
+  // (below) are defense-in-depth against stale-sidebar replay attacks.
+  let callerEmail = '';
+  try {
+    callerEmail = normalizeEmail(Session.getEffectiveUser().getEmail());
+  } catch (_e) { /* sandbox quirk — empty fail-closes */ }
+  if (!isAdmin(callerEmail)) {
+    SpreadsheetApp.getUi().alert(
+      'Not authorized',
+      'Only guild officers can evict members. Contact a workbook admin if you think this is wrong.',
+      SpreadsheetApp.getUi().ButtonSet.OK,
+    );
+    log('warn', 'showEvictionSidebar', { notAuthorized: true, callerEmail });
+    return;
+  }
   const html = HtmlService
     .createHtmlOutput(buildSidebarHtml(theme))
     .setTitle('SquireBot — Evict guildie')
     .setWidth(300);
   SpreadsheetApp.getUi().showSidebar(html);
-  log('info', 'showEvictionSidebar', { theme: themeKey });
+  log('info', 'showEvictionSidebar', { theme: themeKey, callerEmail });
 }
 
 export function getEvictionEmails(): string[] {
+  // Phase 7 plan 07-03 (D-05): admin-guard FIRST. Server-side identity
+  // (Session.getEffectiveUser, never client-supplied). Empty fail-closes
+  // via requireAdminOrThrow per D-06 auth-vs-audit-log split.
+  let callerEmail = '';
+  try {
+    callerEmail = normalizeEmail(Session.getEffectiveUser().getEmail());
+  } catch (_e) { /* fail-closed below */ }
+  requireAdminOrThrow(callerEmail);
   const ss = getActiveSpreadsheet();
   const sheet = ss.getSheetByName(CHAR_OWNER);
   if (!sheet) return [];
@@ -80,6 +106,14 @@ export interface EvictionPreview {
 }
 
 export function previewEviction(email: string): EvictionPreview {
+  // Phase 7 plan 07-03 (D-05): admin-guard FIRST, BEFORE email validation
+  // (auth before input — caller has no business validating against an
+  // endpoint they cannot invoke).
+  let callerEmail = '';
+  try {
+    callerEmail = normalizeEmail(Session.getEffectiveUser().getEmail());
+  } catch (_e) { /* fail-closed below */ }
+  requireAdminOrThrow(callerEmail);
   if (!email || typeof email !== 'string') {
     throw new Error('previewEviction: invalid email');
   }
@@ -111,6 +145,15 @@ export interface EvictionResult {
 }
 
 export function commitEviction(email: string): EvictionResult {
+  // Phase 7 plan 07-03 (D-05): admin-guard FIRST. Coexists with the
+  // existing audit-log `initiated_by` Session lookup below (D-06): this
+  // call fail-closes empty (no admin = no eviction); the audit-log path
+  // soft-falls-back to 'unknown' (load-bearing fields still recorded).
+  let callerEmail = '';
+  try {
+    callerEmail = normalizeEmail(Session.getEffectiveUser().getEmail());
+  } catch (_e) { /* fail-closed below */ }
+  requireAdminOrThrow(callerEmail);
   if (!email || typeof email !== 'string') throw new Error('commitEviction: invalid email');
   const ss = getActiveSpreadsheet();
   const sheet = ss.getSheetByName(CHAR_OWNER);

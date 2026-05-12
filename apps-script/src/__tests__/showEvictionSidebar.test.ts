@@ -288,16 +288,25 @@ describe('commitEviction', () => {
     expect(list[2].chars).toEqual(['Findom']);
   });
 
-  it('Test 12 — initiated_by fallback to "unknown" when Session email empty', () => {
+  it('Test 12 — Phase 7 admin guard: empty Session email fail-closes (D-06 auth path)', () => {
+    // Pre-Phase-7 this test asserted the audit-log soft-fallback to
+    // 'unknown' (D-06 audit-log path). Post-Phase-7 the same Session
+    // call drives the admin guard FIRST (D-06 auth path), which
+    // fail-closes on empty email per requireAdminOrThrow. The audit-log
+    // soft-fallback is residual defensive code — the only path to it
+    // would be Session returning a non-empty admin email at the guard
+    // and an empty value at the later log call, which is non-physical
+    // (single Session lookup; both calls return identical strings).
     installSessionMock('');  // empty effective email
     state.sheets.set('_char_owner', makeSheet('_char_owner', CHAR_OWNER_HEADERS, [
       row('Findom', 'a@x'),
     ]));
-    commitEviction('a@x');
+    expect(() => commitEviction('a@x')).toThrowError(/not_authorized/);
+    // is_removed unchanged; no eviction_log write.
+    const owner = state.sheets.get('_char_owner')!;
+    expect(owner.values[1][8]).toBe(false);
     const meta = state.sheets.get('_meta')!;
-    const logRow = meta.values.find((r) => r[0] === 'eviction_log')!;
-    const list = JSON.parse(String(logRow[1])) as Array<Record<string, unknown>>;
-    expect(list[0].initiated_by).toBe('unknown');
+    expect(meta.values.find((r) => r[0] === 'eviction_log')).toBeUndefined();
   });
 });
 

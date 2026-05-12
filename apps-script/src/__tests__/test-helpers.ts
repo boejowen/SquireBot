@@ -547,14 +547,22 @@ export function mountSidebar(html: string): MountedSidebar {
   tpl.innerHTML = html;
 
   // 3. Walk the parsed fragment, separating script nodes from the rest.
-  const scripts: HTMLScriptElement[] = [];
+  //    Scripts may be nested anywhere (showBankCoinSidebar.ts and
+  //    showCharInfoSidebar.ts inline their <script> INSIDE the outer <div>
+  //    wrapper rather than at top level). A top-level walk would miss
+  //    those nested scripts and let JSDOM auto-evaluate them in its
+  //    separate vm context when the fragment is appended to body —
+  //    triggering the exact 'google is not defined' failure we're fixing.
+  //    querySelectorAll('script') on the template's content gets EVERY
+  //    <script> regardless of nesting depth; we capture their source then
+  //    remove them from the fragment before appending.
+  const scripts: HTMLScriptElement[] = Array.from(
+    tpl.content.querySelectorAll('script'),
+  );
+  scripts.forEach((s) => s.parentNode?.removeChild(s));
   const frag = document.createDocumentFragment();
   Array.from(tpl.content.childNodes).forEach((node) => {
-    if (node.nodeName === 'SCRIPT') {
-      scripts.push(node as HTMLScriptElement);
-    } else {
-      frag.appendChild(node.cloneNode(true));
-    }
+    frag.appendChild(node.cloneNode(true));
   });
   document.body.appendChild(frag);
 

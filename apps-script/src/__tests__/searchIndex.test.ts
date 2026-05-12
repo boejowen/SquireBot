@@ -307,6 +307,21 @@ describe('recent searches', () => {
     pushRecentSearch('q1');
     expect(getRecentSearches()).toEqual(['q1']);
   });
+
+  // Phase 8 plan 08-03 (SEARCH-05 / D-06): persists across the legacy
+  // CacheService 25-min default-eviction boundary. PropertiesService has no
+  // TTL so this is structurally guaranteed; the test documents the
+  // user-facing contract -- "my recent searches survive me closing the
+  // sidebar for half an hour" -- so future readers don't accidentally
+  // revert to a TTL-bounded backend.
+  it('persists across simulated 25-min CacheService-TTL elapse (SEARCH-05)', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-12T00:00:00Z'));
+    pushRecentSearch('persistent-query');
+    vi.setSystemTime(new Date('2026-05-12T00:30:00Z'));  // +30min, past old 25-min TTL
+    expect(getRecentSearches()).toEqual(['persistent-query']);
+    vi.useRealTimers();
+  });
 });
 
 // ---------------------------------------------------------------------------

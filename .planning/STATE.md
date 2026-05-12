@@ -2,9 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: Installer + Permissions Hardening
-status: phase6_complete_uat_verified
-last_updated: "2026-05-11T23:30:00.000Z"
-last_activity: 2026-05-11
+status: phase7_context_gathered
+last_updated: "2026-05-12T00:30:00.000Z"
+last_activity: 2026-05-12
+resume_file: .planning/phases/07-admin-allowlist-eviction-enforcement/07-CONTEXT.md
 progress:
   total_phases: 3
   completed_phases: 1
@@ -31,10 +32,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11 after v1.0 milestone close + v1.
 
 ## Current Position
 
-Phase: 6 — Installer Overwrite-Running Shim (COMPLETE, UAT-verified 2026-05-11)
-Plan: All 5 plans shipped; INST-06 empirically validated on Azure VM. Next: Phase 7 (apps-script admin allowlist).
-Status: Phase 6 fully complete. v1.0.1 binary released, in-field upgrade path validated end-to-end against a real v1.0.0-era watcher. 8 findings recorded (3 are v1.0.2 candidates: boot-time invalid_grant tray gap, T-06-20 wider impact, config.json BOM-intolerance; plus 1 doc/code candidate: foreground-launched watcher dies with parent shell). Next phase to plan: Phase 7.
-Last activity: 2026-05-11 — Phase 6 Task 4 UAT closed. Live v1.0.0-era → v1.0.1 upgrade on Azure VM (user `SquireBot`); both graceful `--quit` and `taskkill /F` paths fired in production; heartbeat resumed after wizard re-OAuth (token had died from idle pre-UAT, surfaced separate v1.0.2 candidates); 8 findings recorded in 06-05-SUMMARY.md.
+Phase: 7 — Admin Allowlist + Eviction Enforcement (CONTEXT gathered 2026-05-12; ready for /gsd-plan-phase)
+Plan: None yet. Phase 6 fully shipped + UAT-verified 2026-05-11. Phase 7 CONTEXT.md captures 6 locked decisions across the 4 gray areas presented; user delegated all four to Claude with the same "simplest end-user experience" directive used in Phase 6.
+Status: Phase 7 context captured. CONTEXT.md + DISCUSSION-LOG.md committed as `docs(07): capture phase context`. Awaiting `/gsd-plan-phase 7`.
+Last activity: 2026-05-12 — Phase 7 discuss-phase completed. Six locked decisions: D-01 lazy onOpen bootstrap + manual-fallback menu item; D-02 JSON array (`_meta.guild_admins`) + separate single-email row (`_meta.workbook_owner_floor`) + JSON-array audit log (`_meta.admin_log`); D-03 Apps Script modal alert for non-admins; D-04 dedicated `showAdminMgmtSidebar` + new "Manage Admins…" menu item; D-05 central `apps-script/src/lib/admin.ts` policy module; D-06 fail-closed auth + soft-fallback audit-log identity. No schema bump, no watcher rebuild. Estimated 3-4 plans.
 
 ### v1.0.1 Phase Plan (2026-05-11)
 
@@ -99,6 +100,8 @@ None. v1.0 shipped clean; v1.0.1 is planning-stage. Phase 6 is unblocked and rea
 
 ### Last Session Summary
 
+**2026-05-12 (Phase 7 discuss-phase completed):** Phase 7 (Admin Allowlist + Eviction Enforcement) context gathered via `/gsd-discuss-phase 7`. Four phase-specific gray areas were surfaced (bootstrap mechanism, storage shape + owner-floor tracking, non-admin failure UX, admin-management UX shape); the user delegated all four to Claude with "make whichever choice(s) that will make the end-user experience as simple as possible" — same play as Phase 6. Six locked decisions emerged (D-01 through D-06 in CONTEXT.md). New code surfaces planned: `apps-script/src/lib/admin.ts` (policy primitives), `apps-script/src/triggers/showAdminMgmtSidebar.ts` (300px sidebar matching v1.0 sidebar patterns), plus admin-guards inserted into the existing `showEvictionSidebar.ts` opener + all three callbacks, lazy `bootstrapGuildAdmins()` call from `onOpen`, and two new menu items in `onOpen.ts`. No schema bump (`_meta.guild_admins`, `_meta.workbook_owner_floor`, `_meta.admin_log` are extend-only row additions). No watcher rebuild. Estimated 3-4 plans. CONTEXT.md + DISCUSSION-LOG.md at `.planning/phases/07-admin-allowlist-eviction-enforcement/` committed (`e168be5`).
+
 **2026-05-11 (Phase 6 Plan 05 executed — Phase 6 SHIPPED as v1.0.1):** Pushed tag `v1.0.1` (annotated, message "Phase 6 (INST-06): installer overwrite-running shim. Watcher binary v1.0.1 release.") to origin at master HEAD commit `265bbd9`. Release workflow run [25686757380](https://github.com/boejowen/SquireBot/actions/runs/25686757380) completed in 1m55s with all 17 steps green — AUTH-03 PRODUCTION consent_screen gate held (release.yml:136). GitHub Release [v1.0.1](https://github.com/boejowen/SquireBot/releases/tag/v1.0.1) published with 4 assets: `SquireBot-Setup-1.0.1.exe` (sha256 `38a447bf1d79813861276d2480bd53451fdda66eaf4be24a8f88e2d9ac43fbc4`), `squirebot.exe` bare binary (sha256 `4707c92db98b3b748efb574927a5b8c8e7773ceec0e2a7c826ea6683d0cf4389`), `latest.json` (version=1.0.1, fresh sha256s, working URLs verified via curl HEAD), and the versionless permalink alias `SquireBot-Setup.exe`. D-06 (latest.json schema unchanged) and D-07 (tag = `v1.0.1`) honored. Phase 6 source-complete + shipped. **Task 4 — end-user v1.0.0 → v1.0.1 upgrade UAT on clean Win11 VM — is DEFERRED**; until that runs, INST-06 is "shipped-pending-UAT" rather than fully verified. Single planning commit captures this state. SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-05-SUMMARY.md`.
 
 **2026-05-11 (Phase 6 Plan 04 executed):** Retired the "Installer won't overwrite a running SquireBot" section from `docs/troubleshooting.md` (-479 bytes) and appended a `### Manual debug aids` subsection to `docs/build-and-install.md` (+995 bytes) documenting `squirebot.exe --quit` with cross-reference to Plan 06 / INST-06. Pure docs change, zero code impact. Single commit `4465836`. SUMMARY at `.planning/phases/06-installer-overwrite-running-shim/06-04-SUMMARY.md`.
@@ -121,11 +124,10 @@ Schema impact NONE across all 3 phases. 100% requirement coverage validated. REQ
 
 ### Next Action
 
-**Phase 6 SHIPPED as `v1.0.1` 2026-05-11.** Next actions, in priority order:
+**Phase 7 CONTEXT GATHERED 2026-05-12.** Next actions, in priority order:
 
-1. **End-user UAT (deferred Task 4 of Plan 06-05):** install `SquireBot-Setup-1.0.1.exe` over an existing v1.0.0 install on a clean Win11 VM (or daily-driver); verify the installer runs to completion without any "please close SquireBot" dialog, tray flickers + reappears as v1.0.1, workbook heartbeats continue, no token re-auth. After UAT passes, append confirmation to `06-05-SUMMARY.md` and STATE.md. Until then, INST-06 is "shipped-pending-UAT".
-2. **Plan Phase 7** (apps-script admin allowlist + eviction enforcement) — ADMIN-01/02/03. Use `/gsd-plan-phase 7`.
-3. **After Phase 7 ships, plan Phase 8** (test infra + persistence + docs backfill).
+1. **Plan Phase 7** — `/gsd-plan-phase 7` (or `/gsd-plan-phase 7 --skip-research` — research optional per CONTEXT.md, all patterns are already in the codebase). CONTEXT.md at `.planning/phases/07-admin-allowlist-eviction-enforcement/07-CONTEXT.md` has 6 locked decisions, full canonical_refs, code_context, and verification_hooks. Estimated 3-4 plans.
+2. **After Phase 7 ships, plan Phase 8** (test infra + persistence + docs backfill).
 
 **Independent of v1.0.1:** Day-10 token-survival check fires automatically 2026-05-13T15:00:00Z (routine `trig_01Uog2muQ22CBsjZfqPiSH9r`).
 

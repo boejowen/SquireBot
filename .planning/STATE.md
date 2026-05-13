@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: — Robustness Polish
-status: in_progress
-last_updated: "2026-05-12T23:55:00.000Z"
-last_activity: "2026-05-12 — Phase 9 Wave 2 executed (4/5 plans done): 09-04 AUTH-07 boot-time invalid_grant. applyBootAuthError helper added to internal/app/runapp.go classifying via auth.IsRevokedRefreshToken; on match fires canonical AUTH-05 tray triple verbatim (SetIconHealth(HealthRed) + SetStatus(\"Reauthorize: refresh token died. Click Reauthorize…\") + ShowReauthorize()). Non-revoked errors preserve ContinueSetup recovery. 3 unit tests + 3 table-driven sub-cases verify both branches; go test ./... green (16 packages). Canonical status string appears in exactly 2 places (boot + running). WatcherMaxSchemaVersion still 3. Next: Wave 3 plan 09-05 (v1.0.2 release tag — yolo auto-push approved by user)."
+status: phase_complete_uat_blocked
+last_updated: "2026-05-13T04:45:00.000Z"
+last_activity: "2026-05-13 — Phase 9 SHIPPED. v1.0.2 tag pushed (workflow 25770477750 green; 4 artifacts published). Verifier: 5/5 must-haves programmatically PASSED; status human_needed (UAT requires Windows VM). Code review: 0 critical, 2 warnings + 4 info captured in 09-REVIEW.md (logged as 999.20/999.21 backlog). MID-SESSION OAUTH INCIDENT: Google flipped brand-verification enforcement on the OAuth client between v1.0.1 ship (2026-05-11) and v1.0.2 ship (2026-05-13), blocking auth for ALL watcher versions uniformly. Not a code bug. Diagnosed across ~3 false leads (multiple-secrets, loopback-IP, redirect URI) before finding the actual cause in OAuth consent screen → Verification status. Resolution: new privacy policy at boejowen.github.io/SquireBot/privacy-policy/ + Search Console verification + resubmission to Google review queue (999.19, ETA 3–5 business days). Phase 9 marked shipped; HUMAN-UAT persisted as blocked on 999.19. Next: Phase 10 (Apps Script Test Quality) — independent of OAuth issue."
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 40
+  completed_plans: 5
+  percent: 100
 ---
 
 # State: SquireBot
@@ -29,10 +29,14 @@ See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
 
 ## Current Position
 
-Phase: 9 — Watcher Robustness Polish (Waves 1+2 complete 2026-05-12; Wave 3 next)
-Plan: 4/5 complete (09-01, 09-02, 09-03, 09-04 shipped; 09-05 release-tag last)
-Status: In progress — Wave 2 merged at 0ba92dc, go test ./... green; user approved yolo auto-push for Wave 3 release tag
-Last activity: 2026-05-12 — Wave 2 (09-04 AUTH-07) merged to master (0ba92dc HEAD). Boot-time invalid_grant now routes to canonical Reauthorize UX symmetric with running-state AUTH-05. Tests: 3 dedicated + 3 table-driven; full repo green. Tracked deviation in 09-04 agent's process note (early edits landed in main repo before worktree-path correction; verified no contamination via git diff fa8e6e8).
+Phase: 9 — Watcher Robustness Polish SHIPPED 2026-05-13 as v1.0.2 (HUMAN-UAT blocked on 999.19 Google brand verification)
+Plan: 5/5 shipped (09-01, 09-02, 09-03, 09-04, 09-05). All commits merged to master (origin HEAD c874fe6).
+Status: Phase complete, HUMAN-UAT blocked on external dependency (Google review queue, ETA 3–5 business days). Phase 10 unblocked and runnable in parallel.
+Last activity: 2026-05-13 — Phase 9 shipped + closed out. v1.0.2 binary live at github.com/boejowen/SquireBot/releases/tag/v1.0.2. OAuth brand-verification mid-session incident handled: privacy policy authored at boejowen.github.io/SquireBot/privacy-policy/, Search Console ownership verified, resubmitted to Google. Five new backlog items (999.19 brand verification tracking, 999.20 WR-01 gofmt, 999.21 WR-02 FreeConsole doc/impl, 999.22 SemVer auto-update, 999.23 graceful policy-block tray UX).
+
+### Active Blocker: 999.19 Google brand verification
+
+External-only dependency. Affects all SquireBot watchers in the field. Existing access tokens (~1h TTL) carry the watchers through their current sessions, then auth wall lands. Will unblock automatically when Google approves. Full incident trail at `.planning/debug/v1-0-2-oauth-invalid-client-incident.md`. Anti-pattern note for future incidents: check OAuth consent screen Verification status FIRST when seeing `Access blocked: Authorization Error / Error 400: invalid_request`; the multiple-secrets / loopback-IP / redirect-URI angles are red herrings.
 
 ### v1.0.2 Phase Plan (2026-05-12)
 

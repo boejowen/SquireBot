@@ -40,7 +40,7 @@ Full details in [`milestones/v1.0.1-ROADMAP.md`](milestones/v1.0.1-ROADMAP.md).
 
 ### 🚧 v1.0.2 — Robustness Polish (in progress)
 
-- [ ] **Phase 9: Watcher Robustness Polish** — close 4 v1.0.1-UAT-surfaced robustness gaps (boot-time `invalid_grant` Reauthorize recovery, tray controller pre-Ready call queue, UTF-8 BOM strip in config loader, foreground-shell-close silent death fix); ship as watcher v1.0.2 binary release. Requirements: AUTH-07, OPS-06, OPS-07, CONFIG-01. Ship gate: tag `v1.0.2` + GitHub Release + `latest.json` refresh.
+- [x] **Phase 9: Watcher Robustness Polish** — closed 4 v1.0.1-UAT-surfaced robustness gaps (boot-time `invalid_grant` Reauthorize recovery, tray controller pre-Ready call queue, UTF-8 BOM strip in config loader, foreground-shell-close silent death fix); shipped as watcher v1.0.2 binary release. Requirements: AUTH-07, OPS-06, OPS-07, CONFIG-01. Ship gate (✓ 2026-05-13): tag `v1.0.2` + GitHub Release + `latest.json` refresh. **HUMAN-UAT scenarios persisted in `09-HUMAN-UAT.md`, blocked on 999.19 (Google brand verification re-approval) until ~2026-05-16/05-18.**
 - [ ] **Phase 10: Apps Script Test Quality** — close v1.0.1-Phase-8-review-surfaced test-quality items (Admin-Mgmt sidebar inline-JS coverage + `mountSidebar` realm leak + weak assertions + leaked pending mock call). Requirements: TEST-03, TEST-04. Ship gate: `clasp push` to dev workbook + green CI.
 
 ## Phase Details
@@ -77,11 +77,11 @@ Full details in [`milestones/v1.0.1-ROADMAP.md`](milestones/v1.0.1-ROADMAP.md).
 |-----------|--------|----------------|--------|-----------|
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
-| v1.0.2 | 2 | 0/? | 🚧 In progress (plans defined per phase by `/gsd-plan-phase`) | — |
+| v1.0.2 | 2 | 5/? | 🚧 In progress (Phase 9 shipped 2026-05-13; HUMAN-UAT blocked on Google brand verification) | — |
 
 | Phase | Milestone | Status | Completed |
 |-------|-----------|--------|-----------|
-| 9. Watcher Robustness Polish | v1.0.2 | Not started | — |
+| 9. Watcher Robustness Polish | v1.0.2 | ✅ Shipped (HUMAN-UAT pending 999.19) | 2026-05-13 |
 | 10. Apps Script Test Quality | v1.0.2 | Not started | — |
 
 ## Backlog
@@ -95,6 +95,11 @@ Carried forward from v1.0 + v1.0.1 (candidates for v1.1 / v2). Items pulled INTO
 - **999.9** SignPath Foundation OSS approval — submitted; awaiting review (would retire INST-05 partial → full). Lands as hotfix when approved (NOT a v1.0.2 phase per milestone-open decision).
 - **999.11** Decide v1.1+ verification doctrine — adopt `/gsd-verify-work` per phase, or formalize live-smoke pattern
 - **999.12** v2: Wantlist + Discord pinger (WANT-01..08; prerequisites WANT-06/07 still open)
+- **999.19** Google OAuth brand verification re-approval — submitted to Google review queue 2026-05-13 with new homepage (`https://boejowen.github.io/SquireBot/`) + privacy policy (`https://boejowen.github.io/SquireBot/privacy-policy/`) + `boejowen.github.io` authorized domain (Search Console-verified). Blocks all SquireBot watcher auth (v0.4.0-rc1, v1.0.1, v1.0.2 — uniform) until Google approves. ETA 3–5 business days. Track resolution in `.planning/debug/v1-0-2-oauth-invalid-client-incident.md`.
+- **999.20** WR-01 — `cmd/squirebot/console_windows.go` is not `gofmt -l` clean (subtle whitespace in the `var` block); shipped in v1.0.2 because there's no gofmt CI gate today, but next push touching this file may trip lint elsewhere. One-line fix.
+- **999.21** WR-02 — `cmd/squirebot/console_windows.go` `freeConsole()` doc promises `nil` on no-console processes but implementation returns non-nil + logs `slog.Warn` whenever `ret == 0`. Per MSDN `ret == 0` is the normal case when no console is attached. Log noise + violated documented contract; `main.go` discards the return with `_ =` so no functional regression. Either fix the impl to swallow `ERROR_INVALID_HANDLE` or update the doc.
+- **999.22** SemVer-aware auto-update comparison — the dev `0.4.0-rc1` watcher on the developer machine treats `1.0.2` as older than itself and skips the update. Almost certainly string comparison in `internal/update/check.go` instead of proper SemVer comparison; pre-release tags (`-rc1`) should sort BELOW the corresponding release. Likely won't affect production guildies (none ran a `-rc1` build) but should be fixed for future pre-release safety.
+- **999.23** Graceful tray messaging when Google blocks the OAuth client itself (policy/verification gate, not user-side `invalid_grant`). Today the watcher hits Reauthorize → browser → "Access blocked" Google page → confused guildie. Better UX: distinguish `invalid_client`/policy errors from `invalid_grant` in the tray classifier and surface "SquireBot's Google brand verification is in review — check back in a few days; nothing you can do on your end."
 
 ---
 

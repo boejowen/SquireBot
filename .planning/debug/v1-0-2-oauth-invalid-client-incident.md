@@ -1,11 +1,12 @@
 ---
-status: investigating
+status: awaiting_google_review
 slug: v1-0-2-oauth-invalid-client-incident
 opened: 2026-05-13T00:50:00Z
-updated: 2026-05-13T00:50:00Z
-hypothesis: OAuth client deleted or quarantined in Google Cloud Console (project 262087828393) between v1.0.1 ship (2026-05-11 17:39Z) and v1.0.2 ship (2026-05-13 00:30Z)
+updated: 2026-05-13T04:30:00Z
+root_cause: Google OAuth brand-verification gate flipped enforcement on the SquireBot Desktop Client between v1.0.1 ship (2026-05-11) and v1.0.2 ship (2026-05-13). Not a code bug. Affects ALL watcher versions (v0.4.0-rc1, v1.0.1, v1.0.2) identically.
 severity: critical
-impact: every v1.0.1 and v1.0.2 watcher in the guild dies on next token refresh — guild-wide OAuth wall
+impact: every SquireBot watcher in the guild loses auth on next refresh until Google approves brand verification
+resolution_path: brand verification submitted to Google review queue 2026-05-13 — typical SLA 3–5 business days
 ---
 
 # v1.0.2 invalid_client OAuth incident
@@ -67,9 +68,28 @@ If client `262087828393-8obvbca97eb1q73f2kna7nef4adhq7bu` is missing or marked d
 
 ## State of Phase 9 close-out
 
-Phase 9 verification PASSED programmatically (5/5 must-haves; verifier returned `human_needed` solely for on-VM UAT). Code review found 0 critical, 2 warnings (WR-01 gofmt drift in console_windows.go, WR-02 doc/impl mismatch on FreeConsole no-console path), 4 info-level items — all non-blocking, captured in `09-REVIEW.md`. ROADMAP not yet marked complete; STATE.md last updated at Wave 2.
+Phase 9 verification PASSED programmatically (5/5 must-haves; verifier returned `human_needed` solely for on-VM UAT). Code review found 0 critical, 2 warnings (WR-01 gofmt drift in console_windows.go, WR-02 doc/impl mismatch on FreeConsole no-console path), 4 info-level items — all non-blocking, captured in `09-REVIEW.md`.
 
-**Decision pending user check of Google Cloud Console** before any further close-out commits or remote pushes. v1.0.2 tag remains pushed (cannot be reverted destructively).
+**Phase 9 close-out completed 2026-05-13** with OAuth verification status captured as blocking item 999.19. The 5 HUMAN-UAT scenarios cannot run until Google approves brand verification — they are persisted in `09-HUMAN-UAT.md` with `status: blocked_on_999.19` and will be re-tried once verification clears.
+
+## Investigation trail (chronological)
+
+1. **First lead — "OAuth client was not found"** (rejected). Verified the client_id baked into v1.0.1 binary and v1.0.2 binary are byte-identical — the build pipeline is innocent. Both versions hit the same Google wall.
+2. **Second lead — multiple client secrets warning** (rejected). User disabled the older `…LKsu` secret; auth still failed. Confirmed the kept secret (`…ZCXH` suffix) matches the binary's baked value.
+3. **Third lead — loopback IP migration** (rejected). Tested `http://localhost:<port>` vs `http://127.0.0.1:<port>` redirect URIs against the auth endpoint; both rejected identically with policy violation.
+4. **Root cause — Google brand verification expired/flipped** (CONFIRMED). The OAuth consent screen page showed "Your branding needs to be verified before it can be shown to users" — Google's automated brand verification gate.
+5. **Resolution path** — submitted to Google review queue 2026-05-13 with these fixes applied:
+   - Privacy policy created at `docs/privacy-policy.md`, served at `https://boejowen.github.io/SquireBot/privacy-policy/`
+   - Homepage URL changed from `https://github.com/boejowen/SquireBot` to `https://boejowen.github.io/SquireBot/` (GH Pages-hosted; owned-domain via Search Console verification)
+   - Authorized domain `boejowen.github.io` added (replacing `github.com` which was unverifiable)
+   - Domain ownership verified in Google Search Console via HTML file token committed at `docs/google7ea0696846f966ed.html`
+   - Homepage updated to include explicit "Privacy policy →" link (Google reviewer-required)
+
+## Anti-patterns to avoid next time
+
+- Do NOT chase "multiple secrets" or "loopback IP" warnings first when the actual error is `Access blocked: Authorization Error / Error 400: invalid_request` with the link to the OAuth 2.0 policies page. Those are noise. Check **OAuth consent screen → Verification status** FIRST.
+- Brand verification is a SEPARATE workflow from consent-screen-publishing-status. `consent_screen_status: PRODUCTION` does NOT mean the app is verified for production use — Google can publish a screen and then flip a verification gate independently.
+- The release.yml AUTH-03 gate only checks the JSON field, not Google's actual verification state. Worth adding a live `oauth2.googleapis.com/.well-known/openid-configuration` ping or similar pre-flight check to a future hardening phase.
 
 ## Files of record
 

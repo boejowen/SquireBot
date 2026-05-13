@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: — Robustness Polish
 status: phase_complete_uat_blocked
-last_updated: "2026-05-13T04:45:00.000Z"
-last_activity: "2026-05-13 — Phase 9 SHIPPED. v1.0.2 tag pushed (workflow 25770477750 green; 4 artifacts published). Verifier: 5/5 must-haves programmatically PASSED; status human_needed (UAT requires Windows VM). Code review: 0 critical, 2 warnings + 4 info captured in 09-REVIEW.md (logged as 999.20/999.21 backlog). MID-SESSION OAUTH INCIDENT: Google flipped brand-verification enforcement on the OAuth client between v1.0.1 ship (2026-05-11) and v1.0.2 ship (2026-05-13), blocking auth for ALL watcher versions uniformly. Not a code bug. Diagnosed across ~3 false leads (multiple-secrets, loopback-IP, redirect URI) before finding the actual cause in OAuth consent screen → Verification status. Resolution: new privacy policy at boejowen.github.io/SquireBot/privacy-policy/ + Search Console verification + resubmission to Google review queue (999.19, ETA 3–5 business days). Phase 9 marked shipped; HUMAN-UAT persisted as blocked on 999.19. Next: Phase 10 (Apps Script Test Quality) — independent of OAuth issue."
+last_updated: "2026-05-13T05:30:00.000Z"
+last_activity: "2026-05-13 — Phase 10 (Apps Script Test Quality) CONTEXT locked. User delegated all 4 gray areas with the 'simple, seamless' tiebreaker (same pattern as Phase 9). 6 decisions captured in 10-CONTEXT.md: D-01 defer all 6 info-level findings IN-01..06 to v1.1 backlog (999.24..29); D-02 mountSidebar realm-leak fix = IIFE wrap (3 LOC); D-03 Admin-Mgmt inline test = 2 tests symmetric with existing 4 sidebars; D-04 3-plan sequential structure 10-01 TEST-04→10-02 TEST-03→10-03 ship gate (CI green BEFORE clasp push); D-05 schema lock unchanged (schema_version=3, WatcherMaxSchemaVersion=3); D-06 meta tiebreaker for downstream agents. Phase 9 v1.0.2 still shipped (HUMAN-UAT blocked on 999.19 Google brand verification, ETA 3–5 business days). Next: /gsd-plan-phase 10."
 progress:
   total_phases: 2
   completed_phases: 1
@@ -29,9 +29,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
 
 ## Current Position
 
-Phase: 9 — Watcher Robustness Polish SHIPPED 2026-05-13 as v1.0.2 (HUMAN-UAT blocked on 999.19 Google brand verification)
-Plan: 5/5 shipped (09-01, 09-02, 09-03, 09-04, 09-05). All commits merged to master (origin HEAD c874fe6).
-Status: Phase complete, HUMAN-UAT blocked on external dependency (Google review queue, ETA 3–5 business days). Phase 10 unblocked and runnable in parallel.
+Phase: 10 — Apps Script Test Quality (context locked 2026-05-13; ready for /gsd-plan-phase 10). Phase 9 SHIPPED 2026-05-13 as v1.0.2 (HUMAN-UAT blocked on 999.19 Google brand verification).
+Plan: Phase 9 = 5/5 shipped (origin HEAD 9701d1f); Phase 10 = 0/3 (3 plans defined in 10-CONTEXT.md D-04 awaiting planner)
+Status: Phase 9 complete (HUMAN-UAT blocked on 999.19 external); Phase 10 context locked, ready to plan
 Last activity: 2026-05-13 — Phase 9 shipped + closed out. v1.0.2 binary live at github.com/boejowen/SquireBot/releases/tag/v1.0.2. OAuth brand-verification mid-session incident handled: privacy policy authored at boejowen.github.io/SquireBot/privacy-policy/, Search Console ownership verified, resubmitted to Google. Five new backlog items (999.19 brand verification tracking, 999.20 WR-01 gofmt, 999.21 WR-02 FreeConsole doc/impl, 999.22 SemVer auto-update, 999.23 graceful policy-block tray UX).
 
 ### Active Blocker: 999.19 Google brand verification

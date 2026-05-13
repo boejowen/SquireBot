@@ -621,7 +621,7 @@ export function mountSidebar(html: string): MountedSidebar {
     const src = orig.textContent || '';
     if (!src.trim()) return;
     // eslint-disable-next-line no-eval
-    (0, eval)(src);
+    (0, eval)(`(function(){\n${src}\n})();`);
   });
 
   function dispatchRunCall(method: string, payload: unknown): void {

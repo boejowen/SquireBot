@@ -84,7 +84,7 @@ describe('showEvictionSidebar — inline JS', () => {
     });
 
     const msg = m.document.getElementById('msg')!;
-    expect(msg.textContent || msg.innerHTML).toMatch(/Marked 2|removed/i);
+    expect(msg.textContent || msg.innerHTML).toContain('Marked 2 character(s) as removed');
   });
 
   // --- TE2 — D-03 error path -------------------------------------------

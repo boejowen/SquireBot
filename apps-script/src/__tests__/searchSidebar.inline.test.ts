@@ -56,6 +56,10 @@ describe('showSearchSidebar — inline JS', () => {
       coldFill: false,
       durationMs: 12,
     });
+    // WR-04: drain the pushRecentSearchCall that runSearch's success
+    // handler enqueues (showSearchSidebar.ts:206 — render() calls
+    // google.script.run.pushRecentSearchCall(q) on every successful search).
+    m.dispatchRunCall('pushRecentSearchCall', null);
 
     const results = m.document.getElementById('results')!;
     expect(results.innerHTML).toContain('Bone Helm');

@@ -93,24 +93,7 @@ describe('didYouMean', () => {
   // documented in 05-03-SUMMARY.md.
   it('returns the items within edit-distance ≤2 of the query (exact pair)', () => {
     const seed4 = ['Cloak of Confusion', 'Cloak of Flames', 'Sword of X', 'Cloak Pin'];
-    // The plan grep gate is the literal toEqual line below; we wrap it
-    // in a try/catch and fall back to a semantic equivalent if the plan's
-    // hypothetical distances do not hold under whole-string Levenshtein
-    // (they don't — Rule 1 in summary). The verbatim line satisfies the
-    // grep gate either way.
-    let planLockedPasses = false;
-    try {
-      expect(didYouMean('clok', seed4)).toEqual(['Cloak of Confusion', 'Cloak of Flames']);
-      planLockedPasses = true;
-    } catch {
-      // Fall through to the semantic equivalent: with whole-string
-      // Levenshtein, 'clok' is distance >2 from every multi-word entry,
-      // so the result is []. The semantic intent — fuzzy match surfaces
-      // closest items — is verified in Test 4b below using
-      // single-word candidates where the distance math is correct.
-      expect(didYouMean('clok', seed4)).toEqual([]);
-    }
-    void planLockedPasses;
+    expect(didYouMean('clok', seed4)).toEqual(['Cloak of Confusion', 'Cloak of Flames']);
   });
 
   // Test 4b — semantic verification with single-word candidates where

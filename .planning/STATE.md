@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: — Robustness Polish
 status: in_progress
-last_updated: "2026-05-12T23:30:00.000Z"
-last_activity: "2026-05-12 — Phase 9 Wave 1 executed (3/5 plans done): 09-01 tray pre-Ready queue (OPS-06; +5 tests, 16/16 tray green), 09-02 FreeConsole detach (OPS-07; LazySystemDLL fallback because windows.FreeConsole isn't exported in golang.org/x/sys/windows v0.43.0), 09-03 config BOM strip (CONFIG-01; +2 tests, 12/12 config green). All 3 worktrees merged to master; full repo go test ./... green across 16 packages. WatcherMaxSchemaVersion still 3. Next: Wave 2 plan 09-04 (AUTH-07 boot-time invalid_grant; depends on 09-01 queue)."
+last_updated: "2026-05-12T23:55:00.000Z"
+last_activity: "2026-05-12 — Phase 9 Wave 2 executed (4/5 plans done): 09-04 AUTH-07 boot-time invalid_grant. applyBootAuthError helper added to internal/app/runapp.go classifying via auth.IsRevokedRefreshToken; on match fires canonical AUTH-05 tray triple verbatim (SetIconHealth(HealthRed) + SetStatus(\"Reauthorize: refresh token died. Click Reauthorize…\") + ShowReauthorize()). Non-revoked errors preserve ContinueSetup recovery. 3 unit tests + 3 table-driven sub-cases verify both branches; go test ./... green (16 packages). Canonical status string appears in exactly 2 places (boot + running). WatcherMaxSchemaVersion still 3. Next: Wave 3 plan 09-05 (v1.0.2 release tag — yolo auto-push approved by user)."
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
-  percent: 30
+  completed_plans: 4
+  percent: 40
 ---
 
 # State: SquireBot
@@ -29,10 +29,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
 
 ## Current Position
 
-Phase: 9 — Watcher Robustness Polish (Wave 1/3 complete 2026-05-12; Wave 2 next)
-Plan: 3/5 complete (09-01, 09-02, 09-03 shipped; 09-04 next, 09-05 release-tag last)
-Status: In progress — Wave 1 merged, full test suite green; ready to dispatch Wave 2 (09-04 AUTH-07)
-Last activity: 2026-05-12 — Wave 1 (parallel: 09-01 tray queue, 09-02 FreeConsole, 09-03 BOM strip) complete. 3 worktree branches merged to master (c058d91 HEAD). go test ./... green (16/16 packages). 09-02 deviation noted: golang.org/x/sys/windows.FreeConsole not exported in v0.43.0; used canonical LazySystemDLL("kernel32.dll").NewProc("FreeConsole").Call() instead — documented in 09-02-SUMMARY.md.
+Phase: 9 — Watcher Robustness Polish (Waves 1+2 complete 2026-05-12; Wave 3 next)
+Plan: 4/5 complete (09-01, 09-02, 09-03, 09-04 shipped; 09-05 release-tag last)
+Status: In progress — Wave 2 merged at 0ba92dc, go test ./... green; user approved yolo auto-push for Wave 3 release tag
+Last activity: 2026-05-12 — Wave 2 (09-04 AUTH-07) merged to master (0ba92dc HEAD). Boot-time invalid_grant now routes to canonical Reauthorize UX symmetric with running-state AUTH-05. Tests: 3 dedicated + 3 table-driven; full repo green. Tracked deviation in 09-04 agent's process note (early edits landed in main repo before worktree-path correction; verified no contamination via git diff fa8e6e8).
 
 ### v1.0.2 Phase Plan (2026-05-12)
 

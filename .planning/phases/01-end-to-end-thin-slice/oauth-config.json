@@ -1,0 +1,11 @@
+{
+  "schema_version": 2,
+  "_comment": "These are the FOUR Google Cloud Console identifiers Plan 03 will bake into the binary at build time via -ldflags='-X main.OAuthClientID=... -X main.OAuthClientSecret=... -X main.PickerAPIKey=... -X main.GCPProjectNumber=...'. OAuth client IDs are public (visible in the URL during the consent flow). The OAuth client secret for a desktop client is effectively public — per Google's docs (https://developers.google.com/identity/protocols/oauth2/native-app), 'when a client runs on a device, it's considered to be a public client and the client_secret is no longer truly confidential.' Picker API keys restricted to 'Google Picker API only' are effectively public (per RESEARCH.md §5.4). GCP project number is public (visible in any console URL).",
+  "_security_note": "Real values are REDACTED for the public GitHub repo. Source of truth lives on the maintainer's PC and gets baked into release binaries via ldflags at build time. Per Google's docs (https://developers.google.com/identity/protocols/oauth2/native-app), the desktop client_secret is effectively public — but committing it to GitHub triggers automated secret-scanning and risks Google auto-rotation, so the values are kept out of the public repo regardless. Refresh tokens live ONLY in wincred per AUTH-04. The watcher's Go config struct has no field for any OAuth credential. See docs/oauth-setup.md for the full provisioning runbook.",
+  "oauth_client_id": "<REDACTED — see local copy / password manager>",
+  "oauth_client_secret": "<REDACTED — see local copy / password manager>",
+  "picker_api_key": "<REDACTED — see local copy / password manager>",
+  "gcp_project_number": "262087828393",
+  "consent_screen_status": "PRODUCTION",
+  "consent_screen_published_at": "2026-05-01T14:17:22Z"
+}

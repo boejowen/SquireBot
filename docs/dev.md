@@ -10,6 +10,7 @@ Stack overview, how to build, how to deploy Apps Script.
 
 - [Stack + architecture + conventions](https://github.com/boejowen/SquireBot/blob/main/CLAUDE.md)
 - [New-machine setup (maintainer workstation)](https://github.com/boejowen/SquireBot/blob/main/docs/new-machine-setup.md)
+- [Secondary-PC bootstrap prompt for Claude Code](https://github.com/boejowen/SquireBot/blob/main/docs/secondary-pc-bootstrap-prompt.md)
 - [OAuth Cloud setup runbook](https://github.com/boejowen/SquireBot/blob/main/docs/oauth-setup.md)
 - [Build + sideload watcher](https://github.com/boejowen/SquireBot/blob/main/docs/build-and-install.md)
 - [Apps Script clasp deploy](https://github.com/boejowen/SquireBot/blob/main/docs/apps-script-deploy.md)

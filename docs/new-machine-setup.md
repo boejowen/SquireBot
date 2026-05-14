@@ -12,6 +12,12 @@ Covers two scenarios:
 
 Look for **🟡 Only if…** callouts to skip steps that don't apply to your scenario.
 
+> **Want to automate steps 1, 2, and 4?** Paste
+> [`docs/secondary-pc-bootstrap-prompt.md`](./secondary-pc-bootstrap-prompt.md)
+> into Claude Code on the secondary PC after cloning. It rehydrates
+> auto-memory, audits toolchains, and orients you on project state in
+> one pass.
+
 This is **not** the guildie install path — guildies just run
 `SquireBot-Setup-X.Y.Z.exe` per [docs/install.md](./install.md).
 

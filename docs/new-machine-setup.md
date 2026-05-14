@@ -2,42 +2,41 @@
 layout: default
 ---
 
-# New-machine setup (developer workstation)
+# Working on SquireBot from another PC
 
-Step-by-step for bringing up a fresh Windows PC as a SquireBot **maintainer**
-workstation — Cursor + Claude Code + GSD, full repo, ability to build the
-watcher and deploy Apps Script.
+Step-by-step for picking up SquireBot work on a different Windows PC.
+Covers two scenarios:
+
+- **Temporary secondary PC** — you'll be there a few days, your primary PC stays online. Most steps below are "do once and forget"; the watcher build + OAuth-secret restore are only needed if you're cutting a release or doing watcher debugging.
+- **Full migration** — you're switching primary machines permanently. Same steps, but you also need to copy unredacted OAuth values from the old PC (they aren't in the repo) and treat the new PC's Claude auto-memory as the new source of truth.
+
+Look for **🟡 Only if…** callouts to skip steps that don't apply to your scenario.
 
 This is **not** the guildie install path — guildies just run
 `SquireBot-Setup-X.Y.Z.exe` per [docs/install.md](./install.md).
 
-> **Before you wipe the old PC, grab these from it:**
->
-> 1. The four real values from `.planning/phases/01-end-to-end-thin-slice/oauth-config.json` on the old machine (committed copy is redacted): `oauth_client_id`, `oauth_client_secret`, `picker_api_key`, `gcp_project_number`. Save them in your password manager.
-> 2. Optionally, the contents of `~/.claude/projects/C--Users-Virus-Canary-Desktop-Claude-SquireBot/memory/` — a verbatim copy is already committed under `.planning/claude-memory/`, so this is a fallback only.
-
 ---
 
-## 0. Prerequisites — install yourself
+## 0. Prerequisites
 
-Install these manually before touching the repo. SquireBot's build scripts
-do **not** auto-install toolchains.
+Cursor + Claude Code are assumed installed under your account on the
+secondary PC (since you said they already are). Everything else below
+is the **maximum** set — only install what your work for the trip
+actually needs.
 
-| Tool | Version | Notes |
+| Tool | Version | Needed for |
 |---|---|---|
-| Git | any recent | `winget install Git.Git` works |
-| Go | **1.24** | `go version`; needs to match `go.mod` |
-| Node.js | 20 LTS or newer | for `apps-script/` clasp + vitest |
-| NSIS | **3.10+** | needed for the installer; `scoop install nsis` or download from <https://nsis.sourceforge.io> |
-| PowerShell | 7+ recommended | 5.1 works too |
-| `jq` | any | only for the bash build one-liner; skippable |
-| Cursor or VS Code | latest | optional — repo is editor-agnostic |
-| Claude Code CLI | latest | `npm i -g @anthropic-ai/claude-code` (or per official docs) |
-| GSD | latest | per <https://github.com/anthropics/claude-code> / your usual GSD install path |
+| Git | any recent | always |
+| Go | **1.24** | 🟡 only if you'll build the watcher |
+| Node.js | 20 LTS or newer | 🟡 only if you'll work on `apps-script/` |
+| NSIS | **3.10+** | 🟡 only if you'll cut a release installer |
+| PowerShell | 7+ recommended | always (5.1 is fine) |
+| `jq` | any | optional — for the bash build one-liner |
 
 Don't install `clasp` globally — it's a project dev-dependency in
-`apps-script/package.json` and **must stay on the 2.4.x line** (clasp 3.x has
-breaking changes; see `.planning/phases/03-apps-script-enrichment-foundation/03-RESEARCH.md` §6).
+`apps-script/package.json` and **must stay on the 2.4.x line** (clasp 3.x
+has breaking changes; see
+`.planning/phases/03-apps-script-enrichment-foundation/03-RESEARCH.md` §6).
 
 ---
 
@@ -53,99 +52,95 @@ git status            # should be clean, on master
 The clone includes:
 
 - All source (`cmd/`, `internal/`, `apps-script/src/`, `installer/`).
-- Full GSD planning history under `.planning/` (phases, research, seeds, bugs, retrospectives).
-- A snapshot of the Claude auto-memory under `.planning/claude-memory/`.
+- Full GSD planning history under `.planning/`.
+- A snapshot of the primary PC's Claude auto-memory under `.planning/claude-memory/`.
 - The Apps Script clasp binding (`apps-script/.clasp.json` with the right `scriptId`).
 - Docs under `docs/` (build, OAuth setup, deploy, eviction runbook, troubleshooting).
 
 ---
 
-## 2. Restore the real OAuth config
+## 2. Rehydrate Claude's auto-memory
 
-The committed `.planning/phases/01-end-to-end-thin-slice/oauth-config.json`
-has placeholders. Paste in the real values you saved from the old PC:
+Claude Code reads per-project memory from
+`~/.claude/projects/<sanitized-cwd>/memory/MEMORY.md`. On a PC that
+hasn't run Claude Code against this repo before, that directory is
+empty. Copy the committed snapshot into place:
 
-```json
-{
-  "schema_version": 2,
-  ...
-  "oauth_client_id":     "262087828393-...apps.googleusercontent.com",
-  "oauth_client_secret": "GOCSPX-...",
-  "picker_api_key":      "AIzaSy...",
-  "gcp_project_number":  "262087828393",
-  "consent_screen_status": "PRODUCTION",
-  "consent_screen_published_at": "2026-05-01T14:17:22Z"
-}
+```powershell
+# 1. Open Claude Code in the repo once so it creates the project dir, then quit.
+# 2. Find the sanitized project dir name (it depends on where you cloned the repo):
+Get-ChildItem $HOME\.claude\projects | Where-Object Name -like "*SquireBot*"
+# 3. Copy the memory files in:
+$projectDir = "$HOME\.claude\projects\<paste-name-from-step-2>\memory"
+New-Item -ItemType Directory -Force -Path $projectDir | Out-Null
+Copy-Item -Force .planning\claude-memory\*.md $projectDir\
 ```
 
-**Do not commit this back.** Add a local-only ignore so a stray `git add`
-can't push secrets:
+Then restart Claude Code in the repo. Verify by asking "what do you
+remember about this project?" — it should reference P99 file formats,
+the consolidated view-tab decision, the OAuth brand-verification
+incident, etc.
+
+> **Sync caveat (temporary-PC scenario):** any new memories Claude
+> writes on the secondary PC stay there. They won't automatically
+> appear on your primary PC when you return. Either:
+> - Accept the divergence and let the primary PC's memory remain authoritative, or
+> - Copy new memory files from the secondary PC's `memory/` dir back to `.planning/claude-memory/` on the primary PC before committing further.
+> The committed `.planning/claude-memory/` snapshot is intentionally a one-time bootstrap, not a live sync.
+
+---
+
+## 3. 🟡 Restore the unredacted OAuth config
+
+Skip this step unless you'll be building the watcher binary or cutting
+a release on the secondary PC. Pure code/planning/Apps Script work
+doesn't need it.
+
+The committed `.planning/phases/01-end-to-end-thin-slice/oauth-config.json`
+has placeholders. Paste the real values from your password manager
+(the four real values: `oauth_client_id`, `oauth_client_secret`,
+`picker_api_key`, `gcp_project_number`) into the file. Then mark it
+skip-worktree so a stray `git add` can't push secrets:
 
 ```powershell
 git update-index --skip-worktree .planning/phases/01-end-to-end-thin-slice/oauth-config.json
 ```
 
-(Reverse with `--no-skip-worktree` if you ever need to update the redacted
-schema in the committed copy.)
+Reverse with `--no-skip-worktree` if you ever need to update the
+redacted schema in the committed copy.
 
-If you lost the values, regenerate from Google Cloud Console per
-[docs/oauth-setup.md](./oauth-setup.md) — but note that rotating the
-OAuth client secret invalidates the secret baked into already-released
-binaries, so existing guildie installs would break until you cut a new
-release. Prefer restoring from password-manager backup.
-
----
-
-## 3. Rehydrate Claude's auto-memory
-
-Claude Code reads per-project memory from
-`~/.claude/projects/<sanitized-cwd>/memory/MEMORY.md`. On a fresh install
-that directory is empty. Copy the committed snapshot into place:
-
-```powershell
-# Adjust the destination path if Cursor/Claude Code chose a different sanitized name.
-# Easiest: launch Claude Code in the repo once; it creates the project dir, then quit.
-$projectDir = "$HOME\.claude\projects\C--Users-$($env:USERNAME)-Desktop-SquireBot\memory"
-New-Item -ItemType Directory -Force -Path $projectDir | Out-Null
-Copy-Item -Force .planning\claude-memory\*.md $projectDir\
-```
-
-Then restart Claude Code. Verify by asking it "what do you remember about
-this project?" — it should reference P99 file formats, the consolidated
-view-tab decision, the OAuth brand-verification incident, etc.
-
-If the sanitized project-dir name differs on your new PC, find the right
-one with `Get-ChildItem $HOME\.claude\projects` after Claude Code has run
-once in the repo.
+If you don't have the values handy: get them from Google Cloud Console
+→ project `262087828393` → APIs & Services → Credentials. Don't rotate
+the secret unless you intend to cut a new release with new ldflags
+values — rotation invalidates the credential baked into every
+already-installed guildie watcher.
 
 ---
 
-## 4. Editor + Claude Code + GSD config
+## 4. Editor + Claude Code + GSD sanity check
 
-- **Cursor / VS Code:** open the repo folder. The repo doesn't ship `.vscode/` (gitignored).
-- **Claude Code:** run `claude` inside the repo. The project's `CLAUDE.md` is auto-loaded and tells the model the stack/architecture/conventions.
-- **GSD:** verify the slash commands work — `/gsd-progress` should print the current milestone status (read from `.planning/STATE.md`, `.planning/ROADMAP.md`, etc.). If GSD complains the dir is malformed, run `/gsd-health`.
+- **Cursor:** open the repo folder. The repo doesn't ship `.vscode/` settings (gitignored).
+- **Claude Code:** run `claude` inside the repo. The project's `CLAUDE.md` is auto-loaded.
+- **GSD:** `/gsd-progress` should print the current milestone status from `.planning/STATE.md`, `.planning/ROADMAP.md`, etc. If GSD complains the dir is malformed, run `/gsd-health`.
 
-`.claude/settings.local.json` is per-machine and intentionally not in the
-repo. Recreate any permission allowlists you want via `/fewer-permission-prompts`
-or by manually editing the file as Claude Code prompts you.
+`.claude/settings.local.json` is per-machine and intentionally not in
+the repo. The secondary PC has its own.
 
 ---
 
-## 5. Apps Script (clasp + esbuild + vitest)
+## 5. 🟡 Apps Script — only if you'll touch `apps-script/`
 
 ```powershell
 cd apps-script
 npm install            # installs clasp 2.4.x, esbuild, vitest, @types/google-apps-script
 npx clasp login        # opens browser; sign in as the workbook owner (jbowen@mncivic.com)
 npm run build          # bundles src/ into dist/Code.js
-npm test               # runs vitest against mocked Apps Script globals
+npm test               # vitest against mocked Apps Script globals
 ```
 
 `clasp login` writes `~/.clasprc.json` (user-level OAuth, not committed).
 The repo already has `apps-script/.clasp.json` with the bound `scriptId`,
-so `clasp push` will hit the correct container-bound script as long as
-the signed-in account owns or has edit access to it.
+so `clasp push` will hit the correct container-bound script.
 
 Deploy on demand:
 
@@ -153,13 +148,13 @@ Deploy on demand:
 npm run deploy         # or: npx clasp push
 ```
 
-Full runbook with safety checks: [docs/apps-script-deploy.md](./apps-script-deploy.md).
+Full runbook: [docs/apps-script-deploy.md](./apps-script-deploy.md).
 
 ---
 
-## 6. Build the watcher
+## 6. 🟡 Watcher — only if you'll build / debug the Go side
 
-Follow [docs/build-and-install.md](./build-and-install.md). The summary is:
+Follow [docs/build-and-install.md](./build-and-install.md). Summary:
 
 ```powershell
 cd <repo root>
@@ -174,67 +169,73 @@ go build -ldflags="$ldflags" -o squirebot.exe .\cmd\squirebot
 .\squirebot.exe --version
 ```
 
-The bash one-liner equivalent (with `jq`) is in `docs/build-and-install.md`.
+You **do not** need to install the watcher on the secondary PC for
+development — `go build` and `go test ./...` give you everything you
+need to iterate. Only do a full install + sign-in if you're testing
+the end-to-end flow.
 
-To produce the NSIS installer:
+NSIS installer (only if cutting a release):
 
 ```powershell
 & "$env:ProgramFiles (x86)\NSIS\makensis.exe" /DVERSION=0.0.0-dev installer\squirebot.nsi
 ```
 
-The release pipeline (`.github/workflows/release.yml`) does the same thing
-in CI when you push a `vX.Y.Z` tag; the local path exists for sideload
-testing on a clean VM.
+---
+
+## 7. 🟡 Run the watcher end-to-end — only if you need a live install
+
+If you actually install + run `squirebot.exe` on the secondary PC,
+you'll go through the wizard and a fresh Google sign-in there
+(refresh tokens are stored in Windows DPAPI per-PC; they don't
+transfer). Your primary PC's watcher is unaffected.
+
+1. Run `squirebot.exe` — wizard auto-launches if no token is stored.
+2. Pick EQ folder, sign in with Google, pick the shared workbook.
+3. Wait for tray icon to go "Ready"; next `/outputfile inventory` will write.
+
+Both PCs writing to the same sheet at once is fine — the per-character
+write contract (atomic `batchUpdate` clear+write per character) means
+they don't collide as long as you don't run the SAME character from
+both PCs simultaneously.
 
 ---
 
-## 7. Re-authorize the watcher
+## 8. Working day-to-day
 
-The OAuth refresh token lives in Windows DPAPI (Credential Manager) and
-**does not move between PCs**. First-run wizard handles this:
+Once set up, the loop is the same as on the primary PC:
 
-1. Run `squirebot.exe` from anywhere — it auto-launches the wizard if no token is stored.
-2. Pick your EQ folder (where `inventory_*.txt` / `spellbook_*.txt` land).
-3. Click "Sign in with Google" — opens browser, sign in as a guildie account.
-4. Pick (or create) the shared workbook with the Drive Picker.
-5. Wizard hands off to the tray. Wait for "Ready" — first write will follow your next `/outputfile inventory` in-game.
+```powershell
+git pull
+# ... do work, /gsd-* slash commands, edits ...
+git push
+```
 
-If the browser tab seems stuck after "Sign in succeeded", re-check
-`.planning/claude-memory/project_v021_wizard_handoff_bug.md` — that bug
-was fixed in v0.2.1; the symptom should not appear on the current
-release. If it does, file a bug.
+GitHub keeps both PCs in sync for tracked files. Things that do NOT
+sync via git, by design:
 
-If you hit `invalid_client` during sign-in: the OAuth secret restored in
-Step 2 doesn't match what Google Cloud Console has. Re-copy from
-password manager.
-
----
-
-## 8. Smoke-verify end-to-end
-
-1. In EQ, run `/outputfile inventory` and `/outputfile spellbook`.
-2. Watch the tray icon — should briefly animate, then `_status` cell in the shared workbook updates with your latest write timestamp.
-3. Open the shared workbook; your `inv:<CharName>` tab should have the new rows.
-4. Trigger an Apps Script refresh (`Extensions → Apps Script → run refreshAll`, or wait for the time-driven trigger). The `view` and `gear_check` consolidated tabs should reflect your character.
-
-If anything fails, [docs/troubleshooting.md](./troubleshooting.md) covers
-the top symptoms. The `_audit` and `_status` tabs in the workbook are the
-first places to look.
+- Claude auto-memory (see Sync caveat in §2).
+- `.claude/settings.local.json` (per-machine permissions).
+- The unredacted `oauth-config.json` (skip-worktree on both PCs).
+- Windows DPAPI OAuth refresh tokens (per-PC by Windows design).
+- Built artifacts: `dist/`, `squirebot.exe`, `node_modules/`.
 
 ---
 
-## 9. Optional housekeeping
+## 9. When you return to the primary PC
 
-- **Move scheduled routines off the old PC.** If you had GSD/Claude Code routines (e.g. `trig_01...` from the v1.0 milestone), they were running on the old machine's daemon and will not auto-migrate. Use `/schedule list` to see what was scheduled; re-create what's still relevant.
-- **Old PC decommission:** after you confirm the new machine writes successfully to the shared sheet, uninstall the watcher from the old PC via Settings → Apps. The token in DPAPI will be orphaned but not security-critical — Google will eventually expire the refresh token.
-- **Re-enable `.gitignore` hygiene:** since `.planning/` is now tracked, the watcher's `WATCHER_MAX_SCHEMA_VERSION` workflow and the GSD phase artifacts will go into git from now on. Be conscious about what gets committed — phase work that produces secrets (new OAuth flows, API keys) should still be redacted before commit.
+Temporary-PC scenario:
+
+1. On the secondary PC, push any work-in-progress branches (or commit + push to `master` if you've been working there).
+2. On the primary PC, `git pull`.
+3. If you accumulated useful new Claude memory entries on the secondary PC, copy them from `~/.claude/projects/<...>/memory/*.md` over to the primary PC's same directory (manual merge — both PCs may have edited `MEMORY.md`).
+4. If you used `clasp push` from the secondary PC, no action needed — the Apps Script container project is the source of truth.
 
 ---
 
 ## What you do NOT need to recreate
 
 These are baked into the repo or already provisioned in the cloud and
-will Just Work as soon as Steps 0–5 are done:
+will Just Work as soon as Steps 0–4 are done:
 
 - Google Cloud Console project + OAuth consent screen (in PRODUCTION since 2026-05-01).
 - The shared workbook + its container-bound Apps Script (clasp `scriptId` is in the repo).

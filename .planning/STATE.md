@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-29T21:13:00.000Z"
-last_activity: 2026-05-29 -- Plan 11-01 complete (PocketBase spike -> HAND-ROLLED verdict)
+last_updated: "2026-05-29T21:33:12.000Z"
+last_activity: 2026-05-29 -- Plan 11-02 complete (goose schema + modernc DB-open + NewTestDB)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 1
-  percent: 14
+  completed_plans: 2
+  percent: 29
 ---
 
 # State: SquireBot
@@ -30,9 +30,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 ## Current Position
 
 Phase: 11 — Backend Foundation + Ingest API (in progress)
-Plan: 11-01 complete (1/7) → next 11-02 (goose schema)
-Status: Executing — D-01 spike resolved (HAND-ROLLED Go fallback); 11-02/11-05 unblocked
-Last activity: 2026-05-29 -- Plan 11-01 complete (PocketBase spike → HAND-ROLLED verdict)
+Plan: 11-02 complete (2/7) → next 11-03 (parser port + atomic replace tx)
+Status: Executing — BACKEND-02 done (goose schema + modernc DB-open + NewTestDB); Wave-3 (11-03/04/05) unblocked
+Last activity: 2026-05-29 -- Plan 11-02 complete (goose schema + modernc DB-open + NewTestDB)
 
 ### v2.0 Phase Plan (2026-05-28)
 
@@ -40,7 +40,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 
 | Phase | Name | Requirements | Stack | Depends on | Status |
 |-------|------|--------------|-------|-----------|--------|
-| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | 🚧 In progress (1/7; 11-01 spike → HAND-ROLLED verdict) |
+| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | 🚧 In progress (2/7; 11-02 goose schema + modernc DB done, BACKEND-02) |
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | Not started |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | Not started |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + TanStack Table + Tailwind; Go read API | P11 (read API) + P12 (data) | Not started |
@@ -121,6 +121,8 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Last Session Summary
 
+**2026-05-29 (Plan 11-02 executed — goose schema + modernc DB-open + NewTestDB, BACKEND-02):** Built the verdict-agnostic SQLite persistence foundation. Created `internal/backendsrv/migrations/00001_init.sql` (forward-only goose migration — all ten D-13 tables: `owner`/`character` split with FK + `name UNIQUE COLLATE NOCASE`, `inventory_item`/`spellbook_entry` with `ON DELETE CASCADE`, `guild_code`, and the five EMPTY dimension tables, copied verbatim from RESEARCH §"Migration SQL Sketch") + `embed.go` (`//go:embed *.sql` + `goose.SetDialect("sqlite3")` + `goose.Up`, idempotent). Created `store/db.go` (`Open`/`DSN` on the modernc `"sqlite"` driver with the RESEARCH Pattern 5 DSN — WAL/busy_timeout(5000)/foreign_keys(ON)/synchronous(NORMAL)/_txlock=immediate — + `SetMaxOpenConns(1)` single-writer) and `store/testhelper.go` (`NewTestDB(t)` shared temp-DB fixture: `Open` + `goose.Up`, in a non-`_test.go` file so 11-03/04/05 can import it). Six tests pass (foreign_keys=1 on a fresh conn; all 10 tables created; goose.Up idempotent on re-run; 5 dimension tables empty); `go build ./...`, `go vet ./...` clean; `CGO_ENABLED=0` builds on host + `linux/amd64` (pure-Go modernc, no cgo). Task 2 followed TDD RED→GREEN. 3 atomic commits (`c262816` feat migration, `3117a1a` test RED, `165582a` feat GREEN). **No deviations.** `go mod tidy` promoted `modernc.org/sqlite` + `goose/v3` to direct deps (and reclassified the pre-existing spike's `pocketbase` dep to direct — removed in 11-05 as planned, not touched here). Wave-3 (11-03 store tx / 11-04 auth store / 11-05 ingest+HTTP) unblocked.
+
 **2026-05-29 (Plan 11-01 executed — PocketBase spike):** Ran the time-boxed D-01 PocketBase-as-framework spike (the gating plan of Phase 11). Pinned `github.com/pocketbase/pocketbase@v0.39.0`, confirming it pulls the same no-cgo `modernc.org/sqlite v1.51.0` the hand-rolled fallback uses (the headline RESEARCH finding, now empirical). A throwaway harness (`spike/pocketbase/main.go`) exercised all four probes with recorded PASS evidence: (a) 5 raw-DDL tables coexist with PB system tables; (b) custom `crypto/subtle` bearer guard → 401 no/bad token, 200 valid, with idempotent DELETE+INSERT atomic replace in `RunInTransaction`; (c) `*/1 * * * *` cron fired at the minute boundary while serving; (d) `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` produced a 22.9 MB static ELF x86-64 binary from Windows. **VERDICT = HAND-ROLLED Go fallback** (reject PocketBase): the locked design bypasses PB's auth-record + collection models, so its admin-UI/auto-REST/Discord-OAuth2 leverage is unused — not worth a pre-1.0 framework + migration tax. Verdict recorded in `11-01-SUMMARY.md` and appended to `11-CONTEXT.md`. 3 atomic commits (`b894008` feat, `adeaead` chore, `b797c64` docs). 11-02 (verdict-agnostic) and 11-05 (now `net/http` ServeMux + `time.Ticker`; removes the PB dep + spike tree) unblocked.
 
 **2026-05-28 (v2.0 ROADMAP created):** Roadmapper transformed the 26 v2.0 requirements into a 6-phase structure (Phases 11–16), accepting REQUIREMENTS.md's provisional A–F mapping unchanged (no concrete coverage problem found). Coverage validated 26/26 (P11=5, P12=2, P13=4, P14=6, P15=5, P16=4); no orphans, no duplicates. Dependencies set: P11 has none; P12→P11; P13→P11; P14→P11+P12; P15→P14+P11; P16→P13+P14+P15+P12. Each phase got 2–5 observable success criteria. Honored the locked stack (Oracle Always Free + SQLite + goose; SvelteKit; Discord OAuth2; bearer token) over the research docs' Hetzner+Postgres recommendation, with an explicit "locked overrides research" note in ROADMAP. Front-loaded the ingest path (P11 + P13 restore data flow before the polished P14 frontend). Surfaced the optional PocketBase spike as a P11 decision note. Wrote `.planning/ROADMAP.md` (v2.0 section + Phase Details + progress tables + backlog re-annotated for Sheet-mooting), finalized `.planning/REQUIREMENTS.md` traceability (Phase column finalized), and reset this STATE.md to the v2.0 phase plan (replacing the stale v1.0.2 phase-plan content). Phase numbering starts at 11 (Phase dirs 09+10 exist on disk from the superseded v1.0.2 binary; never reuse 9/10). *(2026-05-29: backend host later switched Oracle → Hetzner — see Phase 11 CONTEXT D-12; the "$0 backend / ~$12/yr total" premise this entry recorded is retired in favour of ~$67/yr.)*
@@ -141,7 +143,7 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Next Action
 
-`/clear` then `/gsd-execute-phase 11` — continue Phase 11 at **Plan 11-02** (goose schema + `00001_init.sql` + modernc DB-open + temp-DB test helper, BACKEND-02). The D-01 spike (11-01) is complete with verdict **HAND-ROLLED Go fallback**, so all downstream plans use stdlib `net/http`/`modernc`/`goose` shapes (NOT PocketBase). 11-05 carries two cleanup chores: `go mod tidy` after deleting `spike/pocketbase/`, and remove the `pocketbase` dependency. Optionally `/gsd-verify-work 11` first to verify the spike.
+`/clear` then `/gsd-execute-phase 11` — continue Phase 11 at **Plan 11-03** (parser port to UTF-8 `content` per A1 + atomic full-snapshot replace `*sql.Tx` + first-sighting bind / cross-owner reject, BACKEND-03). 11-02 (BACKEND-02) is complete: `store.Open`/`store.DSN`/`store.NewTestDB` + `migrations.RunMigrations` are exported and ready for the Wave-3 plans to build on. All downstream plans use stdlib `net/http`/`modernc`/`goose` shapes (NOT PocketBase, per the 11-01 HAND-ROLLED verdict). 11-05 still carries two cleanup chores: delete `spike/pocketbase/` + remove the `pocketbase` dependency, then `go mod tidy`. Optionally `/gsd-verify-work 11` to verify 11-01/11-02.
 
 ---
 

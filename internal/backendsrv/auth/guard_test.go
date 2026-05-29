@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"go/parser"
+	"go/token"
 	"os"
 	"strings"
 	"testing"
@@ -100,8 +102,11 @@ func TestResolveToken_ReturnsMintingOwner(t *testing.T) {
 // TestResolveToken_UsesConstantTimeCompare is a structural guard (timing is not
 // deterministically unit-testable): the source MUST use
 // subtle.ConstantTimeCompare, MUST filter to active rows (disabled_at IS NULL),
-// MUST hash the presented code (sha256.Sum256), and MUST NOT use PocketBase's
-// apis.RequireAuth (guild codes are opaque static tokens, not PB auth records).
+// MUST hash the presented code (sha256.Sum256), and the package MUST NOT import
+// PocketBase's apis (guild codes are opaque static tokens, not PB auth records —
+// so apis.RequireAuth is never used). The import check is parsed from the AST so
+// a comment that merely NAMES apis.RequireAuth (to document that we avoid it)
+// does not trip the assertion — only a real dependency would.
 func TestResolveToken_UsesConstantTimeCompare(t *testing.T) {
 	src, err := os.ReadFile("guard.go")
 	if err != nil {
@@ -117,7 +122,18 @@ func TestResolveToken_UsesConstantTimeCompare(t *testing.T) {
 			t.Errorf("guard.go must contain %q (security control)", want)
 		}
 	}
-	if strings.Contains(s, "apis.RequireAuth") {
-		t.Error("guard.go must NOT use apis.RequireAuth — guild codes are opaque static tokens, not PB auth records")
+
+	// Parse the file and assert no PocketBase import path appears — robust
+	// against the guard's own doc comment, which intentionally references
+	// apis.RequireAuth to explain what it deliberately does NOT use.
+	f, err := parser.ParseFile(token.NewFileSet(), "guard.go", src, parser.ImportsOnly)
+	if err != nil {
+		t.Fatalf("parse guard.go imports: %v", err)
+	}
+	for _, imp := range f.Imports {
+		path := strings.Trim(imp.Path.Value, `"`)
+		if strings.Contains(path, "pocketbase") {
+			t.Errorf("guard.go must NOT import PocketBase (%q) — guild codes are opaque static tokens, not PB auth records", path)
+		}
 	}
 }

@@ -14,30 +14,34 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **What's working end-to-end (verified):** Installer → OAuth → watcher → inv/spell landing tabs → daily PigParse + weekly wiki enrichment → consolidated `view` + `gear_check` + `spell_check` + `bank` tabs with cell-note tooltips and conditional Last-Synced formatting → cross-character search sidebar (recent-3 MRU now durable per-user) → code-enforced officer-only eviction sidebar with admin-management UX + owner-floor lockout protection → 30-day grace + lazy archive → text-only Pages onboarding site → installer cleanly upgrades over a running watcher (NSIS pre-install shim). All cumulative tests pass (336/336 vitest, full Go test suite). Schema at `_meta.schema_version = 3`; watcher's `WatcherMaxSchemaVersion = 3` (untouched by v1.0.1); ErrSchemaTooNew startup gate verified.
 
-**Current milestone: v1.0.2 Robustness Polish** (started 2026-05-12) — closes 4 watcher robustness gaps surfaced by v1.0.1 Phase 6 UAT + 2 test-quality items from v1.0.1 Phase 8 review. No new user-facing features, no schema change, no third-party gating. See `## Current Milestone` below for scope.
+**Current milestone: v2.0 "Off Google" — Website Frontend** (started 2026-05-28) — replaces the Google Sheet (UI + data store) with a self-hosted Go + SQLite backend + static web frontend, eliminating the Google OAuth dependency. v1.0.2 Robustness Polish shipped as binary tag `v1.0.2` (2026-05-13) but its milestone close was superseded by this pivot. See `## Current Milestone` below for scope.
 
-## Current Milestone: v1.0.2 Robustness Polish
+## Current Milestone: v2.0 "Off Google" — Website Frontend
 
-**Goal:** Close 4 v1.0.1-UAT-surfaced robustness gaps in the Go watcher + 2 test-quality items in the apps-script suite — no new user-facing features, no schema change, no third-party gating.
+**Goal:** Replace the shared Google Sheet (both the UI *and* the data store) with a self-hosted Go + SQLite backend and a static web frontend — permanently eliminating the Google OAuth dependency that currently blocks the guild.
 
-**Target items (6, all from `.planning/ROADMAP.md` § Backlog):**
+**Why now:** Google's brand-verification gate rejected the OAuth client (2026-05-15: *"home page not registered to you"* — `github.io` can't satisfy it), walling off all ~12 guildie watchers. Rather than rent a domain just to placate Google, v2.0 removes Google from the system entirely. Full research: `.planning/explorations/website-milestone/SCOPE.md` + 4 findings docs.
 
-*Go / watcher / installer:*
-- 999.13 (AUTH-07): Reauthorize tray item unhides on boot-time `invalid_grant` (extends v1.0 AUTH-05 which only covered running-state revocation)
-- 999.14 (OPS-06): Tray controller calls queued until `OnReady` fires (or RunApp retry on fast-fail path) — closes pre-Ready no-op trap
-- 999.15 (CONFIG-01): Strip leading UTF-8 BOM in `internal/config/load.go` before `json.Unmarshal` — closes Notepad/PowerShell hand-edit foot-gun
-- 999.16 (OPS-07): Either `windows.FreeConsole()` early in `cmd/squirebot/main.go`, OR document `Start-Process` requirement prominently — closes foreground-shell-close silent death
+**Target features (Phases 11–16):**
+- **P11 — Backend foundation + ingest API:** Oracle Cloud Always Free (ARM) box + Caddy auto-HTTPS; SQLite schema with `goose` migrations; per-guildie bearer-token auth; the upload-receiving endpoint. *Front-loaded so guild data flows again ASAP.*
+- **P12 — Enrichment migration:** PigParse daily + P1999 wiki weekly → in-process scheduled jobs (parsers port near-verbatim; `politeFetch` controls carry over).
+- **P13 — Watcher re-target:** swap the Sheets client for an `internal/backend` HTTP client; delete the OAuth/PKCE/Sheets/Drive-Picker machinery (~2.5–3k LOC); "paste your guild code" onboarding shipped via the existing auto-updater.
+- **P14 — Web frontend:** SvelteKit static app; the 4 views (`view`/`gear_check`/`spell_check`/`bank`) as a reusable data grid; client-side search + "did you mean?"; HTML tooltips; EQ theming (builds on `docs/design/eq-aesthetic-theme.md`).
+- **P15 — Admin web forms + login:** Discord OAuth2 login (gated on guild Discord membership); eviction / bank-coin / admin-management as web forms.
+- **P16 — Cutover:** shadow-mode soak (backend runs alongside the live sheet ~1–2 wk) → one coordinated watcher self-update flip → decommission the sheet.
 
-*Apps-script / tests:*
-- 999.17 (TEST-03): Admin-Mgmt sidebar inline-JS test coverage (extends v1.0.1 TEST-02 sidebar coverage to 5/5 with inline-JS — currently 4/5 inline-JS + trigger-call only for Admin-Mgmt)
-- 999.18 (TEST-04): Phase 8 advisory test-quality fixes (`mountSidebar` realm leak, weak assertions, leaked pending mock call — 0 critical + 4 warning + 6 info per `08-REVIEW.md`)
+**Stack (LOCKED + costed, ≈ $12/yr total):** Oracle Cloud Always Free Ampere A1 (ARM64) backend ($0) · SQLite ($0) · SvelteKit static on Cloudflare/GitHub Pages ($0) · Discord OAuth2 website login ($0) · per-guildie opaque bearer token for watcher↔backend ($0) · ~$12/yr **website-only** domain (no Google verification needed). Azure was rejected — the existing `SquireBot` subscription is Pay-As-You-Go (~$160–250/yr for an always-on VM).
+
+**Scope notes:**
+- v1.0.2's binary shipped (tag `v1.0.2`, 2026-05-13) but its milestone close is **superseded** by this pivot — the sheet it targeted is being replaced. The guild stays dark on the sheet during the ~4–7 wk build, hence P11 (ingest) first.
+- Pre-pays v2 groundwork (Wantlist + Discord pinger): Discord login + per-user identity capture arrive here.
 
 **Out of scope this milestone (explicitly deferred):**
-- SignPath Foundation OSS approval (999.9) — third-party-gated; lands as a hotfix when approved, NOT as a v1.0.2 phase
-- All v1.1 polish candidates (999.1 bank-coin permission lock, 999.2 theme picker tile UI, 999.7 inline SIDEBAR_BODY extraction, 999.11 verification doctrine decision)
-- v2 Wantlist + Discord pinger (999.12 / WANT-01..08; Raid Alliance Discord bot invites still unnegotiated)
+- v2 Wantlist + EC/WTS Discord pinger (WANT-01..08) — still needs Raid Alliance bot invites; this milestone pre-pays the Discord-identity prerequisite.
+- SignPath OSS / installer code-signing polish — orthogonal to the backend swap.
+- Remaining v1.1 Sheet-side polish (theme picker tile UI, etc.) — the Sheet is being retired.
 
-**Schema impact:** None. `_meta.schema_version` stays at 3. `WatcherMaxSchemaVersion` stays at 3 (the watcher binary rebuild in this milestone is for new robustness fixes, not for schema reasons — same shape as v1.0.1's Phase 6).
+**Schema impact:** The old `_meta.schema_version` ↔ `WatcherMaxSchemaVersion` handshake **retires** in favour of forward-only DB migrations (`goose`) + an API version. The watcher's Sheets schema gate is removed in P13.
 
 ## Requirements
 
@@ -77,16 +81,18 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 
 ### Active
 
-<!-- v1.0.2 Robustness Polish scope. See .planning/REQUIREMENTS.md for full REQ-ID list. -->
+<!-- v2.0 "Off Google" scope. REQ-IDs defined in .planning/REQUIREMENTS.md (this milestone); roadmap Phases 11–16. -->
 
-**v1.0.2 — Robustness Polish (in progress)**
+**v2.0 — Off Google / Website Frontend (in progress)** — requirements in `.planning/REQUIREMENTS.md`.
 
-- [ ] Boot-time invalid_grant Reauthorize recovery (AUTH-07)
-- [ ] Tray controller pre-Ready call queue / RunApp retry (OPS-06)
-- [ ] UTF-8 BOM strip in config loader (CONFIG-01)
-- [ ] Foreground-shell-close silent death fix (OPS-07)
-- [ ] Admin-Mgmt sidebar inline-JS test coverage (TEST-03)
-- [ ] Phase 8 advisory test-quality fixes (TEST-04)
+**v1.0.2 — Robustness Polish (binary shipped `v1.0.2` 2026-05-13; milestone close superseded by v2.0):**
+
+- [x] Boot-time invalid_grant Reauthorize recovery (AUTH-07) — in binary; live UAT was blocked by Google verification, then superseded
+- [x] Tray controller pre-Ready call queue / RunApp retry (OPS-06) — in binary
+- [x] UTF-8 BOM strip in config loader (CONFIG-01) — in binary
+- [x] Foreground-shell-close silent death fix (OPS-07) — in binary
+- [x] Admin-Mgmt sidebar inline-JS test coverage (TEST-03) — shipped (dev-workbook smoke passed)
+- [x] Phase 8 advisory test-quality fixes (TEST-04) — shipped
 
 ### v1.0 Partials / Waivers (user-authorized; still tracked post-v1.0.1)
 
@@ -139,7 +145,7 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 
 - **Tech stack (LOCKED):** Go 1.24 single-binary Windows watcher with `fsnotify` v1.7+ / `wincred` / `lumberjack` / `fyne.io/systray` / `minio/selfupdate` / NSIS 3.10+ installer. Apps Script V8 (TypeScript via clasp v2.4 — NOT 3.x — + esbuild 0.20+). PigParse REST + MediaWiki API (never HTML scraping).
 - **Auth (LOCKED):** OAuth 2.0 loopback PKCE with `client_secret` per Google's contract; `drive.file` non-sensitive scope only; refresh tokens in Windows Credential Manager via DPAPI; Production consent screen (Testing mode silently expires refresh tokens every 7 days).
-- **Backend (LOCKED):** Single shared Google Sheet workbook per guild. No separate server, database, or web app in v1. (v2's Discord bot would be the first piece of always-on infrastructure.)
+- **Backend (CHANGING in v2.0):** v1.x used a single shared Google Sheet workbook per guild — no separate server, database, or web app. **v2.0 "Off Google" replaces this** with a self-hosted Go + SQLite backend on Oracle Cloud Always Free (ARM) + Caddy + a static web frontend, retiring the Google Sheet and the Google OAuth dependency entirely. See `## Current Milestone`.
 - **Schema evolution (LOCKED):** Extend-only — add columns at right edge, add tabs, add `_meta` rows. Breaking changes require `_meta.schema_version` bump + idempotent migration + watcher's `WatcherMaxSchemaVersion` check + script's `SCRIPT_MIN_SCHEMA_VERSION` check. v1.0 ships at v3.
 - **View architecture (LOCKED):** Consolidated filterable mega-tabs (`view`, `gear_check`, `spell_check`, `bank`) with leading `Char` column. **Never** per-character view tabs — would breach Google's 200-tab/workbook limit at guild scale.
 - **Code signing:** Default = unsigned + walkthrough; SignPath Foundation OSS approval submitted (in flight). EV certs no longer grant instant SmartScreen reputation (Microsoft removed perk March 2024) so EV is not the path.
@@ -188,4 +194,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-12 — v1.0.2 Robustness Polish started.*
+*Last updated: 2026-05-28 — v2.0 "Off Google" Website Frontend milestone opened.*

@@ -1,42 +1,42 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0.2
-milestone_name: — Robustness Polish
-status: milestone_executed_uat_blocked
-last_updated: "2026-05-13T07:30:00.000Z"
-last_activity: "2026-05-13 — Phase 10 (Apps Script Test Quality) SHIPPED. All 3 plans landed: 10-01 closed 4 WR-* warnings from 08-REVIEW (mountSidebar IIFE wrap + 3 assertion/cleanup fixes); 10-02 added Admin-Mgmt inline-JS test (TEST-03; 5/5 sidebars symmetric); 10-03 verified all CI gates green (337 passed + 1 skipped + 0 failed / 338 total) then clasp-pushed dist/Code.js (179098 bytes) to dev workbook; user confirmed 5/5 sidebar smoke clean. One deferral: 999.30 (searchIndex Test 4 didYouMean contract bug exposed by WR-03 unswallow; pre-existing latent; converted to it.skip pending v1.1 fix). 6 info-level findings IN-01..06 deferred to v1.1 backlog as 999.24..999.29 per CONTEXT D-01. v1.0.2 milestone execution complete (8/8 plans across Phases 9+10); milestone close blocked on external dependency 999.19 (Google OAuth brand verification approval, ETA 3–5 business days)."
+milestone: v2.0
+milestone_name: Off Google — Website Frontend
+status: planning
+last_updated: "2026-05-29T02:04:56.119Z"
+last_activity: 2026-05-29
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 8
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-05-12 (v1.0.2 Robustness Polish opened — 6 backlog items, no schema change)
+**Last updated:** 2026-05-28 (v2.0 "Off Google" Website Frontend opened — Phases 11–16)
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-05-12 with v1.0.2 milestone scope)
+See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
-- **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.
-- **Current focus:** Milestone v1.0.2 Robustness Polish — close 4 watcher robustness gaps (AUTH-07 boot-time Reauthorize, OPS-06 tray controller queueing, CONFIG-01 BOM strip, OPS-07 console-detach) + 2 apps-script test-quality items (TEST-03 Admin-Mgmt inline-JS, TEST-04 Phase 8 advisory fixes). Patch-shaped milestone; no schema bump; no new user-facing features.
+- **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet — now delivered via a self-hosted website instead of the Google Sheet.
+- **Current focus:** Milestone v2.0 "Off Google" — replace the Google Sheet (UI + data store) with a self-hosted Go + SQLite backend (Oracle Cloud Always Free, ARM) + static web frontend (SvelteKit), eliminating the Google OAuth dependency. Phases 11–16. ≈ $12/yr (domain only).
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: v1.0.2 MILESTONE EXECUTION COMPLETE 2026-05-13 (both Phase 9 and Phase 10 shipped). Milestone close blocked on external dependency 999.19 (Google OAuth brand verification approval, ETA 3–5 business days).
-Plan: Phase 9 = 5/5 shipped (v1.0.2 binary release tag live); Phase 10 = 3/3 shipped (apps-script bundle clasp-pushed to dev workbook; 5/5 sidebar smoke clean). 8/8 total plans landed.
-Status: Milestone executed; HUMAN-UAT for Phase 9 + on-VM smoke for Phase 9 fixes both blocked on 999.19. Phase 10 has no human UAT required (test-only phase; dev-workbook smoke already passed).
-Last activity: 2026-05-13 — Phase 9 shipped + closed out. v1.0.2 binary live at github.com/boejowen/SquireBot/releases/tag/v1.0.2. OAuth brand-verification mid-session incident handled: privacy policy authored at boejowen.github.io/SquireBot/privacy-policy/, Search Console ownership verified, resubmitted to Google. Five new backlog items (999.19 brand verification tracking, 999.20 WR-01 gofmt, 999.21 WR-02 FreeConsole doc/impl, 999.22 SemVer auto-update, 999.23 graceful policy-block tray UX).
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-29 — Milestone v2.0 started
 
-### Active Blocker: 999.19 Google brand verification
+### Superseded: 999.19 Google brand verification
 
-External-only dependency. Affects all SquireBot watchers in the field. Existing access tokens (~1h TTL) carry the watchers through their current sessions, then auth wall lands. Will unblock automatically when Google approves. Full incident trail at `.planning/debug/v1-0-2-oauth-invalid-client-incident.md`. Anti-pattern note for future incidents: check OAuth consent screen Verification status FIRST when seeing `Access blocked: Authorization Error / Error 400: invalid_request`; the multiple-secrets / loopback-IP / redirect-URI angles are red herrings.
+Google REJECTED brand verification 2026-05-15 ("home page not registered to you" — `github.io` can't satisfy it), walling off all ~12 guildie watchers. **v2.0 "Off Google" supersedes this** by removing Google entirely rather than renting a domain to placate it. The guild stays dark on the sheet during the v2.0 build (P11 ingest is front-loaded to restore data flow first). Full incident trail at `.planning/debug/v1-0-2-oauth-invalid-client-incident.md`. Anti-pattern note for future Google-OAuth incidents: check OAuth consent screen Verification status FIRST when seeing `Access blocked / Error 400: invalid_request`; the multiple-secrets / loopback-IP / redirect-URI angles are red herrings.
 
 ### v1.0.2 Phase Plan (2026-05-12)
 

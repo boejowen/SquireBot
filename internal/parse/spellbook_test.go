@@ -2,8 +2,6 @@ package parse
 
 import (
 	"bytes"
-	"os"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -67,46 +65,11 @@ func TestParseSpellbook_NoHeader_AllKept(t *testing.T) {
 	}
 }
 
-// Test 5: Slampeach fixture round-trips with exactly 49 unique (Level, Name) rows
-// and every Level is an integer in [1, 60]. This is the load-bearing test that
-// validates the parser against a real EQ-produced spellbook.
-func TestParseSpellbook_SlampeachFixture(t *testing.T) {
-	f, err := os.Open("testdata/Slampeach-Spellbook.txt")
-	if err != nil {
-		t.Fatalf("open testdata: %v", err)
-	}
-	defer f.Close()
-	rows, err := ParseSpellbook(f)
-	if err != nil {
-		t.Fatalf("ParseSpellbook: %v", err)
-	}
-	if len(rows) != 49 {
-		t.Fatalf("expected 49 rows from Slampeach fixture, got %d", len(rows))
-	}
-	seen := map[string]bool{}
-	for i, row := range rows {
-		if len(row) != 2 {
-			t.Errorf("row %d: expected 2 columns, got %d", i, len(row))
-			continue
-		}
-		n, err := strconv.Atoi(row[0])
-		if err != nil {
-			t.Errorf("row %d: Level %q is not an integer", i, row[0])
-			continue
-		}
-		if n < 1 || n > 60 {
-			t.Errorf("row %d: Level %d out of [1,60]", i, n)
-		}
-		if row[1] == "" {
-			t.Errorf("row %d: Name is empty", i)
-		}
-		key := row[0] + "|" + row[1]
-		if seen[key] {
-			t.Errorf("duplicate (Level, Name) pair: %s", key)
-		}
-		seen[key] = true
-	}
-}
+// NOTE: TestParseSpellbook_SlampeachFixture (the real on-disk CP1252 fixture)
+// was re-homed to reader_test.go (wrapped in CP1252Reader) when encoding
+// contract A1 moved the charmap decode OFF the shared ParseSpellbook entry —
+// see TestParseSpellbook_CP1252Reader_SlampeachFixture. The UTF-8/ASCII-clean
+// spellbook cases below stay here unchanged.
 
 // Test 6: Row with non-integer Level is silently skipped (mirrors inventory's
 // row-with-bad-ID behavior).
@@ -143,28 +106,10 @@ func TestParseSpellbook_ShortRowSkipped(t *testing.T) {
 	}
 }
 
-// Test 8: CP-1252 byte 0x92 in Name (curly apostrophe) decodes to UTF-8 U+2019.
-// Smoke-test for the charmap.Windows1252 decoder; mirrors inventory parser's
-// CP1252 round-trip (RESEARCH.md §9.2).
-func TestParseSpellbook_CP1252CurlyApostrophe(t *testing.T) {
-	// "Tashan\x92s Cat" in CP1252 → "Tashan’s Cat" in UTF-8.
-	in := []byte("9\tTashan\x92s Cat\n")
-	rows, err := ParseSpellbook(bytes.NewReader(in))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	got := rows[0][1]
-	want := "Tashan’s Cat" // U+2019 RIGHT SINGLE QUOTATION MARK
-	if got != want {
-		t.Errorf("CP1252 decode mismatch:\n  got:  %q (% x)\n  want: %q (% x)", got, []byte(got), want, []byte(want))
-	}
-	if !bytes.Contains([]byte(got), []byte{0xE2, 0x80, 0x99}) {
-		t.Errorf("expected UTF-8 bytes E2 80 99 (U+2019) in Name; got bytes % x", []byte(got))
-	}
-}
+// NOTE: TestParseSpellbook_CP1252CurlyApostrophe (raw \x92 → U+2019) was
+// re-homed to reader_test.go (wrapped in CP1252Reader) — see
+// TestParseSpellbook_CP1252Reader_DecodesCurlyApostrophe. The bare
+// ParseSpellbook now trusts UTF-8 input (encoding contract A1).
 
 // Test 9: Trailing extra columns are tolerated and truncated to 2.
 func TestParseSpellbook_ExtraColumnsTruncated(t *testing.T) {

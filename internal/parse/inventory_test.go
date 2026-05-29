@@ -99,51 +99,11 @@ func TestParse_FourColumnsSkipped(t *testing.T) {
 	}
 }
 
-// Test 7: CP1252 byte 0x92 in Name field round-trips to UTF-8 right single quotation mark U+2019.
-// See RESEARCH.md §9.2 Pitfall: UTF-8 decoding produces mojibake; charmap.Windows1252 decodes correctly.
-func TestParse_CP1252CurlyApostrophe(t *testing.T) {
-	// "Brell\x92s Trinket" in CP1252 → "Brell’s Trinket" in UTF-8.
-	in := []byte("General1\tBrell\x92s Trinket\t13128\t1\t0\n")
-	rows, err := Parse(bytes.NewReader(in))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	got := rows[0][1]
-	want := "Brell’s Trinket" // U+2019 RIGHT SINGLE QUOTATION MARK
-	if got != want {
-		t.Errorf("CP1252 decode mismatch:\n  got:  %q (% x)\n  want: %q (% x)", got, []byte(got), want, []byte(want))
-	}
-	// Also explicitly assert the UTF-8 byte sequence E2 80 99 is present.
-	if !bytes.Contains([]byte(got), []byte{0xE2, 0x80, 0x99}) {
-		t.Errorf("expected UTF-8 bytes E2 80 99 (U+2019) in Name; got bytes % x", []byte(got))
-	}
-}
-
-// Test 7b (load-bearing supplement): Parse the on-disk CP1252 sample file end-to-end.
-func TestParse_CP1252SampleFile(t *testing.T) {
-	f, err := os.Open("testdata/sample-inventory-with-cp1252.txt")
-	if err != nil {
-		t.Fatalf("open testdata: %v", err)
-	}
-	defer f.Close()
-	rows, err := Parse(f)
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	if len(rows) != 5 {
-		t.Fatalf("expected 5 rows from CP1252 sample (header dropped), got %d", len(rows))
-	}
-	// Row 0 = "Brell’s Trinket"; row 2 = "Tashan’s Lance".
-	if !strings.Contains(rows[0][1], "’") {
-		t.Errorf("row 0 Name should contain U+2019, got %q (% x)", rows[0][1], []byte(rows[0][1]))
-	}
-	if !strings.Contains(rows[2][1], "’") {
-		t.Errorf("row 2 Name should contain U+2019, got %q (% x)", rows[2][1], []byte(rows[2][1]))
-	}
-}
+// NOTE: The two CP1252-decode tests that used to live here
+// (TestParse_CP1252CurlyApostrophe and TestParse_CP1252SampleFile) were re-homed
+// to reader_test.go (wrapping the reader in CP1252Reader) when encoding contract
+// A1 moved the charmap decode OFF the shared Parse entry. The bare Parse now
+// trusts UTF-8 input; see TestParse_UTF8Content_NoDoubleDecode in reader_test.go.
 
 // Test 8: 250-row sample → exactly 250 rows.
 func TestParse_250RowSample(t *testing.T) {

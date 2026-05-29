@@ -19,7 +19,7 @@
 - [ ] **BACKEND-01**: The backend runs on a self-hosted always-on VPS (currently a Hetzner Cloud VPS, US) with Caddy auto-HTTPS, reachable at the website domain over TLS. Single Go binary; in-process scheduler for cron jobs.
 - [x] **BACKEND-02**: A SQLite schema with `goose` forward-only migrations models owners, characters, inventory items, spellbook entries, and dimension/enrichment data. `owner` and `character` are separate tables (owner-email change is a one-row update; no first-write-wins conflict logic). ✅ Plan 11-02 (2026-05-29)
 - [x] **BACKEND-03**: An ingest endpoint accepts a watcher's full-snapshot inventory or spellbook upload and atomically replaces that character's rows (mirrors the v1 clear+write contract; never row-diffs). _(Core atomic-replace tx + first-sighting bind delivered + test-proven in 11-03; the `POST /api/v1/ingest` HTTP surface that composes them wires in 11-05.)_
-- [ ] **BACKEND-04**: Each guildie authenticates to the ingest API with an opaque per-guildie bearer token ("guild code"), minted by the maintainer and stored hashed server-side.
+- [x] **BACKEND-04**: Each guildie authenticates to the ingest API with an opaque per-guildie bearer token ("guild code"), minted by the maintainer and stored hashed server-side. _(Mint/revoke CLI logic + `resolveToken` bearer guard delivered + test-proven in 11-04: 32-byte `crypto/rand` token, base64url plaintext shown once, SHA-256 hash-only storage, `crypto/subtle` constant-time compare; the `Authorization: Bearer` HTTP transport + 401-writes-nothing wiring lands in 11-05.)_
 - [ ] **BACKEND-05**: The backend exposes a versioned read API that powers the website's four views (replacing the Sheet's view tabs as the query layer).
 - [ ] **BACKEND-06**: The SQLite database is backed up nightly off-box (rsync or block-volume snapshot), with a documented restore procedure.
 
@@ -86,7 +86,7 @@
 | BACKEND-01 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
 | BACKEND-02 | P11 Backend Foundation + Ingest API | 11-02 | ✅ Complete (2026-05-29) |
 | BACKEND-03 | P11 Backend Foundation + Ingest API | 11-03 (tx + bind); 11-05 (HTTP surface) | ✅ Complete (2026-05-29) |
-| BACKEND-04 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-04 | P11 Backend Foundation + Ingest API | 11-04 (mint/revoke + guard); 11-05 (HTTP transport) | ✅ Complete (2026-05-29) |
 | BACKEND-06 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
 | ENRICH-10 | P12 Enrichment Job Migration | (filled by `/gsd-plan-phase 12`) | Pending |
 | ENRICH-11 | P12 Enrichment Job Migration | (filled by `/gsd-plan-phase 12`) | Pending |

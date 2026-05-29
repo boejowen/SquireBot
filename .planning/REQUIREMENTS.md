@@ -1,68 +1,117 @@
-# Requirements: SquireBot v1.0.2 — Robustness Polish
+# Requirements: SquireBot v2.0 — "Off Google" (Website Frontend)
 
-> v1.0 shipped 2026-05-11 (69 effective requirements; `milestones/v1.0-REQUIREMENTS.md`). v1.0.1 shipped 2026-05-12 (8 requirements; `milestones/v1.0.1-REQUIREMENTS.md`). This file is scoped to v1.0.2 only.
+> v1.0 shipped 2026-05-11 (69 effective requirements; `milestones/v1.0-REQUIREMENTS.md`). v1.0.1 shipped 2026-05-12 (8 requirements; `milestones/v1.0.1-REQUIREMENTS.md`). v1.0.2 shipped as binary `v1.0.2` 2026-05-13 (6 requirements; milestone close superseded by this pivot). This file is scoped to v2.0 only.
 
-**Milestone goal:** Close 4 v1.0.1-UAT-surfaced robustness gaps in the Go watcher + 2 test-quality items in the apps-script suite — no new user-facing features, no schema change, no third-party gating.
+**Milestone goal:** Replace the shared Google Sheet (both UI and data store) with a self-hosted Go + SQLite backend and a static web frontend — permanently eliminating the Google OAuth dependency that currently blocks the guild.
 
-**Schema impact:** None. `_meta.schema_version` stays at 3. `WatcherMaxSchemaVersion` stays at 3. No new `_meta` rows; no migrations.
+**Why now:** Google's brand-verification gate rejected the OAuth client 2026-05-15 ("home page not registered to you" — `github.io` can't satisfy it), walling off all ~12 guildie watchers. v2.0 removes Google from the system entirely rather than renting a domain to placate it. Full research: `.planning/explorations/website-milestone/SCOPE.md` + 4 findings docs.
 
----
+**Stack (LOCKED + costed, ≈ $12/yr total):** Oracle Cloud Always Free Ampere A1 (ARM64) backend ($0) · SQLite ($0) · SvelteKit static on Cloudflare/GitHub Pages ($0) · Discord OAuth2 website login ($0) · per-guildie opaque bearer token for watcher↔backend ($0) · ~$12/yr website-only domain.
 
-## v1.0.2 Requirements
-
-### Recovery & Identity (AUTH-07)
-
-- [ ] **AUTH-07**: When the watcher boots and its refresh token is invalid (`invalid_grant` raised before the first successful Sheets API call), the tray icon turns red AND the Reauthorize menu item is visible from boot, NOT hidden behind a successful first API call. AUTH-05 in v1.0 covered the running-state revocation path (token works at boot, fails later); this requirement extends the same recovery UX to the boot-time path. Surfaced by Phase 6 UAT Finding C, 2026-05-11 (backlog 999.13).
-
-### Tray Controller Robustness (OPS-06, OPS-07)
-
-- [ ] **OPS-06**: Tray controller calls (`SetStatus`, `Show*`, `SetIconHealth`) that fire before the systray `OnReady` callback runs MUST either (a) be queued and replayed in-order once `OnReady` fires, OR (b) be detected by `app.RunApp` and trigger a single retry on the fast-fail path. The fail mode is: when `RunApp` returns early due to wincred-rebuild failure (or any other pre-Ready abort), the tray menu has no working items because every pre-Ready call silently no-op'd, stranding the user at "Initialising…". Wider impact than the v0.2.x T-06-20 "accept" disposition covered. Surfaced by Phase 6 UAT Finding D, 2026-05-11 (backlog 999.14).
-
-- [ ] **OPS-07**: A foreground-launched watcher (started from cmd.exe or PowerShell without `Start-Process`) MUST NOT die silently when the parent shell closes. Acceptance is satisfied by EITHER: (a) `windows.FreeConsole()` called early in `cmd/squirebot/main.go` so the watcher detaches from any inherited console, OR (b) `docs/build-and-install.md` documents the `Start-Process` requirement prominently (above the fold, not in a footnote) with an explanation of why. Discuss-phase chooses the path. Surfaced by Phase 6 UAT Finding H, 2026-05-11 (backlog 999.16).
-
-### Config Loader Robustness (CONFIG-01)
-
-- [ ] **CONFIG-01**: `internal/config/load.go` strips a leading UTF-8 BOM (`\xEF\xBB\xBF`) from the file contents before `json.Unmarshal`. Closes a foot-gun for users who hand-edit `%LOCALAPPDATA%\SquireBot\config.json` with Notepad (writes BOM by default) or PowerShell 5.1 `Set-Content -Encoding utf8` (writes BOM by default). Estimated ≤5 LOC + 1 unit test. Surfaced by Phase 6 UAT Finding F, 2026-05-11 (backlog 999.15).
-
-### Sidebar Test Coverage (TEST-03)
-
-- [ ] **TEST-03**: Admin-Mgmt sidebar (`showAdminMgmtSidebar`) has at least one inline-JS test covering its DOM event handlers + `google.script.run` callback wiring + error-display path — co-located as `apps-script/src/__tests__/showAdminMgmtSidebar.inline.test.ts`, mirroring the 4 inline-JS test files landed in v1.0.1 Plan 08-02. Closes the v1.0.1 TEST-02 deferral note (5/5 sidebars with inline-JS coverage; currently 4 inline-JS + 1 trigger-call-only). Surfaced by Plan 08-02 historical-correction deferral, 2026-05-12 (backlog 999.17).
-
-### Test Quality (TEST-04)
-
-- [ ] **TEST-04**: Phase 8 advisory test-quality findings are addressed: (a) `mountSidebar` JSDOM realm leak (each test creates a new realm but prior tests' DOM may bleed in), (b) weak assertions in 2+ sidebar inline-JS tests upgraded from `toBeTruthy` / `toBeDefined` to specific equality or structural matchers, (c) leaked pending mock call in `searchSidebar.inline.test.ts` cleaned up. 0 critical + 4 warning + 6 info per `.planning/phases/08-test-infra-persistence-docs/08-REVIEW.md`; this requirement covers the 4 warnings, with discuss-phase deciding whether to also fold in the 6 info-level items. Surfaced by Phase 8 code review, 2026-05-12 (backlog 999.18).
+**Architecture impact:** The `_meta.schema_version` ↔ `WatcherMaxSchemaVersion` handshake retires in favour of forward-only DB migrations (`goose`) + an API version. Google's 200-tab limit disappears; the 4 view tabs become SQL/API endpoints; the watcher sheds ~2.5–3k LOC of OAuth/Sheets/Picker code.
 
 ---
 
-## Out of Scope (v1.0.2 — explicitly deferred at milestone open)
+## v2.0 Requirements
+
+### Backend — self-hosted server (BACKEND)
+
+- [ ] **BACKEND-01**: The backend runs on an Oracle Cloud Always Free (Ampere A1, ARM64) instance with Caddy auto-HTTPS, reachable at the website domain over TLS. Single Go binary; in-process scheduler for cron jobs.
+- [ ] **BACKEND-02**: A SQLite schema with `goose` forward-only migrations models owners, characters, inventory items, spellbook entries, and dimension/enrichment data. `owner` and `character` are separate tables (owner-email change is a one-row update; no first-write-wins conflict logic).
+- [ ] **BACKEND-03**: An ingest endpoint accepts a watcher's full-snapshot inventory or spellbook upload and atomically replaces that character's rows (mirrors the v1 clear+write contract; never row-diffs).
+- [ ] **BACKEND-04**: Each guildie authenticates to the ingest API with an opaque per-guildie bearer token ("guild code"), minted by the maintainer and stored hashed server-side.
+- [ ] **BACKEND-05**: The backend exposes a versioned read API that powers the website's four views (replacing the Sheet's view tabs as the query layer).
+- [ ] **BACKEND-06**: The SQLite database is backed up nightly off-box (rsync or block-volume snapshot), with a documented restore procedure.
+
+### Enrichment jobs (ENRICH)
+
+- [ ] **ENRICH-10**: The daily PigParse price pull (server=1=Blue) runs as an in-process scheduled job, reusing the existing parser and `politeFetch` controls (User-Agent, ETag/If-Modified-Since, backoff).
+- [ ] **ENRICH-11**: The weekly P1999 wiki scrape (per-item summaries, per-class spell lists, Velious gear tiers, quest items) runs as an in-process scheduled job with the same politeness controls.
+
+### Watcher re-target (WATCH)
+
+- [ ] **WATCH-08**: The watcher uploads inventory/spellbook snapshots to the backend HTTP API instead of Google Sheets, preserving the 500 ms debounce + always-re-read behavior.
+- [ ] **WATCH-09**: All Google OAuth/PKCE/Sheets/Drive-Picker machinery is removed from the watcher (~2.5–3k LOC: `internal/auth`, `internal/sheet`, `internal/scaffold`, `internal/picker`, most of `internal/wizard`, reauth/propagation probes).
+- [ ] **WATCH-10**: First-run onboarding is "paste your guild code" — the bearer token is stored in Windows Credential Manager (DPAPI); no browser OAuth flow.
+- [ ] **WATCH-11**: Existing guildies receive the re-targeted watcher via the existing GitHub-Releases auto-updater (one manual step: paste guild code).
+
+### Web frontend (WEB)
+
+- [ ] **WEB-01**: A static web frontend renders the four consolidated views (`view`, `gear_check`, `spell_check`, `bank`) with the leading Char column, filterable and sortable (the work the Sheet did for free).
+- [ ] **WEB-02**: `gear_check` and `spell_check` compute and display progression status — gear OK/MISSING/OTHER vs. Velious tiers; spell KNOWN/MISSING — matching the v1 semantics.
+- [ ] **WEB-03**: Cross-character item search with "did you mean?" fuzzy matching (ports the Wagner-Fischer Levenshtein logic), returning results in <2s.
+- [ ] **WEB-04**: Every inventory row shows a per-item tooltip (wiki summary + price + quest info) and a direct wiki link.
+- [ ] **WEB-05**: The site carries an EQ aesthetic theme site-wide, building on `docs/design/eq-aesthetic-theme.md` (now with full CSS freedom vs. the Sheet's cell-styling limits).
+
+### Website login (AUTH)
+
+- [ ] **AUTH-08**: Website visitors sign in with Discord OAuth2, gated on membership in the guild's Discord server (no allowlist upkeep).
+- [ ] **AUTH-09**: Each signed-in user's Discord identity is captured and stored, pre-paying the v2 Wantlist/Discord-pinger prerequisite (per-user Discord identity).
+
+### Admin web forms (ADMIN)
+
+- [ ] **ADMIN-04**: Eviction (30-day grace + archive) is available as an authenticated, officer-only web form (ports v1 eviction enforcement: `guild_admins` gate + owner-floor protection).
+- [ ] **ADMIN-05**: Manual bank-coin entry (platinum/gold/silver/copper) is an authenticated web form (the file format still has no coin data; manual entry remains the only honest path).
+- [ ] **ADMIN-06**: Admin/officer management (the `guild_admins` allowlist + owner-floor lockout protection) is an authenticated web form.
+
+### Cutover & decommission (CUTOVER)
+
+- [ ] **CUTOVER-01**: The backend runs in shadow mode alongside the live Google Sheet for a 1–2 week soak — ingesting real uploads while never writing to the Sheet (cutover cannot corrupt the live product).
+- [ ] **CUTOVER-02**: A one-time backfill imports human-supplied data only (owner/character metadata, bank coin, archive entries); inventory + dimension/enrichment data self-populates from the next upload / next enrichment run.
+- [ ] **CUTOVER-03**: A single coordinated watcher self-update flips ingest from the Sheet to the backend across the guild.
+- [ ] **CUTOVER-04**: After a successful cutover, the Google Sheet, Apps Script project, and Google OAuth client are decommissioned.
+
+---
+
+## Out of Scope (v2.0 — explicitly deferred at milestone open)
 
 | Item | Why deferred |
 |------|--------------|
-| SignPath Foundation OSS signing (999.9) | Third-party Foundation review timeline; lands as a hotfix when approved (NOT a v1.0.2 phase). Would retire INST-05 partial → full. |
-| Bank-coin permission lock (999.1) | v1.1 polish candidate (eviction enforcement was prioritized in v1.0.1; bank-coin remains social-convention-gated). |
-| Polished theme picker tile UI (999.2) | v1.1 polish candidate; aesthetics-only. |
-| Self-service eviction (999.5) | v2; threat-model still open. |
-| Verification doctrine decision (999.11) | Process change; addressed at v1.1 milestone planning. |
-| Inline `SIDEBAR_BODY` → external `.html` refactor (999.7) | Cosmetic refactor; v1.1 polish candidate. |
-| v2 Wantlist + Discord pinger (999.12 / WANT-01..08) | v2; prerequisites still open (Raid Alliance Discord bot invites). |
+| v2 Wantlist + EC/WTS Discord pinger (WANT-01..08) | Still needs Raid Alliance Discord bot invites (unnegotiated). v2.0 pre-pays the per-user Discord-identity prerequisite (AUTH-09) but does not build the pinger. |
+| Unblocking the v1.0.2 Google OAuth client | The guild stays dark on the Sheet during the build; v2.0 replaces the Sheet, so renting a domain to placate Google would be throwaway work. |
+| SignPath OSS / installer code-signing polish | Orthogonal to the backend swap; the watcher binary changes here are for the re-target, not signing. |
+| Remaining v1.1 Sheet-side polish (theme picker tile UI 999.2, inline SIDEBAR_BODY 999.7, etc.) | The Sheet is being retired; Sheet-side polish is wasted effort. |
+| Postgres / managed DB | SQLite fits the tiny data (<100 MB, ~50–150 writes/day); Postgres is needless ops overhead at this scale (SCOPE Open Decision 1). |
+| "Sign in with Google" website login | Re-introduces the exact brand-verification gate v2.0 exists to escape. Discord OAuth2 (gate-free) is the choice; magic-link/GitHub are gate-free fallbacks. |
+| Mobile app | The website is reachable from any browser; native mobile remains unnecessary scope (carried from v1). |
 
 ---
 
 ## Traceability
 
-| REQ-ID | Phase | Plan(s) | Status |
-|--------|-------|---------|--------|
-| AUTH-07 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
-| OPS-06 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
-| OPS-07 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
-| CONFIG-01 | Phase 9 (Watcher Robustness Polish) | (filled by `/gsd-plan-phase 9`) | Pending |
-| TEST-03 | Phase 10 (Apps Script Test Quality) | (filled by `/gsd-plan-phase 10`) | Pending |
-| TEST-04 | Phase 10 (Apps Script Test Quality) | (filled by `/gsd-plan-phase 10`) | Pending |
+| REQ-ID | Phase (provisional) | Plan(s) | Status |
+|--------|---------------------|---------|--------|
+| BACKEND-01 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-02 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-03 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-04 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-06 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
+| ENRICH-10 | P12 Enrichment migration | (filled by `/gsd-plan-phase 12`) | Pending |
+| ENRICH-11 | P12 Enrichment migration | (filled by `/gsd-plan-phase 12`) | Pending |
+| WATCH-08 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
+| WATCH-09 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
+| WATCH-10 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
+| WATCH-11 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
+| BACKEND-05 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-01 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-02 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-03 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-04 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-05 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| AUTH-08 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
+| AUTH-09 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
+| ADMIN-04 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
+| ADMIN-05 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
+| ADMIN-06 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
+| CUTOVER-01 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
+| CUTOVER-02 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
+| CUTOVER-03 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
+| CUTOVER-04 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
 
-> Phase column filled by roadmapper at v1.0.2 milestone open (2026-05-12). Plan column will be filled by `/gsd-plan-phase` per phase.
+> Phase column is provisional (set at v2.0 milestone open, 2026-05-28); the roadmapper finalizes phase mapping + success criteria. Plan column filled by `/gsd-plan-phase` per phase.
 
-**Coverage check (2026-05-12, roadmap-stage):** 6/6 requirements mapped to exactly one phase. No orphans. No duplicates. Phase 9 = 4 REQs (Go-side); Phase 10 = 2 REQs (apps-script-side).
+**Coverage check (2026-05-28, pre-roadmap):** 26/26 requirements mapped to exactly one phase. No orphans, no duplicates. P11=5, P12=2, P13=4, P14=6, P15=5, P16=4.
 
 ---
 
-*Defined: 2026-05-12 at v1.0.2 milestone start. 6 requirements across 5 backlog items + 2 categories (recovery, tray, config, sidebar tests, test quality). Phase mapping pending roadmap creation.*
+*Defined: 2026-05-28 at v2.0 milestone start. 26 requirements across 7 categories (Backend, Enrichment, Watcher, Web, Auth, Admin, Cutover). Phase mapping finalized by roadmap creation.*

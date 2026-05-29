@@ -55,15 +55,15 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 
 **Why now:** Google's brand-verification gate rejected the OAuth client (2026-05-15: *"home page not registered to you"* — `github.io` can't satisfy it), walling off all ~12 guildie watchers. v2.0 removes Google from the system entirely.
 
-**Stack (LOCKED + costed, ≈ $12/yr total):** Oracle Cloud Always Free Ampere A1 (ARM64) backend ($0) · SQLite + `goose` forward-only migrations ($0) · SvelteKit static on Cloudflare/GitHub Pages ($0) · Discord OAuth2 website login ($0) · per-guildie opaque bearer token for watcher↔backend ($0) · ~$12/yr **website-only** domain (no Google verification needed).
+**Stack (LOCKED + costed, ≈ $67/yr total):** Hetzner Cloud shared-vCPU VPS (US, amd64) backend (~$55/yr) · SQLite + `goose` forward-only migrations ($0) · SvelteKit static on Cloudflare/GitHub Pages ($0) · Discord OAuth2 website login ($0) · per-guildie opaque bearer token for watcher↔backend ($0) · ~$12/yr **website-only** domain (no Google verification needed).
 
-> **Stack note — locked overrides research:** the four findings docs and SCOPE.md recommended a **Hetzner VPS + PostgreSQL**. That recommendation is **superseded** by the locked decision in `PROJECT.md` / `REQUIREMENTS.md`: **Oracle Cloud Always Free (ARM64) + SQLite + `goose`**. Where a findings doc says "Postgres", read "SQLite" (the DDL ports with only `CITEXT`→`TEXT COLLATE NOCASE` + identity-column syntax changes, and `pg_trgm` search becomes SQLite FTS5 / `LIKE` — already noted as an acceptable fallback in finding 04 §6). Where it says "Hetzner / $55/yr", read "Oracle Always Free / $0 box + ~$12/yr domain".
+> **Stack note — reverted to the research-recommended Hetzner VPS; SQLite retained (not Postgres):** the four findings docs and SCOPE.md recommended a **Hetzner VPS + PostgreSQL**. v2.0 initially **overrode** the host to Oracle Cloud Always Free for $0, then **reverted to the research-recommended Hetzner Cloud VPS (US, amd64)** on 2026-05-29 (see `PROJECT.md` Key Decisions + Phase 11 CONTEXT D-12) — while **keeping SQLite + `goose`** rather than the research's Postgres. Where a findings doc says "Postgres", read "SQLite" (the DDL ports with only `CITEXT`→`TEXT COLLATE NOCASE` + identity-column syntax changes, and `pg_trgm` search becomes SQLite FTS5 / `LIKE` — already noted as an acceptable fallback in finding 04 §6). The findings docs' Hetzner host recommendation is now the chosen host; cost is ~$55/yr VPS + ~$12/yr domain ≈ $67/yr (the "$0 backend" premise is retired).
 
 **Sequencing principle — FRONT-LOAD THE INGEST PATH:** the ~12 guildies are dark on the Sheet during the build (Google has walled off their watchers; v2.0 replaces the Sheet rather than placating Google). So P11 (ingest endpoint) and P13 (watcher re-target) restore the data pipeline first; the polished frontend (P14) and admin forms (P15) follow once data is flowing again.
 
 **Schema-evolution change:** the old `_meta.schema_version` ↔ `WatcherMaxSchemaVersion` handshake **retires** in favour of forward-only `goose` DB migrations + an explicit **API version** (`/api/v1/...`). The watcher's Sheets schema gate is removed in P13.
 
-- [ ] **Phase 11: Backend Foundation + Ingest API** - Oracle Always Free box + Caddy auto-HTTPS live; SQLite schema with `goose`; bearer-token auth; the upload-receiving endpoint. *Front-loaded so guild data can flow again ASAP.*
+- [ ] **Phase 11: Backend Foundation + Ingest API** - Hetzner Cloud VPS (US) + Caddy auto-HTTPS live; SQLite schema with `goose`; bearer-token auth; the upload-receiving endpoint. *Front-loaded so guild data can flow again ASAP.*
 - [ ] **Phase 12: Enrichment Job Migration** - daily PigParse pull + weekly P1999 wiki scrape run as in-process scheduled jobs, parsers and `politeFetch` controls carried over.
 - [ ] **Phase 13: Watcher Re-Target + Onboarding** - watcher uploads to the backend HTTP API; all Google OAuth/Sheets/Picker machinery deleted; "paste your guild code" onboarding shipped via the existing auto-updater.
 - [ ] **Phase 14: Web Frontend** - SvelteKit static app + read API; the 4 views as a reusable filterable/sortable data grid; client-side search + "did you mean?"; rich HTML tooltips; EQ theming.
@@ -73,11 +73,11 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 ## Phase Details
 
 ### Phase 11: Backend Foundation + Ingest API
-**Goal**: Stand up the self-hosted backend so guildie watchers have a live, authenticated place to upload to again — Oracle Cloud Always Free (ARM64) box behind Caddy auto-HTTPS, a SQLite schema under `goose` forward-only migrations, per-guildie bearer-token auth, and the upload-receiving endpoint that atomically replaces a character's rows.
+**Goal**: Stand up the self-hosted backend so guildie watchers have a live, authenticated place to upload to again — Hetzner Cloud VPS (US) behind Caddy auto-HTTPS, a SQLite schema under `goose` forward-only migrations, per-guildie bearer-token auth, and the upload-receiving endpoint that atomically replaces a character's rows.
 **Depends on**: Nothing (first phase of v2.0; foundation for everything after)
 **Requirements**: BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06
 **Success Criteria** (what must be TRUE):
-  1. The backend serves over HTTPS at the website domain from the Oracle Always Free (Ampere A1, ARM64) instance — a single Go binary behind Caddy, restart-on-reboot via systemd, reachable with a valid TLS certificate (BACKEND-01)
+  1. The backend serves over HTTPS at the website domain from the Hetzner Cloud VPS (US) — a single Go binary behind Caddy, restart-on-reboot via systemd, reachable with a valid TLS certificate (BACKEND-01)
   2. `goose up` applies the SQLite schema cleanly on a fresh database, creating separate `owner` and `character` tables plus inventory/spellbook/dimension tables; re-running it is a no-op (forward-only, idempotent) (BACKEND-02)
   3. A `POST` of a full-snapshot inventory or spellbook payload, carrying a valid `Authorization: Bearer <guild-code>`, atomically replaces that character's rows (delete-all-then-insert in one transaction) and the rows are then visible via a query — and a shrinking snapshot drops the removed rows (BACKEND-03)
   4. A request with a missing, malformed, or unknown bearer token is rejected (401) and writes nothing; the maintainer can mint a per-guildie token whose plaintext is shown once and stored only hashed server-side (BACKEND-04)
@@ -88,10 +88,10 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 - [ ] 11-03-PLAN.md — parser port to UTF-8 content (A1) + atomic full-snapshot replace tx + first-sighting bind/cross-owner reject (BACKEND-03)
 - [ ] 11-04-PLAN.md — bearer guard (SHA-256 + constant-time compare) + mint/revoke CLI, hash-only storage (BACKEND-04)
 - [ ] 11-05-PLAN.md — POST /api/v1/ingest handler + cmd/squirebot-server entrypoint + scheduler skeleton (verdict-dependent wiring) (BACKEND-01/03/04)
-- [ ] 11-06-PLAN.md — Oracle A1 provisioning + two-layer firewall + Caddy + systemd + cross-compile deploy (on-box; BACKEND-01)
-- [ ] 11-07-PLAN.md — nightly sqlite3 .backup -> Object Storage + restore drill + ship-gate smoke (on-box; BACKEND-06)
+- [ ] 11-06-PLAN.md — Hetzner VPS provisioning + Cloud Firewall + ufw + Caddy + systemd + cross-compile deploy (on-box; BACKEND-01)
+- [ ] 11-07-PLAN.md — nightly sqlite3 .backup -> Cloudflare R2 via rclone + restore drill + ship-gate smoke (on-box; BACKEND-06)
 **UI hint**: no (backend/infrastructure only; no frontend in this phase)
-**Decision — PocketBase spike (optional, 1 day, at phase start):** finding 01 §Recommendation flags PocketBase (open-source single Go binary = SQLite + auth + REST + admin UI) as almost exactly this design, pre-built. A 1-day spike at the start of P11 could compress P11 **and** P15 by ~5–8 days. Evaluate self-hosted PocketBase on the same Oracle box before committing to a hand-rolled Go server; if its auth/extension model fits the bearer-token + enrichment-hook needs, prefer it; if it chafes, the hand-rolled Go server is the fallback. Either way the host (Oracle Always Free) + DB (SQLite) decisions stand. Capture the verdict in the phase CONTEXT.
+**Decision — PocketBase spike (optional, 1 day, at phase start):** finding 01 §Recommendation flags PocketBase (open-source single Go binary = SQLite + auth + REST + admin UI) as almost exactly this design, pre-built. A 1-day spike at the start of P11 could compress P11 **and** P15 by ~5–8 days. Evaluate self-hosted PocketBase on the same Hetzner VPS before committing to a hand-rolled Go server; if its auth/extension model fits the bearer-token + enrichment-hook needs, prefer it; if it chafes, the hand-rolled Go server is the fallback. Either way the host (Hetzner Cloud VPS) + DB (SQLite) decisions stand. Capture the verdict in the phase CONTEXT.
 **Ship gate**: server accepts a real test upload over TLS and the row is queryable back out.
 
 ### Phase 12: Enrichment Job Migration

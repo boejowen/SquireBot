@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: "Off Google" — Website Frontend
-status: planning
-last_updated: "2026-05-29T02:31:41.240Z"
-last_activity: 2026-05-28 — v2.0 ROADMAP.md written (Phases 11–16); REQUIREMENTS.md traceability finalized (26/26 mapped)
+milestone_name: — "Off Google" — Website Frontend
+status: executing
+last_updated: "2026-05-29T03:41:40.551Z"
+last_activity: 2026-05-29 -- Phase 11 planning complete
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 7
   completed_plans: 0
   percent: 0
 ---
@@ -23,7 +23,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — now delivered via a self-hosted website instead of the Google Sheet.
-- **Current focus:** Milestone v2.0 "Off Google" — replace the Google Sheet (UI + data store) with a self-hosted Go + SQLite backend (Oracle Cloud Always Free, ARM64) + static web frontend (SvelteKit), eliminating the Google OAuth dependency. Phases 11–16. ≈ $12/yr (domain only).
+- **Current focus:** Milestone v2.0 "Off Google" — replace the Google Sheet (UI + data store) with a self-hosted Go + SQLite backend (Hetzner Cloud VPS, US) + static web frontend (SvelteKit), eliminating the Google OAuth dependency. Phases 11–16. ≈ $67/yr (~$55/yr VPS + ~$12/yr domain).
 - **Mode:** yolo
 - **Granularity:** coarse
 
@@ -31,8 +31,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 Phase: 11 — Backend Foundation + Ingest API (not started; roadmap just created)
 Plan: —
-Status: Roadmap created; ready to plan Phase 11
-Last activity: 2026-05-28 — v2.0 ROADMAP.md written (Phases 11–16); REQUIREMENTS.md traceability finalized (26/26 mapped)
+Status: Ready to execute
+Last activity: 2026-05-29 -- Phase 11 planning complete
 
 ### v2.0 Phase Plan (2026-05-28)
 
@@ -40,7 +40,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 
 | Phase | Name | Requirements | Stack | Depends on | Status |
 |-------|------|--------------|-------|-----------|--------|
-| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Oracle Always Free, ARM64) | — | Not started |
+| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | Not started |
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | Not started |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | Not started |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + TanStack Table + Tailwind; Go read API | P11 (read API) + P12 (data) | Not started |
@@ -55,11 +55,11 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 4. **P15** (depends on P14 + P11) adds Discord login + the officer-only write forms; must exist before the Sheet's admin sidebars can retire.
 5. **P16 last** (depends on P13 + P14 + P15 + P12) — shadow soak, human-data backfill, one coordinated watcher flip, then decommission Sheet + Apps Script + Google OAuth client. Meets the "Off Google" goal.
 
-**Locked stack overrides research:** SCOPE.md + the 4 findings docs recommended Hetzner VPS + PostgreSQL; that is **superseded** by the locked decision — Oracle Cloud Always Free (ARM64) + SQLite + `goose`. DDL ports with `CITEXT`→`TEXT COLLATE NOCASE` + identity-syntax changes; `pg_trgm` search → SQLite FTS5 / `LIKE`.
+**Reverted to the research-recommended Hetzner VPS; SQLite retained (not Postgres):** SCOPE.md + the 4 findings docs recommended a Hetzner VPS + PostgreSQL. v2.0 initially overrode the host to Oracle Cloud Always Free for $0, then **reverted to the research-recommended Hetzner Cloud VPS (US, amd64)** on 2026-05-29 — while **keeping SQLite + `goose`** (not the research's Postgres). DDL ports with `CITEXT`→`TEXT COLLATE NOCASE` + identity-syntax changes; `pg_trgm` search → SQLite FTS5 / `LIKE`.
 
 **Schema-evolution change:** the `_meta.schema_version` ↔ `WatcherMaxSchemaVersion` handshake retires in favour of forward-only `goose` DB migrations + an explicit API version (`/api/v1/...`). The watcher's Sheets schema gate is removed in P13.
 
-**Open decision surfaced to P11 (not a separate phase):** optional 1-day **PocketBase** spike at the start of P11 (open-source single Go binary = SQLite + auth + REST + admin UI, self-hosted on the same Oracle box) could compress P11 **and** P15 by ~5–8 days. Evaluate before committing to a hand-rolled Go server; verdict captured in the P11 CONTEXT.
+**Open decision surfaced to P11 (not a separate phase):** optional 1-day **PocketBase** spike at the start of P11 (open-source single Go binary = SQLite + auth + REST + admin UI, self-hosted on the same Hetzner VPS) could compress P11 **and** P15 by ~5–8 days. Evaluate before committing to a hand-rolled Go server; verdict captured in the P11 CONTEXT.
 
 ### Superseded: 999.19 Google brand verification
 
@@ -97,7 +97,7 @@ All locked decisions live in `PROJECT.md` Key Decisions table and the per-milest
 **v2.0 milestone-open decisions (locked, see PROJECT.md Current Milestone):**
 
 - **Off Google entirely** — replace the Sheet (UI + data store), not placate Google's brand verification.
-- **Backend = Oracle Cloud Always Free (Ampere A1, ARM64) + Caddy + SQLite + `goose`** (overrides the research docs' Hetzner+Postgres recommendation).
+- **Backend = Hetzner Cloud VPS (US, amd64) + Caddy + SQLite + `goose`** (host switched Oracle Always Free → Hetzner on 2026-05-29 — reverted to the research-recommended Hetzner VPS, SQLite retained not Postgres; see Phase 11 CONTEXT D-12). Cost ~$55/yr VPS + ~$12/yr domain ≈ $67/yr (the "$0 backend" premise is retired).
 - **Frontend = SvelteKit static (adapter-static) + TanStack Table + Tailwind** on Cloudflare/GitHub Pages.
 - **Watcher↔backend auth = per-guildie opaque bearer token** ("guild code"), hashed server-side, stored client-side in DPAPI wincred; character ownership derived server-side from the credential (`_char_owner`/`UpsertCharOwner` deleted).
 - **Website login = Discord OAuth2** gated on guild Discord membership (gate-free; pre-pays AUTH-09). "Sign in with Google" rejected outright (re-introduces the gate).
@@ -107,7 +107,7 @@ All locked decisions live in `PROJECT.md` Key Decisions table and the per-milest
 ### Open TODOs
 
 - **(P11 PocketBase spike)** 1-day evaluation at the start of Phase 11 — self-hosted PocketBase vs. hand-rolled Go server; could compress P11 + P15 by ~5–8 days. Capture verdict in P11 CONTEXT.
-- **(Domain registration)** ~$12/yr website-only domain needs registering before the backend goes live (P11 / P16). No Google verification required.
+- **(A-record for `api.squirebot.quest` — blocked on Hetzner VPS provisioning)** Domain `squirebot.quest` registered at Porkbun (2026-05-29); apex/`www` reserved for the P14 frontend. Remaining: add DNS A-record `api` → the Hetzner VPS public IPv4 once the instance is provisioned (P11 Wave 5 / 11-06 Task 2), so Caddy can issue the TLS cert via HTTP-01. Tracked: `.planning/todos/pending/2026-05-29-add-api-squirebot-quest-a-record-after-oracle-provision.md`.
 - **(Port-relevant backlog into P14)** 999.28 (`didYouMean('')` empty-query contract) + 999.30 (`didYouMean` Levenshtein contract mismatch) should be resolved when porting search logic to the frontend (WEB-03).
 - **(Watcher gofmt/console nits into P13)** 999.20 (`console_windows.go` gofmt) + 999.21 (`freeConsole()` doc-vs-impl) + 999.22 (SemVer-aware auto-update comparison — load-bearing for the P16 coordinated flip) ride along with the watcher re-target.
 - **(SignPath OSS, separate track, 999.9)** still in flight; orthogonal to the backend swap; lands as a hotfix when the Foundation review completes.
@@ -120,7 +120,7 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Last Session Summary
 
-**2026-05-28 (v2.0 ROADMAP created):** Roadmapper transformed the 26 v2.0 requirements into a 6-phase structure (Phases 11–16), accepting REQUIREMENTS.md's provisional A–F mapping unchanged (no concrete coverage problem found). Coverage validated 26/26 (P11=5, P12=2, P13=4, P14=6, P15=5, P16=4); no orphans, no duplicates. Dependencies set: P11 has none; P12→P11; P13→P11; P14→P11+P12; P15→P14+P11; P16→P13+P14+P15+P12. Each phase got 2–5 observable success criteria. Honored the locked stack (Oracle Always Free + SQLite + goose; SvelteKit; Discord OAuth2; bearer token) over the research docs' Hetzner+Postgres recommendation, with an explicit "locked overrides research" note in ROADMAP. Front-loaded the ingest path (P11 + P13 restore data flow before the polished P14 frontend). Surfaced the optional PocketBase spike as a P11 decision note. Wrote `.planning/ROADMAP.md` (v2.0 section + Phase Details + progress tables + backlog re-annotated for Sheet-mooting), finalized `.planning/REQUIREMENTS.md` traceability (Phase column finalized), and reset this STATE.md to the v2.0 phase plan (replacing the stale v1.0.2 phase-plan content). Phase numbering starts at 11 (Phase dirs 09+10 exist on disk from the superseded v1.0.2 binary; never reuse 9/10).
+**2026-05-28 (v2.0 ROADMAP created):** Roadmapper transformed the 26 v2.0 requirements into a 6-phase structure (Phases 11–16), accepting REQUIREMENTS.md's provisional A–F mapping unchanged (no concrete coverage problem found). Coverage validated 26/26 (P11=5, P12=2, P13=4, P14=6, P15=5, P16=4); no orphans, no duplicates. Dependencies set: P11 has none; P12→P11; P13→P11; P14→P11+P12; P15→P14+P11; P16→P13+P14+P15+P12. Each phase got 2–5 observable success criteria. Honored the locked stack (Oracle Always Free + SQLite + goose; SvelteKit; Discord OAuth2; bearer token) over the research docs' Hetzner+Postgres recommendation, with an explicit "locked overrides research" note in ROADMAP. Front-loaded the ingest path (P11 + P13 restore data flow before the polished P14 frontend). Surfaced the optional PocketBase spike as a P11 decision note. Wrote `.planning/ROADMAP.md` (v2.0 section + Phase Details + progress tables + backlog re-annotated for Sheet-mooting), finalized `.planning/REQUIREMENTS.md` traceability (Phase column finalized), and reset this STATE.md to the v2.0 phase plan (replacing the stale v1.0.2 phase-plan content). Phase numbering starts at 11 (Phase dirs 09+10 exist on disk from the superseded v1.0.2 binary; never reuse 9/10). *(2026-05-29: backend host later switched Oracle → Hetzner — see Phase 11 CONTEXT D-12; the "$0 backend / ~$12/yr total" premise this entry recorded is retired in favour of ~$67/yr.)*
 
 **2026-05-13 (v1.0.2 binary shipped):** Phases 9 + 10 shipped as binary tag `v1.0.2`; HUMAN-UAT was blocked on 999.19 (Google brand verification). Milestone close subsequently superseded by the v2.0 "Off Google" pivot — the Sheet it targeted is being replaced, so a Google-OAuth-dependent UAT close became moot.
 
@@ -138,7 +138,7 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Next Action
 
-`/clear` then `/gsd-plan-phase 11` — Phase 11 (Backend Foundation + Ingest API) is the first v2.0 phase, no dependencies. Planner reads ROADMAP.md § Phase 11 + the 4 findings docs (esp. `01-backend-hosting.md` for SQLite/goose/Caddy/Oracle + `04-data-enrichment-migration.md` §1 for the SQLite schema) + REQUIREMENTS.md (BACKEND-01/02/03/04/06). First plan should fold in the optional 1-day PocketBase spike decision.
+`/clear` then `/gsd-plan-phase 11` — Phase 11 (Backend Foundation + Ingest API) is the first v2.0 phase, no dependencies. Planner reads ROADMAP.md § Phase 11 + the 4 findings docs (esp. `01-backend-hosting.md` for SQLite/goose/Caddy/Hetzner + `04-data-enrichment-migration.md` §1 for the SQLite schema) + REQUIREMENTS.md (BACKEND-01/02/03/04/06). First plan should fold in the optional 1-day PocketBase spike decision.
 
 ---
 

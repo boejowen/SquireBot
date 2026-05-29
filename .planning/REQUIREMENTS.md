@@ -6,7 +6,7 @@
 
 **Why now:** Google's brand-verification gate rejected the OAuth client 2026-05-15 ("home page not registered to you" — `github.io` can't satisfy it), walling off all ~12 guildie watchers. v2.0 removes Google from the system entirely rather than renting a domain to placate it. Full research: `.planning/explorations/website-milestone/SCOPE.md` + 4 findings docs.
 
-**Stack (LOCKED + costed, ≈ $12/yr total):** Oracle Cloud Always Free Ampere A1 (ARM64) backend ($0) · SQLite ($0) · SvelteKit static on Cloudflare/GitHub Pages ($0) · Discord OAuth2 website login ($0) · per-guildie opaque bearer token for watcher↔backend ($0) · ~$12/yr website-only domain.
+**Stack (LOCKED + costed, ≈ $67/yr total):** Hetzner Cloud shared-vCPU VPS (US, amd64) backend (~$55/yr) · SQLite ($0) · SvelteKit static on Cloudflare/GitHub Pages ($0) · Discord OAuth2 website login ($0) · per-guildie opaque bearer token for watcher↔backend ($0) · ~$12/yr website-only domain.
 
 **Architecture impact:** The `_meta.schema_version` ↔ `WatcherMaxSchemaVersion` handshake retires in favour of forward-only DB migrations (`goose`) + an API version. Google's 200-tab limit disappears; the 4 view tabs become SQL/API endpoints; the watcher sheds ~2.5–3k LOC of OAuth/Sheets/Picker code.
 
@@ -16,7 +16,7 @@
 
 ### Backend — self-hosted server (BACKEND)
 
-- [ ] **BACKEND-01**: The backend runs on an Oracle Cloud Always Free (Ampere A1, ARM64) instance with Caddy auto-HTTPS, reachable at the website domain over TLS. Single Go binary; in-process scheduler for cron jobs.
+- [ ] **BACKEND-01**: The backend runs on a self-hosted always-on VPS (currently a Hetzner Cloud VPS, US) with Caddy auto-HTTPS, reachable at the website domain over TLS. Single Go binary; in-process scheduler for cron jobs.
 - [ ] **BACKEND-02**: A SQLite schema with `goose` forward-only migrations models owners, characters, inventory items, spellbook entries, and dimension/enrichment data. `owner` and `character` are separate tables (owner-email change is a one-row update; no first-write-wins conflict logic).
 - [ ] **BACKEND-03**: An ingest endpoint accepts a watcher's full-snapshot inventory or spellbook upload and atomically replaces that character's rows (mirrors the v1 clear+write contract; never row-diffs).
 - [ ] **BACKEND-04**: Each guildie authenticates to the ingest API with an opaque per-guildie bearer token ("guild code"), minted by the maintainer and stored hashed server-side.

@@ -11,17 +11,17 @@ package parse
 //   - NO mem-slot info (this is the scribed list, not active mem slots).
 //
 // This file mirrors the inventory parser at internal/parse/inventory.go.
-// Encoding lock-in matches inventory: charmap.Windows1252 decoder, csv.Reader
-// with Comma='\t' and LazyQuotes=true (EQ spell names may contain stray
-// apostrophes — e.g. "Cazic-Thule's Wrath"), FieldsPerRecord=-1 to tolerate
-// extra trailing columns per WATCH-05.
+// Encoding matches inventory (contract A1): ParseSpellbook treats r as ALREADY
+// UTF-8 and does NOT decode CP1252 — the watcher wraps its disk reader in
+// CP1252Reader (defined in inventory.go) first. csv.Reader with Comma='\t' and
+// LazyQuotes=true (EQ spell names may contain stray apostrophes — e.g.
+// "Cazic-Thule's Wrath"), FieldsPerRecord=-1 to tolerate extra trailing columns
+// per WATCH-05.
 
 import (
 	"encoding/csv"
 	"io"
 	"strconv"
-
-	"golang.org/x/text/encoding/charmap"
 )
 
 // ParseSpellbook reads a <Char>-Spellbook.txt file (Win-1252, tab-separated,
@@ -35,14 +35,17 @@ import (
 //
 // Per WATCH-05: extra trailing columns are tolerated and truncated to 2.
 //
+// ENCODING (contract A1): r is treated as ALREADY UTF-8 — ParseSpellbook does
+// NOT decode CP1252. The watcher wraps its disk reader in CP1252Reader first;
+// the backend ingest path feeds UTF-8 content straight in. Do not double-decode.
+//
 // Returns (nil, nil) for empty input — caller treats as a no-op write.
 //
-// Per CLAUDE.md / RESEARCH.md §8.3: this function is encoding-only — it never
-// logs raw content (T-04-07) and never trusts fsnotify event payload data
-// (that discipline lives in internal/watch).
+// Per CLAUDE.md / RESEARCH.md §8.3: this function never logs raw content
+// (T-04-07) and never trusts fsnotify event payload data (that discipline lives
+// in internal/watch).
 func ParseSpellbook(r io.Reader) (rows [][]string, err error) {
-	decoded := charmap.Windows1252.NewDecoder().Reader(r)
-	cr := csv.NewReader(decoded)
+	cr := csv.NewReader(r)
 	cr.Comma = '\t'
 	cr.FieldsPerRecord = -1 // tolerate any column count
 	cr.LazyQuotes = true    // EQ names may contain stray apostrophes

@@ -457,7 +457,10 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 			slog.Error("open inventory", "char", charName, "err", err)
 			return
 		}
-		rows, perr := parse.Parse(f)
+		// Encoding contract A1 (Phase 11): the shared parser no longer decodes
+		// CP1252 — wrap the raw-CP1252 disk file in parse.CP1252Reader so the
+		// watcher keeps decoding off disk (curly apostrophes → U+2019).
+		rows, perr := parse.Parse(parse.CP1252Reader(f))
 		_ = f.Close()
 		if perr != nil {
 			slog.Error("parse inventory", "char", charName, "err", perr)
@@ -540,7 +543,9 @@ func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 			slog.Error("open spellbook", "char", charName, "err", err)
 			return
 		}
-		rows, perr := parse.ParseSpellbook(f)
+		// Encoding contract A1 (Phase 11): wrap the raw-CP1252 disk file in
+		// parse.CP1252Reader (the shared parser is now UTF-8-only).
+		rows, perr := parse.ParseSpellbook(parse.CP1252Reader(f))
 		_ = f.Close()
 		if perr != nil {
 			slog.Error("parse spellbook", "char", charName, "err", perr)

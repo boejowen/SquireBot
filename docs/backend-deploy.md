@@ -194,15 +194,16 @@ sudo -u squirebot sqlite3 /var/lib/squirebot/squirebot.db \
 
 ## 6. Deploy evidence
 
-> Fill in as each step is run on the live box (captured for BACKEND-01 / BACKEND-06 / the ship gate).
+> Captured from the live deploy on **2026-05-29** (Hetzner Cloud VPS, Ubuntu 24.04, root).
 
-- **VPS public IPv4 / region:** _(pending)_
-- **`curl -v https://api.squirebot.quest/` cert + status:** _(pending)_
-- **`systemctl status squirebot-server`:** _(pending)_
-- **Reboot survival:** _(pending)_
-- **`ufw status`:** _(pending)_
-- **`.tables` on the box (goose.Up schema):** _(pending)_
-- **Backup object in R2 (`rclone ls`):** _(pending)_
-- **`crontab -l` (nightly 0 4):** _(pending)_
-- **Restore drill (`.tables` + row count on a restored snapshot):** _(pending)_
-- **Ship-gate: authenticated POST status / unauth POST status / queried row:** _(pending)_
+- **VPS public IPv4 / region:** `5.78.232.85` — Hetzner Hillsboro OR (`us-west`), x86/amd64. DNS A-record `api.squirebot.quest` → `5.78.232.85` confirmed.
+- **External HTTPS / cert:** `curl https://api.squirebot.quest/` → `HTTP=404 TLS_VERIFY=0` (valid Let's Encrypt cert; 404 is expected — only `POST /api/v1/ingest` is routed).
+- **`systemctl status squirebot-server`:** `active (running)`, `enabled`; logs show `goose: successfully migrated database to version: 2` and `squirebot-server listening addr=127.0.0.1:8090`.
+- **Reboot survival:** after `systemctl reboot`, the box returned (`uptime` reset) with `squirebot-server` = `active`, `enabled`, HTTPS 404, and the ship-gate row still present — auto-start confirmed.
+- **`ufw status`:** active; `22/tcp (OpenSSH)`, `80/tcp`, `443/tcp` = ALLOW (v4 + v6); port `8090` NOT opened (loopback-only).
+- **`.tables` on the box (goose.Up schema):** all 12 D-13 tables present — `owner character inventory_item spellbook_entry guild_code item_master pigparse_price quest_items wiki_gear_tier wiki_spells audit_log goose_db_version`.
+- **Caddy / sqlite3 versions:** Caddy `v2.11.3`, sqlite3 `3.45.1` (installed via the official Caddy apt repo).
+- **Backup object in R2 (`rclone ls r2:squirebot-backups`):** `squirebot-2026-05-29.db.gz` present (clean-state snapshot, 3648 bytes). `rclone.conf` at `/root/.config/rclone/rclone.conf`, mode `600`.
+- **Backup schedule:** `/etc/cron.d/squirebot-backup` → `0 4 * * * root /usr/local/bin/squirebot-backup.sh >> /var/log/squirebot-backup.log 2>&1` (cron `active`). *(Used `/etc/cron.d/` rather than `crontab -e` — this box's `crontab` wrapper rejected stdin install over SSH; the cron.d drop-in is equivalent and more declarative.)*
+- **Restore drill:** pulled `squirebot-2026-05-29.db.gz` from R2 → gunzip → `.tables` showed all 12 D-13 tables; `inventory_item` row + `guild_code` row present (before cleanup) — reconstitution proven.
+- **Ship-gate (2026-05-29):** authenticated `POST /api/v1/ingest` over TLS → **204**; unauthenticated POST → **401** (wrote nothing); queried row back → `ShipGateChar|Rusty Dagger|12345|1`; first-sighting owner-bind → `ShipGateTest`. Test data removed post-gate (DB returned to a clean empty-data state; backup refreshed).

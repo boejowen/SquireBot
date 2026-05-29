@@ -111,7 +111,20 @@ The user delegated **every** gray area. Everything above is locked at Claude's r
 
 </deferred>
 
+<spike_verdict>
+## D-01 Spike Verdict (recorded 2026-05-29, Plan 11-01)
+
+**VERDICT: HAND-ROLLED Go fallback** (`net/http` ServeMux 1.22+ + `modernc.org/sqlite` + `goose`). Do NOT adopt PocketBase.
+
+All four D-01 probes PASSED on technical grounds (PocketBase v0.39.0 ships the *same* no-cgo `modernc.org/sqlite v1.51.0` driver the fallback uses; tables/route/guard/cron/amd64-build all work). The decision is therefore judgment on the leverage-vs-opinion axis — and it tips to the fallback because the locked architecture **bypasses PocketBase's two biggest leverage points**: guild codes are opaque static tokens (custom `crypto/subtle` guard, NOT PB's `apis.RequireAuth()`/JWT auth-records) and the domain tables are plain SQL (A5, NOT PB collections — so invisible to PB's admin UI + auto-REST). The product UI is locked to SvelteKit static (P14), not PB's admin UI, and P15's Discord OAuth2 is a contained stdlib task either way. Adopting PB would mean carrying a 22.9 MB pre-1.0 framework (Pitfall 1: v0.23 was a near-total rewrite, periodic migration tax on every upgrade) for almost none of its headline value. The fallback is ~600 LOC, churn-free, and matches the project's single-static-binary ethos.
+
+**Consequence for downstream:** 11-05 wires `net/http` ServeMux (`"POST /api/v1/ingest"`) + a `time.Ticker`/`robfig/cron` goroutine — no PocketBase APIs. The `github.com/pocketbase/pocketbase` dependency and the `spike/pocketbase/` tree are removed in 11-05 (don't ship a pre-1.0 dep the production server won't use). Host (Hetzner Cloud VPS, US, amd64) + DB (SQLite) stand unchanged. **P15 Discord OAuth2 (AUTH-08) is now hand-rolled `golang.org/x/oauth2`, not PB's built-in provider** — note for the P15 planner.
+
+Full per-probe evidence + reasoning: `.planning/phases/11-backend-foundation-ingest-api/11-01-SUMMARY.md`.
+</spike_verdict>
+
 ---
 
 *Phase: 11-backend-foundation-ingest-api*
 *Context gathered: 2026-05-28*
+*Spike verdict appended: 2026-05-29 (Plan 11-01 — HAND-ROLLED Go fallback)*

@@ -82,7 +82,14 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
   3. A `POST` of a full-snapshot inventory or spellbook payload, carrying a valid `Authorization: Bearer <guild-code>`, atomically replaces that character's rows (delete-all-then-insert in one transaction) and the rows are then visible via a query — and a shrinking snapshot drops the removed rows (BACKEND-03)
   4. A request with a missing, malformed, or unknown bearer token is rejected (401) and writes nothing; the maintainer can mint a per-guildie token whose plaintext is shown once and stored only hashed server-side (BACKEND-04)
   5. A nightly off-box backup of the SQLite file runs on a schedule, and the documented restore procedure reconstitutes the database from a snapshot on a clean box (BACKEND-06)
-**Plans**: TBD
+**Plans**: 7 plans (1 spike + 4 autonomous build/test + 2 on-box ops)
+- [ ] 11-01-PLAN.md — PocketBase-as-framework spike (Wave 1, gating): runs the four D-01 PASS/FAIL probes, writes the adopt-vs-hand-rolled verdict to SUMMARY + CONTEXT
+- [ ] 11-02-PLAN.md — goose schema + 00001_init.sql + modernc DB-open (DSN pragmas) + shared temp-DB test helper (BACKEND-02)
+- [ ] 11-03-PLAN.md — parser port to UTF-8 content (A1) + atomic full-snapshot replace tx + first-sighting bind/cross-owner reject (BACKEND-03)
+- [ ] 11-04-PLAN.md — bearer guard (SHA-256 + constant-time compare) + mint/revoke CLI, hash-only storage (BACKEND-04)
+- [ ] 11-05-PLAN.md — POST /api/v1/ingest handler + cmd/squirebot-server entrypoint + scheduler skeleton (verdict-dependent wiring) (BACKEND-01/03/04)
+- [ ] 11-06-PLAN.md — Oracle A1 provisioning + two-layer firewall + Caddy + systemd + cross-compile deploy (on-box; BACKEND-01)
+- [ ] 11-07-PLAN.md — nightly sqlite3 .backup -> Object Storage + restore drill + ship-gate smoke (on-box; BACKEND-06)
 **UI hint**: no (backend/infrastructure only; no frontend in this phase)
 **Decision — PocketBase spike (optional, 1 day, at phase start):** finding 01 §Recommendation flags PocketBase (open-source single Go binary = SQLite + auth + REST + admin UI) as almost exactly this design, pre-built. A 1-day spike at the start of P11 could compress P11 **and** P15 by ~5–8 days. Evaluate self-hosted PocketBase on the same Oracle box before committing to a hand-rolled Go server; if its auth/extension model fits the bearer-token + enrichment-hook needs, prefer it; if it chafes, the hand-rolled Go server is the fallback. Either way the host (Oracle Always Free) + DB (SQLite) decisions stand. Capture the verdict in the phase CONTEXT.
 **Ship gate**: server accepts a real test upload over TLS and the row is queryable back out.

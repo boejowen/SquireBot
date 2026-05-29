@@ -87,7 +87,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 - [x] 11-02-PLAN.md — goose schema + 00001_init.sql + modernc DB-open (DSN pragmas) + shared temp-DB test helper (BACKEND-02). ✅ 2026-05-29
 - [x] 11-03-PLAN.md — parser port to UTF-8 content (A1) + atomic full-snapshot replace tx + first-sighting bind/cross-owner reject (BACKEND-03). ✅ 2026-05-29
 - [x] 11-04-PLAN.md — bearer guard (SHA-256 + `crypto/subtle` constant-time compare) + mint/revoke CLI logic, hash-only `guild_code` storage (BACKEND-04); stdlib-only, verdict-agnostic, no PocketBase coupling. ✅ 2026-05-29
-- [ ] 11-05-PLAN.md — POST /api/v1/ingest handler + cmd/squirebot-server entrypoint + scheduler skeleton (verdict-dependent wiring) (BACKEND-01/03/04)
+- [x] 11-05-PLAN.md — POST /api/v1/ingest handler (guard-first, one-tx bind+replace via 11-03's *sql.Tx fns) + cmd/squirebot-server (serve/mint-code/revoke-code, goose.Up on startup) + time.Ticker scheduler skeleton; HAND-ROLLED net/http (FALLBACK verdict), PocketBase dep + spike tree removed; static linux/amd64 cross-compile verified (BACKEND-01/03/04). ✅ 2026-05-29
 - [ ] 11-06-PLAN.md — Hetzner VPS provisioning + Cloud Firewall + ufw + Caddy + systemd + cross-compile deploy (on-box; BACKEND-01)
 - [ ] 11-07-PLAN.md — nightly sqlite3 .backup -> Cloudflare R2 via rclone + restore drill + ship-gate smoke (on-box; BACKEND-06)
 **UI hint**: no (backend/infrastructure only; no frontend in this phase)
@@ -176,7 +176,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 11. Backend Foundation + Ingest API | v2.0 | 4/7 | 🚧 In Progress | - |
+| 11. Backend Foundation + Ingest API | v2.0 | 5/7 | 🚧 In Progress | - |
 | 12. Enrichment Job Migration | v2.0 | 0/TBD | Not started | - |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 0/TBD | Not started | - |
 | 14. Web Frontend | v2.0 | 0/TBD | Not started | - |

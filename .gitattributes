@@ -11,3 +11,10 @@ internal/parse/testdata/* binary
 # Module files.
 go.mod text eol=lf
 go.sum text eol=lf
+
+# Linux deploy artifacts: MUST be LF — they are scp'd to the Hetzner box. A CRLF
+# shebang (#!/usr/bin/env bash\r) breaks with "bad interpreter"; systemd units
+# and the Caddyfile also prefer LF.
+deploy/*.sh text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/*.service text eol=lf

@@ -137,6 +137,13 @@ None — no external service configuration required (the spike runs entirely on 
 - **11-05 carries two cleanup chores:** remove the `pocketbase` dependency (`go mod tidy` after deleting `spike/pocketbase/`) and delete the spike tree.
 - **No blockers.** Host (Hetzner Cloud VPS, US, amd64) + DB (SQLite) decisions reaffirmed as verdict-independent.
 
+## Self-Check: PASSED
+
+- Files on disk: `spike/pocketbase/main.go` FOUND, `spike/pocketbase/README.md` FOUND, `11-01-SUMMARY.md` FOUND.
+- Commits exist: `b894008` (Task 1) FOUND, `adeaead` (Task 2) FOUND, `b797c64` (Task 3) FOUND.
+- `go build ./spike/...` → exit 0 (the throwaway spike compiles in-tree against the pinned PocketBase v0.39.0).
+- Plan `<verify>`: `go build ./spike/pocketbase/` exit 0; `go list -m modernc.org/sqlite` → `v1.51.0`; amd64 cross-compile → `AMD64_BUILD_OK` (22.9 MB static ELF); all four probes PASS with evidence; `VERDICT:` present in BOTH 11-01-SUMMARY.md and 11-CONTEXT.md (`VERDICT_RECORDED_BOTH`).
+
 ---
 *Phase: 11-backend-foundation-ingest-api*
 *Completed: 2026-05-29*

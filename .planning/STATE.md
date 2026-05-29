@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-29T03:41:40.551Z"
-last_activity: 2026-05-29 -- Phase 11 planning complete
+last_updated: "2026-05-29T21:13:00.000Z"
+last_activity: 2026-05-29 -- Plan 11-01 complete (PocketBase spike -> HAND-ROLLED verdict)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 14
 ---
 
 # State: SquireBot
@@ -29,10 +29,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 ## Current Position
 
-Phase: 11 — Backend Foundation + Ingest API (not started; roadmap just created)
-Plan: —
-Status: Ready to execute
-Last activity: 2026-05-29 -- Phase 11 planning complete
+Phase: 11 — Backend Foundation + Ingest API (in progress)
+Plan: 11-01 complete (1/7) → next 11-02 (goose schema)
+Status: Executing — D-01 spike resolved (HAND-ROLLED Go fallback); 11-02/11-05 unblocked
+Last activity: 2026-05-29 -- Plan 11-01 complete (PocketBase spike → HAND-ROLLED verdict)
 
 ### v2.0 Phase Plan (2026-05-28)
 
@@ -40,7 +40,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 
 | Phase | Name | Requirements | Stack | Depends on | Status |
 |-------|------|--------------|-------|-----------|--------|
-| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | Not started |
+| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | 🚧 In progress (1/7; 11-01 spike → HAND-ROLLED verdict) |
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | Not started |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | Not started |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + TanStack Table + Tailwind; Go read API | P11 (read API) + P12 (data) | Not started |
@@ -98,6 +98,7 @@ All locked decisions live in `PROJECT.md` Key Decisions table and the per-milest
 
 - **Off Google entirely** — replace the Sheet (UI + data store), not placate Google's brand verification.
 - **Backend = Hetzner Cloud VPS (US, amd64) + Caddy + SQLite + `goose`** (host switched Oracle Always Free → Hetzner on 2026-05-29 — reverted to the research-recommended Hetzner VPS, SQLite retained not Postgres; see Phase 11 CONTEXT D-12). Cost ~$55/yr VPS + ~$12/yr domain ≈ $67/yr (the "$0 backend" premise is retired).
+- **Backend server = HAND-ROLLED Go (`net/http` ServeMux + `modernc.org/sqlite` + `goose`), NOT PocketBase** (D-01 spike verdict, Plan 11-01, 2026-05-29). All four spike probes passed, but the opaque-token auth + plain-SQL-table design bypasses PocketBase's leverage points; the pre-1.0 churn tax isn't worth it. P15 Discord OAuth2 (AUTH-08) is consequently hand-rolled `golang.org/x/oauth2`, not PB's built-in provider.
 - **Frontend = SvelteKit static (adapter-static) + TanStack Table + Tailwind** on Cloudflare/GitHub Pages.
 - **Watcher↔backend auth = per-guildie opaque bearer token** ("guild code"), hashed server-side, stored client-side in DPAPI wincred; character ownership derived server-side from the credential (`_char_owner`/`UpsertCharOwner` deleted).
 - **Website login = Discord OAuth2** gated on guild Discord membership (gate-free; pre-pays AUTH-09). "Sign in with Google" rejected outright (re-introduces the gate).
@@ -106,7 +107,7 @@ All locked decisions live in `PROJECT.md` Key Decisions table and the per-milest
 
 ### Open TODOs
 
-- **(P11 PocketBase spike)** 1-day evaluation at the start of Phase 11 — self-hosted PocketBase vs. hand-rolled Go server; could compress P11 + P15 by ~5–8 days. Capture verdict in P11 CONTEXT.
+- **(P11 PocketBase spike — RESOLVED 2026-05-29, Plan 11-01)** Verdict = **HAND-ROLLED Go fallback** (reject PocketBase). All four D-01 probes passed technically, but the locked design bypasses PB's auth-record model (opaque guild-code tokens via a custom `crypto/subtle` guard) and its collection model (plain SQL tables), so PB's admin-UI/auto-REST/Discord-OAuth2 leverage is unused — not worth a 22.9 MB pre-1.0 framework + migration tax. **11-05 wires `net/http` ServeMux + `time.Ticker` and removes the pocketbase dep + `spike/` tree. P15 Discord OAuth2 is now hand-rolled `golang.org/x/oauth2`.** Verdict in `11-01-SUMMARY.md` + appended to `11-CONTEXT.md`.
 - **(A-record for `api.squirebot.quest` — blocked on Hetzner VPS provisioning)** Domain `squirebot.quest` registered at Porkbun (2026-05-29); apex/`www` reserved for the P14 frontend. Remaining: add DNS A-record `api` → the Hetzner VPS public IPv4 once the instance is provisioned (P11 Wave 5 / 11-06 Task 2), so Caddy can issue the TLS cert via HTTP-01. Tracked: `.planning/todos/pending/2026-05-29-add-api-squirebot-quest-a-record-after-oracle-provision.md`.
 - **(Port-relevant backlog into P14)** 999.28 (`didYouMean('')` empty-query contract) + 999.30 (`didYouMean` Levenshtein contract mismatch) should be resolved when porting search logic to the frontend (WEB-03).
 - **(Watcher gofmt/console nits into P13)** 999.20 (`console_windows.go` gofmt) + 999.21 (`freeConsole()` doc-vs-impl) + 999.22 (SemVer-aware auto-update comparison — load-bearing for the P16 coordinated flip) ride along with the watcher re-target.
@@ -119,6 +120,8 @@ None. Roadmap created; Phase 11 ready to plan.
 ## Session Continuity
 
 ### Last Session Summary
+
+**2026-05-29 (Plan 11-01 executed — PocketBase spike):** Ran the time-boxed D-01 PocketBase-as-framework spike (the gating plan of Phase 11). Pinned `github.com/pocketbase/pocketbase@v0.39.0`, confirming it pulls the same no-cgo `modernc.org/sqlite v1.51.0` the hand-rolled fallback uses (the headline RESEARCH finding, now empirical). A throwaway harness (`spike/pocketbase/main.go`) exercised all four probes with recorded PASS evidence: (a) 5 raw-DDL tables coexist with PB system tables; (b) custom `crypto/subtle` bearer guard → 401 no/bad token, 200 valid, with idempotent DELETE+INSERT atomic replace in `RunInTransaction`; (c) `*/1 * * * *` cron fired at the minute boundary while serving; (d) `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` produced a 22.9 MB static ELF x86-64 binary from Windows. **VERDICT = HAND-ROLLED Go fallback** (reject PocketBase): the locked design bypasses PB's auth-record + collection models, so its admin-UI/auto-REST/Discord-OAuth2 leverage is unused — not worth a pre-1.0 framework + migration tax. Verdict recorded in `11-01-SUMMARY.md` and appended to `11-CONTEXT.md`. 3 atomic commits (`b894008` feat, `adeaead` chore, `b797c64` docs). 11-02 (verdict-agnostic) and 11-05 (now `net/http` ServeMux + `time.Ticker`; removes the PB dep + spike tree) unblocked.
 
 **2026-05-28 (v2.0 ROADMAP created):** Roadmapper transformed the 26 v2.0 requirements into a 6-phase structure (Phases 11–16), accepting REQUIREMENTS.md's provisional A–F mapping unchanged (no concrete coverage problem found). Coverage validated 26/26 (P11=5, P12=2, P13=4, P14=6, P15=5, P16=4); no orphans, no duplicates. Dependencies set: P11 has none; P12→P11; P13→P11; P14→P11+P12; P15→P14+P11; P16→P13+P14+P15+P12. Each phase got 2–5 observable success criteria. Honored the locked stack (Oracle Always Free + SQLite + goose; SvelteKit; Discord OAuth2; bearer token) over the research docs' Hetzner+Postgres recommendation, with an explicit "locked overrides research" note in ROADMAP. Front-loaded the ingest path (P11 + P13 restore data flow before the polished P14 frontend). Surfaced the optional PocketBase spike as a P11 decision note. Wrote `.planning/ROADMAP.md` (v2.0 section + Phase Details + progress tables + backlog re-annotated for Sheet-mooting), finalized `.planning/REQUIREMENTS.md` traceability (Phase column finalized), and reset this STATE.md to the v2.0 phase plan (replacing the stale v1.0.2 phase-plan content). Phase numbering starts at 11 (Phase dirs 09+10 exist on disk from the superseded v1.0.2 binary; never reuse 9/10). *(2026-05-29: backend host later switched Oracle → Hetzner — see Phase 11 CONTEXT D-12; the "$0 backend / ~$12/yr total" premise this entry recorded is retired in favour of ~$67/yr.)*
 
@@ -138,7 +141,7 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Next Action
 
-`/clear` then `/gsd-plan-phase 11` — Phase 11 (Backend Foundation + Ingest API) is the first v2.0 phase, no dependencies. Planner reads ROADMAP.md § Phase 11 + the 4 findings docs (esp. `01-backend-hosting.md` for SQLite/goose/Caddy/Hetzner + `04-data-enrichment-migration.md` §1 for the SQLite schema) + REQUIREMENTS.md (BACKEND-01/02/03/04/06). First plan should fold in the optional 1-day PocketBase spike decision.
+`/clear` then `/gsd-execute-phase 11` — continue Phase 11 at **Plan 11-02** (goose schema + `00001_init.sql` + modernc DB-open + temp-DB test helper, BACKEND-02). The D-01 spike (11-01) is complete with verdict **HAND-ROLLED Go fallback**, so all downstream plans use stdlib `net/http`/`modernc`/`goose` shapes (NOT PocketBase). 11-05 carries two cleanup chores: `go mod tidy` after deleting `spike/pocketbase/`, and remove the `pocketbase` dependency. Optionally `/gsd-verify-work 11` first to verify the spike.
 
 ---
 

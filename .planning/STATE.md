@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-29T21:33:12.000Z"
-last_activity: 2026-05-29 -- Plan 11-02 complete (goose schema + modernc DB-open + NewTestDB)
+last_updated: "2026-05-29T21:50:39.000Z"
+last_activity: 2026-05-29 -- Plan 11-03 complete (UTF-8 parser + atomic replace tx + first-sighting bind/cross-owner reject, BACKEND-03)
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 2
-  percent: 29
+  completed_plans: 3
+  percent: 43
 ---
 
 # State: SquireBot
@@ -30,9 +30,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 ## Current Position
 
 Phase: 11 — Backend Foundation + Ingest API (in progress)
-Plan: 11-02 complete (2/7) → next 11-03 (parser port + atomic replace tx)
-Status: Executing — BACKEND-02 done (goose schema + modernc DB-open + NewTestDB); Wave-3 (11-03/04/05) unblocked
-Last activity: 2026-05-29 -- Plan 11-02 complete (goose schema + modernc DB-open + NewTestDB)
+Plan: 11-03 complete (3/7) → next 11-04 (bearer guard + mint/revoke CLI) and/or 11-05 (ingest handler)
+Status: Executing — BACKEND-03 core done (UTF-8 parser + atomic replace tx + first-sighting bind/cross-owner reject + 00002_audit.sql); full `go test ./...` green (no v1 watcher regression). 11-05 composes the tx + bind behind POST /api/v1/ingest.
+Last activity: 2026-05-29 -- Plan 11-03 complete (UTF-8 parser + atomic replace tx + first-sighting bind/cross-owner reject, BACKEND-03)
 
 ### v2.0 Phase Plan (2026-05-28)
 
@@ -40,7 +40,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 
 | Phase | Name | Requirements | Stack | Depends on | Status |
 |-------|------|--------------|-------|-----------|--------|
-| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | 🚧 In progress (2/7; 11-02 goose schema + modernc DB done, BACKEND-02) |
+| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | 🚧 In progress (3/7; 11-03 UTF-8 parser + atomic replace tx + first-sighting bind done, BACKEND-03) |
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | Not started |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | Not started |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + TanStack Table + Tailwind; Go read API | P11 (read API) + P12 (data) | Not started |
@@ -104,6 +104,8 @@ All locked decisions live in `PROJECT.md` Key Decisions table and the per-milest
 - **Website login = Discord OAuth2** gated on guild Discord membership (gate-free; pre-pays AUTH-09). "Sign in with Google" rejected outright (re-introduces the gate).
 - **Schema evolution = forward-only `goose` migrations + API version**; retire `_meta.schema_version`/`WatcherMaxSchemaVersion`.
 - **Cutover = hybrid shadow-mode** (never writes to the Sheet; self-healing inventory + enrichment).
+- **Encoding contract A1 = UTF-8 `content` (locked, Plan 11-03, 2026-05-29):** the shared `internal/parse` is now UTF-8/`io.Reader`-based — the CP1252→UTF-8 decode lives in ONE place (`parse.CP1252Reader`) on the caller's disk-read side. The watcher (incl. P13) wraps; the backend ingest path (UTF-8 JSON `content`) does NOT. **P13 must not double-decode.** The v1 watcher's two runapp.go call sites already wrap in `CP1252Reader` as of 11-03 (zero behavior change off disk). RESEARCH "Encoding Note" Open Question 1 → resolution 1/2.
+- **v2 access-control tightening (D-07, Plan 11-03):** v1 first-write-wins warned-and-allowed a cross-owner character; v2 REJECTS (`store.ErrCharOwnedByAnother`) + writes an append-only `audit_log` row, owner_id never overwritten — because the backend (not 12 racing watchers) owns the write.
 
 ### Open TODOs
 
@@ -120,6 +122,8 @@ None. Roadmap created; Phase 11 ready to plan.
 ## Session Continuity
 
 ### Last Session Summary
+
+**2026-05-29 (Plan 11-03 executed — UTF-8 parser refactor + atomic replace tx + first-sighting bind, BACKEND-03):** Built the heart of BACKEND-03 in three TDD tasks (RED→GREEN each; 6 atomic commits). **Task 1 (encoding A1):** dropped `charmap.Windows1252` from the shared `Parse`/`ParseSpellbook` (they now treat their `io.Reader` as already UTF-8) and relocated the decode into ONE exported helper `parse.CP1252Reader`; wrapped the v1 watcher's two production call sites (`internal/app/runapp.go` inventory + spellbook) in `parse.CP1252Reader` (zero behavior change off disk); re-homed the 4 CP1252-dependent tests into `reader_test.go` + added `TestParse_UTF8Content_NoDoubleDecode`. **Task 2 (atomic replace):** `store.Store`/`NewStore` + `ReplaceInventory`/`ReplaceSpellbook` = one `BEGIN IMMEDIATE…DELETE-all…INSERT…UPDATE…COMMIT` (RESEARCH Pattern 1); shrinking snapshot drops rows (BACKEND-03); integers persist as real INTEGER via `strconv.Atoi` (Sheets `StringValue` hack DROPPED); `row_ordinal`=line order; spellbook `normalized_name`=`lower(trim(name))`; proven atomic on error (FK-violation rollback, neighbour rows untouched). **Task 3 (binding):** `bindCharacter(ctx, *sql.Tx, name, ownerID)` + `ErrCharOwnedByAnother` — first sighting binds to the uploading owner, same-owner re-bind is a no-op, a DIFFERENT owner is REJECTED + `audit_log` row, owner_id never overwritten (v2 tightens v1's warn-and-allow, D-07/V4); single indexed `SELECT … WHERE name` (UNIQUE COLLATE NOCASE); new forward-only `00002_audit.sql` (00001 untouched; goose idempotent at version 2). **FULL `go test ./...` green** (every watcher AND backend package — no v1 regression); `go build`/`go vet` clean; no `go.mod` change. **No deviations.** `bindCharacter`/`Replace*` take a `*sql.Tx`/`*sql.DB` so 11-05 composes bind + replace in ONE tx behind `POST /api/v1/ingest`.
 
 **2026-05-29 (Plan 11-02 executed — goose schema + modernc DB-open + NewTestDB, BACKEND-02):** Built the verdict-agnostic SQLite persistence foundation. Created `internal/backendsrv/migrations/00001_init.sql` (forward-only goose migration — all ten D-13 tables: `owner`/`character` split with FK + `name UNIQUE COLLATE NOCASE`, `inventory_item`/`spellbook_entry` with `ON DELETE CASCADE`, `guild_code`, and the five EMPTY dimension tables, copied verbatim from RESEARCH §"Migration SQL Sketch") + `embed.go` (`//go:embed *.sql` + `goose.SetDialect("sqlite3")` + `goose.Up`, idempotent). Created `store/db.go` (`Open`/`DSN` on the modernc `"sqlite"` driver with the RESEARCH Pattern 5 DSN — WAL/busy_timeout(5000)/foreign_keys(ON)/synchronous(NORMAL)/_txlock=immediate — + `SetMaxOpenConns(1)` single-writer) and `store/testhelper.go` (`NewTestDB(t)` shared temp-DB fixture: `Open` + `goose.Up`, in a non-`_test.go` file so 11-03/04/05 can import it). Six tests pass (foreign_keys=1 on a fresh conn; all 10 tables created; goose.Up idempotent on re-run; 5 dimension tables empty); `go build ./...`, `go vet ./...` clean; `CGO_ENABLED=0` builds on host + `linux/amd64` (pure-Go modernc, no cgo). Task 2 followed TDD RED→GREEN. 3 atomic commits (`c262816` feat migration, `3117a1a` test RED, `165582a` feat GREEN). **No deviations.** `go mod tidy` promoted `modernc.org/sqlite` + `goose/v3` to direct deps (and reclassified the pre-existing spike's `pocketbase` dep to direct — removed in 11-05 as planned, not touched here). Wave-3 (11-03 store tx / 11-04 auth store / 11-05 ingest+HTTP) unblocked.
 
@@ -143,7 +147,7 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Next Action
 
-`/clear` then `/gsd-execute-phase 11` — continue Phase 11 at **Plan 11-03** (parser port to UTF-8 `content` per A1 + atomic full-snapshot replace `*sql.Tx` + first-sighting bind / cross-owner reject, BACKEND-03). 11-02 (BACKEND-02) is complete: `store.Open`/`store.DSN`/`store.NewTestDB` + `migrations.RunMigrations` are exported and ready for the Wave-3 plans to build on. All downstream plans use stdlib `net/http`/`modernc`/`goose` shapes (NOT PocketBase, per the 11-01 HAND-ROLLED verdict). 11-05 still carries two cleanup chores: delete `spike/pocketbase/` + remove the `pocketbase` dependency, then `go mod tidy`. Optionally `/gsd-verify-work 11` to verify 11-01/11-02.
+`/clear` then `/gsd-execute-phase 11` — continue Phase 11 at **Plan 11-04** (bearer guard: SHA-256 + `crypto/subtle` constant-time compare, mint/revoke CLI, hash-only `guild_code` storage, BACKEND-04) and/or **11-05** (the `POST /api/v1/ingest` handler + `cmd/squirebot-server` entrypoint + scheduler skeleton, which composes 11-03's `bindCharacter` + `ReplaceInventory`/`ReplaceSpellbook` in ONE tx and the 11-04 bearer guard). 11-03 (BACKEND-03 core) is complete: `store.Store`/`ReplaceInventory`/`ReplaceSpellbook`, `bindCharacter`/`ErrCharOwnedByAnother`, `parse.CP1252Reader`, and `00002_audit.sql` are exported/applied and test-proven; full `go test ./...` green. All downstream plans use stdlib `net/http`/`modernc`/`goose` (NOT PocketBase, per the 11-01 HAND-ROLLED verdict). 11-05 still carries two cleanup chores: delete `spike/pocketbase/` + remove the `pocketbase` dependency, then `go mod tidy`. **P13 handoff: the watcher must CP1252→UTF-8 decode via `parse.CP1252Reader` before POSTing `content` — do NOT double-decode.** Optionally `/gsd-verify-work 11`.
 
 ---
 

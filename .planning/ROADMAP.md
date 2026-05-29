@@ -85,7 +85,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 **Plans**: 7 plans (1 spike + 4 autonomous build/test + 2 on-box ops)
 - [x] 11-01-PLAN.md — PocketBase-as-framework spike (Wave 1, gating): ran the four D-01 PASS/FAIL probes (all PASS); **VERDICT = HAND-ROLLED Go fallback** (reject PocketBase — design bypasses PB's auth-record + collection models). Recorded in 11-01-SUMMARY + 11-CONTEXT. ✅ 2026-05-29
 - [x] 11-02-PLAN.md — goose schema + 00001_init.sql + modernc DB-open (DSN pragmas) + shared temp-DB test helper (BACKEND-02). ✅ 2026-05-29
-- [ ] 11-03-PLAN.md — parser port to UTF-8 content (A1) + atomic full-snapshot replace tx + first-sighting bind/cross-owner reject (BACKEND-03)
+- [x] 11-03-PLAN.md — parser port to UTF-8 content (A1) + atomic full-snapshot replace tx + first-sighting bind/cross-owner reject (BACKEND-03). ✅ 2026-05-29
 - [ ] 11-04-PLAN.md — bearer guard (SHA-256 + constant-time compare) + mint/revoke CLI, hash-only storage (BACKEND-04)
 - [ ] 11-05-PLAN.md — POST /api/v1/ingest handler + cmd/squirebot-server entrypoint + scheduler skeleton (verdict-dependent wiring) (BACKEND-01/03/04)
 - [ ] 11-06-PLAN.md — Hetzner VPS provisioning + Cloud Firewall + ufw + Caddy + systemd + cross-compile deploy (on-box; BACKEND-01)
@@ -176,7 +176,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 11. Backend Foundation + Ingest API | v2.0 | 2/7 | 🚧 In Progress | - |
+| 11. Backend Foundation + Ingest API | v2.0 | 3/7 | 🚧 In Progress | - |
 | 12. Enrichment Job Migration | v2.0 | 0/TBD | Not started | - |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 0/TBD | Not started | - |
 | 14. Web Frontend | v2.0 | 0/TBD | Not started | - |

@@ -36,6 +36,14 @@ This produces a static `linux/amd64` ELF `squirebot-server` (~10 MB stripped). `
 > public IPv4 is set (Caddy issues the Let's Encrypt cert via the HTTP-01 challenge — no
 > registrar API token needed). Document the public IPv4 + region in the evidence section.
 
+### 2.0 Copy the artifacts up (from the dev box)
+`scp` the cross-compiled binary + the three deploy artifacts to `/tmp/` on the box (use your
+box's SSH user — Hetzner Ubuntu defaults to `root`):
+```powershell
+scp squirebot-server deploy/Caddyfile deploy/squirebot-server.service deploy/squirebot-backup.sh root@<vps-ip>:/tmp/
+ssh root@<vps-ip>          # then run 2.1–2.5 on the box
+```
+
 ### 2.1 Create the service user + data dir
 ```bash
 sudo useradd --system --no-create-home squirebot
@@ -55,11 +63,17 @@ sudo ufw status               # expect 22, 80, 443 = ALLOW
 The Go server's `8090` stays loopback-only — **do NOT open it**. (If you also attached a
 Hetzner Cloud Firewall, confirm it admits 22/80/443 too — both layers must allow the traffic.)
 
-### 2.3 Install Caddy + drop the Caddyfile
+### 2.3 Install Caddy (+ sqlite3) and drop the Caddyfile
+Caddy is **not** in Ubuntu's default repos — add the official Caddy apt repo first, and grab
+`sqlite3` while here (needed for the backup/restore in §3–§4 and the `.tables` check below):
 ```bash
-sudo apt update && sudo apt install -y caddy      # gives a caddy.service
-sudo cp deploy/Caddyfile /etc/caddy/Caddyfile     # (scp deploy/Caddyfile up first, or paste it)
-sudo systemctl reload caddy                        # Caddy auto-provisions the Let's Encrypt cert
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install -y caddy sqlite3                  # caddy.service + the sqlite3 CLI
+sudo cp /tmp/Caddyfile /etc/caddy/Caddyfile        # (copied up in 2.0)
+sudo systemctl reload caddy                         # Caddy auto-provisions the Let's Encrypt cert
 ```
 `deploy/Caddyfile` is the entire config:
 ```
@@ -70,9 +84,8 @@ api.squirebot.quest {
 
 ### 2.4 Deploy the binary + systemd unit
 ```bash
-# from the dev box: scp squirebot-server  user@<vps-ip>:/tmp/
 sudo install -m 0755 /tmp/squirebot-server /usr/local/bin/squirebot-server
-sudo cp deploy/squirebot-server.service /etc/systemd/system/
+sudo cp /tmp/squirebot-server.service /etc/systemd/system/    # (copied up in 2.0)
 sudo systemctl daemon-reload
 sudo systemctl enable --now squirebot-server      # first start runs goose.Up → creates the schema
 ```
@@ -119,7 +132,7 @@ it to the private R2 bucket. The backup is **shell, never Go** (modernc has no `
 
 ### 3.2 Install the script + cron
 ```bash
-sudo install -m 0755 deploy/squirebot-backup.sh /usr/local/bin/squirebot-backup.sh
+sudo install -m 0755 /tmp/squirebot-backup.sh /usr/local/bin/squirebot-backup.sh   # (copied up in 2.0)
 sudo /usr/local/bin/squirebot-backup.sh                       # run once manually to verify
 rclone ls r2:squirebot-backups                                # expect squirebot-<DATE>.db.gz present
 sudo crontab -e   # add:  0 4 * * * /usr/local/bin/squirebot-backup.sh >> /var/log/squirebot-backup.log 2>&1

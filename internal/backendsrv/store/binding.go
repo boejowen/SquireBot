@@ -29,6 +29,18 @@ import (
 // handler (11-05) maps it to HTTP 409 with a clear message.
 var ErrCharOwnedByAnother = errors.New("character owned by another owner")
 
+// BindCharacter is the exported entry point to the first-sighting owner bind,
+// called by the ingest handler (11-05, a different package) INSIDE the same
+// *sql.Tx as the atomic replace. It delegates UNCHANGED to bindCharacter (the
+// package-internal implementation that 11-03's binding_test.go covers directly),
+// so there is one tested bind/cross-owner-reject SQL path. It returns the
+// resolved charID on a first-sighting INSERT or same-owner match, and
+// ErrCharOwnedByAnother (after writing the audit_log row) on a cross-owner
+// attempt — which the handler maps to 409, rolling the tx back.
+func BindCharacter(ctx context.Context, tx *sql.Tx, charName string, tokenOwnerID int64) (charID int64, err error) {
+	return bindCharacter(ctx, tx, charName, tokenOwnerID)
+}
+
 // bindCharacter resolves the character named charName for the uploading token's
 // owner (tokenOwnerID), enforcing the first-sighting single-owner policy:
 //

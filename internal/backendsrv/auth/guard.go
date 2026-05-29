@@ -27,6 +27,21 @@ type Auth struct {
 // New returns an *Auth guarding db. 11-05 calls this once at server startup.
 func New(db *sql.DB) *Auth { return &Auth{db: db} }
 
+// ResolveToken is the exported entry point to the bearer guard, called by the
+// ingest handler (internal/backendsrv/ingest, a different package) as the FIRST
+// step of POST /api/v1/ingest. It delegates UNCHANGED to resolveToken (the
+// package-internal implementation that 11-04's guard_test.go covers directly),
+// so there is one tested code path. It returns (ownerID, true) for a valid
+// active code and (0, false) for a missing/malformed/unknown/revoked token —
+// which the handler maps to 401, writing nothing (D-08 / BACKEND-04 / V2).
+//
+// The 11-04 contract deliberately kept resolveToken lowercase until its first
+// cross-package consumer existed; this one-line export is that consumer (the
+// security behavior is identical — no new logic).
+func (a *Auth) ResolveToken(ctx context.Context, authHeader string) (ownerID int64, ok bool) {
+	return a.resolveToken(ctx, authHeader)
+}
+
 // bearerPrefix is the required Authorization scheme. A header that does not start
 // with exactly "Bearer " is malformed and rejected (D-08).
 const bearerPrefix = "Bearer "

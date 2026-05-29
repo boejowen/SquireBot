@@ -67,6 +67,27 @@ func (s *Store) ReplaceInventory(ctx context.Context, charID int64, rows [][]str
 	}
 	defer tx.Rollback() // no-op after Commit; rolls back the DELETE on any INSERT error
 
+	if err := ReplaceInventoryTx(ctx, tx, charID, rows, uploadedAt, watcherVer); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// ReplaceInventoryTx is the *sql.Tx-taking body of the atomic inventory replace.
+// It runs the DELETE-all-then-INSERT(+UPDATE character) inside the caller's
+// transaction WITHOUT beginning or committing — so the ingest handler (11-05)
+// can compose the first-sighting bindCharacter and this replace in ONE
+// transaction (a cross-owner reject rolls back cleanly; the replace sees the
+// just-bound charID). The public Store.ReplaceInventory delegates here, so this
+// is the SINGLE inventory-replace SQL path — there is no second, test-uncovered
+// copy (11-03's replace_test.go exercises it via Store.ReplaceInventory; the
+// handler exercises it directly).
+//
+// Begin/Commit/Rollback are the CALLER's responsibility. On any error this
+// returns it WITHOUT touching the transaction state (the caller's deferred
+// Rollback handles cleanup), so partial work is never committed.
+func ReplaceInventoryTx(ctx context.Context, tx *sql.Tx, charID int64, rows [][]string, uploadedAt time.Time, watcherVer string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM inventory_item WHERE character_id = ?`, charID); err != nil {
 		slog.Error("inventory replace: delete", "char_id", charID, "err", err)
 		return fmt.Errorf("delete inventory_item (char_id=%d): %w", charID, err)
@@ -98,7 +119,7 @@ func (s *Store) ReplaceInventory(ctx context.Context, charID int64, rows [][]str
 		return fmt.Errorf("update character last_seen (char_id=%d): %w", charID, err)
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // ReplaceSpellbook atomically replaces ALL spellbook_entry rows for charID with
@@ -113,6 +134,21 @@ func (s *Store) ReplaceSpellbook(ctx context.Context, charID int64, rows [][]str
 	}
 	defer tx.Rollback()
 
+	if err := ReplaceSpellbookTx(ctx, tx, charID, rows, uploadedAt, watcherVer); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// ReplaceSpellbookTx is the *sql.Tx-taking body of the atomic spellbook replace
+// (symmetric with ReplaceInventoryTx). It runs DELETE-all-then-INSERT(+UPDATE
+// character) inside the caller's transaction WITHOUT begin/commit, so 11-05 can
+// compose bindCharacter + this replace in ONE tx. The public
+// Store.ReplaceSpellbook delegates here — the SINGLE spellbook-replace SQL path
+// (11-03's tests cover it via the public method; the handler calls it directly).
+// Begin/Commit/Rollback are the caller's responsibility.
+func ReplaceSpellbookTx(ctx context.Context, tx *sql.Tx, charID int64, rows [][]string, uploadedAt time.Time, watcherVer string) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM spellbook_entry WHERE character_id = ?`, charID); err != nil {
 		slog.Error("spellbook replace: delete", "char_id", charID, "err", err)
 		return fmt.Errorf("delete spellbook_entry (char_id=%d): %w", charID, err)
@@ -143,5 +179,5 @@ func (s *Store) ReplaceSpellbook(ctx context.Context, charID int64, rows [][]str
 		return fmt.Errorf("update character last_seen (char_id=%d): %w", charID, err)
 	}
 
-	return tx.Commit()
+	return nil
 }

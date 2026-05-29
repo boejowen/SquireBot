@@ -74,44 +74,46 @@
 | Postgres / managed DB | SQLite fits the tiny data (<100 MB, ~50–150 writes/day); Postgres is needless ops overhead at this scale (SCOPE Open Decision 1). |
 | "Sign in with Google" website login | Re-introduces the exact brand-verification gate v2.0 exists to escape. Discord OAuth2 (gate-free) is the choice; magic-link/GitHub are gate-free fallbacks. |
 | Mobile app | The website is reachable from any browser; native mobile remains unnecessary scope (carried from v1). |
+| Inventory history / per-item time-series | Not in the Core Value ("what's missing, where is it"); adds real complexity. Parked as backlog (finding 04 §1.2). |
+| Per-owner visibility tiers | Universal visibility remains the v1 decision; the DB makes tiers cheap to add later if the guild asks, but not v2.0 scope (finding 04 §5.2). |
 
 ---
 
 ## Traceability
 
-| REQ-ID | Phase (provisional) | Plan(s) | Status |
-|--------|---------------------|---------|--------|
-| BACKEND-01 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
-| BACKEND-02 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
-| BACKEND-03 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
-| BACKEND-04 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
-| BACKEND-06 | P11 Backend foundation + ingest | (filled by `/gsd-plan-phase 11`) | Pending |
-| ENRICH-10 | P12 Enrichment migration | (filled by `/gsd-plan-phase 12`) | Pending |
-| ENRICH-11 | P12 Enrichment migration | (filled by `/gsd-plan-phase 12`) | Pending |
-| WATCH-08 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
-| WATCH-09 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
-| WATCH-10 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
-| WATCH-11 | P13 Watcher re-target | (filled by `/gsd-plan-phase 13`) | Pending |
-| BACKEND-05 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-01 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-02 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-03 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-04 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-05 | P14 Web frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| AUTH-08 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
-| AUTH-09 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
-| ADMIN-04 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
-| ADMIN-05 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
-| ADMIN-06 | P15 Admin forms + login | (filled by `/gsd-plan-phase 15`) | Pending |
-| CUTOVER-01 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
-| CUTOVER-02 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
-| CUTOVER-03 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
-| CUTOVER-04 | P16 Cutover | (filled by `/gsd-plan-phase 16`) | Pending |
+| REQ-ID | Phase (finalized) | Plan(s) | Status |
+|--------|-------------------|---------|--------|
+| BACKEND-01 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-02 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-03 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-04 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
+| BACKEND-06 | P11 Backend Foundation + Ingest API | (filled by `/gsd-plan-phase 11`) | Pending |
+| ENRICH-10 | P12 Enrichment Job Migration | (filled by `/gsd-plan-phase 12`) | Pending |
+| ENRICH-11 | P12 Enrichment Job Migration | (filled by `/gsd-plan-phase 12`) | Pending |
+| WATCH-08 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
+| WATCH-09 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
+| WATCH-10 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
+| WATCH-11 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
+| BACKEND-05 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-01 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-02 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-03 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-04 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-05 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| AUTH-08 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
+| AUTH-09 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
+| ADMIN-04 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
+| ADMIN-05 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
+| ADMIN-06 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
+| CUTOVER-01 | P16 Cutover + Decommission | (filled by `/gsd-plan-phase 16`) | Pending |
+| CUTOVER-02 | P16 Cutover + Decommission | (filled by `/gsd-plan-phase 16`) | Pending |
+| CUTOVER-03 | P16 Cutover + Decommission | (filled by `/gsd-plan-phase 16`) | Pending |
+| CUTOVER-04 | P16 Cutover + Decommission | (filled by `/gsd-plan-phase 16`) | Pending |
 
-> Phase column is provisional (set at v2.0 milestone open, 2026-05-28); the roadmapper finalizes phase mapping + success criteria. Plan column filled by `/gsd-plan-phase` per phase.
+> Phase column **finalized by roadmap creation (2026-05-28)** — the provisional mapping was accepted unchanged (no concrete coverage problem found). Success criteria (2–5 observable behaviors per phase) live in `.planning/ROADMAP.md` § Phase Details. Plan column filled by `/gsd-plan-phase` per phase.
 
-**Coverage check (2026-05-28, pre-roadmap):** 26/26 requirements mapped to exactly one phase. No orphans, no duplicates. P11=5, P12=2, P13=4, P14=6, P15=5, P16=4.
+**Coverage check (2026-05-28, roadmap-finalized):** 26/26 requirements mapped to exactly one phase. No orphans, no duplicates. P11=5 (BACKEND-01/02/03/04/06), P12=2 (ENRICH-10/11), P13=4 (WATCH-08/09/10/11), P14=6 (BACKEND-05 + WEB-01/02/03/04/05), P15=5 (AUTH-08/09 + ADMIN-04/05/06), P16=4 (CUTOVER-01/02/03/04).
 
 ---
 
-*Defined: 2026-05-28 at v2.0 milestone start. 26 requirements across 7 categories (Backend, Enrichment, Watcher, Web, Auth, Admin, Cutover). Phase mapping finalized by roadmap creation.*
+*Defined: 2026-05-28 at v2.0 milestone start. 26 requirements across 7 categories (Backend, Enrichment, Watcher, Web, Auth, Admin, Cutover). Phase mapping FINALIZED by roadmap creation 2026-05-28 (Phases 11–16); success criteria in ROADMAP.md § Phase Details.*

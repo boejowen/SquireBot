@@ -1,0 +1,3 @@
+api.squirebot.quest {
+    reverse_proxy localhost:8090
+}

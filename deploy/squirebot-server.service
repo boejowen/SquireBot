@@ -1,0 +1,14 @@
+[Unit]
+Description=SquireBot backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/squirebot-server serve --addr 127.0.0.1:8090 --db /var/lib/squirebot/squirebot.db
+Restart=always
+RestartSec=3
+User=squirebot
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

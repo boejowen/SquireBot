@@ -8,7 +8,3 @@ squirebot.log.*
 *.tmp
 coverage.out
 node_modules/
-
-# Phase 11 PocketBase spike (throwaway) runtime + build artifacts
-pb_data/
-spike-amd64

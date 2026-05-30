@@ -94,9 +94,9 @@
 | WATCH-09 | P13 Watcher Re-Target + Onboarding | 13-03 (DELETE internal/auth/sheet/scaffold/picker/wizard/heartbeat + reauth.go, strip OAuth ldflags, `go mod tidy` drops the Google tree) + 13-04 (gofmt/freeConsole nits 999.20/21 + 999.22 SemVer compare + binary materially-smaller/no-secret SC-2 confirmation) | ✅ Complete (2026-05-30; 13-04 confirms the SC-2 binary-size byte measure) |
 | WATCH-10 | P13 Watcher Re-Target + Onboarding | 13-02 (`internal/credstore` DPAPI guild-code store + `internal/onboarding` native Win32 dialog, no browser) + 13-03 (onboarding flow: prompt→`/whoami` validate→credstore.Store→green) | ✅ Complete (2026-05-30) |
 | WATCH-11 | P13 Watcher Re-Target + Onboarding | 13-03 (first-launch `MigrateFromV1`: delete stale Google wincred + drop dead config fields, idempotent, preserve EQFolders+mtime; auto-update transport unchanged) + 13-04 (999.22 SemVer compare de-risks the P16 coordinated self-update flip) | ✅ Complete (2026-05-30; 13-04's 999.22 de-risks the P16 flip) |
-| BACKEND-05 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| BACKEND-05 | P14 Web Frontend | 14-01 (compute/data half: `store/readviews.go` + `compute/` Go reimpl of the 4 view builders, parity test-proven) → 14-03 (HTTP read handlers + CORS) | 🟡 Partial (14-01 compute/data done 2026-05-30; HTTP surface in 14-03) |
 | WEB-01 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-02 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-02 | P14 Web Frontend | 14-01 (gear OK/OTHER/MISSING + spell KNOWN/MISSING **compute** parity-proven by Go table-tests translated from the v1 vitest fixtures) → 14-04 (grid **display**) | 🟡 Partial (compute parity done 2026-05-30; grid display in 14-04) |
 | WEB-03 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
 | WEB-04 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
 | WEB-05 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |

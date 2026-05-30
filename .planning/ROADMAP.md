@@ -141,7 +141,11 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
   3. `gear_check` shows gear OK/MISSING/OTHER vs. Velious tiers and `spell_check` shows spell KNOWN/MISSING, matching v1 semantics for the same character (WEB-02)
   4. Cross-character item search returns matches in under 2 seconds and offers a "did you mean?" fuzzy suggestion (ported Wagner-Fischer Levenshtein) when a query has no exact hit (WEB-03)
   5. Every inventory row exposes a per-item tooltip (wiki summary + price + quest info) as rich HTML and a working direct wiki link; the site carries the EQ aesthetic theme site-wide per `docs/design/eq-aesthetic-theme.md` (WEB-04, WEB-05)
-**Plans**: TBD
+**Plans**: 4 plans (Wave 1: backend compute/data ∥ frontend foundation+logic → Wave 2: backend read handlers+CORS → Wave 3: frontend integration)
+- [x] 14-01-PLAN.md — Backend compute + data (Wave 1, independent): Go reimpl of the 4 v1 view builders (`view`/`bank`/`gear_check`/`spell_check`) over the SQLite store + parameterized `store/readviews.go` read methods, WEB-02 parity proven by Go table-tests translated from the v1 vitest fixtures; pickPrice ported with the TEXT-`direction` drift fix; enrichment inline on view/bank rows (D-01/D-02/D-03 · BACKEND-05/WEB-02). ✅ COMPLETE (2026-05-30 — `store/readviews.go` 8 read methods + `compute/` package; all parity table-tests pass; FIXED snake_case JSON contract documented in `compute/types.go` for Plans 02/03/04; `direction` = TEXT string `"0"`=WTS/`"1"`=WTB/`"2"`=BOTH, `price` nullable. See 14-01-SUMMARY.md).
+- [ ] 14-02-PLAN.md — Frontend foundation + pure-logic ports (Wave 1, parallel-safe, no live API): greenfield `web/` SvelteKit (adapter-static SPA, Tailwind v4 CSS-first, self-hosted `@fontsource` woff2, noindex+robots) + the 3 ported modules — `searchIndex.ts` (999.28 + 999.30 fixed), `composeNotes.ts` (plain-text→escaped rich HTML, the HIGH-severity XSS mitigation), `themes.ts` (5-theme CSS-custom-property registry, velious default, sheets-default dropped) + vitest suites (D-03/D-05/D-06/D-07/D-09 · WEB-03/04/05).
+- [ ] 14-03-PLAN.md — Backend read handlers + CORS (Wave 2, depends 14-01): the 5 `GET /api/v1/...` read handlers (4 views + meta) mirroring `whoami.go` minus the bearer guard (public, D-04) + stdlib CORS (exact origin `app.squirebot.quest`, OPTIONS 204) + `main.go` wiring wrapped in CORS; httptest-proven; pins the JSON contract for the client (D-01/D-04/D-10 · BACKEND-05).
+- [ ] 14-04-PLAN.md — Frontend integration (Wave 3, depends 14-02+14-03): API client + a local Svelte-5 `@tanstack/table-core` adapter (NOT `@tanstack/svelte-table` — Pitfall 1) + the one reusable filterable/sortable `DataGrid` (sticky Char+header, faceted filters, multi-sort) instantiated 4× with exact v1 column orders, the hover/tap rich-HTML `ItemTooltip`, cross-character `SearchBox`/`SearchResults` with inline “did you mean?”, and the `[data-theme]` SiteShell+ThemePicker; wires the read API into the visible product (D-03/D-08/D-09 · WEB-01/03/04/05 + BACKEND-05).
 **UI hint**: yes
 **Note**: pure-logic modules port across with little change — `searchIndex.ts` (`levenshtein`/`didYouMean`), `composeNotes.ts` (now rich HTML, no plain-text cell-note cap), and the `THEMES` registry → CSS custom properties. The Sheet's `onChange`/`buildView` rebuild + search-cache machinery is not rebuilt (views are computed on read). Theme picker becomes a per-user `localStorage` preference (no server write). UI safety gate applies.
 
@@ -189,7 +193,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | 11. Backend Foundation + Ingest API | v2.0 | 7/7 | ✅ Complete | 2026-05-29 |
 | 12. Enrichment Job Migration | v2.0 | 5/5 | ✅ Complete | 2026-05-29 |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 4/4 | ✅ Complete | 2026-05-30 |
-| 14. Web Frontend | v2.0 | 0/TBD | Not started | - |
+| 14. Web Frontend | v2.0 | 0/4 | Planned | - |
 | 15. Admin Web Forms + Login | v2.0 | 0/TBD | Not started | - |
 | 16. Cutover + Decommission | v2.0 | 0/TBD | Not started | - |
 

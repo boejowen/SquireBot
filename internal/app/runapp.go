@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/boejowen/SquireBot/internal/backend"
@@ -48,6 +49,20 @@ import (
 // charNameRE extracts <Char> from "<Char>-Inventory.txt". Retained for the
 // legacy extractCharName helper + its tests.
 var charNameRE = regexp.MustCompile(`^(.+)-Inventory\.txt$`)
+
+// watcherRunning serializes the watcher phase of RunApp (HIGH-01). The tray's
+// always-enabled "Enter guild code…" item re-invokes RunApp in a fresh
+// goroutine; without this guard a guildie who is already connected and clicks it
+// again would start a SECOND watch.Run (duplicate ingest POSTs per file change),
+// a second daily-update goroutine, and two goroutines writing the shared
+// cfg.LastKnown*Mtime maps with no sync → possible `fatal error: concurrent map
+// writes` (an uncatchable crash). The CAS below makes a second concurrent entry
+// into the watcher phase a no-op; the flag is reset on watcher exit so a
+// legitimate re-onboard after a disconnect still starts a fresh watcher.
+//
+// It guards ONLY the watcher phase — the onboarding branches above it (prompt
+// guild code while NOT yet watching) remain fully re-entrant.
+var watcherRunning atomic.Bool
 
 // badFolderMessage is the VERBATIM re-prompt text relocated from the deleted
 // wizard's EQ-folder step. Kept identical so guildies see the same wording.
@@ -87,6 +102,17 @@ func RunApp(ctx context.Context, cfg *config.Config, baseURL, version string, t 
 			return
 		}
 	}
+
+	// HIGH-01: only ONE watcher may run at a time. A re-invocation while the
+	// watcher is already up (a guildie re-clicking "Enter guild code…" while
+	// connected) loses the CAS and returns early — no second watch.Run, no
+	// second daily-update goroutine, no unsynchronized cfg-map writers.
+	if !watcherRunning.CompareAndSwap(false, true) {
+		slog.Info("watcher already running; ignoring re-invocation")
+		t.SetStatus("Already connected — watcher is running")
+		return
+	}
+	defer watcherRunning.Store(false)
 
 	if err := runWatcher(ctx, cfg, baseURL, version, code, t); err != nil {
 		slog.Error("watcher exited", "err", err)

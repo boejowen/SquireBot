@@ -13,6 +13,7 @@ import (
 
 	"github.com/boejowen/SquireBot/internal/backend"
 	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/credstore"
 	"github.com/boejowen/SquireBot/internal/tray"
 	"github.com/boejowen/SquireBot/internal/watch"
 )
@@ -245,6 +246,89 @@ func fastBackend(t *testing.T, srv *httptest.Server) *backend.Client {
 	c := backend.NewWithHTTPClient(srv.URL, srv.Client())
 	c.SetBackoffForTest([]time.Duration{0, 0, 0})
 	return c
+}
+
+// ---------------------------------------------------------------------------
+// Phase 13 (HIGH-01 regression): the watcherRunning CAS guard ensures only ONE
+// watcher phase runs at a time. A second concurrent RunApp invocation while a
+// watcher is already up (a guildie re-clicking "Enter guild code…" while
+// connected) must lose the CAS and no-op — no second watch.Run, no second
+// daily-update goroutine, and no second unsynchronized writer of the shared
+// cfg.LastKnown*Mtime maps (which would risk `fatal error: concurrent map
+// writes`).
+// ---------------------------------------------------------------------------
+
+// TestWatcherRunningGuard_SecondEntryNoOps proves the CAS guard at the boundary
+// it protects, headlessly (no real fsnotify watcher, no tray syscalls, no
+// backend round-trip). We simulate a first watcher already being up by holding
+// watcherRunning true, then call RunApp; its watcher phase must lose the CAS and
+// return early WITHOUT starting a second watcher. Observable proof: with a guild
+// code + EQ folder present (so RunApp falls THROUGH onboarding to the guarded
+// watcher phase), the tray is never flipped to green and the ingest backend
+// records ZERO requests — the second watcher's rescanCatchUp/watch.Run never ran.
+func TestWatcherRunningGuard_SecondEntryNoOps(t *testing.T) {
+	// The guard is exercised through credstore.Read (real DPAPI on Windows). On
+	// a box without a usable credential store, skip — the credstore round-trip
+	// test makes the same platform assumption.
+	const probeCode = "high01-guard-probe-code"
+	if err := credstore.Store(probeCode); err != nil {
+		t.Skipf("credstore unavailable on this platform: %v", err)
+	}
+	t.Cleanup(func() { _ = credstore.Delete() })
+
+	withTempLOCALAPPDATA(t) // redirect cfg.Save() under tmp (belt-and-braces)
+
+	// Hold the guard as if a first watcher were already running.
+	if !watcherRunning.CompareAndSwap(false, true) {
+		t.Fatal("watcherRunning was already held at test start; tests must leave it false")
+	}
+	t.Cleanup(func() { watcherRunning.Store(false) })
+
+	// A backend that records any request. If the second watcher started, its
+	// rescanCatchUp would POST the seeded inventory file here.
+	ir := &ingestRecorder{status: http.StatusNoContent}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+
+	// Seed an EQ folder with one inventory file so the guarded watcher phase,
+	// had it run, would have something to upload via catch-up.
+	eqDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(eqDir, "Foo-Inventory.txt"),
+		[]byte("Belt\tThing\t1\t1\t0\n"), 0o644); err != nil {
+		t.Fatalf("seed inv: %v", err)
+	}
+
+	cfg := &config.Config{
+		Version:                 1,
+		LogLevel:                "info",
+		EQFolders:               []string{eqDir},
+		LastKnownInventoryMtime: map[string]string{},
+		LastKnownSpellbookMtime: map[string]string{},
+	}
+	tc := tray.NewController(tray.Config{})
+
+	// RunApp must return promptly (the CAS-fail path is a synchronous early
+	// return). Guard against a hang/regression with a timeout.
+	done := make(chan struct{})
+	go func() {
+		RunApp(context.Background(), cfg, srv.URL, "2.0.0", tc)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunApp did not return — the watcherRunning CAS guard did not no-op the second entry")
+	}
+
+	if ir.requests() != 0 {
+		t.Fatalf("second RunApp made %d backend request(s); want 0 — a second watcher started despite the guard", ir.requests())
+	}
+
+	// Sanity: the guard must still be held (RunApp's `defer watcherRunning.Store(false)`
+	// belongs to the FIRST watcher; the no-op second entry must NOT have cleared it).
+	if !watcherRunning.Load() {
+		t.Fatal("the no-op second entry cleared watcherRunning; it must leave the first watcher's flag intact")
+	}
 }
 
 // TestMakeOnInventoryChange_204PersistsMtime: a 204 from the backend persists

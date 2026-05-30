@@ -16,6 +16,8 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Current milestone: v2.0 "Off Google" — Website Frontend** (started 2026-05-28) — replaces the Google Sheet (UI + data store) with a self-hosted Go + SQLite backend + static web frontend, eliminating the Google OAuth dependency. v1.0.2 Robustness Polish shipped as binary tag `v1.0.2` (2026-05-13) but its milestone close was superseded by this pivot. See `## Current Milestone` below for scope.
 
+**v2.0 progress — Phase 11 (Backend Foundation + Ingest API) COMPLETE (2026-05-29):** the self-hosted backend is LIVE over HTTPS at `https://api.squirebot.quest` (Hetzner Cloud VPS, US/amd64) — a single static Go binary behind Caddy auto-HTTPS (valid Let's Encrypt cert), systemd `Restart=always` (reboot-survival verified), `goose` SQLite schema, per-guildie bearer-token auth, and the `POST /api/v1/ingest` atomic-replace endpoint. Ship-gate passed (authed upload over TLS → 204, unauth → 401, row queried back); nightly off-box backup to Cloudflare R2 + drilled restore. PocketBase evaluated and rejected (hand-rolled `net/http` + `modernc.org/sqlite`). BACKEND-01/02/03/04/06 validated. Next: P13 re-points the watcher at this endpoint (P12 enrichment + P14 frontend in parallel).
+
 ## Current Milestone: v2.0 "Off Google" — Website Frontend
 
 **Goal:** Replace the shared Google Sheet (both the UI *and* the data store) with a self-hosted Go + SQLite backend and a static web frontend — permanently eliminating the Google OAuth dependency that currently blocks the guild.

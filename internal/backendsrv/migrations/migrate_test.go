@@ -95,3 +95,72 @@ func TestDimensionTables_Empty(t *testing.T) {
 		}
 	}
 }
+
+// pigparsePriceEnrichColumns are the 8 price-history columns 00003 adds to
+// pigparse_price (the only dimension table 11-02 left short — RESEARCH §2).
+var pigparsePriceEnrichColumns = []string{
+	"t30", "a30", "t60", "a60", "t6m", "a6m", "ty", "ay",
+}
+
+// enrichTables are the two bookkeeping tables 00003 creates: the scheduler's
+// durable last-run cursor (job_run) and the politeFetch ETag/304 state
+// (etag_cache).
+var enrichTables = []string{"job_run", "etag_cache"}
+
+// TestMigrate_00003_AddsEnrichColumnsAndTables proves the Phase 12 forward-only
+// migration 00003 applied on a fresh DB (NewTestDB runs goose.Up over ALL three
+// migrations): the 8 price-history columns exist on pigparse_price AND the
+// job_run + etag_cache bookkeeping tables exist. This exercises 00003 the same
+// way every store/migrations test does — through the shared NewTestDB fixture.
+func TestMigrate_00003_AddsEnrichColumnsAndTables(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001, 00002, 00003) + t.Cleanup
+
+	// Collect pigparse_price's column names via PRAGMA table_info into a set.
+	cols := map[string]bool{}
+	rows, err := db.Query(`PRAGMA table_info(pigparse_price)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(pigparse_price) failed: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		// PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk.
+		var (
+			cid       int
+			name      string
+			ctype     string
+			notnull   int
+			dfltValue sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
+			t.Fatalf("scanning table_info row failed: %v", err)
+		}
+		cols[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterating table_info rows failed: %v", err)
+	}
+
+	for _, c := range pigparsePriceEnrichColumns {
+		if !cols[c] {
+			t.Errorf("expected pigparse_price to have column %q after 00003, but it does not (have: %v)", c, cols)
+		}
+	}
+
+	// Assert job_run + etag_cache both exist via a single count query.
+	var n int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('job_run','etag_cache')`,
+	).Scan(&n); err != nil {
+		t.Fatalf("counting enrich tables in sqlite_master failed: %v", err)
+	}
+	if n != len(enrichTables) {
+		t.Errorf("expected %d enrich tables (job_run, etag_cache) to exist, found %d", len(enrichTables), n)
+	}
+
+	// A second RunMigrations call is a no-op: goose records applied versions, so
+	// re-running over an already-at-00003 DB returns nil (forward-only/idempotent).
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00003 should be a no-op, got error: %v", err)
+	}
+}

@@ -42,6 +42,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/backendsrv/ingest"
 	"github.com/boejowen/SquireBot/internal/backendsrv/logging"
 	"github.com/boejowen/SquireBot/internal/backendsrv/migrations"
+	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
 	"github.com/boejowen/SquireBot/internal/backendsrv/scheduler"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 )
@@ -49,6 +50,11 @@ import (
 const (
 	defaultAddr = "127.0.0.1:8090"                 // loopback only — Caddy fronts 443 (11-06)
 	defaultDB   = "/var/lib/squirebot/squirebot.db" // matches the RESEARCH systemd unit
+	// defaultCORSOrigin is the LOCKED Cloudflare Pages root subdomain the static
+	// SvelteKit site deploys to (Plan 02 Task 1 / 14-RESEARCH Open-Q2). The read
+	// API echoes this exact origin in Access-Control-Allow-Origin (D-04) — never a
+	// wildcard. Overridable via -cors-origin for a staging/preview deploy.
+	defaultCORSOrigin = "https://app.squirebot.quest"
 )
 
 func main() {
@@ -219,6 +225,8 @@ func runServe(args []string) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fs.String("addr", defaultAddr, "loopback address to bind (Caddy fronts 443)")
 	dbPath := fs.String("db", defaultDB, "path to the SQLite database file")
+	corsOrigin := fs.String("cors-origin", defaultCORSOrigin,
+		"exact origin allowed to read the API via CORS (the static site origin; never a wildcard)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -259,9 +267,27 @@ func runServe(args []string) int {
 	mux.Handle("POST /api/v1/ingest", ingest.New(auth.New(db), db))
 	mux.Handle("GET /api/v1/whoami", ingest.NewWhoami(auth.New(db), db))
 
+	// P14 read API (BACKEND-05): the four consolidated views + a small meta feed,
+	// PUBLIC + read-only (D-04 — no bearer guard; P15's Discord login gates them).
+	// readapi composes Plan 14-01's compute package over this read-side store.
+	st := store.NewStore(db)
+	mux.Handle("GET /api/v1/meta", readapi.NewMeta(st))
+	mux.Handle("GET /api/v1/views/view", readapi.NewViews(st, "view"))
+	mux.Handle("GET /api/v1/views/gear_check", readapi.NewViews(st, "gear_check"))
+	mux.Handle("GET /api/v1/views/spell_check", readapi.NewViews(st, "spell_check"))
+	mux.Handle("GET /api/v1/views/bank", readapi.NewViews(st, "bank"))
+
+	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
+	// route (D-04). The ingest/whoami routes are functionally unaffected — they
+	// still require their bearer guard; the extra CORS headers are harmless on a
+	// POST/authed-GET. CORS is set ONCE here, in Go: the on-box Caddyfile fronting
+	// 443 MUST NOT also emit Access-Control-Allow-Origin — a duplicated header
+	// makes the browser reject the response (Pitfall 5 / T-14.03-06). Verify on the
+	// VPS that Caddy's reverse_proxy block adds no CORS headers (deploy-time check,
+	// mirroring P11's manual-deploy posture).
 	srv := &http.Server{
 		Addr:    *addr,
-		Handler: mux,
+		Handler: readapi.CORS(*corsOrigin, mux),
 	}
 
 	// Run ListenAndServe in a goroutine so we can wait on ctx for shutdown.

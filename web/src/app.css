@@ -21,8 +21,111 @@
 @import "@fontsource/inter/600.css";
 
 /*
- * [data-theme] CSS-custom-property blocks are emitted in Task 4 below this
- * marker (one block per EQ theme + a :root velious fallback). Values mirror
- * the THEMES registry in src/lib/theme/themes.ts.
+ * EQ theme tokens (WEB-05 / D-06). One [data-theme="<key>"] block per theme +
+ * a :root fallback equal to velious (the default when no attribute is set).
+ * Values mirror the THEMES registry in src/lib/theme/themes.ts, which sources
+ * them from the 14-UI-SPEC Theme Catalog. A theme swap is a single attribute
+ * write on the shell root (Plan 04). Token names: --bg --panel --text --accent
+ * --status-ok --status-missing --status-other --font-display --font-body
+ * --weight-display (+ --row-bg/--row-text for Heavy's inverting parchment rows).
  */
-/* >>> THEME-BLOCKS (Task 4) <<< */
+
+:root,
+[data-theme="velious"] {
+  --bg: #060b18;
+  --panel: #0f1729;
+  --text: #d4dee8;
+  --accent: #a8c5e0;
+  --status-ok: #6fc8b0;
+  --status-missing: #e88a8a;
+  --status-other: #a8c5e0;
+  --font-display: "Cinzel Decorative", serif;
+  --font-body: "IM Fell English", serif;
+  --weight-display: 600;
+}
+
+[data-theme="vanilla"] {
+  --bg: #1a120b;
+  --panel: #2a1f15;
+  --text: #c9b896;
+  --accent: #d4af37;
+  --status-ok: #6fa86f;
+  --status-missing: #c66666;
+  --status-other: #d4af37;
+  --font-display: "Cinzel", serif;
+  --font-body: "Crimson Text", serif;
+  --weight-display: 600;
+}
+
+[data-theme="kunark"] {
+  --bg: #0a1108;
+  --panel: #0f1612;
+  --text: #d4cab0;
+  --accent: #c89060;
+  --status-ok: #6fa86f;
+  --status-missing: #c66666;
+  --status-other: #d4a020;
+  --font-display: "Cinzel", serif;
+  --font-body: "IM Fell English", serif;
+  --weight-display: 600;
+}
+
+[data-theme="minimalist"] {
+  --bg: #141414;
+  --panel: #1f1f1d;
+  --text: #e8e0d4;
+  --accent: #b8915c;
+  --status-ok: #7fa87f;
+  --status-missing: #c87878;
+  --status-other: #b8915c;
+  --font-display: "Cinzel", serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --weight-display: 400;
+}
+
+[data-theme="heavy"] {
+  --bg: #1a0e05;
+  --panel: #1a0e05;
+  --text: #e8d8a8;
+  --accent: #f0d088;
+  --status-ok: #2d5a2d;
+  --status-missing: #6b1a1a;
+  --status-other: #5a3a1f;
+  --font-display: "MedievalSharp", cursive;
+  --font-body: "IM Fell English", serif;
+  --weight-display: 600;
+  /* Heavy is the one inverting theme: light parchment data rows on a dark
+     frame. The data-grid surface tokens flip to parchment for Heavy. */
+  --row-bg: #c9b072;
+  --row-text: #3a2817;
+}
+
+/*
+ * Heavy's parchment data rows + beveled stone header (real CSS textures, now
+ * that the Sheet limitation is gone — D-06). Borrowed from the mockup
+ * (eq-aesthetic-preview.html): a parchment gradient fill on rows + faint
+ * column rules, and a beveled stone gradient on the sticky header. Plan 04's
+ * DataGrid applies .eq-row / .eq-header; the rules are theme-scoped so the
+ * other four themes are unaffected.
+ */
+[data-theme="heavy"] .eq-row {
+  background:
+    repeating-linear-gradient(90deg, rgba(58, 40, 23, 0.06) 0 1px, transparent 1px 64px),
+    linear-gradient(#e0c98a, #c9b072);
+  color: var(--row-text);
+}
+[data-theme="heavy"] .eq-header {
+  background: linear-gradient(#2a1a0e, #1a0e05);
+  color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(240, 208, 136, 0.25), inset 0 -2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Honor reduced-motion: theme/tooltip/hover transitions are instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

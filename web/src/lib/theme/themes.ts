@@ -133,3 +133,21 @@ export function saveTheme(key: ThemeKey): void {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, key);
 }
+
+/**
+ * Apply a theme site-wide (Plan 14-04 SiteShell/ThemePicker wiring): write the
+ * SINGLE `[data-theme]` attribute on `root` AND persist the choice to
+ * localStorage. The key is resolved through `resolveTheme` (the 5-key
+ * whitelist), so an arbitrary value falls back to the velious default — no
+ * attribute/CSS injection (T-14.04-04). A null `root` (SSR / pre-mount) is a
+ * safe no-op for the DOM write; persistence still runs.
+ *
+ * Returns the resolved key actually applied (so the caller's `theme` state can
+ * track the canonical value rather than the raw input).
+ */
+export function applyTheme(key: string, root: HTMLElement | null): ThemeKey {
+  const resolved = resolveTheme(key);
+  if (root) root.dataset.theme = resolved;
+  saveTheme(resolved);
+  return resolved;
+}

@@ -23,15 +23,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — now delivered via a self-hosted website instead of the Google Sheet.
-- **Current focus:** Phase 12 — enrichment-job-migration
+- **Current focus:** Phase 13 — Watcher Re-Target + Onboarding (PLANNED, 4 plans, ready to execute)
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: 12 (enrichment-job-migration) — COMPLETE (5/5)
-Plan: 5 of 5 done (12-01 + 12-02 + 12-03 + 12-04 + 12-05 all complete) — Phase 12 finished
-Status: Ready to execute
+Phase: 13 (Watcher Re-Target + Onboarding) — PLANNED (4 plans, 3 waves; checker PASSED, 0 blockers; ready to execute)
+Plan: 13-01 backend additions (`/whoami` + `426` version gate) · 13-02 watcher foundation (`internal/backend` client + credstore + native Win32 dialog) · 13-03 re-target + delete-the-Google-stack integration · 13-04 polish (999.20/21/22 + binary-smaller/no-secret proof). Phase 12 COMPLETE (5/5) before it. ⚠ DEPLOY-PENDING: the P12 enrichment binary + 13-01's backend additions ship in ONE VPS redeploy.
+Status: Phase 13 ready to execute — `/gsd-execute-phase 13` (deletion is rewire-then-delete, build stays green)
 Last activity: 2026-05-30 -- Phase 13 planning complete
 
 ### v2.0 Phase Plan (2026-05-28)
@@ -42,7 +42,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 |-------|------|--------------|-------|-----------|--------|
 | 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | ✅ Complete (7/7 — LIVE at https://api.squirebot.quest; ship-gate passed, nightly R2 backup + drilled restore) |
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | ✅ Complete (5/5; 12-01 schema/store SQL + 12-02 the 4 pure parsers + 12-03 politeFetch + 12-04 the 2 jobs + 12-05 scheduler/wiring done — `RunPigparse` (D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip) + `RunWiki` (single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue); 12-05 db-backed Job registry: `pigparse_daily` (>=24h) + `wiki_weekly` (Sunday UTC) with immediate-check-on-startup + advance-always job_run cursor + per-job sync.Mutex, `run-job pigparse|wiki` D-7 entrypoint; zero inline SQL; ENRICH-10/11 proven end-to-end) |
-| 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | Not started |
+| 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | 📋 Planned (4 plans, 3 waves — checker PASSED; ready to execute) |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + TanStack Table + Tailwind; Go read API | P11 (read API) + P12 (data) | Not started |
 | 15 | Admin Web Forms + Login | AUTH-08, AUTH-09, ADMIN-04, ADMIN-05, ADMIN-06 | Discord OAuth2 login; web forms | P14 + P11 | Not started |
 | 16 | Cutover + Decommission | CUTOVER-01, CUTOVER-02, CUTOVER-03, CUTOVER-04 | shadow soak + backfill + coordinated self-update flip | P13 + P14 + P15 + P12 | Not started |
@@ -164,13 +164,15 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Next Action
 
-**Phase 12 is COMPLETE (5/5).** Two follow-on tracks, then plan Phase 13:
+**Phase 13 is PLANNED (4 plans, 3 waves; checker PASSED, 0 blockers).** Phase 12 is COMPLETE (5/5). Two tracks — they interleave (the deploy bundles P13's backend half):
 
-1. **Deploy + D-7 parity check (P12 rollout, on-box ops):** build the deploy binary with the version stamp — `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X github.com/boejowen/SquireBot/internal/backendsrv/buildinfo.Version=<tag>" -o squirebot-server ./cmd/squirebot-server` (the UA is `SquireBot/dev (+github)` until the `-X` stamp is applied) — drop it on the Hetzner VPS (`https://api.squirebot.quest`, 5.78.232.85) + restart the systemd unit; `goose.Up` applies 00003 on startup and the scheduler's immediate-check pass runs any due job within seconds. Then run `squirebot-server run-job pigparse` + `run-job wiki` on the box and spot-check the populated dimension tables (`item_master`/`pigparse_price`/`wiki_spells`/`wiki_gear_tier`/`quest_items`) against the live Sheet's `_item_master`/`_pigparse`/`_wiki_spells`/`_wiki_gear_tier`/`_quest_items` (SC-4). No new systemd timer — the scheduler is in-process.
+1. **`/gsd-execute-phase 13`** — Watcher Re-Target + Onboarding (WATCH-08/09/10/11). 13-01 backend additions (`GET /api/v1/whoami` + the `426` min-version gate); 13-02 the `internal/backend` POST client + `credstore` (DPAPI) + a native Win32 guild-code dialog (NO loopback); 13-03 the integration — rewire `runapp.go`'s sink Sheets→backend (raw UTF-8 `content`, watcher stops calling `parse.Parse`), native onboarding, WATCH-11 first-launch migration (delete stale Google wincred + dead config), **then DELETE the ~8k-LOC Google OAuth/Sheets/Picker stack + strip OAuth ldflags** (rewire-then-delete → build stays green); 13-04 polish (999.20/21 console + 999.22 SemVer compare — de-risks the P16 flip — + binary-smaller/no-secret proof). `/clear` first.
 
-2. **`/gsd-plan-phase 13`** — Watcher Re-Target + Onboarding (WATCH-08/09/10/11): re-point the v1 watcher at the `POST /api/v1/ingest` API, delete the Google OAuth/Sheets/Picker machinery, ship "paste your guild code" onboarding via the existing auto-updater. Depends only on P11 (live). Carry the deferred watcher nits (999.20 gofmt, 999.21 freeConsole doc, 999.22 SemVer-aware auto-update compare — load-bearing for the P16 flip). **Encoding caution (A1):** P13 must NOT double-decode — the v1 watcher disk-read sites already wrap in `parse.CP1252Reader`; the backend ingest path is UTF-8 JSON `content` (no CP1252).
+2. **Deploy (P12 + P13-01 bundled, on-box ops):** the P12 enrichment binary is still DEPLOY-PENDING and 13-01's `/whoami` + `426` gate ship in the SAME redeploy. Build stamped — `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X github.com/boejowen/SquireBot/internal/backendsrv/buildinfo.Version=<tag>" -o squirebot-server ./cmd/squirebot-server` — drop on the Hetzner VPS (`https://api.squirebot.quest`, 5.78.232.85) + restart systemd; `goose.Up` applies 00003. Then `run-job pigparse|wiki` + the SC-4 Sheet-parity spot-check (`12-HUMAN-UAT.md`). Best sequenced AFTER 13-01 lands so one redeploy ships both. No new systemd timer (scheduler is in-process).
 
-**Phase 11 + Phase 12 both COMPLETE** (live backend at `https://api.squirebot.quest`; the DB now self-populates its dimension data on cadence — daily PigParse, Sunday wiki — restart-safely). ENRICH-10/11 proven end-to-end (schema → store → parsers → client → jobs → scheduler → CLI).
+**Encoding caution (A1):** the re-targeted watcher decodes CP1252→UTF-8 ONCE via `parse.CP1252Reader`, POSTs UTF-8 `content`; the server does NOT re-decode.
+
+**Phase 11 + Phase 12 both COMPLETE** (live backend at `https://api.squirebot.quest`; the DB self-populates dimension data on cadence). Phase 13 planned + verified (PASSED).
 
 ---
 

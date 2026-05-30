@@ -3,8 +3,8 @@
 // Three responsibilities, three files:
 //
 //   - manifest.go (this file) — fetch + parse the canonical latest.json
-//     emitted by .github/workflows/release.yml, plus the IsNewer 3-part
-//     semver comparison.
+//     emitted by .github/workflows/release.yml, plus the IsNewer
+//     SemVer-pre-release-aware version comparison.
 //   - check.go — the 24h background goroutine + manual "Check for updates"
 //     trigger. Downloads the bare binary, SHA-256-verifies it, stages it
 //     as <exepath>.new + <exepath>.expected-sha256.
@@ -105,45 +105,116 @@ func FetchFromURL(ctx context.Context, url string) (Manifest, error) {
 	return m, nil
 }
 
-// IsNewer returns true if the manifest version is strictly newer than the
-// current version under a 3-part numeric semver comparison. Returns false
-// on ANY parse failure — defensive: a corrupt manifest must not trigger
-// an update. Leading "v" prefix is stripped from both inputs.
+// IsNewer reports whether the manifest version is strictly newer than the
+// current version under SemVer-with-pre-release ordering. It is the gate the
+// 24h goroutine + manual "Check for updates" use to decide whether to download
+// and stage the manifest's binary (check.go).
+//
+// Comparison rules:
+//   - Leading "v" is stripped from both inputs.
+//   - MAJOR.MINOR.PATCH compared numerically; the first differing field decides.
+//   - On a core tie, SemVer §11 pre-release precedence applies: a version WITH a
+//     pre-release tail is LOWER than the same version WITHOUT one. So a final
+//     v2.0.0 IS newer than its own "2.0.0-rc1" (an rc watcher should update to
+//     the final), and a final must NOT "downgrade" to a manifest rc. Two
+//     pre-releases of the same core compare by a lexical strings.Compare of the
+//     tail (sufficient for our only-ever "rcN"/"betaN" scheme; the full §11
+//     dot-identifier rule is overkill — see the doctrine note below).
+//
+// Defensive contract (PRESERVED, load-bearing): IsNewer returns false on ANY
+// parse failure of EITHER input. A corrupt/forged manifest version must never
+// trigger an update (the second gate, check.go/swap.go's SHA-256 verify, is the
+// belt; this is the braces), and a current (running) version the watcher cannot
+// itself parse is treated conservatively — the watcher does not auto-update off
+// an unparseable running version. This is the watcher-side inversion of the
+// server's gate: here we fail-CLOSED on the UPDATE decision (never update on
+// doubt); the server's ingest.IsOlder fails-CLOSED on the GATE (always reject on
+// doubt) — opposite directions, same "doubt is safe" spirit.
+//
+// ONE version-compare doctrine, PER SIDE. This watcher-side IsNewer and the
+// server-side internal/backendsrv/ingest/version.go::IsOlder (Plan 01) are
+// DELIBERATELY separate, behaviorally-consistent copies: the watcher binary and
+// the backend binary must not import each other's internals. They agree in
+// direction (a pre-release of a given core is older than that core's final) so
+// the P16 coordinated self-update flip is not surprised by a pre-release safety
+// manifest — only MAJOR.MINOR.PATCH finals are ever published; the pre-release
+// path is a dev-only safety rail, kept correct here so a stray "-rcN" manifest
+// can never make a final watcher downgrade.
 func IsNewer(current, manifest string) bool {
-	cParts, ok := parseVersion(current)
-	if !ok {
+	cCore, cPre, cOK := parseVersion(current)
+	if !cOK {
+		// Unparseable running version → do not auto-update off it (conservative).
 		return false
 	}
-	mParts, ok := parseVersion(manifest)
-	if !ok {
+	mCore, mPre, mOK := parseVersion(manifest)
+	if !mOK {
+		// Corrupt/forged manifest → never trigger an update (defensive).
 		return false
 	}
+
+	// Compare the three core ints in order; the first difference decides.
 	for i := 0; i < 3; i++ {
-		if mParts[i] > cParts[i] {
+		if mCore[i] > cCore[i] {
 			return true
 		}
-		if mParts[i] < cParts[i] {
+		if mCore[i] < cCore[i] {
 			return false
 		}
 	}
-	return false // equal
+
+	// Cores are EQUAL — apply pre-release precedence (SemVer §11): a version WITH
+	// a pre-release tail is older than the same version WITHOUT one.
+	cHasPre := cPre != ""
+	mHasPre := mPre != ""
+	switch {
+	case cHasPre && !mHasPre:
+		// current is a pre-release of the manifest's final → the final is newer.
+		return true
+	case !cHasPre && mHasPre:
+		// current is the final, manifest is a pre-release of it → not newer
+		// (a final must not downgrade to an rc).
+		return false
+	case cHasPre && mHasPre:
+		// Both pre-releases of the same core → lexical compare of the tails
+		// (sufficient for our rcN/betaN scheme; see the doctrine note above).
+		return strings.Compare(mPre, cPre) > 0
+	default:
+		// Equal cores, neither has a tail → not newer (truly equal).
+		return false
+	}
 }
 
-// parseVersion splits "1.2.3" (or "v1.2.3") into [1, 2, 3]. Returns
-// (zero-value, false) on any failure to keep IsNewer's defensive contract.
-func parseVersion(v string) ([3]int, bool) {
+// parseVersion splits "1.2.3" or "1.2.3-rc1" (a leading "v" is stripped first)
+// into its MAJOR.MINOR.PATCH int core and an optional pre-release tail (the
+// substring after the FIRST '-', so "2.0.0-rc-1" keeps "rc-1" as the tail).
+// It returns ok=false if the core is not exactly three numeric parts, keeping
+// IsNewer's defensive "false on any parse failure" contract. The tail (if any)
+// is returned verbatim for the caller's precedence comparison; any non-empty
+// tail counts as a pre-release marker (it is not otherwise validated).
+func parseVersion(v string) (core [3]int, pre string, ok bool) {
 	v = strings.TrimPrefix(v, "v")
-	parts := strings.Split(v, ".")
-	if len(parts) != 3 {
-		return [3]int{}, false
+	if v == "" {
+		return [3]int{}, "", false
 	}
-	var out [3]int
+
+	// Split off the pre-release tail on the FIRST '-' (the core is everything
+	// before it).
+	coreStr := v
+	if i := strings.IndexByte(v, '-'); i >= 0 {
+		coreStr = v[:i]
+		pre = v[i+1:]
+	}
+
+	parts := strings.Split(coreStr, ".")
+	if len(parts) != 3 {
+		return [3]int{}, "", false
+	}
 	for i, p := range parts {
 		n, err := strconv.Atoi(p)
 		if err != nil {
-			return [3]int{}, false
+			return [3]int{}, "", false
 		}
-		out[i] = n
+		core[i] = n
 	}
-	return out, true
+	return core, pre, true
 }

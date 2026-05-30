@@ -105,7 +105,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
   4. After one daily + one weekly cycle, the backend's dimension data matches the live Sheet's `_item_master` / `_pigparse` / `_wiki_spells` / `_wiki_gear_tier` / `_quest_items` to spot-check parity (ENRICH-10, ENRICH-11)
 **Plans**: 5 plans (3 parallel Wave-1 foundation + 1 Wave-2 jobs + 1 Wave-3 scheduler/wiring)
 - [x] 12-01-PLAN.md — Schema + store SQL layer (Wave 1): forward-only `00003_enrich_columns.sql` (8 pigparse price cols + `job_run` + `etag_cache`) + the 5 tested, parameterized dimension write methods (per-item upsert / per-class replace / gear full-replace / per-id quest replace) + job_run/etag cursors. The hard prerequisite. ✅ 2026-05-29 (`5cd347b`, `f96e96d`, `97409ba`)
-- [ ] 12-02-PLAN.md — Pure parsers (Wave 1): port `parseToRows`/`parseItempage`(+SHA-1)/`parseClassPage`/`parseGearTierPage` + eq-constants into `internal/backendsrv/enrich`, byte-parity-tested against the copied `__fixtures__`.
+- [x] 12-02-PLAN.md — Pure parsers (Wave 1): port `parseToRows`/`parseItempage`(+SHA-1)/`parseClassPage`/`parseGearTierPage` + eq-constants into `internal/backendsrv/enrich`, byte-parity-tested against the copied `__fixtures__`. ✅ 2026-05-30 (`012d082`, `1a2fc15`, `d519f37`) — pure (no net/SQL); SHA-1 byte-identical (no signed-byte fix-up); exact-count parity vs the TS parsers run in Node (PigParse 7240, NEC 171, Pre-Raid 577); 28 tests green.
 - [ ] 12-03-PLAN.md — politeFetch client (Wave 1): the `net/http` polite client (UA / If-None-Match+If-Modified-Since→304 / `[2s,4s,8s,16s,32s]` backoff honoring Retry-After / `io.LimitReader` cap / TLS-on) + a backend `Version` var; httptest-driven.
 - [ ] 12-04-PLAN.md — Jobs (Wave 2): the daily PigParse job (WTS t=0 filter, truncation-guard-as-LOG, 304-skip) + the weekly wiki single-run job (no cursor; items+spells+gear+quests with the 1s inter-request sleep, per-item SHA-1 short-circuit, log-but-continue). Composes Wave 1 over one tx; zero inline SQL.
 - [ ] 12-05-PLAN.md — Scheduler + wiring (Wave 3): flesh out `scheduler/scheduler.go` into a Job registry (job_run cursor + simple-interval due predicates + immediate-check-on-startup + per-job mutex), register the 2 jobs, wire the real db-backed scheduler into the server, and add `squirebot-server run-job pigparse|wiki` for the D-7 parity check. Proves ENRICH-10/11 end-to-end.
@@ -182,7 +182,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Backend Foundation + Ingest API | v2.0 | 7/7 | ✅ Complete | 2026-05-29 |
-| 12. Enrichment Job Migration | v2.0 | 1/5 | 🚧 In progress (12-01 schema + store SQL layer done — 00003 migration + 5 dimension write methods + job_run/etag cursors; Wave-1 12-02/12-03 next) | - |
+| 12. Enrichment Job Migration | v2.0 | 2/5 | 🚧 In progress (12-01 schema + store SQL layer + 12-02 the 4 pure parsers + eq-constants done — `internal/backendsrv/enrich`, byte-parity vs fixtures; Wave-1 12-03 politeFetch next) | - |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 0/TBD | Not started | - |
 | 14. Web Frontend | v2.0 | 0/TBD | Not started | - |
 | 15. Admin Web Forms + Login | v2.0 | 0/TBD | Not started | - |

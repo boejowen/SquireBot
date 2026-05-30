@@ -60,6 +60,25 @@ func (s *Store) GetJobRun(ctx context.Context, jobName string) (lastRun time.Tim
 	return lastRun, lastStat.String, true, nil
 }
 
+// GetJobRunDetail reads the last_detail string for jobName ("" when the row is
+// absent or last_detail is NULL). The daily PigParse job writes "rows=N" here on
+// a successful run; on the NEXT run it reads this back to compute the D-4
+// truncation-guard ratio (today's kept count vs. the last-known count) — keeping
+// that read on the single tested SQL path instead of an inline job query.
+func (s *Store) GetJobRunDetail(ctx context.Context, jobName string) (string, error) {
+	var detail sql.NullString
+	qerr := s.db.QueryRowContext(ctx,
+		`SELECT last_detail FROM job_run WHERE job_name = ?`, jobName,
+	).Scan(&detail)
+	switch {
+	case qerr == sql.ErrNoRows:
+		return "", nil
+	case qerr != nil:
+		return "", fmt.Errorf("read job_run.last_detail (job=%q): %w", jobName, qerr)
+	}
+	return detail.String, nil // "" when NULL
+}
+
 // SetJobRun upserts the cursor for jobName, storing lastRun as RFC3339 UTC. It is
 // an upsert (ON CONFLICT(job_name) DO UPDATE) so there is exactly ONE row per job:
 // the first run inserts, every subsequent run updates in place. Called AFTER each

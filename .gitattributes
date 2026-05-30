@@ -5,6 +5,12 @@
 # would change file size and break wc -l / 185-byte assertions.
 internal/parse/testdata/* binary
 
+# Enrichment parser fixtures (Phase 12) are copied byte-for-byte from
+# apps-script/src/__fixtures__/ and feed the byte-parity proof (notably the
+# wikitext SHA-1 check). An autocrlf LF->CRLF rewrite would change the wikitext
+# bytes and flip the SHA-1, breaking parity on a fresh checkout. Keep binary.
+internal/backendsrv/enrich/testdata/* binary
+
 # Go source: enforce LF in repo to match `gofmt`/build expectations.
 *.go text eol=lf
 

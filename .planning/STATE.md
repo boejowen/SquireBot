@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-29T23:55:00.000Z"
-last_activity: 2026-05-29 -- Phase 11 COMPLETE + SECURED (39/39 threats closed); Phase 12 context gathered (12-CONTEXT.md via discuss --auto) — next is /gsd-plan-phase 12
+last_updated: "2026-05-30T01:15:07.401Z"
+last_activity: 2026-05-30 -- Phase 12 planning complete
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 7
+  total_plans: 12
   completed_plans: 7
-  percent: 100
+  percent: 58
 ---
 
 # State: SquireBot
@@ -31,8 +31,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 Phase: 11 — Backend Foundation + Ingest API (✅ COMPLETE 7/7, 2026-05-29)
 Plan: Phase 11 all 7 complete + secured (11-SECURITY.md, 39/39 closed). Phase 12 context gathered (12-CONTEXT.md, discuss --auto) → next: /gsd-plan-phase 12 (recommend /clear first)
-Status: Phase 11 COMPLETE — the v2.0 backend is LIVE at https://api.squirebot.quest (Hetzner Cloud VPS, US/amd64, 5.78.232.85): single static Go binary behind Caddy auto-HTTPS (valid Let's Encrypt cert), systemd Restart=always (reboot-survival verified), ufw 22/80/443 (8090 loopback-only), goose schema v2 (all 12 D-13 tables). Ship-gate PASSED end-to-end: authed POST /api/v1/ingest over TLS → 204, unauth → 401-writes-nothing, row queried back with first-sighting owner-bind. Nightly off-box backup to Cloudflare R2 (sqlite3 .backup → gzip → rclone, cron 0 4 via /etc/cron.d/squirebot-backup) + a drilled restore that reconstitutes the DB. PocketBase rejected (11-01 verdict = HAND-ROLLED Go); spike + dep removed. Full `go test ./...` green (no v1 watcher regression). Verifier: passed 5/5 must-haves. BACKEND-01/02/03/04/06 all ✅. The ~12 guildies have a live authenticated ingest target again — the watcher re-target onto it is P13.
-Last activity: 2026-05-29 -- Phase 11 COMPLETE; backend deployed live to Hetzner + ship-gate passed + R2 backup wired
+Status: Ready to execute
+Last activity: 2026-05-30 -- Phase 12 planning complete
 
 ### v2.0 Phase Plan (2026-05-28)
 

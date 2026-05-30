@@ -29,6 +29,13 @@ Defaults locked for a faithful port (per ROADMAP §Phase 12 Note + findings doc 
 - **D-7 — Parity check is the acceptance proof.** After one daily + one weekly cycle, spot-check the backend's dimension data against the **live Sheet's** `_item_master`/`_pigparse`/`_wiki_spells`/`_wiki_gear_tier`/`_quest_items`. This is the success criterion, not a separate feature.
 
 - **D-8 — Strictly scope to the two enrichment feeds.** ENRICH-10 + ENRICH-11 only. The eviction/stale-archive jobs (`weeklyEvictionArchive`, `weeklyStaleCharArchive`) from findings §5 and any Sheet→DB **backfill/cutover** are NOT in this phase (they belong to P15/P16). Do not scope-creep.
+
+**Locked from 12-RESEARCH.md (2026-05-29) per this phase's faithful-port criterion (mode=auto; Claude picks low-ambiguity defaults). Each is isolated + cheaply reversible if the maintainer later disagrees.**
+
+- **D-9 — PigParse t=0/t=1 duplicate `item_id` → keep only the WTS (t=0) row before upsert.** The `getall` response carries two rows per `item_id` (t=0 WTS/sell, t=1 WTB/buy) but `pigparse_price.item_id` is a PRIMARY KEY (one row/item). The Sheet kept both (dup ids) yet its views read the direction-agnostic `current_avg`/`blue_volume` (a30/t30) aliases, so `direction` was decorative. Lock: keep the **WTS (t=0, sell-side)** row — the standard "what's it worth to sell" value, satisfies the PK, most defensible single price. Implement as one isolated filter so flipping to last-wins or a `(item_id,direction)` key later is a one-line change. (Backend will have fewer `pigparse_price` rows than the Sheet's dup-keeping tab — expected, note it in the D-7 parity check, NOT a failure.)
+- **D-10 — Job cadence = simple interval, not wall-clock pinning.** PigParse due when `now - last_run_at >= 24h`; wiki due when it is Sunday (UTC) AND `last_run_at` precedes this Sunday 00:00 UTC. Restart-robust, no timezone math. (Pin to a UTC off-peak hour only if the maintainer later wants politeness timing — not required.)
+- **D-11 — Add a backend `var Version` (settable via `-ldflags -X`) for the politeFetch User-Agent**, mirroring the watcher's `main.Version`; a hardcoded `SquireBot/dev (+https://github.com/boejowen/SquireBot)` fallback is acceptable. The UA must stay identifying + contactable (the GitHub URL satisfies that).
+- **D-12 — Stale-row cleanup = Sheet-faithful per-key replace.** `wiki_spells`: per-class DELETE+INSERT in one tx. `quest_items`: per-`item_id` DELETE+INSERT. `wiki_gear_tier`: **full-table replace** (its declared `UNIQUE(…, item_id)` is broken — `item_id` is always NULL and NULLs are distinct in SQLite UNIQUE → upsert never fires). `item_master`: pure per-item upsert (items aren't "removed"; keep the wikitext-SHA-1 short-circuit). `pigparse_price`: per-item upsert (D-4 graceful degradation).
 </decisions>
 
 <canonical_refs>
@@ -63,8 +70,11 @@ MUST read before/while planning (full relative paths):
 </deferred>
 
 <open_for_planner>
-1. **Dimension-table column reconciliation (D-6)** — diff actual 11-02 table columns vs each parser's output; author `00003_*.sql` for gaps. Highest-priority research item.
-2. Exact Go package layout for parsers vs job orchestration vs the polite HTTP client.
-3. Scheduler design: compute-next-run + persisted last-run vs a tiny cron lib; how to make "due on startup if missed" deterministic.
-4. Whether `pigparse_price` table name + columns from 11-02 match the findings' `item_price` shape (naming drift to resolve).
+**All 4 resolved by 12-RESEARCH.md (2026-05-29) — kept here for traceability.**
+1. **Dimension-table column reconciliation (D-6)** — RESOLVED. The 11-02 tables are already "rich"; only `pigparse_price` is short the 8 price-history cols (`t30,a30,t60,a60,t6m,a6m,ty,ay`). Exact forward-only `00003_enrich_columns.sql` (8 `ADD COLUMN` + new `job_run` + `etag_cache` tables) is in RESEARCH §"Exact 00003 migration SQL". SQLite allows only one column per `ALTER TABLE ADD COLUMN`.
+2. **Go package layout** — RESOLVED: `internal/backendsrv/enrich/` (4 pure parsers) + `enrich/politefetch/` (net/http client) + `enrich/jobs/` (orchestration); all upsert SQL lives in `store/` (11-05 single-tested-SQL-path rule). See RESEARCH §"Go Package Layout".
+3. **Scheduler design** — RESOLVED: `job_run.last_run_at` DB cursor + an immediate check pass on startup makes "due-on-startup-if-missed" deterministic; per-job `sync.Mutex` replaces `LockService`; compute-next-run predicates, no cron lib. See RESEARCH §"Scheduler Design" + D-10.
+4. **`pigparse_price` vs `item_price` naming drift** — RESOLVED: **`pigparse_price` is authoritative** (the name in `00001_init.sql`); the findings doc's `item_price` does not exist in the DB — map its proposed columns onto `pigparse_price`.
+
+⚠ The one genuine decision the research surfaced (PigParse t=0/t=1 PK collision) is locked as **D-9** above.
 </open_for_planner>

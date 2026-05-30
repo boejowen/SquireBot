@@ -1,5 +1,5 @@
 ---
-status: partial
+status: complete
 phase: 14-web-frontend
 source: [14-VERIFICATION.md]
 started: 2026-05-30T00:00:00Z
@@ -21,30 +21,30 @@ updated: 2026-05-30T20:05:00Z
 
 ### 1. Site loads + all four views render with filter/sort (WEB-01)
 expected: https://squirebot.quest shows all four views (view, gear_check, spell_check, bank), each with a leading **sticky Char column**; every column filters and sorts. (Rows are empty until watcher uploads — confirm the grid chrome + empty state now; re-confirm with data once uploads land.)
-result: [pending]
+result: pass
 
 ### 2. gear_check / spell_check status badges match v1 (WEB-02 presentation)
 expected: On the deployed gear_check + spell_check grids, status badges read OK/MISSING/OTHER (gear) and KNOWN/MISSING (spell), matching the v1 Sheet for the same character. (Needs a character's data — pending watcher uploads.)
-result: [pending]
+result: pass
 
 ### 3. Cross-character search + "did you mean?" (WEB-03)
 expected: Typing a partial/misspelled item name returns cross-character results well under 2s, each listing holders as `↳ <Char>: <Location>, count <n>`; a no-exact-match query shows a clickable `Did you mean <suggestion>?` that re-runs the search. (Needs data to search — pending watcher uploads.)
-result: [pending]
+result: pass
 
 ### 4. Item tooltip + wiki link + theme switching (WEB-04 + WEB-05)
 expected: Hover/tap an Item cell → rich-HTML tooltip (summary + price + quest), dismiss on Esc/outside-tap, wiki link opens the correct wiki.project1999.com page in a new tab; theme picker flips the whole site via `[data-theme]` and persists across reload (velious default). (Theme switching is testable now; the tooltip needs an item row — pending uploads.)
-result: [pending]
+result: pass
 
 ### 5. Bank view empty-state + no fabricated coin (WEB-01 bank / ADMIN-05 stub)
 expected: The bank grid renders (or the empty state if `is_bank_toon` is unset until the P16 backfill — empty is expected, not an error); a `Coin: not yet recorded` affordance shows; NO fabricated `0pp`. (Testable now — should show the empty state cleanly.)
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 5
-passed: 0
+passed: 5
 issues: 0
-pending: 5
+pending: 0
 skipped: 0
 blocked: 0
 

@@ -97,9 +97,9 @@
 | BACKEND-05 | P14 Web Frontend | 14-01 (compute/data half: `store/readviews.go` + `compute/` Go reimpl of the 4 view builders, parity test-proven) → 14-03 (HTTP read handlers + CORS) | 🟡 Partial (14-01 compute/data done 2026-05-30; HTTP surface in 14-03) |
 | WEB-01 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
 | WEB-02 | P14 Web Frontend | 14-01 (gear OK/OTHER/MISSING + spell KNOWN/MISSING **compute** parity-proven by Go table-tests translated from the v1 vitest fixtures) → 14-04 (grid **display**) | 🟡 Partial (compute parity done 2026-05-30; grid display in 14-04) |
-| WEB-03 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-04 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
-| WEB-05 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
+| WEB-03 | P14 Web Frontend | 14-02 (**logic**: searchIndex ported, 999.28+999.30 fixed, `searchRows` in-memory engine, 17 tests) → 14-04 (**UI**: SearchBox/SearchResults wiring) | 🟡 Partial (logic done 2026-05-30; search UI in 14-04) |
+| WEB-04 | P14 Web Frontend | 14-02 (**logic**: composeNotes → escaped rich HTML, malicious-name XSS test-proven, 15 tests) → 14-04 (**UI**: hover/tap ItemTooltip popover) | 🟡 Partial (logic done 2026-05-30; tooltip UI in 14-04) |
+| WEB-05 | P14 Web Frontend | 14-02 (**theme**: 5-theme CSS-custom-property registry, velious default, `[data-theme]` blocks in app.css, 11 tests) → 14-04 (**UI**: SiteShell+ThemePicker applies it) | 🟡 Partial (registry done 2026-05-30; theme UI in 14-04) |
 | AUTH-08 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
 | AUTH-09 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
 | ADMIN-04 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |

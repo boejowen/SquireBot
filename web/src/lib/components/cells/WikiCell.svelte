@@ -6,12 +6,16 @@
 	// mitigation, set explicitly here per the threat register). The lucide
 	// external-link icon sits in the reserved accent set.
 	import ExternalLink from '@lucide/svelte/icons/external-link';
+	import { safeHttpUrl } from '$lib/tooltip/composeNotes';
 
 	let { wikiUrl }: { wikiUrl: string } = $props();
+	// Scheme allow-list (review WR-01 / T-14.04-03): only render the external
+	// link for an absolute http(s) URL — never a javascript:/data: scheme.
+	const safeUrl = $derived(safeHttpUrl(wikiUrl));
 </script>
 
-{#if wikiUrl}
-	<a class="wiki-link" href={wikiUrl} target="_blank" rel="noopener" aria-label="Open on the P1999 wiki">
+{#if safeUrl}
+	<a class="wiki-link" href={safeUrl} target="_blank" rel="noopener" aria-label="Open on the P1999 wiki">
 		<ExternalLink size={16} aria-hidden="true" />
 	</a>
 {/if}

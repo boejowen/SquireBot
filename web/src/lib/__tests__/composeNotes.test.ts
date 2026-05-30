@@ -7,7 +7,7 @@
 // ADDED: the mandatory XSS-escaping assertions (the HIGH-severity gate).
 
 import { describe, it, expect } from 'vitest';
-import { composeItemNote, escapeHtml } from '../tooltip/composeNotes';
+import { composeItemNote, escapeHtml, safeHttpUrl } from '../tooltip/composeNotes';
 
 describe('escapeHtml', () => {
   it('escapes &, <, >, ", and \' (ampersand first)', () => {
@@ -153,10 +153,36 @@ describe('composeItemNote', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 
-  it('escapes a javascript: wiki URL inside the href', () => {
-    // A hostile URL containing a double-quote can't break out of the attribute.
+  it('does not let a quoted (http) wiki URL break out of the href attribute', () => {
+    // A hostile but http URL containing a double-quote can't break out of the attribute.
     const html = composeItemNote('Item', 'https://x/"><script>alert(1)</script>', null, [], []);
     expect(html).not.toContain('"><script>');
     expect(html).toContain('&quot;&gt;&lt;script&gt;');
+  });
+
+  it('drops a javascript: wiki URL entirely — no href rendered, scheme absent (WR-01)', () => {
+    const html = composeItemNote('Item', 'javascript:alert(1)', null, [], []);
+    expect(html).not.toContain('javascript:');
+    expect(html).not.toContain('tooltip-wiki-link');
+    expect(html).not.toContain('<a ');
+    expect(html).toContain('Item'); // the name still renders, inert
+  });
+});
+
+describe('safeHttpUrl', () => {
+  it('passes absolute http(s) URLs through (trimmed)', () => {
+    expect(safeHttpUrl('https://wiki.project1999.com/Cloak')).toBe('https://wiki.project1999.com/Cloak');
+    expect(safeHttpUrl('http://example.com')).toBe('http://example.com');
+    expect(safeHttpUrl('  https://x.test/y  ')).toBe('https://x.test/y');
+  });
+
+  it('rejects non-http(s) schemes and relative/protocol-relative URLs', () => {
+    expect(safeHttpUrl('javascript:alert(1)')).toBe('');
+    expect(safeHttpUrl('JavaScript:alert(1)')).toBe(''); // case-insensitive
+    expect(safeHttpUrl('data:text/html,<script>alert(1)</script>')).toBe('');
+    expect(safeHttpUrl('vbscript:msgbox(1)')).toBe('');
+    expect(safeHttpUrl('//evil.example.com')).toBe('');
+    expect(safeHttpUrl('/relative/path')).toBe('');
+    expect(safeHttpUrl('')).toBe('');
   });
 });

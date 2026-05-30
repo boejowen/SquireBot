@@ -9,7 +9,9 @@
 // output-encoding): composeItemNote emits HTML built from server data that
 // contains wiki/user-controlled strings (item name, wiki summary, quest
 // names) and the wiki URL. EVERY interpolated dynamic value is run through
-// escapeHtml() before injection; only the structural tags (<p>, <a>, <div>,
+// escapeHtml() before injection, AND the wiki URL additionally passes a
+// safeHttpUrl() scheme allow-list (http/https only) so a javascript:/data:
+// URL can never reach the href; only the structural tags (<p>, <a>, <div>,
 // <span>) are literal. The Svelte consumer (Plan 04) is the ONLY place that
 // {@html}s this output, and it is fully escaped here — so a malicious item
 // name like `<img src=x onerror=alert(1)>` renders as inert text, never a
@@ -58,6 +60,18 @@ export function escapeHtml(s: string): string {
 }
 
 /**
+ * URL scheme allow-list (ASVS V5 / T-14.02-01, review WR-01). Returns the URL
+ * only when it is an absolute http(s) URL; otherwise returns '' so the caller
+ * renders NO link. Blocks javascript:, data:, vbscript:, protocol-relative
+ * `//host`, and relative URLs from ever reaching an href. escapeHtml still runs
+ * on the result at the sink for attribute-encoding (defense in depth).
+ */
+export function safeHttpUrl(url: string): string {
+  const trimmed = String(url).trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : '';
+}
+
+/**
  * Build the rich-HTML tooltip for an item. Returns an HTML string the Svelte
  * ItemTooltip injects via {@html}. Content order mirrors the v1 composeItemNote
  * (14-UI-SPEC Item Tooltip Contract):
@@ -78,12 +92,15 @@ export function composeItemNote(
 ): string {
   const parts: string[] = [];
 
-  // 1. Item name + optional wiki link (the URL is escaped inside the href).
+  // 1. Item name + optional wiki link. The URL passes the safeHttpUrl scheme
+  //    allow-list FIRST (so javascript:/data: never reaches the href), then
+  //    escapeHtml for attribute-encoding. A rejected scheme renders no link.
   const safeName = escapeHtml(itemName);
-  if (wikiUrl) {
+  const safeUrl = safeHttpUrl(wikiUrl);
+  if (safeUrl) {
     parts.push(
       `<div class="tooltip-title"><span class="tooltip-item-name">${safeName}</span> ` +
-        `<a class="tooltip-wiki-link" href="${escapeHtml(wikiUrl)}" target="_blank" rel="noopener">wiki</a></div>`,
+        `<a class="tooltip-wiki-link" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener">wiki</a></div>`,
     );
   } else {
     parts.push(`<div class="tooltip-title"><span class="tooltip-item-name">${safeName}</span></div>`);

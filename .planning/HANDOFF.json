@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-30T15:40:00Z",
+  "phase": "14",
+  "phase_name": "web-frontend",
+  "phase_dir": ".planning/phases/14-web-frontend",
+  "plan": 4,
+  "task": null,
+  "total_tasks": null,
+  "status": "phase_complete",
+  "completed_tasks": [
+    {"id": 1, "name": "Phase 14 planned (4 plans, 3 waves) + executed", "status": "done"},
+    {"id": 2, "name": "Code review + fixes (WR-01..04)", "status": "done"},
+    {"id": 3, "name": "Security verification (19/19 threats closed)", "status": "done"},
+    {"id": 4, "name": "Deploy: server binary + static site to VPS (apex squirebot.quest on Caddy)", "status": "done"},
+    {"id": 5, "name": "Human UAT 5/5 PASS (found+fixed WEB-04 wiki-link gap)", "status": "done"},
+    {"id": 6, "name": "Demo character + code removed (prod clean)", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 7, "name": "Phase 15 — Discord login + officer admin write forms", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "Frontend served by Caddy on the VPS at the apex https://squirebot.quest (NOT Cloudflare Pages / app. subdomain)", "rationale": "Lower friction: reuses working Caddy auto-HTTPS, one control plane, one DNS change; keeps P15 same-origin reverse-proxy option open", "phase": "14"},
+    {"decision": "Backend defaultCORSOrigin -> https://squirebot.quest (apex)", "rationale": "Matches the apex frontend origin; api.squirebot.quest unchanged (watchers hardcode it)", "phase": "14"},
+    {"decision": "Wiki link derived from item name at render time (wikiUrlFor)", "rationale": "WEB-04 / FEATURES.md; item_master.wiki_url is empty until enrichment, so name-derivation makes every item link instantly", "phase": "14"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-discuss-phase 15 (Discord OAuth login + officer-only admin write forms).",
+  "context_notes": "Phase 14 is fully closed and LIVE at https://squirebot.quest. Backend on Hetzner VPS 5.78.232.85 (api.squirebot.quest). Views are intentionally empty until real guildie P13-retargeted watchers upload. SSH to the box ONLY works via PowerShell ssh.exe (Windows OpenSSH agent has key squirebot-hetzner); git-bash ssh can't reach it. Remote multi-line: pipe a single-quoted PowerShell here-string to `ssh root@5.78.232.85 \"tr -d '\\r' | bash -s\"` with a throwaway BOM-bait first line. Planning input docs (PLAN/CONTEXT/RESEARCH/etc.) are untracked per commit_docs:false."
+}

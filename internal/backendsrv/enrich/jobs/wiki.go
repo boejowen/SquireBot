@@ -144,7 +144,7 @@ func RunWiki(ctx context.Context, db *sql.DB, fetch politefetch.Fetcher) error {
 	}
 
 	spellsOK, spellsSkip := runWikiSpells(ctx, db, s, fetch, now)
-	gearOK, gearRows := runWikiGearTier(ctx, db, s, fetch, now)
+	gearOK, gearRows := runWikiGearTier(ctx, db, fetch, now)
 
 	detail := fmt.Sprintf(
 		"items_ok=%d items_unchanged=%d items_fail=%d spells_classes=%d spells_skip=%d gear_replaced=%t gear_rows=%d",
@@ -336,11 +336,26 @@ func replaceSpellsForClass(ctx context.Context, db *sql.DB, class string, spells
 
 // runWikiGearTier is sub-pass C: fetch+parse BOTH Velious gear pages, accumulate
 // the combined row set, then full-table replace wiki_gear_tier ONCE. The
-// post-run gear-view rebuild is DROPPED (D-8). Pitfall 1: the full replace fires
-// only with the COMPLETE set — if either page is unavailable (fetch error or
-// 304-unchanged), we SKIP the replace rather than wipe the table with a partial
-// set. Returns (replaced, combinedRowCount).
-func runWikiGearTier(ctx context.Context, db *sql.DB, s *store.Store, fetch politefetch.Fetcher, now time.Time) (replaced bool, rowCount int) {
+// post-run gear-view rebuild is DROPPED (D-8).
+//
+// Gear is a wholesale full-replace, NOT a per-resource conditional fetch: it
+// needs the COMPLETE combined set from BOTH pages every run, so both pages are
+// fetched UNCONDITIONALLY (no ETag / If-None-Match — and NO SetETag for them),
+// exactly like the TS gear trigger, which called politeFetch(url) with no etag
+// option (refreshWikiGearTier.ts:193-194) and rebuilt the table on every
+// successful weekly run. Earlier this pass sent per-page ETags AND advanced them
+// immediately on a 200; combined with the "replace only when BOTH pages are
+// fresh" rule, a single changed page advanced its cached ETag without the replace
+// firing, so its edit was dropped — and stayed dropped, because next run that
+// page 304'd on the freshly-cached ETag (the H-01 staleness trap). Dropping the
+// ETag conditional for gear removes the trap and restores TS fidelity.
+//
+// Pitfall 1 still holds: the full replace fires ONLY with the COMPLETE set — if
+// either page is unavailable (fetch error, error envelope, empty wikitext, or
+// parse failure) we SKIP the replace rather than wipe the table with a partial
+// set (mirrors the TS 1/2-success partial_failure abort). Returns (replaced,
+// combinedRowCount).
+func runWikiGearTier(ctx context.Context, db *sql.DB, fetch politefetch.Fetcher, now time.Time) (replaced bool, rowCount int) {
 	nowStr := now.Format(time.RFC3339)
 
 	var allRows []store.WikiGearTier
@@ -351,16 +366,15 @@ func runWikiGearTier(ctx context.Context, db *sql.DB, s *store.Store, fetch poli
 			return false, 0
 		}
 
+		// Unconditional fetch (no ETag) — a 304 must be impossible here, or the
+		// replace below could never assemble the complete set.
 		url := wikiParseURL(src.pageTitle)
-		page, outcome := fetchWikiPage(ctx, s, fetch, url)
+		page, outcome := fetchWikiPageUnconditional(ctx, fetch, url)
 		if outcome != fetchGotPage {
-			// 304 or fetch error → we don't have this page's current rows, so a
-			// full replace would wipe the OTHER page's rows. Skip the replace.
-			if outcome == fetchUnchanged {
-				slog.Info(wikiJobName+": gear page unchanged (304); skipping full replace to preserve combined set", "page", src.pageTitle)
-			} else {
-				slog.Warn(wikiJobName+": gear page unavailable; skipping full replace", "page", src.pageTitle)
-			}
+			// Fetch error / error envelope / empty wikitext → we don't have this
+			// page's current rows, so a full replace would wipe the OTHER page's
+			// rows. Skip the replace (Pitfall 1).
+			slog.Warn(wikiJobName+": gear page unavailable; skipping full replace", "page", src.pageTitle)
 			allFresh = false
 			continue
 		}
@@ -386,15 +400,13 @@ func runWikiGearTier(ctx context.Context, db *sql.DB, s *store.Store, fetch poli
 				LastRefreshed: nowStr,
 			})
 		}
-		// Note the page ETag now; only committed below if we do the replace.
-		if serr := s.SetETag(ctx, url, page.etag, page.lastModified); serr != nil {
-			slog.Warn(wikiJobName+": gear set etag failed", "page", src.pageTitle, "err", serr)
-		}
+		// NO SetETag here: gear pages are full-replaced every run, never
+		// conditionally fetched (see the staleness-trap note above).
 	}
 
 	if !allFresh {
-		// A page was missing/unchanged — don't clobber the table with a partial
-		// set (Pitfall 1 + the TS partial-failure abort). Leave existing rows.
+		// A page was missing — don't clobber the table with a partial set
+		// (Pitfall 1 + the TS partial-failure abort). Leave existing rows.
 		return false, len(allRows)
 	}
 
@@ -445,6 +457,38 @@ func fetchWikiPage(ctx context.Context, s *store.Store, fetch politefetch.Fetche
 	if res.FromCache { // 304 — unchanged, skip parse+write (Pitfall 6)
 		return wikiPageResult{}, fetchUnchanged
 	}
+	return decodeWikiResult(url, res)
+}
+
+// fetchWikiPageUnconditional fetches url with NO conditional headers (empty
+// Options{} ⇒ no If-None-Match / If-Modified-Since), so MediaWiki always returns
+// a full 200 — a 304 is impossible. Used by the gear-tier pass, which is a
+// wholesale full-table replace that needs the COMPLETE combined set from BOTH
+// pages every run: the TS gear trigger (refreshWikiGearTier.ts:193-194) called
+// politeFetch(url) with NO etag option for exactly this reason. A per-page ETag
+// here would let a single changed page advance its cache entry without the
+// replace firing (the replace only fires when BOTH pages are fresh), permanently
+// dropping that page's edit — the H-01 staleness trap. So gear deliberately skips
+// the ETag cache (read AND write). It can still return fetchSkip on a fetch
+// error / error envelope / empty wikitext (the caller skips the replace then).
+func fetchWikiPageUnconditional(ctx context.Context, fetch politefetch.Fetcher, url string) (wikiPageResult, fetchOutcome) {
+	res := fetch(ctx, url, politefetch.Options{})
+	// No conditional headers were sent, so res.FromCache can't be true; if a
+	// fetcher ever returned it anyway, treat it as a skip (we have no body to
+	// parse) rather than silently dropping the page from the combined set.
+	if res.FromCache {
+		slog.Warn(wikiJobName+": unexpected 304 on unconditional gear fetch; skipping", "url", url)
+		return wikiPageResult{}, fetchSkip
+	}
+	return decodeWikiResult(url, res)
+}
+
+// decodeWikiResult turns a non-304 FetchResult into a wikiPageResult: it checks
+// the HTTP outcome, decodes the action=parse envelope, and extracts the inner
+// wikitext + resolved title. Shared by the conditional (items/spells) and
+// unconditional (gear) fetch paths. Returns fetchSkip on a fetch error /
+// MediaWiki error envelope / empty wikitext (the caller logs + continues).
+func decodeWikiResult(url string, res politefetch.FetchResult) (wikiPageResult, fetchOutcome) {
 	if !res.OK {
 		slog.Warn(wikiJobName+": wiki fetch failed", "url", url, "status", res.Status, "err", res.Err)
 		return wikiPageResult{}, fetchSkip

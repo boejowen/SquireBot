@@ -1,8 +1,9 @@
 // Package enrich holds the pure, host-agnostic enrichment parsers ported 1:1
 // from the Apps Script TypeScript sources (apps-script/src/lib/*). These
-// functions are I/O-free — no net/http, no database/sql, no os beyond test
-// fixture reads — so they are fast, deterministic, and byte-parity-checkable
-// against the same JSON fixtures the TS tests use (copied into testdata/).
+// functions are I/O-free — no network client, no SQL, no filesystem access
+// beyond the test fixture reads — so they are fast, deterministic, and
+// byte-parity-checkable against the same JSON fixtures the TS tests use
+// (copied into testdata/).
 //
 // The four parsers are:
 //   - ParseToRows       (pigparse.go) — PigParse getall response → price rows

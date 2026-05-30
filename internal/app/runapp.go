@@ -1,268 +1,193 @@
-// Package app is the load-bearing Phase 1 orchestrator. Plans 01-06
-// produce isolated packages; package app composes them into a runnable
-// pipeline:
+// Package app is the load-bearing watcher orchestrator. The v1 packages
+// produced isolated pieces; package app composes them into a runnable pipeline.
 //
-//	cold start → config.Load
-//	  ├─ if needsWizard → wizard.Server.Run → returns email + spreadsheet + folder + TokenSource
-//	  └─ else           → auth.ReadToken → OAuthConfigForRefresh → ReuseTokenSource
-//	then sheet.NewClient + ValidateWorkbook
-//	then watch.Run with onChange = parse.Parse → sheet.WriteInventory → sheet.UpsertCharOwner
+// Phase 13 (WATCH-08/09/10/11) re-targeted the SINK from Google Sheets to the
+// v2.0 backend ingest API. The cold-start flow is now:
 //
-// D-04 ChangeWorkbook is a separate entry-point fired from the tray's
-// Change Workbook… menu item. It re-runs picker.Server on a fresh
-// loopback listener with the existing wincred-backed TokenSource (no
-// OAuth re-prompt) and persists the new spreadsheetID on success.
+//	cold start → config.Load → app.MigrateFromV1 (drop dead v1 state)
+//	  ├─ credstore.Read finds no guild code → runOnboarding
+//	  │     (native PromptGuildCode → backend.Validate(/whoami) → credstore.Store
+//	  │      → native PickEQFolder → eqfind.ValidateFolder → cfg.Save)
+//	  └─ guild code present → runWatcher
+//	then watch.Run with onChange = read → parse.CP1252Reader → backend.Ingest
 //
-// File ownership: Plan 03 ships auth.ReadToken / auth.OAuthConfigForRefresh /
-// auth.NewManagerWithListener; this file consumes them by import only and
-// does NOT modify internal/auth/oauth.go.
+// The watcher is THINNER than v1: it POSTs the RAW (CP1252-decoded-to-UTF-8)
+// /outputfile text as Content and the SERVER parses it (D-1). It NO LONGER calls
+// parse.Parse on the upload path. The fsnotify 500ms debounce + always-re-read
+// live in internal/watch and are unchanged.
+//
+// There is NO browser OAuth, NO loopback HTTP listener, and NO Google Sheet
+// anywhere in this flow — the entire internal/auth|sheet|scaffold|picker|wizard
+// stack was deleted (D-2).
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
-	"golang.org/x/oauth2"
-
-	"github.com/boejowen/SquireBot/internal/auth"
+	"github.com/boejowen/SquireBot/internal/backend"
 	"github.com/boejowen/SquireBot/internal/config"
-	"github.com/boejowen/SquireBot/internal/heartbeat"
+	"github.com/boejowen/SquireBot/internal/credstore"
+	"github.com/boejowen/SquireBot/internal/eqfind"
+	"github.com/boejowen/SquireBot/internal/onboarding"
 	"github.com/boejowen/SquireBot/internal/parse"
-	"github.com/boejowen/SquireBot/internal/picker"
-	"github.com/boejowen/SquireBot/internal/scaffold"
-	"github.com/boejowen/SquireBot/internal/sheet"
 	"github.com/boejowen/SquireBot/internal/tray"
 	"github.com/boejowen/SquireBot/internal/update"
 	"github.com/boejowen/SquireBot/internal/watch"
-	"github.com/boejowen/SquireBot/internal/wizard"
 )
 
-// charNameRE extracts <Char> from "<Char>-Inventory.txt". Plan 02-02 Task 5
-// adds a parallel charNameSpellbookRE for "<Char>-Spellbook.txt".
+// charNameRE extracts <Char> from "<Char>-Inventory.txt". Retained for the
+// legacy extractCharName helper + its tests.
 var charNameRE = regexp.MustCompile(`^(.+)-Inventory\.txt$`)
 
-// bootAuthClassification distinguishes a revoked-refresh-token boot error
-// (Reauthorize path) from any other rebuild failure (ContinueSetup path).
-// Plan 09-04 / AUTH-07.
-type bootAuthClassification int
+// badFolderMessage is the VERBATIM re-prompt text relocated from the deleted
+// wizard's EQ-folder step. Kept identical so guildies see the same wording.
+const badFolderMessage = "This folder doesn't look like an EverQuest install (no eqgame.exe found). Pick a different folder."
 
-const (
-	bootAuthOther bootAuthClassification = iota
-	bootAuthRevoked
-)
-
-// charNameSpellbookRE extracts <Char> from "<Char>-Spellbook.txt".
-// Mirrors charNameRE for the WATCH-02 spellbook handler.
-var charNameSpellbookRE = regexp.MustCompile(`^(.+)-Spellbook\.txt$`)
-
-// changeWorkbookTimeout is how long ChangeWorkbook waits for the user
-// to complete a pick before it gives up and tears down the listener.
-const changeWorkbookTimeout = 5 * time.Minute
-
-// RunApp is the background goroutine launched from main.go. Blocks
-// until ctx is cancelled. Branches on config completeness:
-//   - incomplete config → wizard, then watcher
-//   - complete config   → re-load wincred token + watcher directly
+// RunApp is the background goroutine launched from main.go. It blocks until ctx
+// is cancelled. Phase 13 flow:
 //
-// Tray Continue setup… invokes RunApp again; D-04 Change Workbook…
-// invokes ChangeWorkbook (NOT RunApp).
-func RunApp(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller) {
-	if err := bc.Validate(); err != nil {
-		slog.Error("build constants missing", "err", err)
-		t.SetStatus("Build error: missing OAuth constants")
-		t.SetIconHealth(tray.HealthRed)
-		return
-	}
-
-	var ts oauth2.TokenSource
-
-	if needsWizard(cfg) {
-		t.SetStatus("Setup needed")
-		t.SetIconHealth(tray.HealthRed)
-		t.ShowContinueSetup()
-
-		ws := wizard.NewServer(cfg, bc)
-		res := ws.Run(ctx)
-		if res.Err != nil {
-			slog.Error("wizard failed", "err", res.Err)
-			t.SetStatus(fmt.Sprintf("Setup error: %v", res.Err))
-			// Fall through; tray's Continue setup… click triggers a fresh
-			// RunApp invocation (main.go wiring).
+//   - credstore.Read finds no guild code → run onboarding (prompt + validate +
+//     store + EQ folder). If the guildie cancels, go red ("Setup needed") and
+//     return; the tray "Enter guild code…" item re-invokes RunApp.
+//   - a guild code is present but no EQ folder is configured → run just the
+//     EQ-folder onboarding step.
+//   - then start the watcher.
+//
+// baseURL is the backend base (config override or the build_constants default);
+// version is the watcher build version (threaded into every Ingest + the UA).
+func RunApp(ctx context.Context, cfg *config.Config, baseURL, version string, t *tray.Controller) {
+	code, err := credstore.Read()
+	if err != nil || code == "" {
+		// No stored guild code → first-run (or post-migration) onboarding.
+		slog.Info("no guild code stored; starting onboarding")
+		validated, oErr := runOnboarding(ctx, cfg, baseURL, version, t)
+		if oErr != nil {
+			slog.Warn("onboarding did not complete", "err", oErr)
+			t.SetIconHealth(tray.HealthRed)
+			t.SetStatus("Setup needed — click \"Enter guild code…\" in the tray menu")
 			return
 		}
-		t.HideContinueSetup()
-		ts = res.TokenSource
-		// Wizard already wrote cfg.GoogleEmail (auth.Manager) +
-		// cfg.SpreadsheetID (picker.Server) + cfg.EQFolder (handleEQFolderConfirm).
-	}
-
-	// Watcher path. If we came through the wizard, ts is live; otherwise
-	// (skip-wizard cold start) we rebuild it from wincred. AUTH-07 (Plan
-	// 09-04): classify the rebuild error so revoked refresh tokens surface
-	// the Reauthorize path instead of ContinueSetup. Pre-Ready tray calls
-	// are buffered by Plan 09-01 (OPS-06).
-	if ts == nil {
-		built, err := buildTokenSourceFromWincred(ctx, cfg, bc)
-		if err != nil {
-			_ = applyBootAuthError(t, err)
+		code = validated
+	} else if !hasEQFolder(cfg) {
+		// We have a code but never picked an EQ folder (e.g. interrupted setup).
+		if perr := pickAndSaveEQFolder(ctx, cfg, t); perr != nil {
+			slog.Warn("EQ folder selection did not complete", "err", perr)
+			t.SetIconHealth(tray.HealthRed)
+			t.SetStatus("Setup needed — pick your EverQuest folder")
 			return
 		}
-		ts = built
 	}
 
-	if err := runWatcher(ctx, cfg, bc, t, ts); err != nil {
+	if err := runWatcher(ctx, cfg, baseURL, version, code, t); err != nil {
 		slog.Error("watcher exited", "err", err)
 		t.SetStatus(fmt.Sprintf("Watcher error: %v", err))
 		t.SetIconHealth(tray.HealthRed)
 	}
 }
 
-// needsWizard reports whether any of the three config values RunApp
-// needs is missing. Used by both RunApp and the tray's startup flow.
+// hasEQFolder reports whether any EQ folder is configured (either the legacy
+// single EQFolder or the EQFolders slice).
+func hasEQFolder(cfg *config.Config) bool {
+	return cfg.EQFolder != "" || len(cfg.EQFolders) > 0
+}
+
+// runOnboarding is the native "paste your guild code" flow (WATCH-10, D-3). It
+// loops the code prompt until a valid code is stored (or the guildie cancels),
+// then runs the EQ-folder step. Returns the validated guild code on success.
 //
-// Plan 02-02 (WATCH-03): folder presence is satisfied by EITHER the legacy
-// single-string EQFolder OR the new EQFolders slice; either is enough.
-func needsWizard(cfg *config.Config) bool {
-	if cfg.GoogleEmail == "" || cfg.SpreadsheetID == "" {
-		return true
-	}
-	return cfg.EQFolder == "" && len(cfg.EQFolders) == 0
-}
+// There is NO browser and NO loopback server — onboarding.PromptGuildCode is a
+// native Win32 dialog; backend.Validate hits GET /api/v1/whoami.
+func runOnboarding(ctx context.Context, cfg *config.Config, baseURL, version string, t *tray.Controller) (string, error) {
+	t.SetIconHealth(tray.HealthRed)
+	t.SetStatus("Setup needed — enter your guild code")
 
-// swappableTS is an oauth2.TokenSource whose underlying source can be
-// replaced while the sheet client is running. onRefresh swaps it when
-// Reauthorize has stored a new refresh token in wincred: the old
-// ReuseTokenSource cached access token is then stale even though it has
-// not expired by wall-clock time, so simply calling ts.Token() returns
-// the revoked token from cache and the retry 401s again.
-type swappableTS struct {
-	mu  sync.Mutex
-	cur oauth2.TokenSource
-}
-
-func (s *swappableTS) Token() (*oauth2.Token, error) {
-	s.mu.Lock()
-	cur := s.cur
-	s.mu.Unlock()
-	return cur.Token()
-}
-
-func (s *swappableTS) swap(newTS oauth2.TokenSource) {
-	s.mu.Lock()
-	s.cur = newTS
-	s.mu.Unlock()
-}
-
-// buildTokenSourceFromWincred reconstructs an oauth2.TokenSource from
-// the wincred-stored refresh token. Used on the skip-wizard cold-start
-// path and by ChangeWorkbook. Plan 03's OAuthConfigForRefresh keeps the
-// scope set in lockstep with consent-time so the refresh succeeds.
-func buildTokenSourceFromWincred(ctx context.Context, cfg *config.Config, bc auth.BuildConstants) (oauth2.TokenSource, error) {
-	if cfg.GoogleEmail == "" {
-		return nil, fmt.Errorf("no GoogleEmail in config — wizard not yet run")
-	}
-	st, err := auth.ReadToken(cfg.GoogleEmail)
-	if err != nil {
-		return nil, fmt.Errorf("read wincred token for %s: %w", cfg.GoogleEmail, err)
-	}
-	// Prefer the build-time client ID (current Cloud project) over the
-	// stored ClientID — survives a Cloud project migration without
-	// invalidating the wincred entry. Plan 03's StoredToken.ClientID is
-	// retained for diagnostics, not for auth.
-	clientID := bc.OAuthClientID
-	if clientID == "" {
-		clientID = st.ClientID
-	}
-	oauthCfg := auth.OAuthConfigForRefresh(auth.Config{
-		OAuthClientID:     clientID,
-		OAuthClientSecret: bc.OAuthClientSecret, // Google requires client_secret on refresh exchanges for desktop apps
-	})
-	tok := &oauth2.Token{RefreshToken: st.RefreshToken}
-	ts := oauth2.ReuseTokenSource(tok, oauthCfg.TokenSource(ctx, tok))
-	// Defer-zero our local view of the refresh-token bytes so a later
-	// panic / log.Printf cannot leak them. ReuseTokenSource already holds
-	// its own copy internally.
-	st.RefreshToken = ""
-	tok.RefreshToken = ""
-	_ = st
-	return ts, nil
-}
-
-// runWatcher starts the watcher loop and dispatches parse → write →
-// upsert per inventory or spellbook event. Returns when ctx is cancelled
-// or fsnotify errors fatally.
-//
-// Plan 02-02 (WATCH-02 + WATCH-03 + WATCH-09): spans every folder in
-// cfg.EQFolders (back-compat-shim'd from cfg.EQFolder by config.Load),
-// dispatches inventory + spellbook events to separate handlers, and
-// runs a startup catch-up scan so files saved while the watcher was
-// off are uploaded on the next launch.
-func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, ts oauth2.TokenSource) error {
-	sts := &swappableTS{cur: ts}
-	sc, err := sheet.NewClient(ctx, sts, cfg.SpreadsheetID)
-	if err != nil {
-		return fmt.Errorf("sheet client: %w", err)
-	}
-	// Plan 02-04 (AUTH-05): onRefresh swaps in a fresh token source on 401.
-	// drive.file write-access propagation after Reauthorize is handled by
-	// runPostReauthProbe (see makeOnInventoryChange / makeOnSpellbookChange).
-	sc.SetOnRefresh(func() error {
-		var freshTS oauth2.TokenSource
-		select {
-		case freshTS = <-globalReauthTSCh:
-			slog.Info("onRefresh: using post-reauth token source")
-		default:
-			var err error
-			freshTS, err = buildTokenSourceFromWincred(ctx, cfg, bc)
-			if err != nil {
-				return err
-			}
-		}
-		tok, err := freshTS.Token()
+	bc := backend.New(baseURL)
+	for {
+		code, err := onboarding.PromptGuildCode("SquireBot Setup", "Paste your guild code (from your guild officer):")
 		if err != nil {
-			return err
+			// Cancelled (or unsupported platform) — leave the tray red; the tray
+			// "Enter guild code…" item re-triggers RunApp.
+			return "", err
 		}
-		slog.Info("onRefresh: fresh token obtained", "expiry", tok.Expiry)
-		sts.swap(freshTS)
+		// Validate against the backend before storing (D-3).
+		switch verr := bc.Validate(ctx, code); {
+		case verr == nil:
+			if serr := credstore.Store(code); serr != nil {
+				slog.Error("store guild code", "err", serr)
+				t.SetStatus("Could not save the guild code; try again")
+				return "", serr
+			}
+			slog.Info("guild code validated and stored")
+			// EQ folder step (only if none configured yet).
+			if !hasEQFolder(cfg) {
+				if ferr := pickAndSaveEQFolder(ctx, cfg, t); ferr != nil {
+					return "", ferr
+				}
+			}
+			return code, nil
+		case errors.Is(verr, backend.ErrUnauthorized):
+			slog.Info("guild code rejected by backend; re-prompting")
+			t.SetStatus("That guild code was rejected — try again")
+			continue
+		default:
+			// Network / server error — surface and abort (don't loop on an
+			// unreachable backend).
+			slog.Warn("guild code validation error", "err", verr)
+			t.SetStatus("Couldn't reach the server to validate — try again later")
+			return "", verr
+		}
+	}
+}
+
+// pickAndSaveEQFolder runs the native folder picker and persists a valid EQ
+// folder, re-prompting with the verbatim badFolderMessage on a folder that fails
+// eqfind.ValidateFolder. Relocated from the deleted wizard.
+func pickAndSaveEQFolder(ctx context.Context, cfg *config.Config, t *tray.Controller) error {
+	_ = ctx // reserved for future cancellation; the native dialog is modal
+	for {
+		path, err := onboarding.PickEQFolder("Pick your EverQuest folder")
+		if err != nil {
+			return err // cancelled / unsupported
+		}
+		if verr := eqfind.ValidateFolder(path); verr != nil {
+			slog.Info("picked folder failed EQ validation; re-prompting", "path", path, "err", verr)
+			t.SetStatus(badFolderMessage)
+			continue
+		}
+		cfg.EQFolder = path
+		cfg.EQFolders = []string{path}
+		if serr := cfg.Save(); serr != nil {
+			slog.Error("save cfg after EQ folder pick", "err", serr)
+			return serr
+		}
+		slog.Info("EQ folder configured", "path", path)
 		return nil
-	})
-
-	// Plan 02-01 Task 1: ValidateWorkbook returns one of three states.
-	// Wrong → refuse. SchemaTooNew (any state with that error) → refuse.
-	// Empty or Matches → proceed to ScaffoldSchemaV1.
-	state, vErr := sc.ValidateWorkbook(ctx)
-	if errors.Is(vErr, sheet.ErrSchemaTooNew) {
-		return fmt.Errorf("validate workbook on startup: %w", vErr)
 	}
-	if state == sheet.WorkbookStateWrong {
-		return fmt.Errorf("validate workbook on startup: %w", vErr)
-	}
-	// state is Empty or Matches — both proceed to scaffold.
+}
 
-	// Plan 02-01 Task 4: ScaffoldSchemaV1 brings the workbook to v1.
-	// Idempotent — no-op on second run. Fresh shared workbook (Empty)
-	// gets every dimension + view tab created with locked headers and
-	// 13 _meta KV rows including schema_version=1 + canonical_id.
-	if err := scaffold.ScaffoldSchemaV1(ctx, sc); err != nil {
-		return fmt.Errorf("scaffold schema v1: %w", err)
-	}
+// runWatcher starts the watcher loop and dispatches read → POST per inventory or
+// spellbook event. Returns when ctx is cancelled or fsnotify errors fatally.
+//
+// Phase 13: the sink is a backend.Client (no sheet.NewClient/ValidateWorkbook/
+// ScaffoldSchemaV1, no heartbeat goroutine — D-10). The auto-update daily-check
+// goroutine survives unchanged (direct net/http to GitHub, never Google). Folder
+// resolution + rescanCatchUp + watch.Run are unchanged.
+func runWatcher(ctx context.Context, cfg *config.Config, baseURL, version, code string, t *tray.Controller) error {
+	bc := backend.New(baseURL)
 
-	// Plan 02-02 (WATCH-03): determine the folders to watch. Prefer
-	// cfg.EQFolders (Phase 2 multi-folder); fall back to the legacy
-	// cfg.EQFolder for any pre-Phase-2 config that hasn't been re-saved
-	// yet. config.Load already shims EQFolder→EQFolders on read, so
-	// this fallback is belt-and-braces.
+	// Determine the folders to watch. Prefer cfg.EQFolders (multi-folder); fall
+	// back to the legacy cfg.EQFolder. config.Load already shims EQFolder→
+	// EQFolders, so the fallback is belt-and-braces.
 	folders := cfg.EQFolders
 	if len(folders) == 0 && cfg.EQFolder != "" {
 		folders = []string{cfg.EQFolder}
@@ -271,44 +196,24 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 		return fmt.Errorf("no EQ folders configured (cfg.EQFolders empty)")
 	}
 
-	t.SetSpreadsheetID(cfg.SpreadsheetID)
 	t.SetIconHealth(tray.HealthGreen)
-	t.SetStatus(fmt.Sprintf("Connected as %s — watching %s", cfg.GoogleEmail, strings.Join(folders, ", ")))
+	t.SetStatus("Connected — watching " + strings.Join(folders, ", "))
 
-	// Plan 02-05 (WATCH-08 + OPS-05): launch the heartbeat goroutine.
-	// Fires immediately, then every 24h. Goes through the same
-	// mutex-funneled c.batchUpdate as the watcher writes, so heartbeat
-	// fires cannot interleave with WriteInventory / WriteSpellbook.
-	// Honors globalAuthSuspended (skips the API call when true so we
-	// don't burn quota on doomed requests during a Reauthorize wait).
-	go heartbeat.Run(ctx, sc, cfg, cfg.GoogleEmail, bc.WatcherVersion, &globalAuthSuspended)
-
-	// Plan 02-06 (OPS-04): launch the auto-update daily-check goroutine
-	// alongside the heartbeat. Independent goroutines: heartbeat goes
-	// through Sheets API (mutex-funneled batchUpdate); auto-update goes
-	// through direct net/http to GitHub Releases. No coordination needed.
-	// On a successful staging the statusFn updates the tray status; the
-	// startup-swap (cmd/squirebot/main.go update.Apply) takes effect on
-	// the next launch. Owner/repo are hard-coded to the canonical
-	// repository — Phase 5+ may switch to ldflag injection if forking
-	// becomes a real concern (CONTEXT.md Claude's Discretion).
+	// Auto-update daily-check goroutine (OPS-04). Independent of the ingest
+	// path; direct net/http to GitHub Releases. On a successful staging the
+	// statusFn updates the tray; the startup-swap (main.go update.Apply) takes
+	// effect on the next launch.
 	if exe, err := os.Executable(); err != nil {
 		slog.Warn("os.Executable failed; auto-update goroutine not launched", "err", err)
 	} else {
-		go update.RunDailyCheck(ctx, "boejowen", "SquireBot", bc.WatcherVersion, exe, func(msg string) { t.SetStatus(msg) })
+		go update.RunDailyCheck(ctx, "boejowen", "SquireBot", version, exe, func(msg string) { t.SetStatus(msg) })
 	}
 
-	// Plan 02-04 (AUTH-05): pass &globalAuthSuspended through to the
-	// handlers. They will Store(true) on permanent auth failure and
-	// short-circuit subsequent fires until Reauthorize clears the flag.
-	onInventory := makeOnInventoryChange(ctx, sc, cfg, bc, t, &globalAuthSuspended)
-	onSpellbook := makeOnSpellbookChange(ctx, sc, cfg, bc, t, &globalAuthSuspended)
+	onInventory := makeOnInventoryChange(ctx, bc, cfg, code, version, t)
+	onSpellbook := makeOnSpellbookChange(ctx, bc, cfg, code, version, t)
 
-	// Plan 02-02 (WATCH-09): on startup, walk every folder and synthesize
-	// onInventory / onSpellbook calls for any file whose mtime is newer
-	// than the cached LastKnown*Mtime. A guildie who runs SquireBot 5
-	// minutes a day no longer loses snapshots produced while the watcher
-	// was off. Idempotent — re-running with no file changes is a no-op.
+	// WATCH-09: on startup, walk every folder and synthesize callbacks for any
+	// file whose mtime is newer than the cached LastKnown*Mtime. Idempotent.
 	rescanCatchUp(ctx, cfg, folders, onInventory, onSpellbook)
 
 	return watch.Run(ctx, folders, onInventory, onSpellbook)
@@ -316,21 +221,11 @@ func runWatcher(ctx context.Context, cfg *config.Config, bc auth.BuildConstants,
 
 // rescanCatchUp walks every folder in `folders`, lists every
 // <Char>-Inventory.txt and <Char>-Spellbook.txt, compares mtime against
-// cfg.LastKnownInventoryMtime[char] / cfg.LastKnownSpellbookMtime[char],
-// and synthesizes an onInventory / onSpellbook call for each newer file.
-//
-// Per Plan 02-02 Task 5: the OnChange callbacks themselves persist the
-// updated mtime once a sheet write succeeds (see makeOnInventoryChange /
-// makeOnSpellbookChange). rescanCatchUp does NOT update the maps itself —
-// this avoids the false-positive "already uploaded" state if a transient
-// sheet failure happens during catch-up but accepts a re-upload on a
-// clean restart after a partial failure (idempotent re-uploads are cheap).
-//
-// ctx is forwarded to the callbacks via closure. The function does not
-// block on the callbacks — they run synchronously here on the catch-up
-// goroutine; if a callback blocks, catch-up blocks. Acceptable because
-// catch-up runs once at startup and the callbacks are bounded by sheet
-// API latency.
+// cfg.LastKnown*Mtime[char], and synthesizes an onInventory / onSpellbook call
+// for each newer file. The OnChange callbacks themselves persist the updated
+// mtime once an upload succeeds; rescanCatchUp does NOT update the maps itself
+// (accepts a re-upload on a clean restart after a partial failure — idempotent
+// re-uploads are cheap).
 func rescanCatchUp(ctx context.Context, cfg *config.Config, folders []string, onInventory, onSpellbook watch.OnChange) {
 	if ctx.Err() != nil {
 		return
@@ -382,69 +277,25 @@ func rescanCatchUp(ctx context.Context, cfg *config.Config, folders []string, on
 	}
 }
 
-// runPostReauthProbe waits for drive.file batchUpdate write access to
-// propagate after Reauthorize+picker. Runs as a goroutine so batchMu is
-// not held during the wait. Clears authSuspended and restores the tray to
-// green when a probe write succeeds. On 90-minute timeout, surfaces the
-// Reauthorize prompt so the user can retry.
-func runPostReauthProbe(ctx context.Context, sc *sheet.Client, authSuspended *atomic.Bool, t *tray.Controller) {
-	const probeInterval = 60 * time.Second
-	const probeMaxWait = 90 * time.Minute
-	probeDeadline := time.Now().Add(probeMaxWait)
-	for attempt := 1; time.Now().Before(probeDeadline); attempt++ {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(probeInterval):
-		}
-		if err := sc.PingWriteNoLock(ctx); !errors.Is(err, sheet.ErrPermanentAuth) {
-			if err == nil {
-				slog.Info("post-reauth probe: write access propagated", "attempt", attempt)
-			} else {
-				slog.Warn("post-reauth probe: non-auth error; resuming", "err", err)
-			}
-			authSuspended.Store(false)
-			t.SetIconHealth(tray.HealthGreen)
-			t.HideReauthorize()
-			t.SetStatus("Reauthorized — resuming uploads")
-			return
-		}
-		slog.Info("post-reauth probe: drive.file write still propagating", "attempt", attempt)
-		t.SetStatus(fmt.Sprintf("Reauthorized: waiting for Google propagation (attempt %d)…", attempt))
-	}
-	slog.Error("post-reauth probe: write access not propagated", "after", probeMaxWait)
-	t.SetIconHealth(tray.HealthRed)
-	t.ShowReauthorize()
-	t.SetStatus("Reauthorize: Google propagation timed out. Click Reauthorize…")
-}
-
-// makeOnInventoryChange wraps the parse → WriteInventory → UpsertCharOwner
-// chain into a watch.OnChange callback. Extracted for testability.
+// makeOnInventoryChange wraps the read → POST chain into a watch.OnChange
+// callback. Extracted for testability.
 //
-// Plan 02-02 (WATCH-09): on a successful write, the file's source mtime
-// (captured before parse) is persisted to cfg.LastKnownInventoryMtime[char]
-// + cfg.Save() so a watcher restart's catch-up scan correctly recognises
-// "already uploaded" without re-firing.
-func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, authSuspended *atomic.Bool) watch.OnChange {
+// Phase 13 (D-1/D-8): on a file event it re-stats (capturing mtime BEFORE the
+// read so a same-second re-fire is recognised as "already uploaded"), opens,
+// decodes CP1252→UTF-8 ONCE via parse.CP1252Reader, skips an empty body, and
+// POSTs the raw UTF-8 to the backend — it does NOT call parse.Parse. On success
+// it persists cfg.LastKnownInventoryMtime[char] + cfg.Save() (unchanged from v1).
+func makeOnInventoryChange(ctx context.Context, bc *backend.Client, cfg *config.Config, code, version string, t *tray.Controller) watch.OnChange {
 	return func(path string) {
-		// Plan 02-04 (AUTH-05): if the watcher is suspended (refresh
-		// token died, awaiting Reauthorize click), skip BEFORE the
-		// stat/parse/write chain. CONTEXT.md (locked): no silent
-		// retry-loop after invalid_grant.
-		if authSuspended != nil && authSuspended.Load() {
-			slog.Info("auth suspended; skipping inventory", "path", filepath.Base(path))
-			return
-		}
 		charName := extractCharNameForSuffix(path, watch.InventorySuffix)
 		if charName == "" {
-			slog.Warn("inventory file with unexpected name; skipping",
-				"path", filepath.Base(path))
+			slog.Warn("inventory file with unexpected name; skipping", "path", filepath.Base(path))
 			return
 		}
-		// Per CLAUDE.md / RESEARCH.md §8.3: re-stat + re-read fresh on
-		// every event. Never trust fsnotify event payloads on Windows.
-		// Capture mtime BEFORE parse so a same-second re-fire after this
-		// upload is recognised as "already uploaded" by catch-up.
+		// Per CLAUDE.md / RESEARCH §8.3: re-stat + re-read fresh on every event.
+		// Never trust fsnotify event payloads on Windows. Capture mtime BEFORE
+		// the read so a same-second re-fire after this upload is recognised as
+		// "already uploaded" by catch-up.
 		fi, statErr := os.Stat(path)
 		if statErr != nil {
 			slog.Error("stat inventory", "char", charName, "err", statErr)
@@ -457,47 +308,44 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 			slog.Error("open inventory", "char", charName, "err", err)
 			return
 		}
-		// Encoding contract A1 (Phase 11): the shared parser no longer decodes
-		// CP1252 — wrap the raw-CP1252 disk file in parse.CP1252Reader so the
-		// watcher keeps decoding off disk (curly apostrophes → U+2019).
-		rows, perr := parse.Parse(parse.CP1252Reader(f))
+		// Encoding contract A1/D-8: decode CP1252→UTF-8 ONCE here; the backend
+		// receives UTF-8 and does NOT re-decode (double-decoding mojibakes curly
+		// apostrophes). The watcher NO LONGER calls parse.Parse — the server
+		// parses the raw content (D-1).
+		utf8Bytes, rerr := io.ReadAll(parse.CP1252Reader(f))
 		_ = f.Close()
-		if perr != nil {
-			slog.Error("parse inventory", "char", charName, "err", perr)
+		if rerr != nil {
+			slog.Error("read inventory", "char", charName, "err", rerr)
 			return
 		}
-		if len(rows) == 0 {
-			// T-07-05 mitigation: don't WriteInventory with 0 rows (would
-			// clear the tab). EQ flush mid-write or empty char → skip.
-			slog.Info("inventory empty; skipping write", "char", charName)
+		if len(bytes.TrimSpace(utf8Bytes)) == 0 {
+			// T-07-05 carry-over: skip an empty/mid-flush file (the server's
+			// full-snapshot replace would otherwise clear the character's rows).
+			slog.Info("inventory empty; skipping upload", "char", charName)
 			return
 		}
-		uploadedAt := time.Now().UTC().Format(time.RFC3339)
-		if err := sc.WriteInventory(ctx, charName, sheet.InventoryHeader, rows, uploadedAt); err != nil {
-			if errors.Is(err, sheet.ErrPermanentAuth) && globalPostReauthPending.Swap(false) {
-				// drive.file batchUpdate 401 immediately after Reauthorize:
-				// propagation delay, not a dead RT. Suspend writes and probe
-				// in a background goroutine; no Reauthorize button needed.
-				authSuspended.Store(true)
-				t.SetIconHealth(tray.HealthGreen)
-				t.SetStatus("Reauthorized: waiting for Google propagation…")
-				slog.Info("post-reauth propagation wait started", "char", charName)
-				go runPostReauthProbe(ctx, sc, authSuspended, t)
-				return
-			}
-			if isPermanentAuthErr(err) {
-				suspendForAuth(authSuspended, t, charName, "inventory", err)
-				return
-			}
-			slog.Error("write inventory", "char", charName, "err", err)
-			t.SetStatus(fmt.Sprintf("Last upload failed: %s", charName))
+
+		err = bc.Ingest(ctx, code, charName, "inventory", string(utf8Bytes), version)
+		switch {
+		case errors.Is(err, backend.ErrUnauthorized):
+			slog.Warn("upload 401 — guild code invalid", "char", charName)
+			t.SetIconHealth(tray.HealthRed)
+			t.SetStatus("Guild code invalid — re-enter via the tray menu")
+			return // terminal; NO retry (D-5 / Pitfall 5)
+		case errors.Is(err, backend.ErrVersionTooOld):
+			slog.Warn("upload 426 — watcher too old", "char", charName)
+			t.SetStatus("Update needed — SquireBot will auto-update")
+			return
+		case errors.Is(err, backend.ErrCrossOwner):
+			slog.Warn("cross-owner reject", "char", charName)
+			return
+		case err != nil:
+			slog.Error("upload inventory", "char", charName, "err", err)
+			t.SetStatus("Last upload failed: " + charName)
 			return
 		}
-		if err := sc.UpsertCharOwner(ctx, charName, cfg.GoogleEmail, bc.WatcherVersion); err != nil {
-			// Non-fatal — inv:Char write succeeded; surface warning, continue.
-			slog.Warn("upsert char_owner", "char", charName, "err", err)
-		}
-		// WATCH-09: persist the mtime so the next catch-up sees it.
+
+		// Success → persist the mtime so the next catch-up sees it (UNCHANGED).
 		if cfg.LastKnownInventoryMtime == nil {
 			cfg.LastKnownInventoryMtime = make(map[string]string)
 		}
@@ -505,30 +353,18 @@ func makeOnInventoryChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 		if err := cfg.Save(); err != nil {
 			slog.Warn("save cfg after inventory upload", "char", charName, "err", err)
 		}
-		slog.Info("uploaded", "char", charName, "rows", len(rows))
+		slog.Info("uploaded inventory", "char", charName)
 		t.SetStatus(fmt.Sprintf("Last upload: %s at %s", charName, time.Now().Format("15:04")))
 	}
 }
 
-// makeOnSpellbookChange wraps the parse → WriteSpellbook → UpsertCharOwner
-// chain into a watch.OnChange callback. Mirrors makeOnInventoryChange but
-// for <Char>-Spellbook.txt files.
-//
-// Plan 02-02 (WATCH-02): UpsertCharOwner runs after spellbook events too,
-// so last_seen is refreshed on every signal of life — Plan 02-01 Task 3
-// already extended UpsertCharOwner to refresh last_seen on every match.
-func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller, authSuspended *atomic.Bool) watch.OnChange {
+// makeOnSpellbookChange mirrors makeOnInventoryChange for <Char>-Spellbook.txt
+// files (kind "spellbook").
+func makeOnSpellbookChange(ctx context.Context, bc *backend.Client, cfg *config.Config, code, version string, t *tray.Controller) watch.OnChange {
 	return func(path string) {
-		// Plan 02-04 (AUTH-05): mirrors makeOnInventoryChange. Skip when
-		// suspended.
-		if authSuspended != nil && authSuspended.Load() {
-			slog.Info("auth suspended; skipping spellbook", "path", filepath.Base(path))
-			return
-		}
 		charName := extractCharNameForSuffix(path, watch.SpellbookSuffix)
 		if charName == "" {
-			slog.Warn("spellbook file with unexpected name; skipping",
-				"path", filepath.Base(path))
+			slog.Warn("spellbook file with unexpected name; skipping", "path", filepath.Base(path))
 			return
 		}
 		fi, statErr := os.Stat(path)
@@ -543,42 +379,37 @@ func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 			slog.Error("open spellbook", "char", charName, "err", err)
 			return
 		}
-		// Encoding contract A1 (Phase 11): wrap the raw-CP1252 disk file in
-		// parse.CP1252Reader (the shared parser is now UTF-8-only).
-		rows, perr := parse.ParseSpellbook(parse.CP1252Reader(f))
+		utf8Bytes, rerr := io.ReadAll(parse.CP1252Reader(f))
 		_ = f.Close()
-		if perr != nil {
-			slog.Error("parse spellbook", "char", charName, "err", perr)
+		if rerr != nil {
+			slog.Error("read spellbook", "char", charName, "err", rerr)
 			return
 		}
-		if len(rows) == 0 {
-			// Same T-07-05-style mitigation as inventory: don't write zero
-			// rows (would clear the tab). EQ flush mid-write or empty
-			// spellbook → skip.
-			slog.Info("spellbook empty; skipping write", "char", charName)
+		if len(bytes.TrimSpace(utf8Bytes)) == 0 {
+			slog.Info("spellbook empty; skipping upload", "char", charName)
 			return
 		}
-		uploadedAt := time.Now().UTC().Format(time.RFC3339)
-		if err := sc.WriteSpellbook(ctx, charName, sheet.SpellbookHeader, rows, uploadedAt); err != nil {
-			if errors.Is(err, sheet.ErrPermanentAuth) && globalPostReauthPending.Swap(false) {
-				authSuspended.Store(true)
-				t.SetIconHealth(tray.HealthGreen)
-				t.SetStatus("Reauthorized: waiting for Google propagation…")
-				slog.Info("post-reauth propagation wait started", "char", charName)
-				go runPostReauthProbe(ctx, sc, authSuspended, t)
-				return
-			}
-			if isPermanentAuthErr(err) {
-				suspendForAuth(authSuspended, t, charName, "spellbook", err)
-				return
-			}
-			slog.Error("write spellbook", "char", charName, "err", err)
-			t.SetStatus(fmt.Sprintf("Last upload failed: %s spellbook", charName))
+
+		err = bc.Ingest(ctx, code, charName, "spellbook", string(utf8Bytes), version)
+		switch {
+		case errors.Is(err, backend.ErrUnauthorized):
+			slog.Warn("upload 401 — guild code invalid", "char", charName)
+			t.SetIconHealth(tray.HealthRed)
+			t.SetStatus("Guild code invalid — re-enter via the tray menu")
+			return
+		case errors.Is(err, backend.ErrVersionTooOld):
+			slog.Warn("upload 426 — watcher too old", "char", charName)
+			t.SetStatus("Update needed — SquireBot will auto-update")
+			return
+		case errors.Is(err, backend.ErrCrossOwner):
+			slog.Warn("cross-owner reject", "char", charName)
+			return
+		case err != nil:
+			slog.Error("upload spellbook", "char", charName, "err", err)
+			t.SetStatus("Last upload failed: " + charName + " spellbook")
 			return
 		}
-		if err := sc.UpsertCharOwner(ctx, charName, cfg.GoogleEmail, bc.WatcherVersion); err != nil {
-			slog.Warn("upsert char_owner", "char", charName, "err", err)
-		}
+
 		if cfg.LastKnownSpellbookMtime == nil {
 			cfg.LastKnownSpellbookMtime = make(map[string]string)
 		}
@@ -586,15 +417,13 @@ func makeOnSpellbookChange(ctx context.Context, sc *sheet.Client, cfg *config.Co
 		if err := cfg.Save(); err != nil {
 			slog.Warn("save cfg after spellbook upload", "char", charName, "err", err)
 		}
-		slog.Info("uploaded spellbook", "char", charName, "rows", len(rows))
+		slog.Info("uploaded spellbook", "char", charName)
 		t.SetStatus(fmt.Sprintf("Last upload: %s spellbook at %s", charName, time.Now().Format("15:04")))
 	}
 }
 
-// extractCharName returns "<Char>" for "<Char>-Inventory.txt" or "" for
-// any other basename. Retained for the existing TestExtractCharName cases
-// and any external callers; Plan 02-02 callbacks use
-// extractCharNameForSuffix to disambiguate inventory vs. spellbook.
+// extractCharName returns "<Char>" for "<Char>-Inventory.txt" or "" for any
+// other basename. Retained for the existing TestExtractCharName cases.
 func extractCharName(path string) string {
 	base := filepath.Base(path)
 	m := charNameRE.FindStringSubmatch(base)
@@ -605,10 +434,8 @@ func extractCharName(path string) string {
 }
 
 // extractCharNameForSuffix returns "<Char>" for a basename matching
-// "<Char>"+suffix, or "" otherwise. Plan 02-02 Task 5 introduces this
-// helper so the inventory and spellbook handlers can share extraction
-// logic without each owning a regex. Suffixes are watch.InventorySuffix
-// and watch.SpellbookSuffix.
+// "<Char>"+suffix, or "" otherwise. Suffixes are watch.InventorySuffix and
+// watch.SpellbookSuffix.
 func extractCharNameForSuffix(path, suffix string) string {
 	base := filepath.Base(path)
 	if !strings.HasSuffix(base, suffix) {
@@ -619,168 +446,4 @@ func extractCharNameForSuffix(path, suffix string) string {
 		return ""
 	}
 	return name
-}
-
-// isPermanentAuthErr returns true if err is the boundary signal Plan
-// 02-03's withRetry produces on a second auth-flavored 403
-// (sheet.ErrPermanentAuth) OR the canonical Google refresh-token-dead
-// shape Plan 02-04 Task 1's IsRevokedRefreshToken matches against. Both
-// trigger the same UX: tray red + suspend writes + Reauthorize click.
-func isPermanentAuthErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, sheet.ErrPermanentAuth) {
-		return true
-	}
-	return auth.IsRevokedRefreshToken(err)
-}
-
-// applyBootAuthError handles a cold-start buildTokenSourceFromWincred
-// failure. If the error matches the revoked-refresh-token classifier
-// (same one AUTH-05 uses), it mirrors AUTH-05's canonical
-// SetIconHealth(Red) + SetStatus + ShowReauthorize tray triple
-// (suspendForAuth, runapp.go ~lines 628-637) so the user sees a clickable
-// Reauthorize from boot. Otherwise it preserves the original
-// ContinueSetup-style recovery (red icon + raw error in status + wizard
-// re-entry).
-//
-// Plan 09-01 (OPS-06) buffers these pre-Ready tray calls so they replay
-// in OnReady — the tray menu opens already in the auth-error state.
-//
-// Returns the classification so unit tests can assert which branch ran
-// without depending on tray internals.
-//
-// Plan 09-04 / AUTH-07. Phase 6 UAT Finding C.
-func applyBootAuthError(t *tray.Controller, err error) bootAuthClassification {
-	slog.Error("token rebuild from wincred failed", "err", err)
-	if auth.IsRevokedRefreshToken(err) {
-		// AUTH-07: boot-time invalid_grant. Mirror AUTH-05's
-		// suspendForAuth triple exactly so the running-state and
-		// boot-time recovery UX are identical.
-		t.SetIconHealth(tray.HealthRed)
-		t.SetStatus("Reauthorize: refresh token died. Click Reauthorize…")
-		t.ShowReauthorize()
-		return bootAuthRevoked
-	}
-	// Non-revoked wincred breakage (corrupted credential, machine
-	// migration, etc.) — route to wizard re-entry per the original
-	// pre-AUTH-07 behavior.
-	t.SetStatus(fmt.Sprintf("Auth error: %v", err))
-	t.SetIconHealth(tray.HealthRed)
-	t.ShowContinueSetup()
-	return bootAuthOther
-}
-
-// suspendForAuth trips authSuspended, turns the tray red, surfaces the
-// Reauthorize menu item, and logs a structured event. Called from both
-// inventory + spellbook handlers on a permanent-auth failure. Safe with
-// a nil authSuspended (test plumbing).
-func suspendForAuth(authSuspended *atomic.Bool, t *tray.Controller, charName, kind string, err error) {
-	if authSuspended != nil {
-		authSuspended.Store(true)
-	}
-	slog.Error("permanent auth failure — suspending writes",
-		"char", charName, "kind", kind, "err", err)
-	t.SetIconHealth(tray.HealthRed)
-	t.SetStatus("Reauthorize: refresh token died. Click Reauthorize…")
-	t.ShowReauthorize()
-}
-
-// ChangeWorkbook is the D-04 tray flow. Re-runs picker.Server on a
-// fresh loopback listener with a refresh-only TokenSource (no OAuth
-// re-prompt). On successful pick + ValidateWorkbook the picker writes
-// the new spreadsheetID to config.json; this function then surfaces
-// the change in tray status.
-//
-// Phase 1 limitation (T-07-09 / threat register): the running watcher
-// keeps using the OLD spreadsheetID until the user restarts the app.
-// Phase 2 polish will hot-swap. Documented as accepted.
-func ChangeWorkbook(ctx context.Context, cfg *config.Config, bc auth.BuildConstants, t *tray.Controller) {
-	slog.Info("Change Workbook flow start", "email", cfg.GoogleEmail)
-	if cfg.GoogleEmail == "" {
-		slog.Warn("Change Workbook with no GoogleEmail — wizard not yet run; ignoring")
-		t.SetStatus("Setup needed")
-		t.ShowContinueSetup()
-		return
-	}
-	if err := bc.Validate(); err != nil {
-		slog.Error("Change Workbook: build constants missing", "err", err)
-		return
-	}
-
-	ts, err := buildTokenSourceFromWincred(ctx, cfg, bc)
-	if err != nil {
-		slog.Error("Change Workbook: token rebuild", "err", err)
-		t.SetStatus("Change Workbook: re-auth required")
-		return
-	}
-
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		slog.Error("Change Workbook: listen", "err", err)
-		return
-	}
-	defer ln.Close()
-	port := ln.Addr().(*net.TCPAddr).Port
-
-	mux := http.NewServeMux()
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-
-	sc, err := sheet.NewClient(ctx, ts, "")
-	if err != nil {
-		slog.Error("Change Workbook: sheet client", "err", err)
-		return
-	}
-
-	pickerSrv := picker.NewServer(sc, ts, cfg, bc)
-	pickerSrv.SetRedirectAfterPick("/changed")
-	done := make(chan struct{}, 1)
-	pickerSrv.OnPicked(func() {
-		select {
-		case done <- struct{}{}:
-		default:
-		}
-	})
-	pickerSrv.AttachRoutes(mux)
-
-	mux.HandleFunc("/changed", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:system-ui;text-align:center;margin-top:4em">
-<h1 style="color:#2e7d32">&#10003; Workbook changed</h1>
-<p>You can close this tab. SquireBot will pick up the new workbook on the next watcher restart.</p>
-</body></html>`))
-	})
-
-	go func() {
-		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-			slog.Warn("Change Workbook: serve", "err", err)
-		}
-	}()
-	defer func() {
-		shutCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(shutCtx)
-	}()
-
-	startURL := fmt.Sprintf("http://127.0.0.1:%d/picker", port)
-	if err := auth.OpenBrowser(startURL); err != nil {
-		slog.Warn("Change Workbook: open browser", "err", err, "url", startURL)
-	}
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-done:
-		t.SetSpreadsheetID(cfg.SpreadsheetID)
-		short := cfg.SpreadsheetID
-		if len(short) > 8 {
-			short = short[:8] + "…"
-		}
-		t.SetStatus(fmt.Sprintf("Workbook changed: %s", short))
-		slog.Info("Change Workbook complete", "spreadsheet_id_set", cfg.SpreadsheetID != "")
-	case <-time.After(changeWorkbookTimeout):
-		slog.Warn("Change Workbook: timeout waiting for pick")
-		t.SetStatus("Change Workbook: cancelled")
-	}
 }

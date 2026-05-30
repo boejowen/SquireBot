@@ -106,6 +106,50 @@ func NewWithHTTPClient(baseURL string, hc *http.Client) *Client {
 	}
 }
 
+// SetBackoffForTest overrides the per-attempt retry schedule. It is a test seam
+// for callers in OTHER packages (e.g. internal/app's callback tests) that need a
+// near-zero backoff so the retry path doesn't sleep [1s,2s,4s] for real. The
+// length of the supplied slice becomes the attempt cap. Production code never
+// calls this (it uses defaultBackoff via New/NewWithHTTPClient).
+func (c *Client) SetBackoffForTest(d []time.Duration) {
+	c.backoff = d
+}
+
+// Validate performs the one-shot onboarding probe: GET {base}/api/v1/whoami with
+// Authorization: Bearer <code>. It returns nil on 200 (the code is valid + active),
+// ErrUnauthorized on 401 (bad/unknown/revoked code → the onboarding flow re-prompts),
+// and a non-nil generic error on any other status or a transport failure. Unlike
+// Ingest there is NO retry — validation is a single request whose result the
+// onboarding loop acts on immediately (a 500 surfaces as "couldn't reach the
+// server", not a silent loop). The bearer code is NEVER logged (V7).
+func (c *Client) Validate(ctx context.Context, code string) error {
+	url := c.baseURL + "/api/v1/whoami"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("backend: build whoami request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+code)
+	req.Header.Set("User-Agent", "SquireBot (+https://github.com/boejowen/SquireBot)")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		// Do NOT echo the code; surface a transport error the caller treats as
+		// "network problem", distinct from ErrUnauthorized.
+		return fmt.Errorf("backend: whoami request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	switch resp.StatusCode {
+	case http.StatusOK: // 200
+		return nil
+	case http.StatusUnauthorized: // 401
+		return ErrUnauthorized
+	default:
+		return fmt.Errorf("backend: whoami unexpected HTTP %d", resp.StatusCode)
+	}
+}
+
 // envelope is the client-side mirror of the server's ingest.Envelope (D-04). The
 // json tags MUST match the server EXACTLY (character/kind/content/watcher_version)
 // — this is intentionally a private copy, NOT an import of the server package

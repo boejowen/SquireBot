@@ -42,14 +42,16 @@ func TestLoadMissingReturnsZeroValue(t *testing.T) {
 }
 
 // TestSaveLoadRoundTrip: Save then Load yields the same config.
+//
+// Phase 13 (WATCH-08/11): SpreadsheetID + GoogleEmail are GONE; BackendBaseURL
+// is the new (overridable) field. The round-trip now covers BackendBaseURL.
 func TestSaveLoadRoundTrip(t *testing.T) {
 	withTempConfig(t)
 
 	in := &Config{
 		Version:                 1,
 		EQFolder:                `C:\Project1999`,
-		SpreadsheetID:           "abc123",
-		GoogleEmail:             "guildie@example.com",
+		BackendBaseURL:          "https://api.example.test",
 		LastKnownInventoryMtime: map[string]string{"Foo": "2026-04-30T12:00:00Z"},
 		LogLevel:                "info",
 	}
@@ -61,14 +63,72 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	if out.EQFolder != in.EQFolder ||
-		out.SpreadsheetID != in.SpreadsheetID ||
-		out.GoogleEmail != in.GoogleEmail ||
+		out.BackendBaseURL != in.BackendBaseURL ||
 		out.LogLevel != in.LogLevel ||
 		out.Version != in.Version {
 		t.Errorf("round-trip mismatch:\n in = %+v\nout = %+v", in, out)
 	}
 	if got, want := out.LastKnownInventoryMtime["Foo"], in.LastKnownInventoryMtime["Foo"]; got != want {
 		t.Errorf("LastKnownInventoryMtime[Foo] = %q; want %q", got, want)
+	}
+}
+
+// TestSaveLoad_DropsGoogleKeys (Phase 13 / WATCH-11): because SpreadsheetID and
+// GoogleEmail are removed from the struct, a saved config.json must contain
+// NEITHER `spreadsheet_id` NOR `google_email`. When BackendBaseURL is set, the
+// JSON DOES carry `backend_base_url`. This is the "field-drop" half of the v1→v2
+// migration (the migrate.go side deletes the stale wincred entry).
+func TestSaveLoad_DropsGoogleKeys(t *testing.T) {
+	p := withTempConfig(t)
+	in := &Config{
+		Version:        1,
+		EQFolder:       `C:\Project1999`,
+		BackendBaseURL: "https://api.squirebot.quest",
+		LogLevel:       "info",
+	}
+	if err := in.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	body := string(data)
+	for _, banned := range []string{"spreadsheet_id", "google_email"} {
+		if strings.Contains(body, banned) {
+			t.Errorf("config JSON still contains dropped key %q: %s", banned, body)
+		}
+	}
+	if !strings.Contains(body, `"backend_base_url"`) {
+		t.Errorf("config JSON missing backend_base_url key: %s", body)
+	}
+}
+
+// TestLoad_V1ConfigIgnoresGoogleKeys (Phase 13 / WATCH-11): a v1.x config.json
+// carrying `spreadsheet_id` + `google_email` (now unknown keys) still Loads
+// cleanly — encoding/json ignores unknown keys — preserving EQFolder. This is
+// the "old config still works" forward-compat the auto-update relies on.
+func TestLoad_V1ConfigIgnoresGoogleKeys(t *testing.T) {
+	p := withTempConfig(t)
+	body := `{
+  "version": 1,
+  "eq_folder": "C:\\P99",
+  "spreadsheet_id": "abc123",
+  "google_email": "g@example.com",
+  "log_level": "info"
+}`
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load on a v1 config with Google keys should not error; got: %v", err)
+	}
+	if c.EQFolder != `C:\P99` {
+		t.Errorf("EQFolder = %q; want C:\\P99 (preserved across the unknown keys)", c.EQFolder)
+	}
+	if c.LogLevel != "info" {
+		t.Errorf("LogLevel = %q; want info", c.LogLevel)
 	}
 }
 
@@ -79,11 +139,10 @@ func TestSaveDoesNotEmitRefreshToken(t *testing.T) {
 	p := withTempConfig(t)
 
 	c := &Config{
-		Version:       1,
-		EQFolder:      `C:\Project1999`,
-		SpreadsheetID: "abc123",
-		GoogleEmail:   "guildie@example.com",
-		LogLevel:      "info",
+		Version:        1,
+		EQFolder:       `C:\Project1999`,
+		BackendBaseURL: "https://api.squirebot.quest",
+		LogLevel:       "info",
 	}
 	if err := c.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -199,14 +258,12 @@ func TestLoad_BothFieldsPresent(t *testing.T) {
 func TestSaveLoad_BothFieldsPersist(t *testing.T) {
 	p := withTempConfig(t)
 	in := &Config{
-		Version:                  1,
-		EQFolder:                 `C:\Project1999`,
-		EQFolders:                []string{`C:\EQ1`, `C:\EQ2`},
-		SpreadsheetID:            "abc",
-		GoogleEmail:              "g@example.com",
-		LastKnownInventoryMtime:  map[string]string{"Foo": "2026-04-30T12:00:00Z"},
-		LastKnownSpellbookMtime:  map[string]string{"Foo": "2026-05-01T12:00:00Z"},
-		LogLevel:                 "info",
+		Version:                 1,
+		EQFolder:                `C:\Project1999`,
+		EQFolders:               []string{`C:\EQ1`, `C:\EQ2`},
+		LastKnownInventoryMtime: map[string]string{"Foo": "2026-04-30T12:00:00Z"},
+		LastKnownSpellbookMtime: map[string]string{"Foo": "2026-05-01T12:00:00Z"},
+		LogLevel:                "info",
 	}
 	if err := in.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -296,12 +353,9 @@ func TestLoad_StripsUTF8BOM(t *testing.T) {
 	if c.EQFolder != `C:\P99` {
 		t.Errorf("EQFolder = %q; want C:\\P99", c.EQFolder)
 	}
-	if c.SpreadsheetID != "abc123" {
-		t.Errorf("SpreadsheetID = %q; want abc123", c.SpreadsheetID)
-	}
-	if c.GoogleEmail != "g@example.com" {
-		t.Errorf("GoogleEmail = %q; want g@example.com", c.GoogleEmail)
-	}
+	// Phase 13: spreadsheet_id/google_email are unknown keys now (dropped from
+	// the struct) — encoding/json ignores them; the BOM-strip still parses the
+	// surviving fields. (No struct fields to assert for them anymore.)
 	if c.LogLevel != "info" {
 		t.Errorf("LogLevel = %q; want info", c.LogLevel)
 	}

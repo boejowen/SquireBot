@@ -210,6 +210,59 @@ func TestIngest_UTF8_ByteFidelity(t *testing.T) {
 	}
 }
 
+// TestValidate drives the onboarding probe (GET /api/v1/whoami): 200 -> nil,
+// 401 -> ErrUnauthorized, anything else -> a non-nil generic error. Validation
+// is one-shot (NO retry) — a single request per call regardless of status.
+func TestValidate(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		wantNil bool
+		wantErr error // checked with errors.Is when non-nil
+	}{
+		{"200_ok", http.StatusOK, true, nil},
+		{"401_unauthorized", http.StatusUnauthorized, false, ErrUnauthorized},
+		{"500_generic", http.StatusInternalServerError, false, nil},
+		{"403_generic", http.StatusForbidden, false, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rs := &recordingServer{statuses: []int{tc.status}}
+			srv := httptest.NewServer(rs.handler())
+			defer srv.Close()
+			c := fastClient(t, srv)
+
+			err := c.Validate(context.Background(), "SECRETCODE")
+			if tc.wantNil {
+				if err != nil {
+					t.Fatalf("Validate = %v, want nil on %d", err, tc.status)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("Validate = nil, want error on %d", tc.status)
+				}
+				if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+					t.Fatalf("Validate err = %v, want errors.Is(_, %v)", err, tc.wantErr)
+				}
+			}
+			// Validation is one-shot: exactly one request, even on 500 (no retry).
+			if rs.requests() != 1 {
+				t.Fatalf("status %d made %d requests, want exactly 1 (validation never retries)", tc.status, rs.requests())
+			}
+			// Request shape: GET to /api/v1/whoami with the bearer header.
+			if rs.lastMethod != http.MethodGet {
+				t.Errorf("method = %q, want GET", rs.lastMethod)
+			}
+			if rs.lastPath != "/api/v1/whoami" {
+				t.Errorf("path = %q, want /api/v1/whoami", rs.lastPath)
+			}
+			if rs.lastAuth != "Bearer SECRETCODE" {
+				t.Errorf("Authorization = %q, want %q", rs.lastAuth, "Bearer SECRETCODE")
+			}
+		})
+	}
+}
+
 func TestIngest_NoSecretInLogs(t *testing.T) {
 	// Capture everything the client slogs and assert neither the bearer code nor
 	// the raw content appears (V7).

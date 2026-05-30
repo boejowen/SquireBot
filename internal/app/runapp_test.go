@@ -2,8 +2,8 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,8 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/oauth2"
-
+	"github.com/boejowen/SquireBot/internal/backend"
 	"github.com/boejowen/SquireBot/internal/config"
 	"github.com/boejowen/SquireBot/internal/tray"
 	"github.com/boejowen/SquireBot/internal/watch"
@@ -44,31 +43,6 @@ func TestExtractCharName(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("extractCharName(%q) = %q, want %q", tc.in, got, tc.want)
 		}
-	}
-}
-
-func TestNeedsWizard(t *testing.T) {
-	cases := []struct {
-		name string
-		cfg  *config.Config
-		want bool
-	}{
-		{"empty", &config.Config{}, true},
-		{"only email", &config.Config{GoogleEmail: "a@b.com"}, true},
-		{"only spreadsheet", &config.Config{SpreadsheetID: "X"}, true},
-		{"only folder", &config.Config{EQFolder: `C:\P99`}, true},
-		{"email+spreadsheet missing folder", &config.Config{GoogleEmail: "a@b.com", SpreadsheetID: "X"}, true},
-		{"all three (legacy EQFolder)", &config.Config{GoogleEmail: "a@b.com", SpreadsheetID: "X", EQFolder: `C:\P99`}, false},
-		// Plan 02-02 (WATCH-03): EQFolders satisfies folder requirement too.
-		{"all three (Phase 2 EQFolders)", &config.Config{GoogleEmail: "a@b.com", SpreadsheetID: "X", EQFolders: []string{`C:\P99`}}, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := needsWizard(tc.cfg)
-			if got != tc.want {
-				t.Errorf("needsWizard(%+v) = %v, want %v", tc.cfg, got, tc.want)
-			}
-		})
 	}
 }
 
@@ -231,55 +205,162 @@ func TestRescanCatchUp_MissingFolderIsSkipped(t *testing.T) {
 	}
 }
 
-// TestApplyBootAuthError_Revoked verifies AUTH-07 boot classification: when
-// buildTokenSourceFromWincred returns an error matching
-// auth.IsRevokedRefreshToken, applyBootAuthError returns bootAuthRevoked.
-// Plan 09-04. Phase 6 UAT Finding C.
-func TestApplyBootAuthError_Revoked(t *testing.T) {
-	// Synthetic revoked-token error. Matches auth.IsRevokedRefreshToken
-	// via the oauth2 RetrieveError + ErrorCode "invalid_grant" path
-	// (see internal/auth/refresh.go IsRevokedRefreshToken).
-	revokedErr := &oauth2.RetrieveError{ErrorCode: "invalid_grant"}
+// ---------------------------------------------------------------------------
+// Phase 13 (WATCH-08): the rewritten makeOnInventoryChange SINK — POSTs the
+// raw UTF-8 content to the backend and handles the status switch.
+// ---------------------------------------------------------------------------
 
-	c := tray.NewController(tray.Config{})
-	got := applyBootAuthError(c, revokedErr)
-	if got != bootAuthRevoked {
-		t.Errorf("applyBootAuthError(revoked) = %v, want bootAuthRevoked", got)
+// ingestRecorder is an httptest handler that records the request count + body
+// and returns a fixed status. Mirrors internal/backend's client_test pattern.
+type ingestRecorder struct {
+	status   int
+	count    int32
+	lastBody string
+}
+
+func (ir *ingestRecorder) handler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&ir.count, 1)
+		b, _ := readAll(r)
+		ir.lastBody = b
+		w.WriteHeader(ir.status)
 	}
 }
 
-// TestApplyBootAuthError_NonRevoked verifies that a wincred-rebuild error
-// that does NOT match the revoked classifier routes to the ContinueSetup
-// path (bootAuthOther). Plan 09-04.
-func TestApplyBootAuthError_NonRevoked(t *testing.T) {
-	otherErr := errors.New("wincred read failed: target not found")
-	c := tray.NewController(tray.Config{})
-	got := applyBootAuthError(c, otherErr)
-	if got != bootAuthOther {
-		t.Errorf("applyBootAuthError(other) = %v, want bootAuthOther", got)
+func (ir *ingestRecorder) requests() int { return int(atomic.LoadInt32(&ir.count)) }
+
+func readAll(r *http.Request) (string, error) {
+	buf := make([]byte, r.ContentLength)
+	if r.ContentLength <= 0 {
+		return "", nil
+	}
+	_, err := r.Body.Read(buf)
+	return string(buf), err
+}
+
+// fastBackend returns a *backend.Client whose retry backoff is near-zero so the
+// 5xx-path test does not sleep for real.
+func fastBackend(t *testing.T, srv *httptest.Server) *backend.Client {
+	t.Helper()
+	c := backend.NewWithHTTPClient(srv.URL, srv.Client())
+	c.SetBackoffForTest([]time.Duration{0, 0, 0})
+	return c
+}
+
+// TestMakeOnInventoryChange_204PersistsMtime: a 204 from the backend persists
+// the file's mtime into cfg.LastKnownInventoryMtime and saves config.
+func TestMakeOnInventoryChange_204PersistsMtime(t *testing.T) {
+	p := withTempLOCALAPPDATA(t) // redirect cfg.Save() under tmp
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusNoContent}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	invPath := filepath.Join(dir, "Foo-Inventory.txt")
+	if err := os.WriteFile(invPath, []byte("Belt\tFine Steel Long Sword\t5616\t1\t0\n"), 0o644); err != nil {
+		t.Fatalf("write inv: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownInventoryMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnInventoryChange(context.Background(), bc, cfg, "CODE", "2.0.0", tc)
+	cb(invPath)
+
+	if ir.requests() != 1 {
+		t.Fatalf("backend saw %d requests, want 1", ir.requests())
+	}
+	if cfg.LastKnownInventoryMtime["Foo"] == "" {
+		t.Errorf("mtime not persisted for Foo after a 204")
 	}
 }
 
-// TestApplyBootAuthError_TableDriven exercises both branches in one place
-// for traceability — mirrors the TestNeedsWizard pattern at runapp_test.go:45-68.
-// Plan 09-04.
-func TestApplyBootAuthError_TableDriven(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want bootAuthClassification
-	}{
-		{"revoked-oauth2-retrieveerror", &oauth2.RetrieveError{ErrorCode: "invalid_grant"}, bootAuthRevoked},
-		{"non-revoked-generic", errors.New("wincred load failed"), bootAuthOther},
-		{"non-revoked-wrapped", fmt.Errorf("rebuild: %w", errors.New("io error")), bootAuthOther},
+// TestMakeOnInventoryChange_401NoLoopSetsRed: a 401 from the backend does NOT
+// retry (the handler sees exactly one request) and the callback does not loop.
+func TestMakeOnInventoryChange_401NoLoopSetsRed(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusUnauthorized}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	invPath := filepath.Join(dir, "Foo-Inventory.txt")
+	if err := os.WriteFile(invPath, []byte("Belt\tThing\t1\t1\t0\n"), 0o644); err != nil {
+		t.Fatalf("write inv: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := tray.NewController(tray.Config{})
-			got := applyBootAuthError(c, tc.err)
-			if got != tc.want {
-				t.Errorf("applyBootAuthError(%v) = %v, want %v", tc.err, got, tc.want)
-			}
-		})
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownInventoryMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnInventoryChange(context.Background(), bc, cfg, "BADCODE", "2.0.0", tc)
+	cb(invPath)
+
+	if ir.requests() != 1 {
+		t.Fatalf("401 path made %d requests, want exactly 1 (no retry loop — D-5/Pitfall 5)", ir.requests())
+	}
+	// On a 401 the mtime must NOT be persisted (the upload did not succeed).
+	if cfg.LastKnownInventoryMtime["Foo"] != "" {
+		t.Errorf("mtime persisted on a 401; want untouched")
+	}
+}
+
+// TestMakeOnInventoryChange_EmptyFileSkipsNoRequest: an empty (whitespace-only)
+// file is skipped with NO backend request (T-07-05 carry-over).
+func TestMakeOnInventoryChange_EmptyFileSkipsNoRequest(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusNoContent}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	invPath := filepath.Join(dir, "Foo-Inventory.txt")
+	if err := os.WriteFile(invPath, []byte("   \n\t\n"), 0o644); err != nil {
+		t.Fatalf("write inv: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownInventoryMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnInventoryChange(context.Background(), bc, cfg, "CODE", "2.0.0", tc)
+	cb(invPath)
+
+	if ir.requests() != 0 {
+		t.Fatalf("empty-file path made %d requests, want 0 (skip-empty guard)", ir.requests())
+	}
+}
+
+// TestMakeOnInventoryChange_426UpdateNeeded: a 426 surfaces "update needed" and
+// does NOT loop (single request).
+func TestMakeOnInventoryChange_426UpdateNeeded(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusUpgradeRequired}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	invPath := filepath.Join(dir, "Foo-Inventory.txt")
+	if err := os.WriteFile(invPath, []byte("Belt\tThing\t1\t1\t0\n"), 0o644); err != nil {
+		t.Fatalf("write inv: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownInventoryMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnInventoryChange(context.Background(), bc, cfg, "CODE", "1.9.0", tc)
+	cb(invPath)
+
+	if ir.requests() != 1 {
+		t.Fatalf("426 path made %d requests, want exactly 1 (no retry)", ir.requests())
+	}
+	if cfg.LastKnownInventoryMtime["Foo"] != "" {
+		t.Errorf("mtime persisted on a 426; want untouched")
 	}
 }

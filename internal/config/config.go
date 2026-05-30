@@ -20,15 +20,21 @@ import (
 //
 // SECURITY: NEVER add a refresh_token field. Refresh tokens live in wincred only (AUTH-04).
 type Config struct {
-	Version                 int               `json:"version"`                              // schema version, =1
-	EQFolder                string            `json:"eq_folder"`                            // Phase 1 single-folder; preserved for back-compat
-	EQFolders               []string          `json:"eq_folders,omitempty"`                 // Plan 02-02 WATCH-03 multi-folder
-	SpreadsheetID           string            `json:"spreadsheet_id"`                       // set by Plan 06 picker
-	GoogleEmail             string            `json:"google_email"`                         // set by Plan 03 OAuth (cached)
-	LastKnownInventoryMtime map[string]string `json:"last_known_inventory_mtime"`           // Plan 02-02 WATCH-09 catch-up: per-char inventory mtime
-	LastKnownSpellbookMtime map[string]string `json:"last_known_spellbook_mtime"`           // Plan 02-02 WATCH-09 catch-up: per-char spellbook mtime
-	LogLevel                string            `json:"log_level"`                            // "info" default
-	PendingUpdateVersion    string            `json:"pending_update_version,omitempty"`     // Plan 02-06 OPS-04 informational; the .new file presence is the SOURCE OF TRUTH for whether a swap will happen on next launch — this field is for diagnostics only
+	Version                 int               `json:"version"`                          // schema version, =1
+	EQFolder                string            `json:"eq_folder"`                        // Phase 1 single-folder; preserved for back-compat
+	EQFolders               []string          `json:"eq_folders,omitempty"`             // Plan 02-02 WATCH-03 multi-folder
+	BackendBaseURL          string            `json:"backend_base_url,omitempty"`       // Phase 13 WATCH-08: overrides the hardcoded https://api.squirebot.quest fallback (build_constants.go); blank = use the default. Advanced/self-host only.
+	LastKnownInventoryMtime map[string]string `json:"last_known_inventory_mtime"`       // Plan 02-02 WATCH-09 catch-up: per-char inventory mtime
+	LastKnownSpellbookMtime map[string]string `json:"last_known_spellbook_mtime"`       // Plan 02-02 WATCH-09 catch-up: per-char spellbook mtime
+	LogLevel                string            `json:"log_level"`                        // "info" default
+	PendingUpdateVersion    string            `json:"pending_update_version,omitempty"` // Plan 02-06 OPS-04 informational; the .new file presence is the SOURCE OF TRUTH for whether a swap will happen on next launch — this field is for diagnostics only
+
+	// Phase 13 (WATCH-11) NOTE: the v1 fields SpreadsheetID (`spreadsheet_id`)
+	// and GoogleEmail (`google_email`) were REMOVED — the watcher no longer
+	// targets a Google Sheet. A v1 config.json carrying those keys still Loads
+	// cleanly (encoding/json ignores unknown keys) and the next Save() drops
+	// them from disk; app.MigrateFromV1 additionally deletes the stale
+	// SquireBot:<google-email> wincred entry on first launch.
 }
 
 // pathFn is the directory resolver used to compute the config path.

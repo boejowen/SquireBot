@@ -15,8 +15,8 @@ import (
 	"fyne.io/systray"
 
 	"github.com/boejowen/SquireBot/internal/app"
-	"github.com/boejowen/SquireBot/internal/auth"
 	"github.com/boejowen/SquireBot/internal/config"
+	"github.com/boejowen/SquireBot/internal/credstore"
 	"github.com/boejowen/SquireBot/internal/logging"
 	"github.com/boejowen/SquireBot/internal/system"
 	"github.com/boejowen/SquireBot/internal/tray"
@@ -26,31 +26,21 @@ import (
 func main() {
 	// Plan 02-07 (INST-04 / CONTEXT.md Q3): --uninstall-wipe-credentials.
 	// Invoked by the NSIS uninstaller when the user answered "Yes" to the
-	// "Also delete saved configuration and Google account credentials?"
-	// prompt. We read config.GoogleEmail, delete the wincred entry under
-	// SquireBot:<email>, and exit. The NSIS script runs this BEFORE
-	// deleting squirebot.exe so the binary is still on disk to invoke.
+	// "Also delete saved configuration and credentials?" prompt. Phase 13
+	// (WATCH-10): the credential is now the guild code under the fixed target
+	// SquireBot:guild-code (no email key), so we delete it via credstore.Delete.
+	// The NSIS script runs this BEFORE deleting squirebot.exe so the binary is
+	// still on disk to invoke.
 	//
-	// Runs FIRST (before update.Apply) — auto-update has no business
-	// firing during an uninstall. We always exit 0, even on partial
-	// state (no email in config, config load failure, wincred delete
-	// failure) — the uninstaller must not block on a guildie who never
-	// completed the wizard but ran the installer.
+	// Runs FIRST (before update.Apply) — auto-update has no business firing
+	// during an uninstall. We always exit 0, even on a not-found credential —
+	// the uninstaller must not block on a guildie who never onboarded.
 	if len(os.Args) >= 2 && os.Args[1] == "--uninstall-wipe-credentials" {
-		cfg, err := config.Load()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "config load failed: %v\n", err)
+		if err := credstore.Delete(); err != nil {
+			fmt.Fprintf(os.Stderr, "wincred delete (guild code) failed or absent: %v\n", err)
 			os.Exit(0)
 		}
-		if cfg.GoogleEmail == "" {
-			fmt.Fprintln(os.Stderr, "no email in config; nothing to wipe")
-			os.Exit(0)
-		}
-		if err := auth.DeleteToken(cfg.GoogleEmail); err != nil {
-			fmt.Fprintf(os.Stderr, "wincred delete failed for %s: %v\n", cfg.GoogleEmail, err)
-			os.Exit(0)
-		}
-		fmt.Fprintf(os.Stderr, "wincred entry removed for %s\n", cfg.GoogleEmail)
+		fmt.Fprintln(os.Stderr, "wincred guild-code entry removed")
 		os.Exit(0)
 	}
 
@@ -117,12 +107,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	bc := auth.BuildConstants{
-		OAuthClientID:     OAuthClientID,
-		OAuthClientSecret: OAuthClientSecret,
-		PickerAPIKey:      PickerAPIKey,
-		GCPProjectNumber:  GCPProjectNumber,
-		WatcherVersion:    Version,
+	// Phase 13 (WATCH-11): first-launch v1→v2 migration. On a watcher that just
+	// auto-updated from v1.x this deletes the stale Google refresh-token wincred
+	// entry and drops the dead config.json fields (google_email, spreadsheet_id).
+	// Idempotent + non-fatal — a failed migration must not block startup.
+	if err := app.MigrateFromV1(cfg); err != nil {
+		slog.Warn("v1→v2 migration", "err", err)
+	}
+
+	// Backend base URL: a config override wins (advanced/self-host); otherwise
+	// the hardcoded build_constants.go default (the canonical host).
+	baseURL := BackendBaseURL
+	if cfg.BackendBaseURL != "" {
+		baseURL = cfg.BackendBaseURL
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,23 +127,20 @@ func main() {
 
 	var trayCtl *tray.Controller
 	trayCtl = tray.NewController(tray.Config{
-		IconGreen:     iconGreenBytes,
-		IconRed:       iconRedBytes,
-		LogDir:        logDir,
-		SpreadsheetID: cfg.SpreadsheetID,
-		OnContinueSetup: func() {
-			slog.Info("Continue setup clicked — re-running RunApp")
-			go app.RunApp(ctx, cfg, bc, trayCtl)
-		},
-		OnChangeWorkbook: func() {
-			// D-04: re-run picker on existing token. RESEARCH.md §5.6.
-			slog.Info("Change Workbook clicked — launching picker on existing token")
-			go app.ChangeWorkbook(ctx, cfg, bc, trayCtl)
+		IconGreen: iconGreenBytes,
+		IconRed:   iconRedBytes,
+		LogDir:    logDir,
+		OnEnterGuildCode: func() {
+			// Phase 13 (D-3): re-run RunApp; its credstore.Read branch re-enters
+			// the native onboarding (prompt → validate → store → EQ folder).
+			// Folds the old Continue-setup intent into this single item.
+			slog.Info("Enter guild code clicked — re-running RunApp")
+			go app.RunApp(ctx, cfg, baseURL, Version, trayCtl)
 		},
 		OnCheckUpdates: func() {
-			// Plan 02-06 (OPS-04): manual fire of the daily check. Same
-			// flow as the 24h goroutine in runWatcher; checkMu serializes
-			// so a click landing concurrently with the tick is safe.
+			// Plan 02-06 (OPS-04): manual fire of the daily check. Same flow as
+			// the 24h goroutine in runWatcher; checkMu serializes so a click
+			// landing concurrently with the tick is safe.
 			slog.Info("Check for updates clicked — running update.CheckOnce")
 			go func() {
 				exe, err := os.Executable()
@@ -161,21 +155,14 @@ func main() {
 				}
 			}()
 		},
-		OnReauthorize: func() {
-			// Plan 02-04 (AUTH-05): refresh token died. Re-run the OAuth
-			// loopback flow against the existing email; on success the
-			// wincred entry is replaced and the watcher resumes.
-			slog.Info("Reauthorize clicked — running OAuth flow")
-			go app.RunReauthorize(ctx, cfg, bc, trayCtl)
-		},
 		OnQuit: func() {
 			slog.Info("Quit clicked — cancelling root context")
 			cancel()
 		},
 	})
 
-	// Background goroutine: wizard (if needed) then watcher loop.
-	go app.RunApp(ctx, cfg, bc, trayCtl)
+	// Background goroutine: onboarding (if needed) then watcher loop.
+	go app.RunApp(ctx, cfg, baseURL, Version, trayCtl)
 
 	// Plan 06 (INST-06): named-event shutdown listener. Blocks on
 	// Local\SquireBot-Shutdown; on signal, funnels through the SAME path
@@ -185,10 +172,9 @@ func main() {
 	// already-cancelled ctx is a no-op. Goroutine exits on either signal
 	// OR ctx.Done so it cannot leak when shutdown comes from another path.
 	//
-	// Per D-03: no drain coordination. In-flight batchUpdate calls
-	// observe ctx cancellation through the existing mutex-funneled
-	// sheet.Client retry envelope and abandon. WATCH-09 catch-up
-	// re-uploads any missed file changes on next launch.
+	// No drain coordination. In-flight backend ingest POSTs observe ctx
+	// cancellation through the http.Client request context and abandon.
+	// WATCH-09 catch-up re-uploads any missed file changes on next launch.
 	go func() {
 		select {
 		case <-system.WaitForShutdown(ctx):
@@ -211,9 +197,8 @@ func main() {
 		"config_path", config.Path(),
 		"icon_green_bytes", len(iconGreenBytes),
 		"icon_red_bytes", len(iconRedBytes),
-		"google_email", cfg.GoogleEmail,
-		"spreadsheet_id_set", cfg.SpreadsheetID != "",
-		"eq_folder_set", cfg.EQFolder != "",
+		"backend_base_url", baseURL,
+		"eq_folder_set", cfg.EQFolder != "" || len(cfg.EQFolders) > 0,
 	)
 
 	// Main goroutine: systray.Run blocks until systray.Quit fires.

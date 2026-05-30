@@ -1,24 +1,24 @@
-// Package tray hosts the SquireBot system-tray UI controller. The
-// menu surface follows CONTEXT.md "Claude's Discretion" floor:
+// Package tray hosts the SquireBot system-tray UI controller.
+//
+// Phase 13 (WATCH-09 / D-3) menu surface — the Sheets/OAuth items are gone:
 //
 //	Status            (read-only label, e.g. "Last upload: Foo at 14:32")
-//	Open Workbook     (rundll32 url.dll,FileProtocolHandler — Pitfall #6)
 //	Open log folder   (explorer.exe %LOCALAPPDATA%\SquireBot)
-//	Change Workbook…  (D-04 — re-runs picker via OnChangeWorkbook callback)
-//	Continue setup…   (D-07 — hidden until needsWizard; OnContinueSetup callback)
+//	Check for updates (manual fire of update.CheckOnce)
+//	Enter guild code… (D-3: triggers the native onboarding via OnEnterGuildCode)
 //	Quit              (cancels app ctx + systray.Quit)
 //
-// The Controller's menu construction is centralised in MenuPlan() so
-// unit tests can assert the contract without a live systray (which
-// requires a desktop session). Plan 08 smoke checkpoint validates the
-// live tray on Win11 VM.
+// Removed in Phase 13: "Open Workbook" (no Google Sheet), "Change Workbook…"
+// (no workbook), "Reauthorize…" (no OAuth refresh-token death path), and
+// "Continue setup…" (folded into the always-visible "Enter guild code…" item —
+// re-running onboarding is always allowed).
 //
-// Green/red icon distinction: the Controller swaps tray icons via
-// SetIconHealth using the IconGreen / IconRed bytes supplied by main.go
-// (sourced from assets/icon-green.ico and assets/icon-red.ico —
-// distinct 16x16 BMP-in-ICO solid-color placeholders, 1118 bytes each).
-// Day-1 soak finding 2026-05-03 promoted this from the original "same
-// bytes for both" stand-in noted as deferred Phase 5 polish.
+// The Controller's menu construction is centralised in MenuPlan() so unit tests
+// can assert the contract without a live systray (which requires a desktop
+// session). The human smoke checkpoint validates the live tray on a Win11 VM.
+//
+// Green/red icon distinction: the Controller swaps tray icons via SetIconHealth
+// using the IconGreen / IconRed bytes supplied by main.go.
 package tray
 
 import (
@@ -30,45 +30,36 @@ import (
 	"fyne.io/systray"
 )
 
-// MenuItem describes one entry in the tray menu plan. The plan is
-// consumed by OnReady (live) and asserted by tests (offline).
+// MenuItem describes one entry in the tray menu plan. The plan is consumed by
+// OnReady (live) and asserted by tests (offline).
 type MenuItem struct {
 	Label   string
 	Tooltip string
 }
 
-// Canonical menu labels — exported so callers / tests can reference
-// them by name without relying on string-literal duplication.
+// Canonical menu labels — exported so callers / tests can reference them by name
+// without relying on string-literal duplication.
 const (
 	LabelStatus         = "Initialising…" // disabled status row, mutated by SetStatus
-	LabelOpenWorkbook   = "Open Workbook"
 	LabelOpenLogFolder  = "Open log folder"
 	LabelCheckUpdates   = "Check for updates" // Plan 02-06 (OPS-04): manual fire of update.CheckOnce
-	LabelChangeWorkbook = "Change Workbook…"
-	LabelContinueSetup  = "Continue setup…"
-	LabelReauthorize    = "Reauthorize…" // Plan 02-04 (AUTH-05): hidden until ErrPermanentAuth/IsRevokedRefreshToken trips authSuspended
+	LabelEnterGuildCode = "Enter guild code…" // Phase 13 (D-3): triggers native onboarding
 	LabelQuit           = "Quit"
 )
 
-// MenuPlan returns the ordered list of action menu items the tray
-// builds (excluding the leading Status row and separators). Order is
-// the contract: CONTEXT.md mandates Status / Open Workbook / Open log
-// folder / Quit be present; D-04 and D-07 add Change Workbook… and
-// Continue setup… adjacent to their workflow neighbours.
+// MenuPlan returns the ordered list of action menu items the tray builds
+// (excluding the leading Status row and separators). Order is the contract.
 func MenuPlan() []MenuItem {
 	return []MenuItem{
-		{Label: LabelOpenWorkbook, Tooltip: "Open the configured Google Sheet in your browser"},
 		{Label: LabelOpenLogFolder, Tooltip: `Open %LOCALAPPDATA%\SquireBot in Explorer`},
 		{Label: LabelCheckUpdates, Tooltip: "Check GitHub Releases for a newer SquireBot; downloads + verifies in the background."},
-		{Label: LabelChangeWorkbook, Tooltip: "Pick a different SquireBot workbook (re-runs Picker)"},
-		{Label: LabelContinueSetup, Tooltip: "Resume the SquireBot wizard"},
-		{Label: LabelReauthorize, Tooltip: "Refresh token died. Click to re-sign-in to Google."},
+		{Label: LabelEnterGuildCode, Tooltip: "Enter (or re-enter) your guild code to connect to the SquireBot backend."},
 		{Label: LabelQuit, Tooltip: "Exit SquireBot"},
 	}
 }
 
-// Health drives the tray-icon swap. SetIconHealth flips between green
-// (normal) and red (Setup needed / watcher error / OAuth gate).
+// Health drives the tray-icon swap. SetIconHealth flips between green (normal)
+// and red (Setup needed / watcher error / invalid guild code).
 type Health int
 
 const (
@@ -82,20 +73,14 @@ type actionKind int
 const (
 	actStatus actionKind = iota
 	actIconHealth
-	actShowContinueSetup
-	actHideContinueSetup
-	actShowReauthorize
-	actHideReauthorize
-	actSetSpreadsheetID
 )
 
-// pendingAction is a single deferred mutator call. Only one payload field
-// is meaningful per kind (the others stay zero-valued). Plan 09-01.
+// pendingAction is a single deferred mutator call. Only one payload field is
+// meaningful per kind (the others stay zero-valued). Plan 09-01.
 type pendingAction struct {
-	kind          actionKind
-	status        string // actStatus
-	health        Health // actIconHealth
-	spreadsheetID string // actSetSpreadsheetID
+	kind   actionKind
+	status string // actStatus
+	health Health // actIconHealth
 }
 
 // Config bundles the construction-time inputs to NewController.
@@ -103,65 +88,51 @@ type Config struct {
 	IconGreen        []byte
 	IconRed          []byte
 	LogDir           string
-	SpreadsheetID    string // initial; can be empty (wizard not yet run)
-	OnContinueSetup  func() // wizard re-entry trigger (D-07)
-	OnChangeWorkbook func() // D-04: re-run picker on existing token
 	OnCheckUpdates   func() // Plan 02-06 (OPS-04): manual fire of update.CheckOnce
-	OnReauthorize    func() // Plan 02-04 (AUTH-05): re-run OAuth loopback flow on refresh-token death
+	OnEnterGuildCode func() // Phase 13 (D-3): trigger native onboarding (re-runs RunApp)
 	OnQuit           func() // app shutdown trigger
 }
 
 // Controller is the tray UI. NewController + OnReady/OnExit are the
-// systray-facing surface; SetStatus / SetIconHealth /
-// ShowContinueSetup / HideContinueSetup / SetSpreadsheetID are the
-// goroutine-safe mutators called from runApp.
+// systray-facing surface; SetStatus / SetIconHealth are the goroutine-safe
+// mutators called from RunApp.
 type Controller struct {
-	mu            sync.Mutex
-	iconGreen     []byte
-	iconRed       []byte
-	logDir        string
-	spreadsheetID string
+	mu        sync.Mutex
+	iconGreen []byte
+	iconRed   []byte
+	logDir    string
 
-	// OPS-06 / Plan 09-01: queue-and-replay so pre-OnReady mutator calls
-	// are not silently dropped. Both fields are guarded by t.mu (above).
+	// OPS-06 / Plan 09-01: queue-and-replay so pre-OnReady mutator calls are not
+	// silently dropped. Both fields are guarded by t.mu (above).
 	ready   bool
 	pending []pendingAction
 
 	mStatus         *systray.MenuItem
-	mWorkbook       *systray.MenuItem
 	mLogs           *systray.MenuItem
 	mCheckUpdates   *systray.MenuItem // Plan 02-06 (OPS-04)
-	mChangeWorkbook *systray.MenuItem // D-04
-	mContinueSetup  *systray.MenuItem // D-07 (hidden by default)
-	mReauthorize    *systray.MenuItem // Plan 02-04 (AUTH-05) — hidden by default
+	mEnterGuildCode *systray.MenuItem // Phase 13 (D-3)
 	mQuit           *systray.MenuItem
 
-	onContinueSetup  func()
-	onChangeWorkbook func()
 	onCheckUpdates   func()
-	onReauthorize    func()
+	onEnterGuildCode func()
 	onQuit           func()
 }
 
-// NewController allocates a Controller. systray.Run(t.OnReady, t.OnExit)
-// from cmd/squirebot/main.go binds it to the live tray.
+// NewController allocates a Controller. systray.Run(t.OnReady, t.OnExit) from
+// cmd/squirebot/main.go binds it to the live tray.
 func NewController(c Config) *Controller {
 	return &Controller{
 		iconGreen:        c.IconGreen,
 		iconRed:          c.IconRed,
 		logDir:           c.LogDir,
-		spreadsheetID:    c.SpreadsheetID,
-		onContinueSetup:  c.OnContinueSetup,
-		onChangeWorkbook: c.OnChangeWorkbook,
 		onCheckUpdates:   c.OnCheckUpdates,
-		onReauthorize:    c.OnReauthorize,
+		onEnterGuildCode: c.OnEnterGuildCode,
 		onQuit:           c.OnQuit,
 	}
 }
 
-// drainPending replays every queued mutator call against the now-live
-// menu items, in FIFO insertion order. The caller MUST hold t.mu.
-// Plan 09-01 / OPS-06.
+// drainPending replays every queued mutator call against the now-live menu
+// items, in FIFO insertion order. The caller MUST hold t.mu. Plan 09-01 / OPS-06.
 func (t *Controller) drainPending() {
 	for _, a := range t.pending {
 		switch a.kind {
@@ -171,31 +142,13 @@ func (t *Controller) drainPending() {
 			}
 		case actIconHealth:
 			t.applyIconHealthLocked(a.health)
-		case actShowContinueSetup:
-			if t.mContinueSetup != nil {
-				t.mContinueSetup.Show()
-			}
-		case actHideContinueSetup:
-			if t.mContinueSetup != nil {
-				t.mContinueSetup.Hide()
-			}
-		case actShowReauthorize:
-			if t.mReauthorize != nil {
-				t.mReauthorize.Show()
-			}
-		case actHideReauthorize:
-			if t.mReauthorize != nil {
-				t.mReauthorize.Hide()
-			}
-		case actSetSpreadsheetID:
-			t.spreadsheetID = a.spreadsheetID
 		}
 	}
 	t.pending = nil
 }
 
-// applyIconHealthLocked performs the systray icon swap. Caller MUST hold
-// t.mu. Plan 09-01 / OPS-06.
+// applyIconHealthLocked performs the systray icon swap. Caller MUST hold t.mu.
+// Plan 09-01 / OPS-06.
 func (t *Controller) applyIconHealthLocked(h Health) {
 	switch h {
 	case HealthGreen:
@@ -209,10 +162,9 @@ func (t *Controller) applyIconHealthLocked(h Health) {
 	}
 }
 
-// OnReady is the systray.Run callback that builds the menu. systray
-// itself is not test-friendly (needs a desktop session), so unit tests
-// assert MenuPlan() instead of running this function. Order MUST match
-// MenuPlan() — both reflect CONTEXT.md's "Claude's Discretion" floor.
+// OnReady is the systray.Run callback that builds the menu. systray itself is
+// not test-friendly (needs a desktop session), so unit tests assert MenuPlan()
+// instead of running this function. Order MUST match MenuPlan().
 func (t *Controller) OnReady() {
 	if len(t.iconGreen) > 0 {
 		systray.SetIcon(t.iconGreen)
@@ -224,23 +176,13 @@ func (t *Controller) OnReady() {
 
 	systray.AddSeparator()
 	plan := MenuPlan()
-	t.mWorkbook = systray.AddMenuItem(plan[0].Label, plan[0].Tooltip)       // Open Workbook
-	t.mLogs = systray.AddMenuItem(plan[1].Label, plan[1].Tooltip)           // Open log folder
-	t.mCheckUpdates = systray.AddMenuItem(plan[2].Label, plan[2].Tooltip)   // Check for updates (Plan 02-06 / OPS-04)
-	t.mChangeWorkbook = systray.AddMenuItem(plan[3].Label, plan[3].Tooltip) // Change Workbook… (D-04)
-	t.mContinueSetup = systray.AddMenuItem(plan[4].Label, plan[4].Tooltip)  // Continue setup… (D-07)
-	t.mContinueSetup.Hide()                                                 // D-07: shown only when wizard is incomplete
-	t.mReauthorize = systray.AddMenuItem(plan[5].Label, plan[5].Tooltip)    // Reauthorize… (Plan 02-04 / AUTH-05)
-	t.mReauthorize.Hide()                                                   // surfaced only when authSuspended is true
+	t.mLogs = systray.AddMenuItem(plan[0].Label, plan[0].Tooltip)           // Open log folder
+	t.mCheckUpdates = systray.AddMenuItem(plan[1].Label, plan[1].Tooltip)   // Check for updates
+	t.mEnterGuildCode = systray.AddMenuItem(plan[2].Label, plan[2].Tooltip) // Enter guild code…
 	systray.AddSeparator()
-	t.mQuit = systray.AddMenuItem(plan[6].Label, plan[6].Tooltip) // Quit
+	t.mQuit = systray.AddMenuItem(plan[3].Label, plan[3].Tooltip) // Quit
 
 	// Plan 09-01 / OPS-06: drain any mutator calls queued before OnReady.
-	// Must run AFTER all systray.AddMenuItem calls (so the *MenuItem fields
-	// are non-nil) and BEFORE go t.loop() (so the loop starts in a stable
-	// state). The flag flip + drain run under t.mu in a single critical
-	// section so concurrent SetStatus/SetIconHealth/etc. either land in the
-	// queue (and are drained here) or land live (after we release t.mu).
 	t.mu.Lock()
 	t.ready = true
 	t.drainPending()
@@ -249,29 +191,13 @@ func (t *Controller) OnReady() {
 	go t.loop()
 }
 
-// loop fires the click-handlers. Each menu item ships its own
-// ClickedCh so we just multiplex. systray.Quit is the canonical way
-// to break out of systray.Run; we call OnQuit first so runApp can
-// cancel the root ctx, then systray.Quit unblocks main().
+// loop fires the click-handlers. Each menu item ships its own ClickedCh so we
+// just multiplex. systray.Quit is the canonical way to break out of systray.Run;
+// we call OnQuit first so RunApp can cancel the root ctx, then systray.Quit
+// unblocks main().
 func (t *Controller) loop() {
 	for {
 		select {
-		case _, ok := <-t.mWorkbook.ClickedCh:
-			if !ok {
-				return
-			}
-			t.mu.Lock()
-			id := t.spreadsheetID
-			t.mu.Unlock()
-			if id == "" {
-				slog.Info("Open Workbook clicked but no spreadsheet configured yet")
-				continue
-			}
-			url := "https://docs.google.com/spreadsheets/d/" + id
-			// Pitfall #6: rundll32 sidesteps the cmd shell's `&` ambiguity.
-			if err := exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start(); err != nil {
-				slog.Warn("Open Workbook failed", "err", err)
-			}
 		case _, ok := <-t.mLogs.ClickedCh:
 			if !ok {
 				return
@@ -287,29 +213,13 @@ func (t *Controller) loop() {
 			if t.onCheckUpdates != nil {
 				t.onCheckUpdates()
 			}
-		case _, ok := <-t.mChangeWorkbook.ClickedCh:
+		case _, ok := <-t.mEnterGuildCode.ClickedCh:
 			if !ok {
 				return
 			}
-			slog.Info("Change Workbook clicked")
-			if t.onChangeWorkbook != nil {
-				t.onChangeWorkbook()
-			}
-		case _, ok := <-t.mContinueSetup.ClickedCh:
-			if !ok {
-				return
-			}
-			slog.Info("Continue setup clicked")
-			if t.onContinueSetup != nil {
-				t.onContinueSetup()
-			}
-		case _, ok := <-t.mReauthorize.ClickedCh:
-			if !ok {
-				return
-			}
-			slog.Info("Reauthorize clicked")
-			if t.onReauthorize != nil {
-				t.onReauthorize()
+			slog.Info("Enter guild code clicked")
+			if t.onEnterGuildCode != nil {
+				t.onEnterGuildCode()
 			}
 		case _, ok := <-t.mQuit.ClickedCh:
 			if !ok {
@@ -325,12 +235,12 @@ func (t *Controller) loop() {
 	}
 }
 
-// OnExit is the systray exit callback. No-op; runApp's ctx cancellation
+// OnExit is the systray exit callback. No-op; RunApp's ctx cancellation
 // (triggered by mQuit's onQuit) is what tears down background work.
 func (t *Controller) OnExit() {}
 
-// SetStatus updates the disabled top menu label. Goroutine-safe. Pre-Ready
-// calls are queued and replayed by OnReady. Plan 09-01 / OPS-06.
+// SetStatus updates the disabled top menu label. Goroutine-safe. Pre-Ready calls
+// are queued and replayed by OnReady. Plan 09-01 / OPS-06.
 func (t *Controller) SetStatus(s string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -355,80 +265,6 @@ func (t *Controller) SetIconHealth(h Health) {
 	t.applyIconHealthLocked(h)
 }
 
-// ShowContinueSetup makes the Continue setup… item visible. D-07. Pre-Ready
-// calls are queued. Plan 09-01 / OPS-06.
-func (t *Controller) ShowContinueSetup() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if !t.ready {
-		t.pending = append(t.pending, pendingAction{kind: actShowContinueSetup})
-		return
-	}
-	if t.mContinueSetup != nil {
-		t.mContinueSetup.Show()
-	}
-}
-
-// HideContinueSetup hides the Continue setup… item. Pre-Ready calls are queued. Plan 09-01.
-func (t *Controller) HideContinueSetup() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if !t.ready {
-		t.pending = append(t.pending, pendingAction{kind: actHideContinueSetup})
-		return
-	}
-	if t.mContinueSetup != nil {
-		t.mContinueSetup.Hide()
-	}
-}
-
-// ShowReauthorize makes the Reauthorize… item visible. Plan 02-04
-// (AUTH-05) + AUTH-07 boot path. Pre-Ready calls are queued. Plan 09-01 / OPS-06.
-func (t *Controller) ShowReauthorize() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if !t.ready {
-		t.pending = append(t.pending, pendingAction{kind: actShowReauthorize})
-		return
-	}
-	if t.mReauthorize != nil {
-		t.mReauthorize.Show()
-	}
-}
-
-// HideReauthorize hides the Reauthorize… item. Pre-Ready calls are queued. Plan 09-01.
-func (t *Controller) HideReauthorize() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if !t.ready {
-		t.pending = append(t.pending, pendingAction{kind: actHideReauthorize})
-		return
-	}
-	if t.mReauthorize != nil {
-		t.mReauthorize.Hide()
-	}
-}
-
-// SetSpreadsheetID updates the cached spreadsheet ID. Plan 09-01 / OPS-06:
-// the in-memory field is always kept current; if pre-Ready, the assignment is
-// also queued so the drain path is symmetric with the other mutators.
-func (t *Controller) SetSpreadsheetID(id string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.spreadsheetID = id
-	if !t.ready {
-		t.pending = append(t.pending, pendingAction{kind: actSetSpreadsheetID, spreadsheetID: id})
-	}
-}
-
-// SpreadsheetID returns the currently-tracked spreadsheet ID
-// (read-only, for diagnostics).
-func (t *Controller) SpreadsheetID() string {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.spreadsheetID
-}
-
 // LogDir returns the directory the "Open log folder" item targets.
 func (t *Controller) LogDir() string { return t.logDir }
 
@@ -450,9 +286,8 @@ func (t *Controller) isReady() bool {
 	return t.ready
 }
 
-// simulateReady is a TEST-ONLY helper that flips the ready flag and drains
-// the pending queue. Mirrors OnReady's drain block exactly. Allows offline
-// tests to exercise the drain code path without a live systray. Plan 09-01.
+// simulateReady is a TEST-ONLY helper that flips the ready flag and drains the
+// pending queue. Mirrors OnReady's drain block exactly. Plan 09-01.
 func (t *Controller) simulateReady() {
 	t.mu.Lock()
 	t.ready = true

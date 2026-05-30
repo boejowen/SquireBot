@@ -1,30 +1,19 @@
 package main
 
-// Build-time OAuth + Picker constants.
+// Build-time constants, populated at link time via -ldflags="-X main.<name>=...".
 //
-// These vars are populated at link time by:
+// Phase 13 (WATCH-09 / D-2) GUTTED the OAuth/Picker constants — the re-targeted
+// watcher bakes in NO Google secret. Only two values remain:
 //
-//	go build -ldflags="-X main.OAuthClientID=... -X main.OAuthClientSecret=... -X main.PickerAPIKey=... -X main.GCPProjectNumber=..."
-//
-// The values come from .planning/phases/01-end-to-end-thin-slice/oauth-config.json
-// (gitignored, local-only — see Plan 01-02 SUMMARY). All four values are
-// effectively public per RESEARCH.md §4.1 / §5.4 — desktop OAuth client
-// IDs and API-restricted Picker keys are visible in the consent flow and
-// the JS bundle respectively. The OAuth client SECRET, despite the name,
-// is also effectively public for desktop apps: per Google's docs, "When
-// a client runs on a device, the client_secret is no longer truly
-// confidential." Google's token endpoint nonetheless REQUIRES it as a
-// parameter even when PKCE is in use, so we bake it in via -ldflags
-// alongside the others. Blast radius is bounded by the Picker API
-// restriction and the drive.file scope.
-//
-// At runtime cmd/squirebot copies these into auth.BuildConstants and
-// calls Validate(); any empty value returns auth.ErrMissingConstants
-// and the binary refuses to start the OAuth flow.
+//	Version        — the watcher build version, stamped by release.yml
+//	                 (-X main.Version=<tag>); travels in every ingest POST + the
+//	                 User-Agent so the backend's 426 min-version gate can read it.
+//	BackendBaseURL — the canonical backend host. The hardcoded default below IS
+//	                 the production target; release.yml MAY override it via
+//	                 -X main.BackendBaseURL=... (belt-and-braces), and a guildie
+//	                 MAY override it per-machine via the config.json
+//	                 backend_base_url field (advanced/self-host only).
 var (
-	OAuthClientID     = ""
-	OAuthClientSecret = ""
-	PickerAPIKey      = ""
-	GCPProjectNumber  = ""
-	Version           = "0.1.0-dev"
+	Version        = "0.1.0-dev"
+	BackendBaseURL = "https://api.squirebot.quest"
 )

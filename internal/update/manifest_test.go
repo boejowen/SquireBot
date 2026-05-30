@@ -170,6 +170,75 @@ func TestIsNewer_MalformedInputReturnsFalse(t *testing.T) {
 	}
 }
 
+// Test 8 (999.22): IsNewer is SemVer-pre-release-aware. A version WITH a
+// pre-release tail sorts BELOW the same version WITHOUT one (SemVer §11), so a
+// final v2.0.0 IS newer than its own rc, and a final must NOT "downgrade" to an
+// rc. This is the watcher-side twin of the server's ingest.IsOlder (deliberate
+// separate copies; identical direction). Load-bearing for the P16 coordinated
+// self-update flip (a pre-release safety manifest must rank correctly).
+func TestIsNewer_SemVerPreRelease(t *testing.T) {
+	cases := []struct {
+		name              string
+		current, manifest string
+		want              bool
+	}{
+		// Core comparison (unchanged from the strict 3-part behaviour).
+		{"older-to-newer-major", "1.0.0", "2.0.0", true},
+		{"equal-finals", "2.0.0", "2.0.0", false},
+		{"newer-to-older-patch", "2.0.1", "2.0.0", false},
+		{"v-prefix-stripped-both", "v1.0.0", "v2.0.0", true},
+		// Pre-release ranks BELOW its final.
+		{"rc-updates-to-final", "2.0.0-rc1", "2.0.0", true},
+		{"final-does-not-downgrade-to-rc", "2.0.0", "2.0.0-rc1", false},
+		// Pre-release vs pre-release (lexical tail compare; sufficient for rcN/betaN).
+		{"rc1-to-rc2", "2.0.0-rc1", "2.0.0-rc2", true},
+		{"rc2-not-to-rc1", "2.0.0-rc2", "2.0.0-rc1", false},
+		{"same-rc-equal", "2.0.0-rc1", "2.0.0-rc1", false},
+		// A higher core with a pre-release still beats a lower final
+		// (core compares first; the pre-release tail only breaks a core tie).
+		{"prerelease-of-higher-core-wins", "2.0.0", "2.1.0-rc1", true},
+		{"final-not-newer-than-prerelease-of-higher-core", "2.1.0-rc1", "2.0.0", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsNewer(c.current, c.manifest); got != c.want {
+				t.Errorf("IsNewer(%q, %q) = %v, want %v", c.current, c.manifest, got, c.want)
+			}
+		})
+	}
+}
+
+// Test 9 (999.22): the defensive "false on any parse failure" contract is
+// preserved. A CORRUPT or unparseable manifest version must NEVER trigger an
+// update (a forged/garbage manifest cannot masquerade as newer), and an
+// unparseable CURRENT (running) version is conservative — the watcher does not
+// auto-update off a version it cannot itself parse. This is the watcher-side
+// inversion of the server's fail-CLOSED gate: here we fail-CLOSED on the UPDATE
+// decision (never update on doubt), where the server fails-CLOSED on the GATE
+// (always reject on doubt).
+func TestIsNewer_DefensiveCorruptVersion(t *testing.T) {
+	cases := []struct {
+		name              string
+		current, manifest string
+	}{
+		{"corrupt-manifest-garbage", "2.0.0", "garbage"},
+		{"corrupt-manifest-empty", "2.0.0", ""},
+		{"corrupt-manifest-two-part", "2.0.0", "2.0"},
+		{"corrupt-manifest-nonnumeric-core", "2.0.0", "2.x.0"},
+		{"corrupt-current-garbage", "garbage", "2.0.0"},
+		{"corrupt-current-empty", "", "2.0.0"},
+		{"corrupt-current-two-part", "2.0", "2.0.0"},
+		{"both-corrupt", "nope", "nope"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsNewer(c.current, c.manifest); got != false {
+				t.Errorf("IsNewer(%q, %q) = %v, want false (defensive on unparseable version)", c.current, c.manifest, got)
+			}
+		})
+	}
+}
+
 // Test 7: FetchFromURL with a context whose deadline has already elapsed
 // returns the ctx error (DeadlineExceeded).
 func TestFetchFromURL_ContextDeadlineExceeded(t *testing.T) {
@@ -191,4 +260,3 @@ func TestFetchFromURL_ContextDeadlineExceeded(t *testing.T) {
 		t.Errorf("error = %v, want wrapping context.DeadlineExceeded", err)
 	}
 }
-

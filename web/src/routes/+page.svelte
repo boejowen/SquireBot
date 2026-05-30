@@ -11,6 +11,7 @@
 	// per-view-empty StateBlock; loading -> the skeleton. (The bank coin affordance
 	// renders the "not yet recorded" copy, never a fabricated zero-platinum value.)
 
+	import { onMount } from 'svelte';
 	import DataGrid from '$lib/components/DataGrid.svelte';
 	import SearchBox from '$lib/components/SearchBox.svelte';
 	import StateBlock from '$lib/components/StateBlock.svelte';
@@ -106,7 +107,14 @@
 		void load();
 	}
 
-	$effect(() => {
+	// One-shot initial fetch. onMount is the correct primitive for a fire-once
+	// load: it runs exactly once after the component mounts and never re-runs.
+	// A bare $effect would re-fire the whole five-endpoint parallel fetch if
+	// load() ever started reading reactive state synchronously (e.g. scoping the
+	// fetch by `active` or a query param) — refactor-fragile (review WR-03).
+	// refetch() (the Retry handler) calls load() directly, so the effect is not
+	// needed for retry either.
+	onMount(() => {
 		void load();
 	});
 

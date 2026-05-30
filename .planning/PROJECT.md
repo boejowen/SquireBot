@@ -199,4 +199,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-30 — Phase 12 (Enrichment Job Migration) complete + verified; backend self-populates dimension data on cadence.*
+*Last updated: 2026-05-30 — Phase 13 (Watcher Re-Target) complete: the watcher is off Google (~8k LOC deleted, binary 57% smaller) and uploads to the LIVE backend; P11+P12+P13-backend deployed; enrichment self-populating on cadence.*

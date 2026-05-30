@@ -29,14 +29,14 @@ func fastClient(t *testing.T, srv *httptest.Server) *Client {
 // returns each status from the statuses sequence in order (clamping to the last
 // element once exhausted), incrementing a request counter the test asserts on.
 type recordingServer struct {
-	statuses    []int
-	count       int32
-	lastMethod  string
-	lastPath    string
-	lastAuth    string
-	lastCT      string
-	lastUA      string
-	lastBody    []byte
+	statuses   []int
+	count      int32
+	lastMethod string
+	lastPath   string
+	lastAuth   string
+	lastCT     string
+	lastUA     string
+	lastBody   []byte
 }
 
 func (rs *recordingServer) handler() http.HandlerFunc {

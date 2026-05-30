@@ -59,6 +59,16 @@ function tierSort(a: Row<GearCheckRow>, b: Row<GearCheckRow>): number {
 // Char · Slot · Item · ID · Count · Wiki · Price · Last Synced.
 // Default sort Char asc, then item asc, then location asc (DataGrid seeds the
 // multi-sort state; these accessors back it).
+// The global "Filter all columns" box runs `includesString` over each column's
+// raw accessor value. For columns whose accessor diverges from what the user
+// actually sees rendered, that produces confusing "phantom" matches (review
+// WR-02): `last_synced` carries the raw ISO string ("2026-05-09T00:00:00Z")
+// while the cell renders only "2026-05-09", `wiki` carries the full wiki URL
+// while the cell renders just an icon (no visible text), and `price` carries a
+// raw number that the cell formats as "1,234pp". `id` is excluded too so a
+// price/count digit-run can't match unrelated item IDs. Each of these sets
+// `enableGlobalFilter: false` so the global box only matches the user-visible
+// text columns (Char / Slot / Item); per-column filtering is unaffected.
 export const viewColumns: ColumnDef<ViewRow, unknown>[] = [
 	{ id: 'char', accessorKey: 'char', header: 'Char' },
 	{ id: 'slot', accessorKey: 'slot', header: 'Slot' },
@@ -68,7 +78,7 @@ export const viewColumns: ColumnDef<ViewRow, unknown>[] = [
 		header: 'Item',
 		cell: (ctx) => renderComponent(ItemCell, { row: ctx.row.original })
 	},
-	{ id: 'id', accessorKey: 'id', header: 'ID' },
+	{ id: 'id', accessorKey: 'id', header: 'ID', enableGlobalFilter: false },
 	{ id: 'count', accessorKey: 'count', header: 'Count' },
 	{
 		id: 'wiki',
@@ -76,12 +86,14 @@ export const viewColumns: ColumnDef<ViewRow, unknown>[] = [
 		header: 'Wiki',
 		enableSorting: false,
 		enableColumnFilter: false,
+		enableGlobalFilter: false,
 		cell: (ctx) => renderComponent(WikiCell, { wikiUrl: ctx.row.original.wiki_url })
 	},
 	{
 		id: 'price',
 		accessorKey: 'price',
 		header: 'Price',
+		enableGlobalFilter: false,
 		cell: (ctx) => renderComponent(PriceCell, { price: ctx.row.original.price })
 	},
 	{
@@ -89,6 +101,7 @@ export const viewColumns: ColumnDef<ViewRow, unknown>[] = [
 		accessorKey: 'last_synced',
 		header: 'Last Synced',
 		enableColumnFilter: false,
+		enableGlobalFilter: false,
 		cell: (ctx) => renderComponent(LastSyncedCell, { lastSynced: ctx.row.original.last_synced })
 	}
 ];

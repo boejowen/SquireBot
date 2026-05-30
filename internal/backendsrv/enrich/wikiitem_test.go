@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // loadWikitext reads a wiki fixture (the MediaWiki action=parse envelope) and
@@ -219,6 +220,73 @@ func TestSHA1Hex_Stability(t *testing.T) {
 	c, _, _, _ := ParseItempage(wikitext+" modified", title)
 	if a.WikitextSHA1 == c.WikitextSHA1 {
 		t.Errorf("SHA-1 unchanged after wikitext change: %q", a.WikitextSHA1)
+	}
+}
+
+// TestExtractSummary_ASCIIShort is the byte==rune baseline: pure-ASCII input
+// under the limit is returned verbatim (no regression vs the old byte path).
+func TestExtractSummary_ASCIIShort(t *testing.T) {
+	in := "A short note about a Cloak of Flames."
+	if got := extractSummary(in); got != in {
+		t.Errorf("extractSummary(%q) = %q, want verbatim", in, got)
+	}
+}
+
+// TestExtractSummary_RuneTruncationValidUTF8 is the M-01 regression: a multi-byte
+// rune straddling rune-position 200 must NOT be sliced mid-sequence. The TS
+// measures/slices by string.length + slice (UTF-16 units); the Go port now uses
+// []rune, matching wiki-parser.ts:237-241. The old byte path (text[:200]) cut the
+// snowman's first byte off, emitting invalid UTF-8 ("… e2 | e2 80 a6").
+func TestExtractSummary_RuneTruncationValidUTF8(t *testing.T) {
+	// 199 ASCII 'a' + ☃ (U+2603, 3 bytes) as rune #200, then filler past 200.
+	// No spaces, so the word-boundary branch is skipped (lastSpace == -1) and the
+	// full 200-rune cut + "…" is returned — exactly the TS `cut + '…'` path.
+	in := strings.Repeat("a", 199) + "☃" + strings.Repeat("b", 50)
+	got := extractSummary(in)
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("extractSummary produced invalid UTF-8: % x", []byte(got))
+	}
+	if !strings.ContainsRune(got, '☃') {
+		t.Errorf("output dropped/mangled the boundary rune ☃: %q", got)
+	}
+	// 200 kept runes + the trailing ellipsis = 201 runes.
+	if n := utf8.RuneCountInString(got); n != 201 {
+		t.Errorf("rune count = %d, want 201 (200 runes + …)", n)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("output missing trailing ellipsis: %q", got)
+	}
+	// The 200th rune (the snowman) must be the last char BEFORE the ellipsis,
+	// fully intact (proves it wasn't truncated mid-sequence).
+	if !strings.HasSuffix(got, "☃…") {
+		t.Errorf("boundary rune not preserved intact before ellipsis: %q", got)
+	}
+}
+
+// TestExtractSummary_RuneWordBoundary proves the word-boundary trim still fires
+// on rune-cut input: a space past rune 170 (within the first 200 runes) trims
+// there, matching the TS `lastSpace > MAX_SUMMARY_LEN - 30` branch, and the
+// multi-byte rune before the cut survives intact + valid.
+func TestExtractSummary_RuneWordBoundary(t *testing.T) {
+	// Layout (runes): [0..179] 'a', [180] 'é' (2 bytes), [181] ' ', [182..249] 'b'.
+	// The last space within the first 200 runes is at rune-index 181 (> 170), so
+	// the result is trimmed to runes [0..180] (ending in 'é') + "…".
+	in := strings.Repeat("a", 180) + "é" + " " + strings.Repeat("b", 68)
+	got := extractSummary(in)
+
+	if !utf8.ValidString(got) {
+		t.Fatalf("invalid UTF-8: % x", []byte(got))
+	}
+	if !strings.HasSuffix(got, "é…") {
+		t.Errorf("want trim at the space after 'é' (…é…), got %q", got)
+	}
+	// 181 kept runes (indices 0..180) + the ellipsis = 182 runes; no 'b' leaks in.
+	if n := utf8.RuneCountInString(got); n != 182 {
+		t.Errorf("rune count = %d, want 182 (181 runes + …)", n)
+	}
+	if strings.ContainsRune(got, 'b') {
+		t.Errorf("trailing 'b' run leaked past the word-boundary trim: %q", got)
 	}
 }
 

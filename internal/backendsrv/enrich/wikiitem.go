@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 const minWikitextLength = 200
@@ -365,12 +366,25 @@ func extractSummary(notes string) string {
 	text = templateRe.ReplaceAllString(text, "")
 	text = strings.TrimSpace(wsRe.ReplaceAllString(text, " "))
 
-	if len(text) <= maxSummaryLen {
+	// Length + truncation are measured in RUNES, not bytes, to match the TS
+	// `text.length` (UTF-16 code units) + `text.slice(0, MAX_SUMMARY_LEN)`. A
+	// byte slice (text[:maxSummaryLen]) would cut a multi-byte UTF-8 rune in
+	// half on a summary whose 200th byte falls inside a non-ASCII character
+	// (em-dash, curly quote, accented zone/mob name) → invalid UTF-8 stored in
+	// the summary. P1999 notes are all BMP, where 1 rune == 1 UTF-16 unit, so
+	// the rune count matches the TS string.length exactly.
+	r := []rune(text)
+	if len(r) <= maxSummaryLen {
 		return text
 	}
-	cut := text[:maxSummaryLen]
+	cut := string(r[:maxSummaryLen])
 	lastSpace := strings.LastIndex(cut, " ")
-	if lastSpace > maxSummaryLen-30 {
+	// The boundary check is on the RUNE-cut prefix (TS: cut.lastIndexOf(' ') vs
+	// MAX_SUMMARY_LEN-30). lastSpace is a BYTE offset; convert it to a rune index
+	// (== the TS UTF-16 index for BMP text) before comparing. lastSpace == -1
+	// (no space in cut) ⇒ keep the full cut, exactly like the TS `-1 > 170` =
+	// false branch (guarded here so cut[:-1] never panics).
+	if lastSpace >= 0 && utf8.RuneCountInString(cut[:lastSpace]) > maxSummaryLen-30 {
 		cut = cut[:lastSpace]
 	}
 	return strings.TrimSpace(cut) + "…"

@@ -122,8 +122,13 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
   3. First-run onboarding is "paste your guild code" — the watcher prompts for the code, validates it against the backend, stores the bearer token in Windows Credential Manager (DPAPI), and goes green; no browser OAuth flow exists anywhere (WATCH-10)
   4. An existing v1.x watcher auto-updates to the re-targeted binary via the GitHub-Releases pipeline with no binary action by the guildie; on first launch it finds no backend credential, prompts once for the guild code, and the stale Google wincred entry + dead `config.json` fields are cleaned up (WATCH-11)
   5. The watcher sends its version and the backend rejects-with-clear-message a watcher too old for the API version — the "old watcher refuses to corrupt data" guarantee survives the move from `WatcherMaxSchemaVersion` to API versioning (WATCH-08, WATCH-09)
-**Plans**: TBD
-**UI hint**: no (Go watcher + tray-driven native/loopback setup prompt; not the web frontend)
+**Plans**: 4 plans (Wave 1: backend additions ∥ watcher foundation → Wave 2: re-target + deletion integration → Wave 3: polish + ship-prep)
+- [ ] 13-01-PLAN.md — Backend additions (Wave 1, independent): `GET /api/v1/whoami` (authed, reuses `auth.ResolveToken`, 200/401) + the min-watcher-version gate in `ingest/handler.go` (`426 Upgrade Required` when `IsOlder(env.WatcherVersion, MIN)`) + a SemVer-aware server-side version compare. Ships in the bundled P12 redeploy. (D-4 — WATCH-08/09/10.)
+- [ ] 13-02-PLAN.md — Watcher foundation (Wave 1, parallel-safe): the `internal/backend` POST client (Envelope + Bearer + version UA + error-class map + bounded retry, D-5) + the `internal/credstore` DPAPI guild-code helper (D-6) + the `internal/onboarding` native Win32 input dialog (D-3, no loopback) + relocated sqweek EQ-folder picker. (WATCH-08/09/10.)
+- [ ] 13-03-PLAN.md — Re-target + deletion + onboarding (Wave 2, the integration): rewire `runapp.go`'s sink Sheets→`internal/backend` (RAW UTF-8 content, D-1/D-8), the native onboarding flow + `/whoami` validate, the WATCH-11 first-launch migration (delete stale Google wincred + drop dead config fields), DROP the heartbeat (D-10), THEN DELETE `internal/auth`/`sheet`/`scaffold`/`picker`/`wizard`/`heartbeat` + `reauth.go`, strip the OAuth ldflags from `build_constants.go` + `release.yml`, `go mod tidy`. Build/vet/test green. (WATCH-08/09/10/11.)
+- [ ] 13-04-PLAN.md — Polish + ship-prep (Wave 3): the ride-along nits 999.20/21 (`console_windows.go` gofmt + freeConsole doc) + 999.22 (SemVer-aware `update/manifest.go` compare, the watcher-side twin of 13-01's helper, load-bearing for the P16 flip) + confirm the binary is materially smaller + carries no Google secret (SC-2). (WATCH-09/11.)
+**UI hint**: no (Go watcher + tray-driven native setup prompt; not the web frontend)
+**Scope guard**: the guild-wide coordinated watcher flip is **P16** (CUTOVER-03); P13 only SHIPS the re-targeted binary + proves a clean install + guild-code paste works. Discord login/admin forms = P15.
 **Ship gate**: re-targeted watcher binary published on GitHub Releases; a clean install + a guild-code paste results in a successful upload to the backend.
 
 ### Phase 14: Web Frontend
@@ -183,7 +188,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 |-------|-----------|----------------|--------|-----------|
 | 11. Backend Foundation + Ingest API | v2.0 | 7/7 | ✅ Complete | 2026-05-29 |
 | 12. Enrichment Job Migration | v2.0 | 5/5 | ✅ Complete | 2026-05-29 |
-| 13. Watcher Re-Target + Onboarding | v2.0 | 0/TBD | Not started | - |
+| 13. Watcher Re-Target + Onboarding | v2.0 | 0/4 | Not started | - |
 | 14. Web Frontend | v2.0 | 0/TBD | Not started | - |
 | 15. Admin Web Forms + Login | v2.0 | 0/TBD | Not started | - |
 | 16. Cutover + Decommission | v2.0 | 0/TBD | Not started | - |

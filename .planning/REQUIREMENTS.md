@@ -90,10 +90,10 @@
 | BACKEND-06 | P11 Backend Foundation + Ingest API | 11-07 (sqlite3 .backup → R2 via rclone + restore drill) | ✅ Complete (2026-05-29) |
 | ENRICH-10 | P12 Enrichment Job Migration | 12-01 (00003 migration + `pigparse_price` upsert store method + `job_run`/`etag_cache` cursors — foundation) + 12-02 (`ParseToRows` ported, byte-parity) + 12-03 (politeFetch) + 12-04 (`RunPigparse` — D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip; composes Wave-1 over one tx, zero inline SQL) + 12-05 (scheduler registers `pigparse_daily`, due now-last>=24h, immediate-check-on-startup + advance-always cursor + per-job mutex; `run-job pigparse` D-7 entrypoint) | ✅ Complete (2026-05-29) |
 | ENRICH-11 | P12 Enrichment Job Migration | 12-01 (00003 migration + `wiki_spells`/`wiki_gear_tier`/`item_master`/`quest_items` store methods + cursors — foundation) + 12-02 (`ParseItempage`/`ParseClassPage`/`ParseGearTierPage` ported, byte-parity) + 12-03 (politeFetch) + 12-04 (`RunWiki` — single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue; zero inline SQL) + 12-05 (scheduler registers `wiki_weekly`, due Sunday UTC; `run-job wiki` D-7 entrypoint) | ✅ Complete (2026-05-29) |
-| WATCH-08 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
-| WATCH-09 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
-| WATCH-10 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
-| WATCH-11 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
+| WATCH-08 | P13 Watcher Re-Target + Onboarding | 13-01 (`/whoami` validate + 426 version-gate) + 13-02 (`internal/backend` POST client + UA version) + 13-03 (sink rewire: watch→read→POST raw UTF-8, debounce preserved) | Pending |
+| WATCH-09 | P13 Watcher Re-Target + Onboarding | 13-03 (DELETE internal/auth/sheet/scaffold/picker/wizard/heartbeat + reauth.go, strip OAuth ldflags, `go mod tidy` drops the Google tree) + 13-04 (gofmt/freeConsole nits 999.20/21 + 999.22 SemVer compare + binary materially-smaller/no-secret SC-2 confirmation) | Pending |
+| WATCH-10 | P13 Watcher Re-Target + Onboarding | 13-02 (`internal/credstore` DPAPI guild-code store + `internal/onboarding` native Win32 dialog, no browser) + 13-03 (onboarding flow: prompt→`/whoami` validate→credstore.Store→green) | Pending |
+| WATCH-11 | P13 Watcher Re-Target + Onboarding | 13-03 (first-launch `MigrateFromV1`: delete stale Google wincred + drop dead config fields, idempotent, preserve EQFolders+mtime; auto-update transport unchanged) + 13-04 (999.22 SemVer compare de-risks the P16 coordinated self-update flip) | Pending |
 | BACKEND-05 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
 | WEB-01 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |
 | WEB-02 | P14 Web Frontend | (filled by `/gsd-plan-phase 14`) | Pending |

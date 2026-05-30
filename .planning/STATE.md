@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-30T04:30:00Z"
-last_activity: 2026-05-30 -- Phase 12 COMPLETE + VERIFIED (8/8 must-haves; SC-4 live Sheet-parity → tracked human-UAT) + CODE-REVIEWED (1 HIGH gear-tier ETag data-loss bug + 2 MED transliteration bugs FIXED w/ regression test; 4 LOW deferred). 5/5 plans; db-backed Job registry, 2 cadenced jobs (pigparse_daily/wiki_weekly); ENRICH-10/11 proven end-to-end (verifier ran both jobs against the LIVE PigParse + wiki APIs). DEPLOY-PENDING: ship the rebuilt binary to the VPS so goose applies 00003 + the scheduler runs (see Next Action)
+last_updated: "2026-05-30T04:46:55.336Z"
+last_activity: 2026-05-30 -- Phase 13 planning complete
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 12
+  total_plans: 16
   completed_plans: 12
-  percent: 100
+  percent: 75
 ---
 
 # State: SquireBot
@@ -31,8 +31,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 Phase: 12 (enrichment-job-migration) — COMPLETE (5/5)
 Plan: 5 of 5 done (12-01 + 12-02 + 12-03 + 12-04 + 12-05 all complete) — Phase 12 finished
-Status: Phase 12 COMPLETE + VERIFIED (8/8 must-haves; jobs proven against LIVE APIs) + CODE-REVIEWED (a HIGH gear-tier ETag data-loss bug + 2 MED fixed; 4 LOW deferred to /gsd-code-review-fix). DEPLOY-PENDING: rebuilt binary → VPS (goose applies 00003 + scheduler runs); SC-4 Sheet-parity is a tracked human-UAT (12-HUMAN-UAT.md). Phase 13 (watcher re-target) ready to plan
-Last activity: 2026-05-30 -- Phase 12 Plan 12-05 complete (scheduler fleshed into a db-backed Job registry + `squirebot-server run-job pigparse|wiki`; 2 cadenced jobs registered with politefetch.Fetch, immediate-check-on-startup + advance-always job_run cursor + per-job sync.Mutex, ctx.Done() shutdown kept verbatim; whole-repo go test green (25 pkg), static linux/amd64 ELF builds, no Google/PocketBase dep). ENRICH-10/11 proven end-to-end.
+Status: Ready to execute
+Last activity: 2026-05-30 -- Phase 13 planning complete
 
 ### v2.0 Phase Plan (2026-05-28)
 

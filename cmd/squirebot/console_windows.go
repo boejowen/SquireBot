@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 
 	"golang.org/x/sys/windows"
@@ -16,8 +15,8 @@ import (
 // NewLazySystemDLL forces the system32 search path, mitigating DLL-preload
 // attacks.
 var (
-	kernel32         = windows.NewLazySystemDLL("kernel32.dll")
-	procFreeConsole  = kernel32.NewProc("FreeConsole")
+	kernel32        = windows.NewLazySystemDLL("kernel32.dll")
+	procFreeConsole = kernel32.NewProc("FreeConsole")
 )
 
 // freeConsole detaches the watcher process from any inherited console
@@ -33,28 +32,30 @@ var (
 // update.Apply() runs, but BEFORE logging.Setup() so subsequent slog
 // output writes only to the lumberjack-backed log file.
 //
-// Returns nil if the process had no console attached (e.g., launched via
-// the GUI subsystem or by Explorer double-click) — safe to call
-// unconditionally. On any FreeConsole failure, log at Warn level via slog
-// (which falls back to stderr because logging.Setup has not yet run —
-// intentional: a detach failure is informational only and the watcher
-// continues regardless).
+// Returns nil unconditionally — safe to call regardless of console state.
+// A no-console process (GUI-subsystem / Explorer double-click launch) is the
+// common benign case: FreeConsole returns BOOL 0 with a benign LastError, which
+// this function logs at Debug, not Warn (logging.Setup has not yet run, so the
+// record falls through slog's default handler to stderr — Debug keeps it out of
+// the way on every GUI launch). A genuine detach failure (a console WAS attached
+// but could not be released) is likewise non-fatal: it is informational only and
+// the watcher continues regardless, so it does not surface as an error return.
 //
-// FreeConsole returns a BOOL (non-zero = success). On failure the syscall
-// also surfaces a Win32 LastError via the LazyProc.Call third return.
-// Per MSDN, GetLastError after a successful no-console call is benign
-// (ERROR_INVALID_HANDLE on processes that never had a console); we map
-// the BOOL contract directly and only return non-nil when ret == 0.
+// FreeConsole returns a BOOL (non-zero = success). On a ret==0 result the syscall
+// also surfaces a Win32 LastError via the LazyProc.Call third return. Per MSDN,
+// GetLastError after a no-console call is benign (ERROR_INVALID_HANDLE on
+// processes that never had a console), so ret==0 is treated as the benign
+// no-console case rather than a hard failure — matching this function's
+// "returns nil unconditionally / safe to call unconditionally" contract.
 func freeConsole() error {
 	ret, _, err := procFreeConsole.Call()
 	if ret == 0 {
-		// Some Windows builds set err to "The operation completed
-		// successfully." even on no-console processes; we only treat
-		// ret==0 as a real failure (BOOL contract). Surface via slog
-		// for dev visibility; logging.Setup has not run yet, so this
-		// falls through slog's default handler to stderr.
-		slog.Warn("FreeConsole failed", "err", err)
-		return fmt.Errorf("FreeConsole: %w", err)
+		// ret==0 is the benign no-console case on a GUI/Explorer launch (and a
+		// genuine detach failure is non-fatal anyway — the watcher continues).
+		// Log at Debug so it does not spam Warn on every GUI launch; logging.Setup
+		// has not run yet, so this falls through slog's default handler to stderr.
+		slog.Debug("FreeConsole returned 0 (likely no console attached); continuing", "err", err)
+		return nil
 	}
 	return nil
 }

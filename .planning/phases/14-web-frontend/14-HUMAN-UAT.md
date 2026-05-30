@@ -8,7 +8,8 @@ updated: 2026-05-30T20:05:00Z
 
 ## Current Test
 
-[ready to walk — the site is LIVE at https://squirebot.quest. Re-run `/gsd-verify-work 14` to step through tests 1–5. NOTE: the per-character views are currently empty (`characters:[]`) because no guildie's re-targeted watcher has uploaded to the new backend yet (the P12 dimension/enrichment data IS populated, but per-character inventory/spellbook comes from watcher uploads). So the data-dependent assertions (test 1 "non-empty rows", tests 2/3, the tooltip in test 4) can't be confirmed until uploads land; the UI chrome, empty states (test 5), and theming (part of test 4) are testable now.]
+[UAT walk done 2026-05-30 over the demo data (`Demoknight`, SHD L60). Outcome:
+**Test 1 PASS** (views render, sticky Char, filter/sort). **Test 2 PASS** (gear OK/OTHER/MISSING + spell KNOWN/MISSING badges over live data). **Test 3 = not a bug** — `didYouMean` is whole-name, edit-distance ≤2 (ported verbatim from v1, the WEB-03 oracle); the test query `frozn` is ~15 edits from any full item name so it correctly yields no suggestion. A proper near-miss (e.g. `Rusty Helmet` → `Rusty Helm`, 2 edits) does suggest. Working as designed. **Test 4 — WAS AN ISSUE, NOW FIXED** (`f12ad9b`, deployed): item rows had no wiki link because the URL came from the empty `item_master.wiki_url`; now the link is derived from the item name at render time (`wikiUrlFor`, per FEATURES.md/WEB-04) so every item links. **Test 5** (bank empty-state) not yet eyeballed by the user. Hard-refresh https://squirebot.quest to re-confirm 4 + walk 5.]
 
 ## Deploy status: LIVE (2026-05-30) — both gaps RESOLVED + verified end-to-end
 

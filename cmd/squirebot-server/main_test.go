@@ -82,6 +82,49 @@ func TestRun_RevokeDispatch_MissingArg(t *testing.T) {
 	}
 }
 
+// TestRun_RunJob_BadName: run-job with an unknown job name is a usage error
+// (exit 2) and makes no live fetch. The live pigparse/wiki success paths are
+// covered by Plan 04's job tests (httptest-backed) + the manual D-7 parity check;
+// here we assert only the dispatch/arg-handling layer so the unit test needs no
+// network. (The bad name is rejected BEFORE the DB is opened, so the --db value
+// is irrelevant — but we pass a temp path to mirror real invocation.)
+func TestRun_RunJob_BadName(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "squirebot-runjob.db")
+	if code := run([]string{"run-job", "bogus", "--db", dbPath}); code != 2 {
+		t.Fatalf("run(run-job bogus) exit = %d, want 2", code)
+	}
+}
+
+// TestRun_RunJob_MissingName: run-job with no positional job name is a usage error
+// (exit 2).
+func TestRun_RunJob_MissingName(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "squirebot-runjob.db")
+	if code := run([]string{"run-job", "--db", dbPath}); code != 2 {
+		t.Fatalf("run(run-job with no job name) exit = %d, want 2", code)
+	}
+}
+
+// TestRun_RunJob_ExtraPositional: run-job with TWO job names is a usage error
+// (exit 2). Documented choice: exactly one job name is required, so
+// `run-job pigparse wiki` is rejected rather than silently running only the first
+// (avoids an ambiguous "which one ran?" surprise in the D-7 parity check).
+func TestRun_RunJob_ExtraPositional(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "squirebot-runjob.db")
+	if code := run([]string{"run-job", "pigparse", "wiki", "--db", dbPath}); code != 2 {
+		t.Fatalf("run(run-job pigparse wiki) exit = %d, want 2 (exactly one job name required)", code)
+	}
+}
+
+// TestRun_RunJob_NameAroundFlag: the job-name positional may appear AFTER the --db
+// flag (splitFlagsAndPositionals handles ordering, same as revoke-code). A bad
+// name in that position still exits 2 — proving the arg split, not a live run.
+func TestRun_RunJob_NameAroundFlag(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "squirebot-runjob.db")
+	if code := run([]string{"run-job", "--db", dbPath, "bogus"}); code != 2 {
+		t.Fatalf("run(run-job --db X bogus) exit = %d, want 2", code)
+	}
+}
+
 // openForAssert opens the DB the CLI wrote (it already has the schema via the
 // subcommand's goose.Up) for read-back assertions, registering cleanup.
 func openForAssert(t *testing.T, dbPath string) *sql.DB {

@@ -7,15 +7,21 @@
 // Subcommand dispatch mirrors the watcher's cmd/squirebot/main.go os.Args shape:
 // sniff os.Args[1], run the CLI subcommand, exit early; otherwise fall through
 // to serve. The maintainer-run CLI subcommands are out-of-band (no HTTP surface
-// in P11 — that is P15):
+// in P11/P12 — that is P15). run-job is the D-7 parity-check entrypoint, the Go
+// parallel to the Sheet's "Refresh … Now" menu items: it invokes one enrichment
+// job once on demand (run on the box) and exits.
 //
 //	squirebot-server mint-code   --owner <label>     # print a guild code ONCE (D-05)
 //	squirebot-server revoke-code <id|label>          # disable a guild code (D-09)
+//	squirebot-server run-job     pigparse|wiki       # run one enrichment job once (D-7 parity)
 //	squirebot-server serve --addr 127.0.0.1:8090 --db /var/lib/squirebot/squirebot.db
 //
-// "Off Google" (CLAUDE.md): the backend has NO Google/OAuth/Sheets dependency —
-// no OAuth client id/secret, no -X main.OAuthClientID ldflags. The only secret
-// the server ever handles is the guild-code hash (in SQLite).
+// v2.0 "Off-the-cloud-suite" invariant (CLAUDE.md): the backend introduces NO
+// dependency on the retired cloud-auth / spreadsheet APIs — no client id/secret,
+// no -X main.ClientID ldflags. The only secret the server ever handles is the
+// guild-code hash (in SQLite). The import block + `go list -deps` stay clean of
+// those packages (enforced by the threat-model T-12.05-05 grep + the static
+// linux/amd64 cross-compile).
 package main
 
 import (
@@ -31,6 +37,8 @@ import (
 	"time"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/auth"
+	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/jobs"
+	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/politefetch"
 	"github.com/boejowen/SquireBot/internal/backendsrv/ingest"
 	"github.com/boejowen/SquireBot/internal/backendsrv/logging"
 	"github.com/boejowen/SquireBot/internal/backendsrv/migrations"
@@ -49,7 +57,7 @@ func main() {
 
 // run is the testable entrypoint: main calls os.Exit(run(os.Args[1:])). It
 // dispatches the subcommand (mint-code / revoke-code / serve) and returns the
-// process exit code. Splitting the body out of main lets a test drive the mint
+// process exit code. Splitting the body out of main lets a test exercise the mint
 // dispatch against a temp DB and assert the exit code without spawning a process.
 func run(args []string) int {
 	// Sniff args[0] (= os.Args[1]) for a CLI subcommand; the two maintainer
@@ -61,6 +69,8 @@ func run(args []string) int {
 			return runMint(args[1:])
 		case "revoke-code":
 			return runRevoke(args[1:])
+		case "run-job":
+			return runJobCmd(args[1:])
 		case "serve":
 			return runServe(args[1:])
 		}
@@ -139,9 +149,70 @@ func runRevoke(args []string) int {
 	return 0
 }
 
+// runJobCmd implements `run-job pigparse|wiki`: open + migrate the DB (goose.Up so
+// a fresh box works), then invoke the named enrichment job ONCE on demand with the
+// production politefetch.Fetch and exit. This is the D-7 parity-check entrypoint —
+// the maintainer runs it on the box to populate/refresh the dimension tables out
+// of band, paralleling the Sheet's "Refresh … Now" menu items. It adds NO HTTP
+// surface (mirrors mint-code/revoke-code) and NO new cloud-auth/spreadsheet dep.
+//
+// The job name is a positional that may appear before OR after the --db flag
+// (splitFlagsAndPositionals separates them, same as revoke-code). Exactly one job
+// name is required: a missing, unknown, or extra positional is a usage error
+// (exit 2). The job's own slog output (counts/status) is visible because we call
+// logging.Setup(); a SIGINT/SIGTERM cancels ctx so a long wiki crawl unwinds
+// cleanly (the jobs' ctx-aware sleeps + politeFetch backoff respond to it).
+func runJobCmd(args []string) int {
+	flagArgs, positionals := splitFlagsAndPositionals(args)
+
+	fs := flag.NewFlagSet("run-job", flag.ContinueOnError)
+	dbPath := fs.String("db", defaultDB, "path to the SQLite database file")
+	if err := fs.Parse(flagArgs); err != nil {
+		return 2
+	}
+	if len(positionals) != 1 || positionals[0] == "" {
+		// Missing, empty, or more than one job name → usage error. Requiring
+		// exactly one keeps `run-job pigparse wiki` from silently running only one.
+		fmt.Fprintln(os.Stderr, "run-job: exactly one job name is required: pigparse | wiki")
+		return 2
+	}
+	name := positionals[0]
+	if name != "pigparse" && name != "wiki" {
+		fmt.Fprintf(os.Stderr, "run-job: unknown job %q (want: pigparse | wiki)\n", name)
+		return 2
+	}
+
+	logging.Setup() // JSON slog to stdout so the job's counts/status are visible
+
+	db, err := openMigratedDB(*dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "run-job: %v\n", err)
+		return 1
+	}
+	defer db.Close()
+
+	// SIGINT/SIGTERM cancels ctx so a long wiki run (the per-page 1s sleeps +
+	// politeFetch backoff are all ctx-aware) aborts cleanly instead of wedging.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	switch name {
+	case "pigparse":
+		err = jobs.RunPigparse(ctx, db, politefetch.Fetch)
+	case "wiki":
+		err = jobs.RunWiki(ctx, db, politefetch.Fetch)
+	}
+	if err != nil {
+		slog.Error("run-job failed", "job", name, "err", err)
+		return 1
+	}
+	slog.Info("run-job complete", "job", name)
+	return 0
+}
+
 // runServe is the default path: set up the Linux stdout logger, open the DB, run
 // goose.Up on startup (D-10 — idempotent, no-ops on an up-to-date DB), register
-// the in-process scheduler skeleton (no real jobs — P12), and serve POST
+// the in-process scheduler with the two real enrichment jobs (P12), and serve POST
 // /api/v1/ingest on a net/http ServeMux bound to loopback. The server runs until
 // SIGINT/SIGTERM, which cancels the root context and unwinds the scheduler.
 func runServe(args []string) int {
@@ -168,13 +239,16 @@ func runServe(args []string) int {
 		return 1
 	}
 
-	// Root context cancelled on SIGINT/SIGTERM — drives a clean shutdown of the
+	// Root context cancelled on SIGINT/SIGTERM — triggers a clean shutdown of the
 	// scheduler goroutine and the HTTP server.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// In-process scheduler SKELETON — registers NO real jobs (P12 fills it in).
-	scheduler.Start(ctx)
+	// In-process scheduler — registers the real PigParse + wiki jobs (P12). It
+	// reads each job's job_run cursor for the due-check, runs an immediate check
+	// pass on startup, and advances the cursor after each run; ctx cancel unwinds
+	// it on SIGINT/SIGTERM.
+	scheduler.Start(ctx, db)
 
 	// Route the single network surface this milestone introduces. Go 1.22+
 	// method+pattern routing ("POST /api/v1/ingest"); the handler composes the

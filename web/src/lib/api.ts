@@ -4,7 +4,7 @@
 // below mirror its exact snake_case field names.
 //
 // Base origin is the API host https://api.squirebot.quest (distinct from the
-// static-site origin app.squirebot.quest). It is configurable via the
+// static-site origin https://squirebot.quest). It is configurable via the
 // PUBLIC_API_BASE env var (SvelteKit $env/dynamic/public) so a staging/preview
 // API is an env change, not a recompile; the trailing slash (if any) is
 // trimmed so `${API_BASE}/api/v1/...` always joins cleanly.

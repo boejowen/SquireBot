@@ -10,10 +10,10 @@ const config = {
 		// SPA mode: adapter-static with a fallback page (no per-route prerender).
 		// The 4 views are data-driven from the live read API at runtime, so we
 		// ship one fallback document and let client routing take over.
-		// Deploy target is LOCKED to Cloudflare Pages at the root subdomain
-		// app.squirebot.quest (14-02-PLAN Task 1 step 2) — a root origin, so
-		// kit.paths.base is intentionally NOT set (no GH-Pages base-path tax),
-		// and it is the CORS allow-origin Plan 03 grants on the Go read API.
+		// Deploy target: served by Caddy on the VPS at the apex https://squirebot.quest
+		// (deploy decision 2026-05-30 — switched from the planned Cloudflare Pages
+		// app. subdomain). It's a root origin, so kit.paths.base is intentionally NOT
+		// set, and the apex is the CORS allow-origin the Go read API grants.
 		adapter: adapter({ fallback: '200.html' })
 	}
 };

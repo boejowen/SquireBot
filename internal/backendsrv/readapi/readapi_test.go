@@ -27,7 +27,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 )
 
-const testOrigin = "https://app.squirebot.quest"
+const testOrigin = "https://squirebot.quest"
 
 // --- seed helpers (raw INSERTs over the migrated temp DB) ---------------------
 

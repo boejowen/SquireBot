@@ -50,11 +50,13 @@ import (
 const (
 	defaultAddr = "127.0.0.1:8090"                 // loopback only — Caddy fronts 443 (11-06)
 	defaultDB   = "/var/lib/squirebot/squirebot.db" // matches the RESEARCH systemd unit
-	// defaultCORSOrigin is the LOCKED Cloudflare Pages root subdomain the static
-	// SvelteKit site deploys to (Plan 02 Task 1 / 14-RESEARCH Open-Q2). The read
-	// API echoes this exact origin in Access-Control-Allow-Origin (D-04) — never a
-	// wildcard. Overridable via -cors-origin for a staging/preview deploy.
-	defaultCORSOrigin = "https://app.squirebot.quest"
+	// defaultCORSOrigin is the apex origin the static SvelteKit site is served from
+	// — Caddy on the same VPS at https://squirebot.quest (deploy decision 2026-05-30:
+	// switched from the planned Cloudflare Pages app. subdomain to apex-on-Caddy; see
+	// 14-CONTEXT/STATE). The read API echoes this exact origin in
+	// Access-Control-Allow-Origin (D-04) — never a wildcard. Overridable via
+	// -cors-origin for a staging/preview deploy.
+	defaultCORSOrigin = "https://squirebot.quest"
 )
 
 func main() {

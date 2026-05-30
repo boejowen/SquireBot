@@ -1,8 +1,9 @@
 package readapi
 
 // cors.go is the read API's CORS middleware (D-04). The static SvelteKit site
-// (https://app.squirebot.quest, Cloudflare Pages — Plan 02 Task 1) and this API
-// (https://api.squirebot.quest, Caddy → loopback 127.0.0.1:8090) are DIFFERENT
+// (https://squirebot.quest, served by Caddy on the same VPS — deploy decision
+// 2026-05-30, switched from the planned Cloudflare Pages app. subdomain) and this
+// API (https://api.squirebot.quest, Caddy → loopback 127.0.0.1:8090) are DIFFERENT
 // origins, so the browser preflights any non-simple cross-origin request and
 // blocks the response unless the API echoes an allowed origin. This middleware
 // is the only cross-origin control in P14 (the data is intentionally public per
@@ -27,7 +28,7 @@ import "net/http"
 
 // CORS wraps next so every response carries the cross-origin headers the static
 // site needs and answers the OPTIONS preflight with 204 (no body). allowOrigin is
-// the EXACT static-site origin (e.g. https://app.squirebot.quest), never a wildcard.
+// the EXACT static-site origin (e.g. https://squirebot.quest), never a wildcard.
 //
 // It is mounted once around the whole mux in cmd/squirebot-server (so it travels
 // with every route). The extra headers are harmless on the ingest/whoami routes —

@@ -23,7 +23,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — now delivered via a self-hosted website instead of the Google Sheet.
-- **Current focus:** Phase 15 — Admin Web Forms + Login (next). Phase 14 (Web Frontend) code-complete + automated-verified 2026-05-30; deploy + visual UAT pending (14-HUMAN-UAT.md).
+- **Current focus:** Phase 15 — Admin Web Forms + Login (next). Phase 14 (Web Frontend) code-complete + automated-verified 2026-05-30; deploy + visual UAT pending (14-HUMAN-UAT.md). **Deploy decision 2026-05-30 (deviation from plan):** the static frontend is served by **Caddy on the VPS at the apex `https://squirebot.quest`** — NOT Cloudflare Pages / the `app.` subdomain (lower friction: reuses the working Caddy auto-HTTPS, one control plane, one DNS change; keeps the P15 same-origin reverse-proxy option open). Backend `defaultCORSOrigin` updated app.→ `https://squirebot.quest` (commit pending); `api.squirebot.quest` unchanged (watchers hardcode it).
 - **Mode:** yolo
 - **Granularity:** coarse
 

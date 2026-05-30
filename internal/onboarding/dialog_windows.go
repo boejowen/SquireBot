@@ -54,20 +54,20 @@ var (
 // Win32 constants (subset; values from WinUser.h).
 const (
 	// Window styles.
-	wsChild        = 0x40000000
-	wsVisible      = 0x10000000
-	wsBorder       = 0x00800000
-	wsTabStop      = 0x00010000
-	wsGroup        = 0x00020000
-	wsPopup        = 0x80000000
-	wsCaption      = 0x00C00000 // WS_BORDER | WS_DLGFRAME
-	wsSysMenu      = 0x00080000
-	esAutoHScroll  = 0x00000080
-	bsDefPushBtn   = 0x00000001
-	dsModalFrame   = 0x00000080
-	dsSetFont      = 0x00000040
-	dsCenter       = 0x00000800
-	ssLeft         = 0x00000000
+	wsChild       = 0x40000000
+	wsVisible     = 0x10000000
+	wsBorder      = 0x00800000
+	wsTabStop     = 0x00010000
+	wsGroup       = 0x00020000
+	wsPopup       = 0x80000000
+	wsCaption     = 0x00C00000 // WS_BORDER | WS_DLGFRAME
+	wsSysMenu     = 0x00080000
+	esAutoHScroll = 0x00000080
+	bsDefPushBtn  = 0x00000001
+	dsModalFrame  = 0x00000080
+	dsSetFont     = 0x00000040
+	dsCenter      = 0x00000800
+	ssLeft        = 0x00000000
 
 	// Dialog/control messages.
 	wmInitDialog = 0x0110
@@ -108,10 +108,10 @@ type dialogState struct {
 // guards both maps (onboarding dialogs are serial, but this keeps the package
 // correct under serial reuse from any goroutine).
 var dialogRegistry struct {
-	mu        sync.Mutex
-	nextTok   uintptr
-	byToken   map[uintptr]*dialogState
-	byHwnd    map[uintptr]*dialogState
+	mu      sync.Mutex
+	nextTok uintptr
+	byToken map[uintptr]*dialogState
+	byHwnd  map[uintptr]*dialogState
 }
 
 func init() {
@@ -126,6 +126,17 @@ func registerState(st *dialogState) uintptr {
 	tok := dialogRegistry.nextTok
 	dialogRegistry.byToken[tok] = st
 	return tok
+}
+
+// unregisterToken removes a token entry from byToken if it is still present.
+// Idempotent: a no-op once claimByToken has moved the state to byHwnd (the
+// success path). PromptGuildCode defers this so the DialogBoxIndirectParamW
+// creation-failure path (== -1, where WM_INITDIALOG never fires and thus
+// claimByToken never runs) does not leak the registered dialogState (MED-01).
+func unregisterToken(tok uintptr) {
+	dialogRegistry.mu.Lock()
+	defer dialogRegistry.mu.Unlock()
+	delete(dialogRegistry.byToken, tok)
 }
 
 // claimByToken moves the state from the token map to the hwnd map (called once on
@@ -167,6 +178,11 @@ func PromptGuildCode(title, prompt string) (string, error) {
 
 	st := &dialogState{prompt: prompt}
 	tok := registerState(st)
+	// MED-01: ensure the token entry is removed on every exit. On success
+	// claimByToken (in WM_INITDIALOG) already moved the state to byHwnd and this
+	// is a no-op; on the creation-failure path below (== -1) WM_INITDIALOG never
+	// fires, so this defer is what prevents the byToken leak.
+	defer unregisterToken(tok)
 
 	cb := windows.NewCallback(dialogProc)
 
@@ -201,6 +217,11 @@ func PromptGuildCode(title, prompt string) (string, error) {
 // claims the dialogState by the integer token passed as lParam (re-keying it by
 // hwnd); thereafter it looks the state up by hwnd. No uintptr is ever converted
 // back to a Go pointer.
+//
+// dialogProc MUST NOT panic — it runs across the DialogBoxIndirectParamW syscall
+// callback boundary, where a Go panic propagating out is undefined/fatal. Keep
+// every callee here panic-free (UTF16PtrFromString returns an error; slice
+// indexing stays bounded).
 func dialogProc(hwnd uintptr, msg uintptr, wParam uintptr, lParam uintptr) uintptr {
 	switch msg {
 	case wmInitDialog:
@@ -299,53 +320,53 @@ func buildInputDialogTemplate(title string) ([]byte, error) {
 	//               short x, y, cx, cy; } + menu/class/title (sz_Or_Ord arrays).
 	style := uint32(wsPopup | wsCaption | wsSysMenu | dsModalFrame | dsCenter)
 	writeU32(&b, style)
-	writeU32(&b, 0) // dwExtendedStyle
-	writeU16(&b, 4) // cdit = 4 controls (label, edit, OK, Cancel)
-	writeI16(&b, 0) // x
-	writeI16(&b, 0) // y
-	writeI16(&b, 220) // cx (dialog units)
-	writeI16(&b, 90)  // cy
-	writeU16(&b, 0)   // menu: none (0x0000)
-	writeU16(&b, 0)   // windowClass: none -> default dialog class
+	writeU32(&b, 0)             // dwExtendedStyle
+	writeU16(&b, 4)             // cdit = 4 controls (label, edit, OK, Cancel)
+	writeI16(&b, 0)             // x
+	writeI16(&b, 0)             // y
+	writeI16(&b, 220)           // cx (dialog units)
+	writeI16(&b, 90)            // cy
+	writeU16(&b, 0)             // menu: none (0x0000)
+	writeU16(&b, 0)             // windowClass: none -> default dialog class
 	writeU16Slice(&b, titleU16) // title (NUL-terminated UTF-16)
 
 	// Control 1: STATIC prompt label.
 	writeControl(&b, control{
 		style: uint32(wsChild | wsVisible | ssLeft),
-		x:     10, y:  8, cx: 200, cy: 20,
-		id:    idPrompt, atom: atomStatic,
+		x:     10, y: 8, cx: 200, cy: 20,
+		id: idPrompt, atom: atomStatic,
 	})
 
 	// Control 2: EDIT box.
 	writeControl(&b, control{
 		style: uint32(wsChild | wsVisible | wsBorder | wsTabStop | wsGroup | esAutoHScroll),
 		x:     10, y: 34, cx: 200, cy: 14,
-		id:    idEdit, atom: atomEdit,
+		id: idEdit, atom: atomEdit,
 	})
 
 	// Control 3: OK button (default).
 	writeControl(&b, control{
 		style: uint32(wsChild | wsVisible | wsTabStop | bsDefPushBtn),
 		x:     58, y: 60, cx: 44, cy: 16,
-		id:    idOK, atom: atomButton, title: "OK",
+		id: idOK, atom: atomButton, title: "OK",
 	})
 
 	// Control 4: Cancel button.
 	writeControl(&b, control{
 		style: uint32(wsChild | wsVisible | wsTabStop),
 		x:     116, y: 60, cx: 44, cy: 16,
-		id:    idCancel, atom: atomButton, title: "Cancel",
+		id: idCancel, atom: atomButton, title: "Cancel",
 	})
 
 	return b.Bytes(), nil
 }
 
 type control struct {
-	style          uint32
-	x, y, cx, cy   int16
-	id             int
-	atom           uint16 // predefined class atom (button/edit/static)
-	title          string // optional caption baked into the template
+	style        uint32
+	x, y, cx, cy int16
+	id           int
+	atom         uint16 // predefined class atom (button/edit/static)
+	title        string // optional caption baked into the template
 }
 
 // writeControl appends a DWORD-aligned DLGITEMTEMPLATE for c.

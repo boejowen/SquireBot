@@ -30,9 +30,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 ## Current Position
 
 Phase: 13 (Watcher Re-Target + Onboarding) — IN PROGRESS (1/4 plans done; 13-01 ✅; checker PASSED, 0 blockers)
-Plan: 13-01 backend additions (`/whoami` + `426` version gate) ✅ DONE 2026-05-30 · 13-02 watcher foundation (`internal/backend` client + credstore + native Win32 dialog) — NEXT · 13-03 re-target + delete-the-Google-stack integration · 13-04 polish (999.20/21/22 + binary-smaller/no-secret proof). Phase 12 COMPLETE (5/5) before it. ⚠ DEPLOY-PENDING: the P12 enrichment binary + 13-01's backend additions (NOW BUILT) ship in ONE VPS redeploy.
+Plan: 13-01 backend additions (`/whoami` + `426` version gate) ✅ DONE 2026-05-30 · 13-02 watcher foundation (`internal/backend` client + credstore + native Win32 dialog) — NEXT · 13-03 re-target + delete-the-Google-stack integration · 13-04 polish (999.20/21/22 + binary-smaller/no-secret proof). Phase 12 COMPLETE (5/5) before it. ✅ DEPLOYED 2026-05-30: the bundled P12 enrichment + 13-01 (`/whoami` + `426` gate) are LIVE on the VPS (goose v3 applied; `pigparse_price`=4338, `wiki_spells`=1562, `wiki_gear_tier`=1183 populated on cadence; `item_master`/`quest_items` await the re-targeted watchers' uploads). Rollback `.bak` on the box.
 Status: 13-01 executed (6 commits, TDD); `/gsd-execute-phase 13` continues with 13-02/03/04 (deletion is rewire-then-delete, build stays green). The backend half of SC-5 + the onboarding validate target are now in `main`.
-Last activity: 2026-05-30 -- Plan 13-01 executed (backend additions: /whoami + 426 gate + IsOlder)
+Last activity: 2026-05-30 -- Plan 13-01 executed (backend additions: /whoami + 426 gate + IsOlder) + bundled P12+13-01 DEPLOYED to the live VPS (goose v3; enrichment self-populating: pigparse 4338, spells 1562, gear 1183) + verified end-to-end; now executing the watcher half (13-02/03/04)
 
 ### v2.0 Phase Plan (2026-05-28)
 

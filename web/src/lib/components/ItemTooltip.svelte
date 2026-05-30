@@ -13,7 +13,7 @@
 	// text, never a live tag (vitest-proven in 14-02). Do NOT {@html} anything
 	// else; do NOT pass un-escaped content here.
 
-	import { composeItemNote } from '$lib/tooltip/composeNotes';
+	import { composeItemNote, wikiUrlFor } from '$lib/tooltip/composeNotes';
 	import type {
 		PigparsePriceRow,
 		WikiSummaryForNote,
@@ -42,7 +42,9 @@
 
 	// Body HTML is fully escaped by composeItemNote (14-02). Derived so it only
 	// recomputes when inputs change.
-	let bodyHtml = $derived(composeItemNote(itemName, wikiUrl, summary, prices, questLinks));
+	let bodyHtml = $derived(
+		composeItemNote(itemName, wikiUrl || wikiUrlFor(itemName), summary, prices, questLinks)
+	);
 
 	function show() {
 		open = true;

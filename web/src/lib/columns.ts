@@ -24,6 +24,7 @@
 
 import type { ColumnDef, Row } from '@tanstack/table-core';
 import { renderComponent } from '$lib/table';
+import { wikiUrlFor } from '$lib/tooltip/composeNotes';
 import type { ViewRow, GearCheckRow, SpellCheckRow } from '$lib/api';
 import StatusCell from '$lib/components/StatusCell.svelte';
 import ItemCell from '$lib/components/cells/ItemCell.svelte';
@@ -87,7 +88,10 @@ export const viewColumns: ColumnDef<ViewRow, unknown>[] = [
 		enableSorting: false,
 		enableColumnFilter: false,
 		enableGlobalFilter: false,
-		cell: (ctx) => renderComponent(WikiCell, { wikiUrl: ctx.row.original.wiki_url })
+		cell: (ctx) =>
+			renderComponent(WikiCell, {
+				wikiUrl: ctx.row.original.wiki_url || wikiUrlFor(ctx.row.original.item)
+			})
 	},
 	{
 		id: 'price',

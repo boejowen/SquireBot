@@ -72,6 +72,19 @@ export function safeHttpUrl(url: string): string {
 }
 
 /**
+ * Derive the P1999 wiki page URL from an item name (research FEATURES.md:
+ * "build at render time from item name"): https://wiki.project1999.com/<Item_Name>
+ * with spaces → underscores. Lets EVERY item show a working wiki link even when
+ * item_master enrichment hasn't populated a stored wiki_url yet (WEB-04 "working
+ * direct wiki link"). Returns '' for a blank name so the caller renders no link.
+ */
+export function wikiUrlFor(itemName: string): string {
+  const t = String(itemName).trim();
+  if (!t) return '';
+  return 'https://wiki.project1999.com/' + encodeURIComponent(t.replace(/ /g, '_'));
+}
+
+/**
  * Build the rich-HTML tooltip for an item. Returns an HTML string the Svelte
  * ItemTooltip injects via {@html}. Content order mirrors the v1 composeItemNote
  * (14-UI-SPEC Item Tooltip Contract):

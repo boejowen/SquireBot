@@ -7,7 +7,7 @@
 // ADDED: the mandatory XSS-escaping assertions (the HIGH-severity gate).
 
 import { describe, it, expect } from 'vitest';
-import { composeItemNote, escapeHtml, safeHttpUrl } from '../tooltip/composeNotes';
+import { composeItemNote, escapeHtml, safeHttpUrl, wikiUrlFor } from '../tooltip/composeNotes';
 
 describe('escapeHtml', () => {
   it('escapes &, <, >, ", and \' (ampersand first)', () => {
@@ -184,5 +184,16 @@ describe('safeHttpUrl', () => {
     expect(safeHttpUrl('//evil.example.com')).toBe('');
     expect(safeHttpUrl('/relative/path')).toBe('');
     expect(safeHttpUrl('')).toBe('');
+  });
+});
+
+describe('wikiUrlFor', () => {
+  it('builds a P1999 wiki URL from the item name (spaces -> underscores)', () => {
+    expect(wikiUrlFor('Frozen Efreeti Boots')).toBe('https://wiki.project1999.com/Frozen_Efreeti_Boots');
+    expect(wikiUrlFor('Ghoulbane')).toBe('https://wiki.project1999.com/Ghoulbane');
+  });
+  it('returns empty string for a blank name', () => {
+    expect(wikiUrlFor('')).toBe('');
+    expect(wikiUrlFor('   ')).toBe('');
   });
 });

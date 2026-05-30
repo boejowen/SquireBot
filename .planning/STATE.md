@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-30T17:27:00.000Z"
-last_activity: 2026-05-30 -- Phase 14 plan 14-04 (frontend integration capstone — DataGrid×4 + ItemTooltip + search + [data-theme] SiteShell, wired to the read API) complete
+last_updated: "2026-05-30T18:05:00.000Z"
+last_activity: 2026-05-30 -- Phase 14 (Web Frontend) COMPLETE 4/4 — verification human_needed (6/6 must-haves code-verified: Go whole-repo suite + 60 web tests + WEB-02 Go parity green; code-review 0 Critical, WR-01 fixed d14e4ab). Deploy (server binary + Cloudflare Pages) + 5 visual UAT items tracked in 14-HUMAN-UAT.md. NEXT: Phase 15.
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 20
   completed_plans: 20
   percent: 100
@@ -23,16 +23,16 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — now delivered via a self-hosted website instead of the Google Sheet.
-- **Current focus:** Phase 14 — web-frontend
+- **Current focus:** Phase 15 — Admin Web Forms + Login (next). Phase 14 (Web Frontend) code-complete + automated-verified 2026-05-30; deploy + visual UAT pending (14-HUMAN-UAT.md).
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: 14 (web-frontend) — ALL PLANS EXECUTED (verification + code-review pending)
-Plan: 4 of 4 complete
-Status: Phase 14 code-complete (14-01 + 14-02 + 14-03 + 14-04 all done); phase verification + code-review pending before close
-Last activity: 2026-05-30 -- Phase 14 plan 14-04 (frontend integration: `api.ts` + local table-core adapter + reusable DataGrid×4 + ItemTooltip + SearchBox/SearchResults + StatusCell/StatusLegend + StateBlock + [data-theme] SiteShell/ThemePicker; WEB-01/03/04/05 + BACKEND-05 consumption; build green / 57 tests) complete
+Phase: 14 (web-frontend) — ✅ COMPLETE (4/4 plans; verification human_needed — code-complete + automated-verified, deploy + visual UAT pending). NEXT: Phase 15 (Admin Web Forms + Login).
+Plan: 4 of 4 complete (14-01 compute/data + 14-02 logic/theme ports + 14-03 read handlers/CORS + 14-04 wired UI)
+Status: Phase 14 verified human_needed — 6/6 must-haves code-verified (Go whole-repo suite + 60 web tests green; WEB-02 Go parity table-tests translated from v1 vitest fixtures pass; `npm run build` emits the static site). Code review: 0 Critical / 4 Warning / 5 Info — WR-01 (wiki-URL `safeHttpUrl` scheme allow-list) fixed in d14e4ab; WR-02/03/04 + Info deferred to optional `/gsd-code-review-fix 14`. NOT yet deployed: the live box runs a pre-P14 binary (readapi 404) + Cloudflare Pages static deploy pending — both + 5 visual/interactive UAT items tracked in 14-HUMAN-UAT.md (run `/gsd-verify-work 14` after deploy).
+Last activity: 2026-05-30 -- Phase 14 COMPLETE: all 4 plans executed + verified (human_needed, no code gaps) + code-reviewed (WR-01 fixed d14e4ab). Deploy + human UAT are the remaining operational steps.
 
 ### v2.0 Phase Plan (2026-05-28)
 
@@ -43,7 +43,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 | 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | ✅ Complete (7/7 — LIVE at https://api.squirebot.quest; ship-gate passed, nightly R2 backup + drilled restore) |
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | ✅ Complete (5/5; 12-01 schema/store SQL + 12-02 the 4 pure parsers + 12-03 politeFetch + 12-04 the 2 jobs + 12-05 scheduler/wiring done — `RunPigparse` (D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip) + `RunWiki` (single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue); 12-05 db-backed Job registry: `pigparse_daily` (>=24h) + `wiki_weekly` (Sunday UTC) with immediate-check-on-startup + advance-always job_run cursor + per-job sync.Mutex, `run-job pigparse|wiki` D-7 entrypoint; zero inline SQL; ENRICH-10/11 proven end-to-end) |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | ✅ Complete (4/4 — sink re-pointed to backend; Google stack deleted; native guild-code onboarding; binary 57% smaller + Google-secret-free; SemVer pre-release auto-update twin in place) |
-| 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + TanStack Table + Tailwind; Go read API | P11 (read API) + P12 (data) | Not started |
+| 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + `@tanstack/table-core` (local adapter; svelte-table is Svelte-4-only) + Tailwind v4; Go read API | P11 (read API) + P12 (data) | ✅ Complete 2026-05-30 (4/4 — human_needed: 6/6 must-haves code-verified, WEB-02 Go parity green, 60 web tests; code-review 0 Critical, WR-01 fixed; deploy + 5 visual UAT pending in 14-HUMAN-UAT.md) |
 | 15 | Admin Web Forms + Login | AUTH-08, AUTH-09, ADMIN-04, ADMIN-05, ADMIN-06 | Discord OAuth2 login; web forms | P14 + P11 | Not started |
 | 16 | Cutover + Decommission | CUTOVER-01, CUTOVER-02, CUTOVER-03, CUTOVER-04 | shadow soak + backfill + coordinated self-update flip | P13 + P14 + P15 + P12 | Not started |
 

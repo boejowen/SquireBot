@@ -16,8 +16,9 @@
 package jobs
 
 import (
-	"net/url"
 	"strings"
+
+	"github.com/boejowen/SquireBot/internal/backendsrv/enrich"
 )
 
 // PigparseURL is the daily price source: PigParse's getall for server=1 (Blue).
@@ -32,19 +33,23 @@ const PigparseURL = "https://pigparse.azurewebsites.net/api/item/getall/1"
 const WikiAPIBase = "https://wiki.project1999.com/api.php"
 
 // wikiParseURL builds the action=parse&prop=wikitext request URL for one page
-// title, mirroring the TS request shape used by all three wiki triggers:
+// title, mirroring the TS request shape used by all three wiki triggers
+// (refreshWikiItems.ts:176, refreshWikiSpells.ts:170, refreshWikiGearTier.ts:193):
 //
-//	WIKI_API_BASE?action=parse&prop=wikitext&format=json&page=<title>&redirects=...
+//	`${WIKI_API_BASE}?action=parse&prop=wikitext&format=json&page=${encodeURIComponent(name.replace(/ /g, '_'))}&redirects=true`
 //
 // The page title has spaces replaced with underscores (matching the TS
-// `.replace(/ /g, '_')`) and is then query-escaped, so a title like
-// "Players:Velious Pre-Raid Gear" becomes "Players%3AVelious_Pre-Raid_Gear"
-// (byte-faithful to the TS encodeURIComponent for the colon/underscore cases the
-// real titles use). redirects=1 asks MediaWiki to resolve a redirect page (e.g.
-// "Fungi Tunic" → "Fungus Covered Scale Tunic") to its canonical target — the
-// `parse.title` in the response is the resolved title the parser uses for the
-// wiki_url. The returned URL is ALSO the etag_cache key (one cache row per page).
+// `.replace(/ /g, '_')`) and is then escaped with the SAME enrich.EncodeURIComponent
+// the parser uses for stored wiki_url/source_url values — NOT url.QueryEscape,
+// which over-escapes apostrophes and parentheses (`Lord_Nagafen's_Lair` →
+// `%27`, `Cloak_of_Flames_(Quest)` → `%28..%29`) and so diverges byte-for-byte
+// from the TS encodeURIComponent. There is now ONE escaper for wiki page names.
+// redirects=true asks MediaWiki to resolve a redirect page (e.g. "Fungi Tunic"
+// → "Fungus Covered Scale Tunic") to its canonical target — the `parse.title` in
+// the response is the resolved title the parser uses for the wiki_url. The
+// returned URL is ALSO the etag_cache key (one cache row per page), so matching
+// the TS byte-for-byte keeps the cache key stable across the port.
 func wikiParseURL(pageTitle string) string {
-	escaped := url.QueryEscape(strings.ReplaceAll(pageTitle, " ", "_"))
-	return WikiAPIBase + "?action=parse&prop=wikitext&format=json&redirects=1&page=" + escaped
+	escaped := enrich.EncodeURIComponent(strings.ReplaceAll(pageTitle, " ", "_"))
+	return WikiAPIBase + "?action=parse&prop=wikitext&format=json&page=" + escaped + "&redirects=true"
 }

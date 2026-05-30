@@ -102,15 +102,16 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 // unreserved set: A-Za-z0-9 and - _ . ! ~ * ' ( ). Everything else is
 // percent-encoded byte-by-byte over the UTF-8 encoding.
 func pageNameToSlug(name string) string {
-	return encodeURIComponent(strings.ReplaceAll(name, " ", "_"))
+	return EncodeURIComponent(strings.ReplaceAll(name, " ", "_"))
 }
 
-// encodeURIComponent mirrors JavaScript's encodeURIComponent exactly: every
+// EncodeURIComponent mirrors JavaScript's encodeURIComponent exactly: every
 // byte of the UTF-8 string is percent-encoded except the unreserved set
 // A-Za-z0-9-_.!~*'() (uppercase hex, matching JS). This is required for
 // byte-parity of the wiki URLs the Sheet wrote (item wiki_url + quest_items
-// source_url).
-func encodeURIComponent(s string) string {
+// source_url) AND for the wiki request URLs the jobs build (jobs.wikiParseURL),
+// so there is ONE escaper for wiki page names across the package boundary.
+func EncodeURIComponent(s string) string {
 	const upperhex = "0123456789ABCDEF"
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {

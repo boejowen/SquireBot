@@ -18,6 +18,8 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **v2.0 progress — Phase 11 (Backend Foundation + Ingest API) COMPLETE (2026-05-29):** the self-hosted backend is LIVE over HTTPS at `https://api.squirebot.quest` (Hetzner Cloud VPS, US/amd64) — a single static Go binary behind Caddy auto-HTTPS (valid Let's Encrypt cert), systemd `Restart=always` (reboot-survival verified), `goose` SQLite schema, per-guildie bearer-token auth, and the `POST /api/v1/ingest` atomic-replace endpoint. Ship-gate passed (authed upload over TLS → 204, unauth → 401, row queried back); nightly off-box backup to Cloudflare R2 + drilled restore. PocketBase evaluated and rejected (hand-rolled `net/http` + `modernc.org/sqlite`). BACKEND-01/02/03/04/06 validated. Next: P13 re-points the watcher at this endpoint (P12 enrichment + P14 frontend in parallel).
 
+**v2.0 progress — Phase 12 (Enrichment Job Migration) COMPLETE (2026-05-30):** the backend now self-populates its SQLite dimension tables on cadence — a daily PigParse price pull + a weekly P1999 wiki scrape run as in-process scheduled jobs (db-backed `job_run` cursor, immediate-check-on-startup, per-job mutex), with the 4 pure parsers + the `politeFetch` politeness controls ported verbatim from Apps Script (byte-parity proven against the live fixtures) behind a forward-only `00003` goose migration. Verified 8/8 must-haves — the verifier exercised BOTH jobs against the LIVE PigParse + P1999 wiki APIs (4,338 WTS rows; 14 spell classes + 1,183 gear rows) — and a code review caught + fixed a HIGH gear-tier ETag data-loss bug plus 2 transliteration bugs (with a regression test). ENRICH-10/11 satisfied. **Deploy-pending:** the rebuilt binary must ship to the VPS so `goose` applies `00003` and the scheduler starts; the SC-4 backend-vs-Sheet parity spot-check is a tracked human-UAT (`12-HUMAN-UAT.md`). Next: `/gsd-plan-phase 13` (watcher re-target).
+
 ## Current Milestone: v2.0 "Off Google" — Website Frontend
 
 **Goal:** Replace the shared Google Sheet (both the UI *and* the data store) with a self-hosted Go + SQLite backend and a static web frontend — permanently eliminating the Google OAuth dependency that currently blocks the guild.
@@ -197,4 +199,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-28 — v2.0 "Off Google" Website Frontend milestone opened.*
+*Last updated: 2026-05-30 — Phase 12 (Enrichment Job Migration) complete + verified; backend self-populates dimension data on cadence.*

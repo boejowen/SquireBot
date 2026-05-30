@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-30T03:00:00Z"
-last_activity: 2026-05-30 -- Phase 12 COMPLETE (12-05 scheduler + run-job CLI): db-backed Job registry, 2 cadenced jobs (pigparse_daily/wiki_weekly), immediate-check-on-startup + advance-always cursor + per-job mutex; ENRICH-10/11 proven end-to-end
+last_updated: "2026-05-30T04:30:00Z"
+last_activity: 2026-05-30 -- Phase 12 COMPLETE + VERIFIED (8/8 must-haves; SC-4 live Sheet-parity → tracked human-UAT) + CODE-REVIEWED (1 HIGH gear-tier ETag data-loss bug + 2 MED transliteration bugs FIXED w/ regression test; 4 LOW deferred). 5/5 plans; db-backed Job registry, 2 cadenced jobs (pigparse_daily/wiki_weekly); ENRICH-10/11 proven end-to-end (verifier ran both jobs against the LIVE PigParse + wiki APIs). DEPLOY-PENDING: ship the rebuilt binary to the VPS so goose applies 00003 + the scheduler runs (see Next Action)
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 12
-  completed_plans: 11
-  percent: 92
+  completed_plans: 12
+  percent: 100
 ---
 
 # State: SquireBot
@@ -31,7 +31,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 Phase: 12 (enrichment-job-migration) — COMPLETE (5/5)
 Plan: 5 of 5 done (12-01 + 12-02 + 12-03 + 12-04 + 12-05 all complete) — Phase 12 finished
-Status: Phase 12 COMPLETE; Phase 13 (watcher re-target) ready to plan
+Status: Phase 12 COMPLETE + VERIFIED (8/8 must-haves; jobs proven against LIVE APIs) + CODE-REVIEWED (a HIGH gear-tier ETag data-loss bug + 2 MED fixed; 4 LOW deferred to /gsd-code-review-fix). DEPLOY-PENDING: rebuilt binary → VPS (goose applies 00003 + scheduler runs); SC-4 Sheet-parity is a tracked human-UAT (12-HUMAN-UAT.md). Phase 13 (watcher re-target) ready to plan
 Last activity: 2026-05-30 -- Phase 12 Plan 12-05 complete (scheduler fleshed into a db-backed Job registry + `squirebot-server run-job pigparse|wiki`; 2 cadenced jobs registered with politefetch.Fetch, immediate-check-on-startup + advance-always job_run cursor + per-job sync.Mutex, ctx.Done() shutdown kept verbatim; whole-repo go test green (25 pkg), static linux/amd64 ELF builds, no Google/PocketBase dep). ENRICH-10/11 proven end-to-end.
 
 ### v2.0 Phase Plan (2026-05-28)
@@ -40,7 +40,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 
 | Phase | Name | Requirements | Stack | Depends on | Status |
 |-------|------|--------------|-------|-----------|--------|
-| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | 🚧 In progress (5/7; 11-05 ingest handler + cmd/squirebot-server + scheduler skeleton done — BACKEND-01/03/04 wired, PocketBase removed; next 11-06 deploy) |
+| 11 | Backend Foundation + Ingest API | BACKEND-01, BACKEND-02, BACKEND-03, BACKEND-04, BACKEND-06 | Go + SQLite + goose + Caddy (Hetzner Cloud VPS, US, amd64) | — | ✅ Complete (7/7 — LIVE at https://api.squirebot.quest; ship-gate passed, nightly R2 backup + drilled restore) |
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | ✅ Complete (5/5; 12-01 schema/store SQL + 12-02 the 4 pure parsers + 12-03 politeFetch + 12-04 the 2 jobs + 12-05 scheduler/wiring done — `RunPigparse` (D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip) + `RunWiki` (single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue); 12-05 db-backed Job registry: `pigparse_daily` (>=24h) + `wiki_weekly` (Sunday UTC) with immediate-check-on-startup + advance-always job_run cursor + per-job sync.Mutex, `run-job pigparse|wiki` D-7 entrypoint; zero inline SQL; ENRICH-10/11 proven end-to-end) |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | Not started |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + TanStack Table + Tailwind; Go read API | P11 (read API) + P12 (data) | Not started |

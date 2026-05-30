@@ -56,6 +56,14 @@ func invBody(char string, n int) string {
 	return sb.String()
 }
 
+// invBodyVer builds a 1-row inventory envelope with an explicit watcher_version
+// (used by the 426 min-version gate cases). An empty ver omits nothing — it sends
+// `"watcher_version":""` so the gate's `!= ""` empty-allow rule is exercised.
+func invBodyVer(char, ver string) string {
+	return `{"character":"` + char + `","kind":"inventory","watcher_version":"` + ver +
+		`","content":"General0\tItem0\t1000\t1\t0\n"}`
+}
+
 // countInv returns the inventory_item row count for a character name (0 if the
 // character does not exist yet).
 func countInv(t *testing.T, db *sql.DB, char string) int {
@@ -330,5 +338,112 @@ func TestIngest_EmptyContent_NoOp(t *testing.T) {
 	}
 	if got := countInv(t, db, "Slampeach"); got != 0 {
 		t.Errorf("after empty snapshot rows = %d, want 0", got)
+	}
+}
+
+// TestIngest_TooOldVersion_426_WritesNothing: a valid Bearer + watcher_version
+// below the floor ("1.9.9" < "2.0.0") is rejected 426 Upgrade Required with a
+// clear human message, and the store is never touched (SC-5 / D-4). The 426 runs
+// after decode and before any store call, so nothing is written.
+func TestIngest_TooOldVersion_426_WritesNothing(t *testing.T) {
+	h, db := newHandler(t)
+	code, err := auth.MintCode(db, "alice")
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+
+	rec := post(t, h, code, invBodyVer("Slampeach", "1.9.9"))
+
+	if rec.Code != http.StatusUpgradeRequired {
+		t.Fatalf("status = %d, want 426 Upgrade Required; body=%q", rec.Code, rec.Body.String())
+	}
+	if body := strings.ToLower(rec.Body.String()); !strings.Contains(body, "too old") {
+		t.Errorf("body = %q, want a clear 'too old' message", rec.Body.String())
+	}
+	if got := totalInv(t, db); got != 0 {
+		t.Errorf("inventory_item count = %d, want 0 (426 must write nothing)", got)
+	}
+	// No character row should have been bound either.
+	if got := countInv(t, db, "Slampeach"); got != 0 {
+		t.Errorf("rows for Slampeach = %d, want 0", got)
+	}
+}
+
+// TestIngest_FloorVersion_204: watcher_version exactly at the floor ("2.0.0") is
+// NOT version-rejected and proceeds to a normal 2xx on a valid snapshot.
+func TestIngest_FloorVersion_204(t *testing.T) {
+	h, db := newHandler(t)
+	code, err := auth.MintCode(db, "alice")
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+
+	rec := post(t, h, code, invBodyVer("Slampeach", "2.0.0"))
+
+	if rec.Code != http.StatusNoContent && rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 2xx for floor version; body=%q", rec.Code, rec.Body.String())
+	}
+	if got := countInv(t, db, "Slampeach"); got != 1 {
+		t.Errorf("inventory rows = %d, want 1 (floor version proceeds)", got)
+	}
+}
+
+// TestIngest_NewerVersion_204: watcher_version above the floor ("2.1.0") proceeds.
+func TestIngest_NewerVersion_204(t *testing.T) {
+	h, db := newHandler(t)
+	code, err := auth.MintCode(db, "alice")
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+
+	rec := post(t, h, code, invBodyVer("Slampeach", "2.1.0"))
+
+	if rec.Code != http.StatusNoContent && rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 2xx for newer version; body=%q", rec.Code, rec.Body.String())
+	}
+	if got := countInv(t, db, "Slampeach"); got != 1 {
+		t.Errorf("inventory rows = %d, want 1 (newer version proceeds)", got)
+	}
+}
+
+// TestIngest_EmptyVersion_NotRejected_204: an EMPTY watcher_version is the ONE
+// intentional exception to IsOlder's "empty present ⇒ older" rule — the gate
+// guards `if env.WatcherVersion != "" && IsOlder(...)`, so a legacy/blank version
+// is NOT actively rejected (forward-compat with the "accepted now" envelope
+// contract) and proceeds through the normal ingest flow.
+func TestIngest_EmptyVersion_NotRejected_204(t *testing.T) {
+	h, db := newHandler(t)
+	code, err := auth.MintCode(db, "alice")
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+
+	rec := post(t, h, code, invBodyVer("Slampeach", ""))
+
+	if rec.Code == http.StatusUpgradeRequired {
+		t.Fatalf("status = 426; an empty watcher_version must NOT be version-rejected")
+	}
+	if rec.Code != http.StatusNoContent && rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 2xx for empty version; body=%q", rec.Code, rec.Body.String())
+	}
+	if got := countInv(t, db, "Slampeach"); got != 1 {
+		t.Errorf("inventory rows = %d, want 1 (empty version proceeds)", got)
+	}
+}
+
+// TestIngest_TooOldVersion_NoAuth_401NotGate426: the version gate runs AFTER the
+// bearer guard — a too-old version WITHOUT a token is still 401 (never 426), and
+// writes nothing. This pins the load-bearing ordering (401-writes-nothing is
+// structurally first).
+func TestIngest_TooOldVersion_NoAuth_401NotGate426(t *testing.T) {
+	h, db := newHandler(t)
+
+	rec := post(t, h, "", invBodyVer("Slampeach", "1.9.9"))
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (auth precedes the version gate)", rec.Code)
+	}
+	if got := totalInv(t, db); got != 0 {
+		t.Errorf("inventory_item count = %d, want 0", got)
 	}
 }

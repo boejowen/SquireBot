@@ -250,11 +250,14 @@ func runServe(args []string) int {
 	// it on SIGINT/SIGTERM.
 	scheduler.Start(ctx, db)
 
-	// Route the single network surface this milestone introduces. Go 1.22+
-	// method+pattern routing ("POST /api/v1/ingest"); the handler composes the
-	// bearer guard + bind + atomic replace (11-02/03/04).
+	// Route the network surfaces. Go 1.22+ method+pattern routing. The ingest
+	// handler composes the bearer guard + bind + atomic replace (11-02/03/04); the
+	// whoami handler (13-01 / D-4) is the authed, side-effect-free validation
+	// endpoint the watcher onboarding calls to verify a pasted guild code. Both
+	// reuse the SAME bearer guard (a second thin auth.New(db) wrapper is fine).
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/ingest", ingest.New(auth.New(db), db))
+	mux.Handle("GET /api/v1/whoami", ingest.NewWhoami(auth.New(db), db))
 
 	srv := &http.Server{
 		Addr:    *addr,

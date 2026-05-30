@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-30T16:27:00.000Z"
-last_activity: 2026-05-30 -- Phase 14 plan 14-02 (web/ foundation + search/tooltip/theme ports) complete
+last_updated: "2026-05-30T16:47:00.000Z"
+last_activity: 2026-05-30 -- Phase 14 plan 14-03 (Go read handlers + stdlib CORS + main.go wiring) complete
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 20
-  completed_plans: 18
-  percent: 90
+  completed_plans: 19
+  percent: 95
 ---
 
 # State: SquireBot
@@ -30,9 +30,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 ## Current Position
 
 Phase: 14 (web-frontend) — EXECUTING
-Plan: 3 of 4
-Status: Executing Phase 14 (14-01 + 14-02 complete; 14-03/14-04 remain)
-Last activity: 2026-05-30 -- Phase 14 plan 14-02 (web/ SvelteKit foundation + searchIndex/composeNotes/themes ports) complete
+Plan: 4 of 4
+Status: Executing Phase 14 (14-01 + 14-02 + 14-03 complete; 14-04 remains)
+Last activity: 2026-05-30 -- Phase 14 plan 14-03 (readapi: 5 public read handlers + stdlib CORS + main.go route wiring; BACKEND-05 HTTP half; JSON contract pinned for 14-04) complete
 
 ### v2.0 Phase Plan (2026-05-28)
 
@@ -87,7 +87,7 @@ Google REJECTED brand verification 2026-05-15 ("home page not registered to you"
 | Apps-script LOC (TypeScript) | 13,266 (to be decommissioned in P16) |
 | Vitest tests | 336/336 (apps-script; pre-v2.0) + **43/43 (web/ — searchIndex 17 / composeNotes 15 / themes 11, Plan 14-02)** |
 | Active blockers | 0 |
-| Phase 14 progress | 14-01 (~73 min) + 14-02 (~27 min) complete; 14-03/14-04 remain |
+| Phase 14 progress | 14-01 (~73 min) + 14-02 (~27 min) + 14-03 (~11 min) complete; 14-04 remains |
 
 ## Accumulated Context
 
@@ -179,10 +179,10 @@ None. Roadmap created; Phase 11 ready to plan.
 
 ### Next Action
 
-**Phase 14 is EXECUTING (2/4 plans; 14-01 + 14-02 done 2026-05-30; 0 blockers).** Phases 11/12/13 COMPLETE. Next plan = **14-03 (backend read handlers + CORS)** then **14-04 (Svelte client)**.
+**Phase 14 is EXECUTING (3/4 plans; 14-01 + 14-02 + 14-03 done 2026-05-30; 0 blockers).** Phases 11/12/13 COMPLETE. Next (and last P14) plan = **14-04 (Svelte client)** — wires the now-live read API into the visible product.
 
-1. **`/gsd-execute-phase 14`** (continues at plan 14-03) — Backend read handlers + CORS (Wave 2, depends 14-01): the 5 `GET /api/v1/...` read handlers (4 views + `/meta`) mirroring `whoami.go` minus the bearer guard (public, D-04) + stdlib CORS (exact origin **`https://app.squirebot.quest`** — the deploy target 14-02 locked; OPTIONS→204) + `main.go` wiring wrapped in CORS; httptest-proven. Composes the `compute.View/Bank/GearCheck/SpellCheck` + `store.CharFreshness` from 14-01.
-   - **Then 14-04 (Svelte client, Wave 3, depends 14-02+14-03):** API client + a local Svelte-5 `@tanstack/table-core` adapter (the package is already installed) + the one reusable `DataGrid` (sticky Char+header, faceted filters, multi-sort) ×4, the hover/tap `ItemTooltip` (wraps the already-escaped `composeItemNote`), `SearchBox`/`SearchResults` (`searchRows` + inline "did you mean?"), `[data-theme]` SiteShell+ThemePicker (`THEMES`/`loadTheme`/`saveTheme`). The home `+page.svelte` is still the scaffold placeholder — 14-04 replaces it.
+1. **`/gsd-execute-phase 14`** (continues at plan 14-04 — Svelte client, Wave 3, depends 14-02+14-03): API client + a local Svelte-5 `@tanstack/table-core` adapter (the package is already installed) + the one reusable `DataGrid` (sticky Char+header, faceted filters, multi-sort) ×4, the hover/tap `ItemTooltip` (wraps the already-escaped `composeItemNote`), `SearchBox`/`SearchResults` (`searchRows` + inline "did you mean?"), `[data-theme]` SiteShell+ThemePicker (`THEMES`/`loadTheme`/`saveTheme`). The home `+page.svelte` is still the scaffold placeholder — 14-04 replaces it. **Wire `lib/api.ts` to the 5 endpoints 14-03 pinned** (see 14-03-SUMMARY.md "THE PINNED ENDPOINT JSON CONTRACT"): every view endpoint returns a JSON array (`[]` when empty, never null); `/views/bank` → `{rows,coin:null}`; `/meta` → `{characters:[{name,last_seen}]}`; `price` nullable; `prices[].direction` a string `"0"`/`"1"`/`"2"`; CORS origin `https://app.squirebot.quest`.
+   - **14-03 done:** `internal/backendsrv/readapi/` — 5 public read handlers (one `ViewsHandler` dispatched by view name + `MetaHandler`) mirroring `whoami.go` minus the bearer guard (D-04 public), zero writes, V7 slog; stdlib CORS (exact origin, no wildcard, OPTIONS→204) wrapping the whole mux via a `-cors-origin` flag; httptest-proven; `go test ./internal/backendsrv/...` + static linux/amd64 cross-compile + `go vet ./...` green. The JSON contract is PINNED for 14-04. The read API is BUILT (deploys with the next on-box redeploy — item 2).
    - **14-02 done:** the `web/` SvelteKit SPA scaffolds/builds/type-checks (adapter-static, Tailwind v4, self-hosted fonts, noindex); the 3 pure modules are ported with provable parity + both carried bugs fixed + the HIGH-severity tooltip XSS mitigation test-proven; 43/43 vitest green.
 
 2. **Deploy (P12 + P13-01 bundled, on-box ops) — NOW UNBLOCKED:** the P12 enrichment binary is DEPLOY-PENDING and 13-01's `/whoami` + `426` gate are BUILT into `main`, shipping in the SAME redeploy. Build stamped — `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X github.com/boejowen/SquireBot/internal/backendsrv/buildinfo.Version=<tag>" -o squirebot-server ./cmd/squirebot-server` (static x86-64 ELF verified) — drop on the Hetzner VPS (`https://api.squirebot.quest`, 5.78.232.85) + restart systemd; `goose.Up` applies 00003. Then `run-job pigparse|wiki` + the SC-4 Sheet-parity spot-check (`12-HUMAN-UAT.md`). Can deploy now that 13-01 has landed (one redeploy ships both). No new systemd timer (scheduler is in-process).

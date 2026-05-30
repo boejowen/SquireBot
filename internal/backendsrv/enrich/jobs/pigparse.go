@@ -38,7 +38,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 )
 
-// pigparseJobName is the job_run cursor key + the slog op for this job.
+// pigparseJobName is the job_run position-marker key + the slog op for this job.
 const pigparseJobName = "pigparse_daily"
 
 // rowCountFloorPct mirrors refreshPigparse.ts ROW_COUNT_FLOOR_PCT: if today's
@@ -49,9 +49,10 @@ const rowCountFloorPct = 0.90
 // RunPigparse runs the daily PigParse price pull: it reads the cached ETag,
 // fetches getall/1 (304-aware), parses, keeps only the WTS (t=0) rows, logs a
 // truncation guard if the response shrank, upserts the prices over one tx, and
-// advances the job_run + etag cursors. fetch is injected (politefetch.Fetch in
-// production; a fake in tests). It returns a non-nil error only on a fetch/parse/
-// DB failure (the caller logs + continues; the cursor already advanced).
+// advances the job_run + etag position markers. fetch is injected
+// (politefetch.Fetch in production; a fake in tests). It returns a non-nil error
+// only on a fetch/parse/DB failure (the caller logs + continues; the marker
+// already advanced).
 func RunPigparse(ctx context.Context, db *sql.DB, fetch politefetch.Fetcher) error {
 	s := store.NewStore(db)
 	now := time.Now().UTC()
@@ -154,9 +155,9 @@ func RunPigparse(ctx context.Context, db *sql.DB, fetch politefetch.Fetcher) err
 		return fmt.Errorf("%s: commit: %w", pigparseJobName, err)
 	}
 
-	// 10) Persist the ETag (304 next time if unchanged) + advance the cursor,
-	// stashing the kept-row count in last_detail so the NEXT run can compute the
-	// truncation ratio.
+	// 10) Persist the ETag (304 next time if unchanged) + advance the position
+	// marker, stashing the kept-row count in last_detail so the NEXT run can
+	// compute the truncation ratio.
 	if err := s.SetETag(ctx, PigparseURL, res.ETag, res.LastModified); err != nil {
 		// Non-fatal: the data is written; a stale/absent ETag just means we
 		// re-fetch unconditionally next time.

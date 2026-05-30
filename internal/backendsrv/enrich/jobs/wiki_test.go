@@ -1,0 +1,283 @@
+package jobs
+
+import (
+	"context"
+	"database/sql"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"testing"
+
+	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/politefetch"
+	"github.com/boejowen/SquireBot/internal/backendsrv/store"
+)
+
+// --- fixture-serving wiki test server -------------------------------------
+
+// pageToFixture maps a wiki page title (the `page=` query value, with spaces as
+// underscores) to the testdata fixture file (sans .json) the server returns. It
+// covers the item pages the seeded inventory references + the 14 class pages we
+// have fixtures for + the 2 Velious gear pages.
+var pageToFixture = map[string]string{
+	// Item pages (page title == inventory name, spaces→underscores).
+	"Cloth_Cap":                    "wiki-parse-cloth-cap",
+	"Pearl":                        "wiki-parse-pearl",
+	"Cloak_of_Flames":              "wiki-parse-cloak-of-flames",
+	"Fungus_Covered_Scale_Tunic":   "wiki-parse-fungus-covered-scale-tunic",
+	// Class spell pages (display name, spaces→underscores).
+	"Necromancer":   "wiki-class-necromancer",
+	"Paladin":       "wiki-class-paladin",
+	"Warrior":       "wiki-class-warrior",
+	// Velious gear pages.
+	"Players:Velious_Pre-Raid_Gear": "wiki-velious-preraid-gear",
+	"Players:Velious_Raiding_Gear":  "wiki-velious-raiding-gear",
+}
+
+// wikiServerOpts lets a test force a specific status for a given page title (to
+// exercise 304 / 500 paths).
+type wikiServerOpts struct {
+	statusForPage map[string]int // page title (underscored) → forced HTTP status
+}
+
+// newWikiFixtureServer returns an httptest.Server that, for each request,
+// inspects the `page=` param and returns the matching fixture body (the raw
+// action=parse envelope JSON). Unknown pages return a MediaWiki "missingtitle"
+// error envelope (200 with {"error":...}), mirroring the real API. Forced
+// statuses from opts override the body.
+func newWikiFixtureServer(t *testing.T, opts wikiServerOpts) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		if forced, ok := opts.statusForPage[page]; ok && forced != http.StatusOK {
+			w.WriteHeader(forced)
+			return
+		}
+		fixture, ok := pageToFixture[page]
+		if !ok {
+			// Unknown page → MediaWiki-style error envelope.
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"error":{"code":"missingtitle","info":"The page you specified doesn't exist."}}`))
+			return
+		}
+		body, err := os.ReadFile("../testdata/" + fixture + ".json")
+		if err != nil {
+			t.Errorf("read fixture %s: %v", fixture, err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("ETag", `"`+page+`-v1"`)
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// serverFetcher returns a Fetcher that rewrites the production wiki/pigparse URL
+// to point at the fixture server (preserving the query string), then delegates
+// to the real politefetch.Fetch — so the test exercises the genuine ETag/304/
+// body-read path against canned fixtures.
+func serverFetcher(srv *httptest.Server) politefetch.Fetcher {
+	base, _ := url.Parse(srv.URL)
+	return func(ctx context.Context, raw string, opts politefetch.Options) politefetch.FetchResult {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return politefetch.FetchResult{OK: false, Err: err}
+		}
+		u.Scheme = base.Scheme
+		u.Host = base.Host
+		u.Path = "/" // collapse api.php → server root; the handler only reads ?page=
+		return politefetch.Fetch(ctx, u.String(), opts)
+	}
+}
+
+// seedInvFor seeds one inventory row so the items pass has a ref to fetch.
+func seedInvFor(t *testing.T, db *sql.DB, charID int64, name string, itemID int64, ord int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO inventory_item (character_id, location, name, item_id, count, slots, row_ordinal, uploaded_at)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+		charID, "General1", name, itemID, 1, 0, ord,
+	); err != nil {
+		t.Fatalf("seed inventory_item %q: %v", name, err)
+	}
+}
+
+// seedAllItemRefs seeds the four item fixtures we have wiki pages for.
+func seedAllItemRefs(t *testing.T, db *sql.DB) {
+	_, charID := seedOwnerChar(t, db, "owner-a", "Aragorn")
+	seedInvFor(t, db, charID, "Cloth Cap", 1001, 1)
+	seedInvFor(t, db, charID, "Pearl", 11000, 2)
+	seedInvFor(t, db, charID, "Cloak of Flames", 18950, 3)
+	seedInvFor(t, db, charID, "Fungus Covered Scale Tunic", 13128, 4)
+}
+
+// --- tests ----------------------------------------------------------------
+
+func TestRunWiki_PopulatesAllTables(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedAllItemRefs(t, db)
+
+	srv := newWikiFixtureServer(t, wikiServerOpts{})
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki: %v", err)
+	}
+
+	for _, table := range []string{"item_master", "wiki_spells", "wiki_gear_tier", "quest_items"} {
+		if n := countRows(t, db, table); n == 0 {
+			t.Errorf("%s is empty after RunWiki, want > 0", table)
+		}
+	}
+
+	// A known item's summary + SHA-1 must be populated.
+	var summary, sha string
+	if err := db.QueryRow(`SELECT wiki_summary, wikitext_sha1 FROM item_master WHERE item_id = ?`, 1001).
+		Scan(&summary, &sha); err != nil {
+		t.Fatalf("query item_master 1001: %v", err)
+	}
+	if summary == "" || sha == "" {
+		t.Errorf("item 1001 wiki_summary=%q wikitext_sha1=%q, want both populated", summary, sha)
+	}
+
+	// wiki_gear_tier must contain at least one Iksar-tagged row (Pre-Raid page).
+	var iksar int
+	if err := db.QueryRow(`SELECT count(*) FROM wiki_gear_tier WHERE tier = 'Iksar'`).Scan(&iksar); err != nil {
+		t.Fatalf("count iksar gear rows: %v", err)
+	}
+	if iksar == 0 {
+		t.Errorf("wiki_gear_tier has no Iksar-tagged rows, want > 0")
+	}
+
+	assertJobStatus(t, db, "wiki_weekly", "ok")
+}
+
+func TestRunWiki_SHA1ShortCircuit(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedAllItemRefs(t, db)
+	srv := newWikiFixtureServer(t, wikiServerOpts{})
+
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #1: %v", err)
+	}
+	firstCount := countRows(t, db, "item_master")
+
+	// Second run: same fixtures → same SHA-1 → the per-item upsert is skipped.
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #2: %v", err)
+	}
+	secondCount := countRows(t, db, "item_master")
+
+	if secondCount != firstCount {
+		t.Errorf("item_master rows changed across identical runs: %d -> %d (SHA-1 short-circuit/dedup broken)", firstCount, secondCount)
+	}
+}
+
+func TestRunWiki_304SkipsResource(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedAllItemRefs(t, db)
+
+	// Force the Paladin class page to 304 (unchanged); all others 200.
+	srv := newWikiFixtureServer(t, wikiServerOpts{
+		statusForPage: map[string]int{"Paladin": http.StatusNotModified},
+	})
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki: %v", err)
+	}
+
+	// Necromancer (200) populated; Paladin (304) absent.
+	var necN, palN int
+	if err := db.QueryRow(`SELECT count(*) FROM wiki_spells WHERE class = 'NEC'`).Scan(&necN); err != nil {
+		t.Fatalf("count NEC: %v", err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM wiki_spells WHERE class = 'PAL'`).Scan(&palN); err != nil {
+		t.Fatalf("count PAL: %v", err)
+	}
+	if necN == 0 {
+		t.Errorf("NEC spells = 0, want > 0 (200 should populate)")
+	}
+	if palN != 0 {
+		t.Errorf("PAL spells = %d, want 0 (304 should skip the write)", palN)
+	}
+}
+
+func TestRunWiki_GearFullReplaceNoDuplicates(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedAllItemRefs(t, db)
+	srv := newWikiFixtureServer(t, wikiServerOpts{})
+
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #1: %v", err)
+	}
+	first := countRows(t, db, "wiki_gear_tier")
+
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #2: %v", err)
+	}
+	second := countRows(t, db, "wiki_gear_tier")
+
+	if first == 0 {
+		t.Fatalf("wiki_gear_tier empty after first run")
+	}
+	if second != first {
+		t.Errorf("wiki_gear_tier rows = %d on 2nd run, want %d (full-replace, not 2x — Pitfall 1)", second, first)
+	}
+}
+
+func TestRunWiki_OneBadPageDoesNotAbort(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedAllItemRefs(t, db)
+
+	// One item page (Pearl) returns 500; the run must still complete + populate
+	// the other items/tables.
+	srv := newWikiFixtureServer(t, wikiServerOpts{
+		statusForPage: map[string]int{"Pearl": http.StatusInternalServerError},
+	})
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki: want nil error despite one bad page, got %v", err)
+	}
+
+	// Cloth Cap (1001) populated; Pearl (11000) absent.
+	var clothN, pearlN int
+	if err := db.QueryRow(`SELECT count(*) FROM item_master WHERE item_id = ?`, 1001).Scan(&clothN); err != nil {
+		t.Fatalf("count cloth: %v", err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM item_master WHERE item_id = ?`, 11000).Scan(&pearlN); err != nil {
+		t.Fatalf("count pearl: %v", err)
+	}
+	if clothN == 0 {
+		t.Errorf("item 1001 absent, want present (one bad page must not abort the run)")
+	}
+	if pearlN != 0 {
+		t.Errorf("item 11000 present (%d), want absent (its page 500'd)", pearlN)
+	}
+	// Spells + gear still populated.
+	if n := countRows(t, db, "wiki_spells"); n == 0 {
+		t.Errorf("wiki_spells empty, want populated (a bad ITEM page must not block the spells pass)")
+	}
+	if n := countRows(t, db, "wiki_gear_tier"); n == 0 {
+		t.Errorf("wiki_gear_tier empty, want populated")
+	}
+
+	assertJobStatus(t, db, "wiki_weekly", "ok")
+}

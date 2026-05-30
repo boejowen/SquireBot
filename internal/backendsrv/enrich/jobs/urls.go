@@ -7,12 +7,12 @@
 //	  → enrich.Parse*   (12-02, the pure parsers)
 //	    → store.*Tx     (12-01, the single tested SQL path, composed over ONE tx)
 //
-// The Sheets-specific machinery the triggers carried — the 6-minute resumable
-// cursor (refreshWikiItems's CURSOR_KEY self-reschedule), monitorCellCount,
-// weeklySchemaHealthcheck, LockService, PropertiesService, and the post-run
-// buildSpellCheck/buildGearCheck VIEW rebuilds — is DELETED, not ported (D-5/D-8):
+// The Sheets-specific machinery the triggers carried — the 6-minute
+// resumable-position self-reschedule, the 10M-cell watchdog, the expected-tab
+// schema watchdog, the Apps Script document lock, the script-properties store,
+// and the post-run gear/spell view rebuilds — is DELETED, not ported (D-5/D-8):
 // a backend job has no execution cap (one uninterrupted run), the single-writer
-// DB + a per-job mutex replace LockService, and the views belong to P14.
+// DB + a per-job mutex replace the Apps Script lock, and the views belong to P14.
 package jobs
 
 import (

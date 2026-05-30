@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+/*
+ * Self-hosted webfonts (D-07 "Off Google" — no Google Fonts runtime link).
+ * Each face ships as a versioned @fontsource woff2 package; font-display: swap
+ * is the @fontsource default. Six faces back the five EQ theme display/body
+ * fonts (Theme Catalog, 14-UI-SPEC): Cinzel Decorative (velious display),
+ * Cinzel (vanilla/kunark/minimalist display), IM Fell English (velious/kunark/
+ * heavy body-accent), MedievalSharp (heavy display), Crimson Text (vanilla
+ * body), Inter (minimalist body + UI everywhere).
+ */
+@import "@fontsource/cinzel/400.css";
+@import "@fontsource/cinzel/600.css";
+@import "@fontsource/cinzel-decorative/400.css";
+@import "@fontsource/cinzel-decorative/700.css";
+@import "@fontsource/im-fell-english/400.css";
+@import "@fontsource/medievalsharp/400.css";
+@import "@fontsource/crimson-text/400.css";
+@import "@fontsource/crimson-text/600.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/600.css";
+
+/*
+ * [data-theme] CSS-custom-property blocks are emitted in Task 4 below this
+ * marker (one block per EQ theme + a :root velious fallback). Values mirror
+ * the THEMES registry in src/lib/theme/themes.ts.
+ */
+/* >>> THEME-BLOCKS (Task 4) <<< */

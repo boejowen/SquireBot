@@ -1,0 +1,4 @@
+# D-05: the public site is "anyone with the link," NOT search-indexed.
+# Paired with <meta name="robots" content="noindex"> in src/app.html.
+User-agent: *
+Disallow: /

@@ -67,7 +67,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 - [x] **Phase 12: Enrichment Job Migration** - daily PigParse pull + weekly P1999 wiki scrape run as in-process scheduled jobs, parsers and `politeFetch` controls carried over. ✅ 2026-05-29
 - [x] **Phase 13: Watcher Re-Target + Onboarding** - watcher uploads to the backend HTTP API; all Google OAuth/Sheets/Picker machinery deleted; "paste your guild code" onboarding shipped via the existing auto-updater. ✅ Complete 2026-05-30 (4/4; binary 57% smaller, Google-free, SemVer pre-release auto-update twin in place).
 - [x] **Phase 14: Web Frontend** - SvelteKit static app + read API; the 4 views as a reusable filterable/sortable data grid; client-side search + "did you mean?"; rich HTML tooltips; EQ theming. ✅ Complete 2026-05-30 (4/4; verification human_needed — 6/6 must-haves code-verified incl. WEB-02 Go parity tests + 60 web tests; code-review 0 Critical, WR-01 fixed d14e4ab). Deploy (server binary + Cloudflare Pages `app.squirebot.quest`) + 5 visual UAT items pending in 14-HUMAN-UAT.md.
-- [ ] **Phase 15: Admin Web Forms + Login** - Discord OAuth2 login gated on guild Discord membership; eviction, bank-coin, and admin-management as authenticated web forms.
+- [ ] **Phase 15: Admin Web Forms + Login** - Discord OAuth2 login gated on guild Discord membership; eviction, bank-coin, and admin-management as authenticated web forms. **Planned 2026-05-30 (5 plans, 5 waves).**
 - [ ] **Phase 16: Cutover + Decommission** - shadow-mode soak alongside the live Sheet (1–2 wk), one-time human-data backfill, one coordinated watcher self-update flip, then decommission the Sheet + Apps Script + Google OAuth client.
 
 ## Phase Details
@@ -159,7 +159,12 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
   3. Eviction is an authenticated, officer-only web form that ports v1 enforcement — the `guild_admins` gate plus owner-floor lockout protection — and applies the 30-day grace + archive; a non-officer cannot reach or fire it (ADMIN-04)
   4. Manual bank-coin entry (platinum/gold/silver/copper) is an authenticated web form that persists the four values (the file format still carries no coin data) (ADMIN-05)
   5. Admin/officer management (the `guild_admins` allowlist + owner-floor protection) is an authenticated web form; the workbook-owner-floor equivalent cannot be removed by a peer admin (ADMIN-06)
-**Plans**: TBD
+**Plans**: 5 plans (strictly sequential waves — each depends on the prior; no in-wave file collisions)
+- [ ] 15-01-PLAN.md — Schema + store foundation (Wave 1): `00004_web_auth.sql` (web_user/web_session[hashed]/guild_admins/app_config/coin cols/eviction grace+archive/audit_log generic cols) + the session/officer/owner-floor/eviction/coin store methods. Ports v1 admin.ts semantics. (AUTH-08/09 + ADMIN-04/05/06.)
+- [ ] 15-02-PLAN.md — Discord OAuth2 + opaque session + CORS-creds + `set-owner-floor` CLI (Wave 2): hand-rolled `golang.org/x/oauth2` login/callback/whoami-web/logout, membership gate via guilds list, RequireSession/RequireOfficer, read API session-gated. **autonomous:false** — Discord-app provisioning is a maintainer prerequisite (checkpoint). (AUTH-08/09.)
+- [ ] 15-03-PLAN.md — Backend write surface (Wave 3): eviction/bank-coin/officer-mgmt handlers with authorize-under-transaction (WR-04 TOCTOU close), owner-floor protection, audit_log writes, the eviction-archive scheduler job. (ADMIN-04/05/06.)
+- [ ] 15-04-PLAN.md — Frontend auth gate (Wave 4): `auth.ts` + credentialed fetch, AuthGate/LoginScreen/NotMemberScreen/SessionIndicator/ConfirmDialog, `--destructive` token, officer-only Admin nav. (AUTH-08/09.)
+- [ ] 15-05-PLAN.md — The three web forms (Wave 5): BankCoinForm (member, range-validated) + EvictionForm (officer, preview+confirm) + AdminMgmtForm (officer, promote-by-pick+confirm) + `/admin` + `/bank-coin` routes + bank-view coin surfacing. (ADMIN-04/05/06.)
 **UI hint**: yes
 **Note**: Discord OAuth2 login has no brand-verification or app-review gate (finding 03 §4 — confirmed); "Sign in with Google" is rejected outright because it would re-introduce the exact gate v2.0 exists to escape. In the DB world, eviction/admin enforcement gets *cleaner and more enforceable* — access revocation becomes one app-controlled action, not a separate Google Drive un-share. UI safety gate applies.
 

@@ -64,7 +64,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 **Schema-evolution change:** the old `_meta.schema_version` ↔ `WatcherMaxSchemaVersion` handshake **retires** in favour of forward-only `goose` DB migrations + an explicit **API version** (`/api/v1/...`). The watcher's Sheets schema gate is removed in P13.
 
 - [x] **Phase 11: Backend Foundation + Ingest API** - Hetzner Cloud VPS (US) + Caddy auto-HTTPS live; SQLite schema with `goose`; bearer-token auth; the upload-receiving endpoint. *Front-loaded so guild data can flow again ASAP.* ✅ 2026-05-29
-- [ ] **Phase 12: Enrichment Job Migration** - daily PigParse pull + weekly P1999 wiki scrape run as in-process scheduled jobs, parsers and `politeFetch` controls carried over.
+- [x] **Phase 12: Enrichment Job Migration** - daily PigParse pull + weekly P1999 wiki scrape run as in-process scheduled jobs, parsers and `politeFetch` controls carried over. ✅ 2026-05-29
 - [ ] **Phase 13: Watcher Re-Target + Onboarding** - watcher uploads to the backend HTTP API; all Google OAuth/Sheets/Picker machinery deleted; "paste your guild code" onboarding shipped via the existing auto-updater.
 - [ ] **Phase 14: Web Frontend** - SvelteKit static app + read API; the 4 views as a reusable filterable/sortable data grid; client-side search + "did you mean?"; rich HTML tooltips; EQ theming.
 - [ ] **Phase 15: Admin Web Forms + Login** - Discord OAuth2 login gated on guild Discord membership; eviction, bank-coin, and admin-management as authenticated web forms.
@@ -108,7 +108,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 - [x] 12-02-PLAN.md — Pure parsers (Wave 1): port `parseToRows`/`parseItempage`(+SHA-1)/`parseClassPage`/`parseGearTierPage` + eq-constants into `internal/backendsrv/enrich`, byte-parity-tested against the copied `__fixtures__`. ✅ 2026-05-30 (`012d082`, `1a2fc15`, `d519f37`) — pure (no net/SQL); SHA-1 byte-identical (no signed-byte fix-up); exact-count parity vs the TS parsers run in Node (PigParse 7240, NEC 171, Pre-Raid 577); 28 tests green.
 - [x] 12-03-PLAN.md — politeFetch client (Wave 1): the `net/http` polite client (UA / If-None-Match+If-Modified-Since→304 / `[2s,4s,8s,16s,32s]` backoff honoring Retry-After / `io.LimitReader` cap / TLS-on) + a backend `Version` var; httptest-driven.
 - [x] 12-04-PLAN.md — Jobs (Wave 2): the daily PigParse job (WTS t=0 filter, truncation-guard-as-LOG, 304-skip) + the weekly wiki single-run job (no cursor; items+spells+gear+quests with the 1s inter-request sleep, per-item SHA-1 short-circuit, log-but-continue). Composes Wave 1 over one tx; zero inline SQL. ✅ 2026-05-30 (`9c8120c`, `a79b37b`) — `RunPigparse` (4,333 WTS rows, item 19450 keeps the t=0 price) + `RunWiki` (all 4 dimension tables populated, gear full-replace non-duplicating, one-bad-page-no-abort) + `store.DistinctInventoryItemIDs`; production-job-file inline-SQL grep = 0, deleted-machinery grep = 0; whole-repo `go test ./...` green.
-- [ ] 12-05-PLAN.md — Scheduler + wiring (Wave 3): flesh out `scheduler/scheduler.go` into a Job registry (job_run cursor + simple-interval due predicates + immediate-check-on-startup + per-job mutex), register the 2 jobs, wire the real db-backed scheduler into the server, and add `squirebot-server run-job pigparse|wiki` for the D-7 parity check. Proves ENRICH-10/11 end-to-end.
+- [x] 12-05-PLAN.md — Scheduler + wiring (Wave 3): flesh out `scheduler/scheduler.go` into a Job registry (job_run cursor + simple-interval due predicates + immediate-check-on-startup + per-job mutex), register the 2 jobs, wire the real db-backed scheduler into the server, and add `squirebot-server run-job pigparse|wiki` for the D-7 parity check. Proves ENRICH-10/11 end-to-end. ✅ 2026-05-29 (`b08dbea`, `2caede6`) — `pigparse_daily` (>=24h) + `wiki_weekly` (Sunday UTC) registered with `politefetch.Fetch`; immediate-check-on-startup + advance-always cursor + per-job `sync.Mutex` TryLock; `ctx.Done()` shutdown kept verbatim; `run-job pigparse|wiki` exits cleanly (exactly-one-name -> 2 otherwise); whole-repo `go test ./...` green (25 pkg), static linux/amd64 ELF builds, no Google/PocketBase dep.
 **UI hint**: no (backend scheduled jobs only)
 **Note**: parsers are pure, host-agnostic functions (`parseToRows`, `parseItempage`, wiki-spell / gear-tier parsers) and port near-verbatim to Go; only the I/O wrappers (`UrlFetchApp`/`PropertiesService`/`CacheService`/`LockService`) are replaced. The `monitorCellCount` and `weeklySchemaHealthcheck` watchdogs are Sheets-specific and are dropped.
 
@@ -177,12 +177,12 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
-| v2.0 | 6 | 1/TBD | 🚧 In progress | — |
+| v2.0 | 6 | 12/TBD | 🚧 In progress | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Backend Foundation + Ingest API | v2.0 | 7/7 | ✅ Complete | 2026-05-29 |
-| 12. Enrichment Job Migration | v2.0 | 4/5 | In Progress|  |
+| 12. Enrichment Job Migration | v2.0 | 5/5 | ✅ Complete | 2026-05-29 |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 0/TBD | Not started | - |
 | 14. Web Frontend | v2.0 | 0/TBD | Not started | - |
 | 15. Admin Web Forms + Login | v2.0 | 0/TBD | Not started | - |

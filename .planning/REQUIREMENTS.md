@@ -25,8 +25,8 @@
 
 ### Enrichment jobs (ENRICH)
 
-- [ ] **ENRICH-10**: The daily PigParse price pull (server=1=Blue) runs as an in-process scheduled job, reusing the existing parser and `politeFetch` controls (User-Agent, ETag/If-Modified-Since, backoff).
-- [ ] **ENRICH-11**: The weekly P1999 wiki scrape (per-item summaries, per-class spell lists, Velious gear tiers, quest items) runs as an in-process scheduled job with the same politeness controls.
+- [x] **ENRICH-10**: The daily PigParse price pull (server=1=Blue) runs as an in-process scheduled job, reusing the existing parser and `politeFetch` controls (User-Agent, ETag/If-Modified-Since, backoff). ✅ 2026-05-29 (P12 — scheduler registers `pigparse_daily`, due when now-last>=24h)
+- [x] **ENRICH-11**: The weekly P1999 wiki scrape (per-item summaries, per-class spell lists, Velious gear tiers, quest items) runs as an in-process scheduled job with the same politeness controls. ✅ 2026-05-29 (P12 — scheduler registers `wiki_weekly`, due Sunday UTC)
 
 ### Watcher re-target (WATCH)
 
@@ -88,8 +88,8 @@
 | BACKEND-03 | P11 Backend Foundation + Ingest API | 11-03 (tx + bind); 11-05 (HTTP surface) | ✅ Complete (2026-05-29) |
 | BACKEND-04 | P11 Backend Foundation + Ingest API | 11-04 (mint/revoke + guard); 11-05 (HTTP transport) | ✅ Complete (2026-05-29) |
 | BACKEND-06 | P11 Backend Foundation + Ingest API | 11-07 (sqlite3 .backup → R2 via rclone + restore drill) | ✅ Complete (2026-05-29) |
-| ENRICH-10 | P12 Enrichment Job Migration | 12-01 (00003 migration + `pigparse_price` upsert store method + `job_run`/`etag_cache` cursors — foundation) + 12-02 (`ParseToRows` ported, byte-parity) + 12-03 (politeFetch) + 12-04 (`RunPigparse` — D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip; composes Wave-1 over one tx, zero inline SQL); 12-05 (scheduler cadence) | In progress (store + parser + politeFetch + the daily JOB CODE done 2026-05-30; the in-process *schedule* lands in 12-05) |
-| ENRICH-11 | P12 Enrichment Job Migration | 12-01 (00003 migration + `wiki_spells`/`wiki_gear_tier`/`item_master`/`quest_items` store methods + cursors — foundation) + 12-02 (`ParseItempage`/`ParseClassPage`/`ParseGearTierPage` ported, byte-parity) + 12-03 (politeFetch) + 12-04 (`RunWiki` — single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue; zero inline SQL); 12-05 (scheduler cadence) | In progress (store + parsers + politeFetch + the weekly JOB CODE done 2026-05-30; the in-process *schedule* lands in 12-05) |
+| ENRICH-10 | P12 Enrichment Job Migration | 12-01 (00003 migration + `pigparse_price` upsert store method + `job_run`/`etag_cache` cursors — foundation) + 12-02 (`ParseToRows` ported, byte-parity) + 12-03 (politeFetch) + 12-04 (`RunPigparse` — D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip; composes Wave-1 over one tx, zero inline SQL) + 12-05 (scheduler registers `pigparse_daily`, due now-last>=24h, immediate-check-on-startup + advance-always cursor + per-job mutex; `run-job pigparse` D-7 entrypoint) | ✅ Complete (2026-05-29) |
+| ENRICH-11 | P12 Enrichment Job Migration | 12-01 (00003 migration + `wiki_spells`/`wiki_gear_tier`/`item_master`/`quest_items` store methods + cursors — foundation) + 12-02 (`ParseItempage`/`ParseClassPage`/`ParseGearTierPage` ported, byte-parity) + 12-03 (politeFetch) + 12-04 (`RunWiki` — single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue; zero inline SQL) + 12-05 (scheduler registers `wiki_weekly`, due Sunday UTC; `run-job wiki` D-7 entrypoint) | ✅ Complete (2026-05-29) |
 | WATCH-08 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
 | WATCH-09 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
 | WATCH-10 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |

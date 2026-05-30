@@ -1,0 +1,364 @@
+package readapi_test
+
+// readapi_test.go is the httptest proof of the P14 read HTTP surface (BACKEND-05
+// HTTP half). It does NOT re-prove compute parity (Plan 01's table-tests own
+// that) — it proves the HANDLER contract Plan 04 wires to:
+//   - each views route → 200 + application/json + the right-shaped body;
+//   - /meta → 200 + a {characters:[{name,last_seen}]} object;
+//   - the bank body is an object with coin === null (not a bare array);
+//   - a non-GET request → 405 (read-only contract, T-14.03-03);
+//   - the CORS middleware echoes the EXACT locked origin (never "*") on a GET and
+//     answers an OPTIONS preflight with 204 + that header + an empty body.
+//
+// It seeds a migrated temp DB (store.NewTestDB) with a couple of characters +
+// inventory rows + one priced/quest item via self-contained raw INSERT helpers
+// (the store/compute packages' own seed helpers are package-private), mirroring
+// the verified column layouts in migrations/00001_init.sql + 00003.
+
+import (
+	"database/sql"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
+	"github.com/boejowen/SquireBot/internal/backendsrv/store"
+)
+
+const testOrigin = "https://app.squirebot.quest"
+
+// --- seed helpers (raw INSERTs over the migrated temp DB) ---------------------
+
+func seedChar(t *testing.T, db *sql.DB, label, name, class string, level int64, isBank bool) int64 {
+	t.Helper()
+	res, err := db.Exec(`INSERT INTO owner (label) VALUES (?)`, label)
+	if err != nil {
+		t.Fatalf("seed owner %q: %v", label, err)
+	}
+	ownerID, _ := res.LastInsertId()
+	bank := 0
+	if isBank {
+		bank = 1
+	}
+	var classArg any
+	if class != "" {
+		classArg = class
+	}
+	res, err = db.Exec(
+		`INSERT INTO character (owner_id, name, class, level, is_bank_toon, last_seen)
+		 VALUES (?,?,?,?,?,?)`,
+		ownerID, name, classArg, level, bank, "2026-05-09T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("seed character %q: %v", name, err)
+	}
+	id, _ := res.LastInsertId()
+	return id
+}
+
+func seedInv(t *testing.T, db *sql.DB, charID int64, location, name string, itemID, ordinal int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO inventory_item (character_id, location, name, item_id, count, slots, row_ordinal, uploaded_at)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+		charID, location, name, itemID, 1, 0, ordinal,
+	); err != nil {
+		t.Fatalf("seed inventory_item %q: %v", name, err)
+	}
+}
+
+func seedItemMaster(t *testing.T, db *sql.DB, itemID int64, name, summary, url string, isQuest bool) {
+	t.Helper()
+	q := 0
+	if isQuest {
+		q = 1
+	}
+	if _, err := db.Exec(
+		`INSERT INTO item_master (item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+		itemID, name, summary, url, "", q, "sha",
+	); err != nil {
+		t.Fatalf("seed item_master (item_id=%d): %v", itemID, err)
+	}
+}
+
+func seedPigparse(t *testing.T, db *sql.DB, itemID int64, direction string, a30 float64, t30 int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO pigparse_price (item_id, name, current_avg, blue_volume, last_seen, direction, t30, a30, last_refreshed)
+		 VALUES (?,?,?,?,?,?,?,?,datetime('now'))`,
+		itemID, "x", a30, t30, "2026-05-09", direction, t30, a30,
+	); err != nil {
+		t.Fatalf("seed pigparse_price (item_id=%d): %v", itemID, err)
+	}
+}
+
+func seedQuest(t *testing.T, db *sql.DB, itemID int64, questName, source string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO quest_items (item_id, quest_name, source_url, source, last_refreshed)
+		 VALUES (?,?,?,?,datetime('now'))`,
+		itemID, questName, "http://example/q", source,
+	); err != nil {
+		t.Fatalf("seed quest_items (item_id=%d): %v", itemID, err)
+	}
+}
+
+func seedWikiSpell(t *testing.T, db *sql.DB, class string, level int64, name, normalized string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO wiki_spells (class, level, spell_name, normalized_name, last_refreshed)
+		 VALUES (?,?,?,?,datetime('now'))`,
+		class, level, name, normalized,
+	); err != nil {
+		t.Fatalf("seed wiki_spells (%s/%d/%s): %v", class, level, name, err)
+	}
+}
+
+func seedSpellbook(t *testing.T, db *sql.DB, charID, level int64, name, normalized string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO spellbook_entry (character_id, level, name, normalized_name, uploaded_at)
+		 VALUES (?,?,?,?,datetime('now'))`,
+		charID, level, name, normalized,
+	); err != nil {
+		t.Fatalf("seed spellbook_entry (char_id=%d): %v", charID, err)
+	}
+}
+
+// seedStore builds a small but representative world: two characters (one a bank
+// toon) with inventory, one priced+quest item, one wiki spell the char knows, so
+// every endpoint returns at least one row.
+func seedStore(t *testing.T) *store.Store {
+	t.Helper()
+	db := store.NewTestDB(t)
+
+	enchID := seedChar(t, db, "owner-a", "Alpha", "Enchanter", 60, false)
+	bankID := seedChar(t, db, "owner-b", "Banker", "Warrior", 60, true)
+
+	// A priced + quest item so a ViewRow carries a non-null price + quest link.
+	seedItemMaster(t, db, 1001, "Jade Reaver", "A fine blade.", "https://wiki.project1999.com/Jade_Reaver", false)
+	seedPigparse(t, db, 1001, "0", 1500.0, 7) // WTS, a30>0 → non-null price
+	seedQuest(t, db, 1001, "Sword Quest", "in_game_flag")
+
+	seedInv(t, db, enchID, "General1", "Jade Reaver", 1001, 0)
+	seedInv(t, db, enchID, "General2", "Bone Chips", 13073, 1)
+	seedInv(t, db, bankID, "Bank1", "Jade Reaver", 1001, 0)
+
+	// spell_check input: a class spell the char knows (KNOWN) + one it lacks.
+	seedWikiSpell(t, db, "Enchanter", 1, "Minor Illusion", "minor illusion")
+	seedWikiSpell(t, db, "Enchanter", 4, "Pendril's Animation", "pendril's animation")
+	seedSpellbook(t, db, enchID, 1, "Minor Illusion", "minor illusion")
+
+	return store.NewStore(db)
+}
+
+// --- the handler-contract tests ----------------------------------------------
+
+func TestViewsView_OK(t *testing.T) {
+	h := readapi.NewViews(seedStore(t), "view")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/views/view", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode view body as JSON array: %v (body=%s)", err, rec.Body.String())
+	}
+	if len(rows) == 0 {
+		t.Fatalf("view returned 0 rows, want >=1")
+	}
+	// The leading Char column is the consolidated-view contract — assert the key.
+	if _, ok := rows[0]["char"]; !ok {
+		t.Fatalf("view row missing \"char\" key; got keys %v", keysOf(rows[0]))
+	}
+	// snake_case enrichment fields the client tooltip consumes.
+	for _, k := range []string{"slot", "item", "id", "count", "wiki_url", "price", "last_synced"} {
+		if _, ok := rows[0][k]; !ok {
+			t.Errorf("view row missing %q key; got keys %v", k, keysOf(rows[0]))
+		}
+	}
+}
+
+func TestViewsGearCheck_OK(t *testing.T) {
+	h := readapi.NewViews(seedStore(t), "gear_check")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/views/gear_check", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode gear_check body as JSON array: %v (body=%s)", err, rec.Body.String())
+	}
+	// gear_check may legitimately be empty (no Velious tier rows seeded), but it
+	// MUST decode as an array, not null/object.
+	if rows == nil {
+		t.Fatalf("gear_check body decoded to nil, want a JSON array")
+	}
+}
+
+func TestViewsSpellCheck_OK(t *testing.T) {
+	h := readapi.NewViews(seedStore(t), "spell_check")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/views/spell_check", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode spell_check body as JSON array: %v (body=%s)", err, rec.Body.String())
+	}
+	if len(rows) == 0 {
+		t.Fatalf("spell_check returned 0 rows, want >=1 (seeded Enchanter spells)")
+	}
+	for _, k := range []string{"char", "class", "level", "spell", "status"} {
+		if _, ok := rows[0][k]; !ok {
+			t.Errorf("spell_check row missing %q key; got keys %v", k, keysOf(rows[0]))
+		}
+	}
+}
+
+func TestViewsBank_OK_CoinNull(t *testing.T) {
+	h := readapi.NewViews(seedStore(t), "bank")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/views/bank", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	// The bank body is an OBJECT {rows:[...], coin:null}, NOT a bare array.
+	var body struct {
+		Rows []map[string]any `json:"rows"`
+		Coin json.RawMessage  `json:"coin"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode bank body as object: %v (body=%s)", err, rec.Body.String())
+	}
+	// coin === null in P14 (ADMIN-05 fills it in P15). Assert the key is present
+	// AND its value is JSON null.
+	if string(body.Coin) != "null" {
+		t.Fatalf("bank coin = %q, want JSON null", string(body.Coin))
+	}
+	if len(body.Rows) == 0 {
+		t.Fatalf("bank returned 0 rows, want >=1 (seeded a bank toon with inventory)")
+	}
+	if _, ok := body.Rows[0]["char"]; !ok {
+		t.Fatalf("bank row missing \"char\" key; got keys %v", keysOf(body.Rows[0]))
+	}
+}
+
+func TestMeta_OK(t *testing.T) {
+	h := readapi.NewMeta(seedStore(t))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/meta", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	var body struct {
+		Characters []struct {
+			Name     string `json:"name"`
+			LastSeen string `json:"last_seen"`
+		} `json:"characters"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode meta body: %v (body=%s)", err, rec.Body.String())
+	}
+	if len(body.Characters) != 2 {
+		t.Fatalf("meta characters = %d, want 2", len(body.Characters))
+	}
+	if body.Characters[0].Name == "" {
+		t.Fatalf("meta character missing name; got %+v", body.Characters[0])
+	}
+	if body.Characters[0].LastSeen == "" {
+		t.Fatalf("meta character missing last_seen; got %+v", body.Characters[0])
+	}
+}
+
+func TestViews_NonGET_405(t *testing.T) {
+	h := readapi.NewViews(seedStore(t), "view")
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, "/api/v1/views/view", nil))
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s status = %d, want 405", method, rec.Code)
+		}
+	}
+}
+
+func TestMeta_NonGET_405(t *testing.T) {
+	h := readapi.NewMeta(seedStore(t))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/meta", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST /meta status = %d, want 405", rec.Code)
+	}
+}
+
+// --- CORS middleware contract -------------------------------------------------
+
+func TestCORS_GET_EchoesExactOrigin(t *testing.T) {
+	inner := readapi.NewViews(seedStore(t), "view")
+	h := readapi.CORS(testOrigin, inner)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/views/view", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (CORS must pass GET through to the handler)", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != testOrigin {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want exact %q", got, testOrigin)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Fatalf("Access-Control-Allow-Origin must never be the wildcard")
+	}
+	if got := rec.Header().Get("Vary"); got != "Origin" {
+		t.Errorf("Vary = %q, want Origin", got)
+	}
+}
+
+func TestCORS_OPTIONS_Preflight204(t *testing.T) {
+	// The inner handler must NOT run on a preflight — use one that fails the test
+	// if invoked, proving the middleware short-circuits OPTIONS.
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("inner handler ran on an OPTIONS preflight; CORS must short-circuit it")
+	})
+	h := readapi.CORS(testOrigin, inner)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodOptions, "/api/v1/views/view", nil))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("OPTIONS status = %d, want 204", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != testOrigin {
+		t.Fatalf("preflight Access-Control-Allow-Origin = %q, want %q", got, testOrigin)
+	}
+	body, _ := io.ReadAll(rec.Body)
+	if len(body) != 0 {
+		t.Fatalf("OPTIONS preflight body = %q, want empty", string(body))
+	}
+}
+
+// keysOf returns the keys of a decoded JSON object for clearer failure messages.
+func keysOf(m map[string]any) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
+}

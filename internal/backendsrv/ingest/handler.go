@@ -49,6 +49,15 @@ import (
 // surfaces as a decode error (mapped to a 4xx) rather than being buffered whole.
 const maxBodyBytes = 1 << 20 // 1 MiB
 
+// minWatcherVersion is the floor below which the backend refuses an ingest with
+// 426 Upgrade Required (SC-5 / CONTEXT D-4). It is the first re-targeted watcher
+// version (v2.0.0, the version that POSTs to /api/v1/ingest instead of writing
+// the Sheet); bump it ONLY on a real breaking API change. The compare is the
+// SemVer-aware ingest.IsOlder (version.go) — the single backend version-compare
+// truth, whose behavior twin is the watcher-side 999.22 fix (Plan 04). An empty
+// watcher_version is NOT measured against this floor (see the gate in ServeHTTP).
+const minWatcherVersion = "2.0.0"
+
 // Handler serves POST /api/v1/ingest. It holds the bearer guard (11-04) and the
 // single-writer *sql.DB (11-02) over which it composes the first-sighting bind
 // (11-03) and the atomic replace (11-03) in ONE transaction. Construct it once
@@ -96,6 +105,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	env, err := DecodeAndValidate(r.Body)
 	if err != nil {
 		h.writeEnvelopeError(w, err)
+		return
+	}
+
+	// [2.5] min-watcher-version gate (SC-5 / D-4). The bearer guard [1] already
+	// ran, so a missing token is 401 (NOT 426). An EMPTY watcher_version is NOT
+	// rejected: the envelope documents the field as "accepted now" (forward-compat
+	// with a legacy/blank version), so only a PRESENT-but-too-old version trips the
+	// 426 — `env.WatcherVersion != ""` is the one intentional exception to
+	// IsOlder's "empty present ⇒ older" rule. This runs BEFORE any store call (it
+	// is post-decode but pre-parse/pre-bind), so a 426 writes NOTHING. The message
+	// is the watcher-facing string the tray mirrors — kept human and reassuring.
+	if env.WatcherVersion != "" && IsOlder(env.WatcherVersion, minWatcherVersion) {
+		slog.Info("ingest rejected", "reason", "watcher_too_old", "ver", env.WatcherVersion, "status", http.StatusUpgradeRequired)
+		http.Error(w, "Your SquireBot is too old for this server; it will auto-update shortly.", http.StatusUpgradeRequired)
 		return
 	}
 
@@ -196,8 +219,10 @@ func (h *Handler) bindAndReplace(r *http.Request, ownerID int64, env Envelope, r
 	}
 
 	// Atomic full-snapshot replace for the bound charID, in the SAME tx. The
-	// watcher_version travels in the envelope (accepted now; gated in P13). On
-	// failure, roll back BOTH the bind and the (partial) replace.
+	// watcher_version travels in the envelope and is stored alongside the rows; a
+	// too-old version was already rejected at the [2.5] gate above, so any version
+	// reaching here is at/above the floor (or intentionally empty). On failure,
+	// roll back BOTH the bind and the (partial) replace.
 	uploadedAt := time.Now().UTC()
 	switch env.Kind {
 	case KindInventory:

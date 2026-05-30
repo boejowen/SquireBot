@@ -1,40 +1,37 @@
 name: release
 
-# Phase 2 release pipeline (Plan 02-08).
+# SquireBot watcher release pipeline.
 #
-# Architecture: LINEAR explicit-step workflow. CI does NOT invoke
-# goreleaser (Pitfall F: a goreleaser-driven CI step would (a) dual-build
-# the binary, (b) complicate the AUTH-03 PRODUCTION gate's interaction
-# with goreleaser's declarative pipeline, and (c) risk clobbering the
-# gate during a future scaffold-regeneration). The .goreleaser.yaml at
-# the repo root exists for local snapshot builds only.
+# Phase 13 (WATCH-09 / D-2): the watcher was re-targeted from Google Sheets to
+# the v2.0 backend ingest API. The Google OAuth/PKCE/Sheets/Drive-Picker stack
+# was deleted and the build bakes in NO Google secret — the OAuth ldflags + the
+# oauth-config.json materialize step + the consent-screen PRODUCTION gate were
+# all removed from this workflow.
+#
+# Architecture: LINEAR explicit-step workflow. CI does NOT invoke goreleaser
+# (Pitfall F: a goreleaser-driven CI step would dual-build the binary and
+# complicate the manifest emission). The .goreleaser.yaml at the repo root
+# exists for local snapshot builds only.
 #
 # What this workflow does (in order):
-#   1. Materialises oauth-config.json from the OAUTH_CONFIG_JSON repo
-#      secret. The local file is gitignored so CI must rebuild it.
-#   2. Refuses to build if consent_screen_status != "PRODUCTION" --
-#      AUTH-03 enforcement at the CI layer (Pitfall #1: Testing-mode
-#      refresh tokens silently expire after 7 days, so a non-Production
-#      release is always a bug). This gate is preserved VERBATIM from
-#      Phase 1; do NOT remove it without a phase-level decision.
-#   3. Builds dist/squirebot.exe with -ldflags injecting the five
-#      build-time vars (OAuthClientID, OAuthClientSecret, PickerAPIKey,
-#      GCPProjectNumber, Version). OAuthClientSecret is required by
-#      Google's token endpoint even for desktop PKCE flows -- see
-#      docs/build-and-install.md "About the client secret".
-#   4. Installs NSIS (verifies version >= 3.10) and runs makensis to
-#      produce dist/SquireBot-Setup-<version>.exe.
-#   5. Computes SHA-256 of BOTH the installer and the bare binary;
-#      writes dist/latest.json -- the Phase 2 manifest the auto-updater
-#      (Plan 02-06 / OPS-04) will consume. Schema includes binary_url +
-#      binary_sha256 in addition to installer_url + installer_sha256.
-#   6. Uploads three artifacts (installer .exe, bare squirebot.exe,
-#      latest.json). On tag push, also creates a GitHub Release using
-#      the canonical action.
+#   1. Builds dist/squirebot.exe with -ldflags injecting ONLY Version (the
+#      watcher build version, sent in every ingest POST + the User-Agent so the
+#      backend's 426 min-version gate can read it) and BackendBaseURL (the
+#      canonical host; the hardcoded build_constants.go default already covers
+#      it, so the ldflag is belt-and-braces).
+#   2. Installs NSIS (verifies version >= 3.10) and runs makensis to produce
+#      dist/SquireBot-Setup-<version>.exe.
+#   3. Computes SHA-256 of BOTH the installer and the bare binary; writes
+#      dist/latest.json — the manifest the in-app auto-updater (OPS-04) consumes.
+#      Schema includes binary_url + binary_sha256 (the auto-updater downloads +
+#      SHA-256-verifies the bare binary before the startup swap) in addition to
+#      installer_url + installer_sha256.
+#   4. Uploads three artifacts (installer .exe, bare squirebot.exe, latest.json).
+#      On tag push, also creates a GitHub Release using the canonical action.
 #
-# Phase 2 still ships unsigned (D-13 inherited from Phase 1). SignPath
-# OSS code-signing (Plan 02-09) will land as an additional workflow
-# step between makensis and Compute SHA-256 -- not via goreleaser.
+# The binary still ships unsigned (D-13). SignPath OSS code-signing will land as
+# an additional workflow step between makensis and Compute SHA-256 — not via
+# goreleaser.
 
 on:
   push:
@@ -59,18 +56,6 @@ jobs:
         with:
           go-version: '1.25'
           check-latest: true
-
-      - name: Materialise oauth-config.json from secret
-        shell: pwsh
-        env:
-          OAUTH_CONFIG_JSON: ${{ secrets.OAUTH_CONFIG_JSON }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:OAUTH_CONFIG_JSON)) {
-            Write-Error "Secret OAUTH_CONFIG_JSON is empty. Populate it from .planning/phases/01-end-to-end-thin-slice/oauth-config.json. See docs/oauth-setup.md for the runbook."
-            exit 1
-          }
-          New-Item -ItemType Directory -Force -Path .planning/phases/01-end-to-end-thin-slice | Out-Null
-          $env:OAUTH_CONFIG_JSON | Out-File -Encoding utf8 -NoNewline .planning/phases/01-end-to-end-thin-slice/oauth-config.json
 
       - name: Install NSIS (>= 3.10)
         shell: pwsh
@@ -125,45 +110,21 @@ jobs:
           "numeric_version=$numericVersion" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
           Write-Host "Building version: $version (NSIS VIProductVersion: $numericVersion)"
 
-      - name: Load OAuth constants from oauth-config.json (AUTH-03 gate)
-        id: oauth
-        shell: pwsh
-        run: |
-          $cfg = Get-Content .planning/phases/01-end-to-end-thin-slice/oauth-config.json -Raw | ConvertFrom-Json
-          # AUTH-03 / Pitfall #1: Testing-mode refresh tokens silently expire
-          # after 7 days. Refuse to ship a release built against a non-
-          # Production consent screen.
-          if ($cfg.consent_screen_status -ne "PRODUCTION") {
-            Write-Error "oauth-config.json consent_screen_status is '$($cfg.consent_screen_status)' -- must be 'PRODUCTION' before release per AUTH-03 / Plan 02. Update the OAUTH_CONFIG_JSON secret after flipping the consent screen."
-            exit 1
-          }
-          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_id))     { Write-Error "oauth_client_id missing -- see docs/oauth-setup.md";     exit 1 }
-          if ([string]::IsNullOrWhiteSpace($cfg.oauth_client_secret)) { Write-Error "oauth_client_secret missing -- Google's token endpoint requires this for desktop PKCE clients; see docs/build-and-install.md 'About the client secret'"; exit 1 }
-          if ([string]::IsNullOrWhiteSpace($cfg.picker_api_key))      { Write-Error "picker_api_key missing -- see docs/oauth-setup.md";     exit 1 }
-          if ([string]::IsNullOrWhiteSpace($cfg.gcp_project_number))  { Write-Error "gcp_project_number missing -- see docs/oauth-setup.md"; exit 1 }
-          "client_id=$($cfg.oauth_client_id)"          | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-          "client_secret=$($cfg.oauth_client_secret)"  | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-          "api_key=$($cfg.picker_api_key)"             | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-          "project_num=$($cfg.gcp_project_number)"     | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-
       - name: Build bare squirebot.exe (pre-NSIS, pre-manifest)
         shell: pwsh
         env:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: '0'
-          OAUTH_CLIENT_ID:     ${{ steps.oauth.outputs.client_id }}
-          OAUTH_CLIENT_SECRET: ${{ steps.oauth.outputs.client_secret }}
-          PICKER_API_KEY:      ${{ steps.oauth.outputs.api_key }}
-          GCP_PROJECT_NUMBER:  ${{ steps.oauth.outputs.project_num }}
         run: |
+          # Phase 13 (D-2): NO Google secret is baked in. Only Version (the 426
+          # gate vector) and BackendBaseURL (belt-and-braces; the hardcoded
+          # build_constants.go default is already https://api.squirebot.quest)
+          # are stamped via -ldflags.
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $ldflags = "-H=windowsgui -s -w " +
-                     "-X main.OAuthClientID=$env:OAUTH_CLIENT_ID " +
-                     "-X main.OAuthClientSecret=$env:OAUTH_CLIENT_SECRET " +
-                     "-X main.PickerAPIKey=$env:PICKER_API_KEY " +
-                     "-X main.GCPProjectNumber=$env:GCP_PROJECT_NUMBER " +
-                     "-X main.Version=${{ steps.ver.outputs.version }}"
+                     "-X main.Version=${{ steps.ver.outputs.version }} " +
+                     "-X main.BackendBaseURL=https://api.squirebot.quest"
           go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
           Get-Item dist/squirebot.exe | Select-Object Name, Length
 
@@ -240,15 +201,17 @@ jobs:
           "installer_sha256=$installerHash" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
           "binary_sha256=$binaryHash"       | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
 
-      - name: Write latest.json (Phase 2 manifest with both URLs)
+      - name: Write latest.json (auto-updater manifest with both URLs)
         shell: pwsh
         run: |
-          # Phase 2 manifest schema (consumed by Plan 02-06 auto-updater):
+          # Manifest schema (consumed by the OPS-04 auto-updater):
           #   { version, installer_url, installer_sha256, binary_url,
           #     binary_sha256, released_at, phase, signed }
           # binary_url is the bare squirebot.exe asset that the in-app
           # auto-updater downloads + SHA-256-verifies before the startup
           # swap. Keep this schema in lockstep with internal/update/manifest.go.
+          # (phase is informational only — left at 2 to avoid churning the
+          # manifest contract; the auto-updater ignores it.)
           $version = "${{ steps.ver.outputs.version }}"
           $owner   = "${{ github.repository_owner }}"
           $repo    = "${{ github.event.repository.name }}"
@@ -295,18 +258,20 @@ jobs:
             dist/squirebot.exe
             dist/latest.json
           body: |
-            SquireBot ${{ steps.ver.outputs.version }} -- Phase 2 unsigned release.
+            SquireBot ${{ steps.ver.outputs.version }} -- v2.0 backend watcher (unsigned).
+
+            This is the re-targeted watcher: it uploads your inventory/spellbook
+            to the SquireBot backend (no Google account, no browser sign-in).
+            On first launch it asks for your guild code via a native dialog.
 
             **Install:** download `SquireBot-Setup-${{ steps.ver.outputs.version }}.exe`,
             double-click, walk through the SmartScreen "More info -> Run anyway"
-            wall (D-13: Phase 2 still ships unsigned; SignPath OSS pending).
-            NSIS wizard installs to `%LOCALAPPDATA%\Programs\SquireBot\` with
-            no UAC prompt.
+            wall (D-13: still ships unsigned; SignPath OSS pending). NSIS wizard
+            installs to `%LOCALAPPDATA%\Programs\SquireBot\` with no UAC prompt.
 
-            **Auto-updater asset:** `squirebot.exe` (bare binary, ~17 MB) is
-            consumed by the in-app auto-updater (OPS-04 / Plan 02-06) via
-            `binary_url` in `latest.json`. End users do NOT download this
-            file directly.
+            **Auto-updater asset:** `squirebot.exe` (bare binary) is consumed by
+            the in-app auto-updater (OPS-04) via `binary_url` in `latest.json`.
+            End users do NOT download this file directly.
 
             See [docs/build-and-install.md](https://github.com/${{ github.repository }}/blob/main/docs/build-and-install.md)
             for the full local-build + smoke instructions.

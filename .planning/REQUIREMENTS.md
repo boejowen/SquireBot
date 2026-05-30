@@ -88,8 +88,8 @@
 | BACKEND-03 | P11 Backend Foundation + Ingest API | 11-03 (tx + bind); 11-05 (HTTP surface) | ✅ Complete (2026-05-29) |
 | BACKEND-04 | P11 Backend Foundation + Ingest API | 11-04 (mint/revoke + guard); 11-05 (HTTP transport) | ✅ Complete (2026-05-29) |
 | BACKEND-06 | P11 Backend Foundation + Ingest API | 11-07 (sqlite3 .backup → R2 via rclone + restore drill) | ✅ Complete (2026-05-29) |
-| ENRICH-10 | P12 Enrichment Job Migration | (filled by `/gsd-plan-phase 12`) | Pending |
-| ENRICH-11 | P12 Enrichment Job Migration | (filled by `/gsd-plan-phase 12`) | Pending |
+| ENRICH-10 | P12 Enrichment Job Migration | 12-01 (00003 migration + `pigparse_price` upsert store method + `job_run`/`etag_cache` cursors — foundation); 12-02/03/04/05 (parser, politeFetch, daily job, scheduler) | In progress (store layer done 2026-05-29; the scheduled job lands in 12-04/12-05) |
+| ENRICH-11 | P12 Enrichment Job Migration | 12-01 (00003 migration + `wiki_spells`/`wiki_gear_tier`/`item_master`/`quest_items` store methods + cursors — foundation); 12-02/03/04/05 (parsers, politeFetch, weekly job, scheduler) | In progress (store layer done 2026-05-29; the scheduled job lands in 12-04/12-05) |
 | WATCH-08 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
 | WATCH-09 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |
 | WATCH-10 | P13 Watcher Re-Target + Onboarding | (filled by `/gsd-plan-phase 13`) | Pending |

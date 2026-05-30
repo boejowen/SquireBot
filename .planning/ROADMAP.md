@@ -63,7 +63,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 
 **Schema-evolution change:** the old `_meta.schema_version` ↔ `WatcherMaxSchemaVersion` handshake **retires** in favour of forward-only `goose` DB migrations + an explicit **API version** (`/api/v1/...`). The watcher's Sheets schema gate is removed in P13.
 
-- [ ] **Phase 11: Backend Foundation + Ingest API** - Hetzner Cloud VPS (US) + Caddy auto-HTTPS live; SQLite schema with `goose`; bearer-token auth; the upload-receiving endpoint. *Front-loaded so guild data can flow again ASAP.*
+- [x] **Phase 11: Backend Foundation + Ingest API** - Hetzner Cloud VPS (US) + Caddy auto-HTTPS live; SQLite schema with `goose`; bearer-token auth; the upload-receiving endpoint. *Front-loaded so guild data can flow again ASAP.* ✅ 2026-05-29
 - [ ] **Phase 12: Enrichment Job Migration** - daily PigParse pull + weekly P1999 wiki scrape run as in-process scheduled jobs, parsers and `politeFetch` controls carried over.
 - [ ] **Phase 13: Watcher Re-Target + Onboarding** - watcher uploads to the backend HTTP API; all Google OAuth/Sheets/Picker machinery deleted; "paste your guild code" onboarding shipped via the existing auto-updater.
 - [ ] **Phase 14: Web Frontend** - SvelteKit static app + read API; the 4 views as a reusable filterable/sortable data grid; client-side search + "did you mean?"; rich HTML tooltips; EQ theming.
@@ -88,8 +88,8 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 - [x] 11-03-PLAN.md — parser port to UTF-8 content (A1) + atomic full-snapshot replace tx + first-sighting bind/cross-owner reject (BACKEND-03). ✅ 2026-05-29
 - [x] 11-04-PLAN.md — bearer guard (SHA-256 + `crypto/subtle` constant-time compare) + mint/revoke CLI logic, hash-only `guild_code` storage (BACKEND-04); stdlib-only, verdict-agnostic, no PocketBase coupling. ✅ 2026-05-29
 - [x] 11-05-PLAN.md — POST /api/v1/ingest handler (guard-first, one-tx bind+replace via 11-03's *sql.Tx fns) + cmd/squirebot-server (serve/mint-code/revoke-code, goose.Up on startup) + time.Ticker scheduler skeleton; HAND-ROLLED net/http (FALLBACK verdict), PocketBase dep + spike tree removed; static linux/amd64 cross-compile verified (BACKEND-01/03/04). ✅ 2026-05-29
-- [ ] 11-06-PLAN.md — Hetzner VPS provisioning + Cloud Firewall + ufw + Caddy + systemd + cross-compile deploy (on-box; BACKEND-01)
-- [ ] 11-07-PLAN.md — nightly sqlite3 .backup -> Cloudflare R2 via rclone + restore drill + ship-gate smoke (on-box; BACKEND-06)
+- [x] 11-06-PLAN.md — Hetzner VPS + ufw + Caddy auto-HTTPS + systemd + cross-compile deploy; LIVE at api.squirebot.quest with a valid Let's Encrypt cert, reboot-survival verified (BACKEND-01). ✅ 2026-05-29
+- [x] 11-07-PLAN.md — nightly sqlite3 .backup → Cloudflare R2 via rclone (cron) + drilled restore + ship-gate smoke PASSED (authed POST 204, unauth 401, row queried back) (BACKEND-06). ✅ 2026-05-29
 **UI hint**: no (backend/infrastructure only; no frontend in this phase)
 **Decision — PocketBase spike (optional, 1 day, at phase start):** finding 01 §Recommendation flags PocketBase (open-source single Go binary = SQLite + auth + REST + admin UI) as almost exactly this design, pre-built. A 1-day spike at the start of P11 could compress P11 **and** P15 by ~5–8 days. Evaluate self-hosted PocketBase on the same Hetzner VPS before committing to a hand-rolled Go server; if its auth/extension model fits the bearer-token + enrichment-hook needs, prefer it; if it chafes, the hand-rolled Go server is the fallback. Either way the host (Hetzner Cloud VPS) + DB (SQLite) decisions stand. Capture the verdict in the phase CONTEXT.
 **Ship gate**: server accepts a real test upload over TLS and the row is queryable back out.
@@ -176,7 +176,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 11. Backend Foundation + Ingest API | v2.0 | 5/7 | 🚧 In Progress | - |
+| 11. Backend Foundation + Ingest API | v2.0 | 7/7 | ✅ Complete | 2026-05-29 |
 | 12. Enrichment Job Migration | v2.0 | 0/TBD | Not started | - |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 0/TBD | Not started | - |
 | 14. Web Frontend | v2.0 | 0/TBD | Not started | - |

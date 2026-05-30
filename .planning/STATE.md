@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-29T22:32:00.000Z"
-last_activity: 2026-05-29 -- Plan 11-05 complete (POST /api/v1/ingest handler + cmd/squirebot-server entrypoint + scheduler skeleton; BACKEND-01/03/04 wiring; PocketBase dep + spike tree removed)
+last_updated: "2026-05-29T23:55:00.000Z"
+last_activity: 2026-05-29 -- Phase 11 COMPLETE (7/7): backend LIVE over HTTPS on Hetzner VPS; ship-gate PASSED; nightly R2 backup + drilled restore; verifier 5/5 (BACKEND-01/02/03/04/06)
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 5
-  percent: 71
+  completed_plans: 7
+  percent: 100
 ---
 
 # State: SquireBot
@@ -29,10 +29,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 ## Current Position
 
-Phase: 11 — Backend Foundation + Ingest API (in progress)
-Plan: 11-05 complete (5/7) → next 11-06 (deploy: Hetzner provisioning + Caddy + systemd + TLS + firewall + DNS A-record)
-Status: Executing — BACKEND-01 (single-binary + in-process-scheduler half) / BACKEND-03 (HTTP delivery) / BACKEND-04 (401-writes-nothing wiring) done at the build/test tier. `cmd/squirebot-server` is a runnable single Go binary dispatching serve|mint-code|revoke-code, running goose.Up on startup, serving `POST /api/v1/ingest` on loopback (127.0.0.1:8090) with a time.Ticker scheduler skeleton — all HAND-ROLLED net/http (11-01 FALLBACK verdict), PocketBase dep + `spike/` tree REMOVED (go mod tidy clean). The handler composes the pieces in load-bearing order: MaxBytesReader body cap → bearer guard FIRST (401 + RETURN before any store call) → envelope validate (4xx) → UTF-8 parse → first-sighting bind + atomic replace in ONE *sql.Tx → 204; cross-owner → 409 (audit row committed). Reuses 11-03's *sql.Tx bind+replace via exported Tx wrappers (single tested SQL path; no inline SQL in handler.go). Static linux/amd64 cross-compile verified (ELF). Full `go test ./...` green (no v1 watcher regression); no Google dep anywhere (`go list -deps` = 0).
-Last activity: 2026-05-29 -- Plan 11-05 complete (POST /api/v1/ingest + cmd/squirebot-server + scheduler skeleton; BACKEND-01/03/04 wiring; PocketBase removed)
+Phase: 11 — Backend Foundation + Ingest API (✅ COMPLETE 7/7, 2026-05-29)
+Plan: all 7 complete → next: Phase 12 (Enrichment Job Migration; depends on P11 ✅)
+Status: Phase 11 COMPLETE — the v2.0 backend is LIVE at https://api.squirebot.quest (Hetzner Cloud VPS, US/amd64, 5.78.232.85): single static Go binary behind Caddy auto-HTTPS (valid Let's Encrypt cert), systemd Restart=always (reboot-survival verified), ufw 22/80/443 (8090 loopback-only), goose schema v2 (all 12 D-13 tables). Ship-gate PASSED end-to-end: authed POST /api/v1/ingest over TLS → 204, unauth → 401-writes-nothing, row queried back with first-sighting owner-bind. Nightly off-box backup to Cloudflare R2 (sqlite3 .backup → gzip → rclone, cron 0 4 via /etc/cron.d/squirebot-backup) + a drilled restore that reconstitutes the DB. PocketBase rejected (11-01 verdict = HAND-ROLLED Go); spike + dep removed. Full `go test ./...` green (no v1 watcher regression). Verifier: passed 5/5 must-haves. BACKEND-01/02/03/04/06 all ✅. The ~12 guildies have a live authenticated ingest target again — the watcher re-target onto it is P13.
+Last activity: 2026-05-29 -- Phase 11 COMPLETE; backend deployed live to Hetzner + ship-gate passed + R2 backup wired
 
 ### v2.0 Phase Plan (2026-05-28)
 

@@ -122,7 +122,17 @@ async function getJSON<T>(path: string, fetchFn: typeof fetch = fetch): Promise<
 	if (!res.ok) {
 		throw new ApiError(`unexpected ${res.status} fetching ${path}`, res.status);
 	}
-	return (await res.json()) as T;
+	// A 2xx body that isn't valid JSON (e.g. an interposing proxy/Cloudflare
+	// error page served with 200, or an empty body) makes res.json() reject with
+	// a raw SyntaxError that is NOT an ApiError — it would escape the fetch
+	// try/catch above and break the ApiError contract every caller relies on
+	// (status classification, the +page.svelte error state). Wrap the parse so a
+	// malformed body surfaces as a branded ApiError carrying the real status.
+	try {
+		return (await res.json()) as T;
+	} catch {
+		throw new ApiError(`malformed JSON from ${path}`, res.status);
+	}
 }
 
 // --- Public wrappers (one per pinned endpoint) ---------------------------

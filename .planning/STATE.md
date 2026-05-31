@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T03:35:00.000Z"
-last_activity: "2026-05-31 -- Phase 15 EXECUTED (5/5 plans, build+verify local): all suites green; code-review (2 BLOCKER + 7 WARNING + INFO) ALL fixed (172 web tests, +7 blocker regressions); verification human_needed 5/5 must-haves (no gaps); 15-HUMAN-UAT.md tracks the deferred deploy/visual smokes. Did NOT auto-advance -- P16 blocked on the P15 live deploy."
+last_updated: "2026-05-31T07:05:00.000Z"
+last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE to the VPS (binary + 00004 migration to v4 + DISCORD_* systemd EnvironmentFile + new frontend bundle + owner-floor seeded as broccolifart; Discord login verified end-to-end; demo char Demoknight loaded). THEN quick task 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) done LOCALLY -- redeploy pending to push 2qk live."
 progress:
   total_phases: 6
   completed_phases: 5
@@ -148,6 +148,14 @@ All locked decisions live in `PROJECT.md` Key Decisions table and the per-milest
 ### Active Blockers
 
 None. Roadmap created; Phase 11 ready to plan.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260531-2qk | Uncap bank-coin gold/silver/copper (free non-negative integers, both layers) + link header wordmark to home | 2026-05-31 | bcfd353 | [260531-2qk](./quick/260531-2qk-uncap-bank-coin-gold-silver-copper-link-/) |
+
+> Note: 260531-2qk is committed LOCALLY only — it needs the VPS redeploy (backend binary for coin.go + frontend bundle for coin.ts/SiteShell) to go live.
 
 ## Session Continuity
 

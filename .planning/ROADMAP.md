@@ -67,7 +67,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 - [x] **Phase 12: Enrichment Job Migration** - daily PigParse pull + weekly P1999 wiki scrape run as in-process scheduled jobs, parsers and `politeFetch` controls carried over. ✅ 2026-05-29
 - [x] **Phase 13: Watcher Re-Target + Onboarding** - watcher uploads to the backend HTTP API; all Google OAuth/Sheets/Picker machinery deleted; "paste your guild code" onboarding shipped via the existing auto-updater. ✅ Complete 2026-05-30 (4/4; binary 57% smaller, Google-free, SemVer pre-release auto-update twin in place).
 - [x] **Phase 14: Web Frontend** - SvelteKit static app + read API; the 4 views as a reusable filterable/sortable data grid; client-side search + "did you mean?"; rich HTML tooltips; EQ theming. ✅ Complete 2026-05-30 (4/4; verification human_needed — 6/6 must-haves code-verified incl. WEB-02 Go parity tests + 60 web tests; code-review 0 Critical, WR-01 fixed d14e4ab). Deploy (server binary + Cloudflare Pages `app.squirebot.quest`) + 5 visual UAT items pending in 14-HUMAN-UAT.md.
-- [ ] **Phase 15: Admin Web Forms + Login** - Discord OAuth2 login gated on guild Discord membership; eviction, bank-coin, and admin-management as authenticated web forms. **Code-complete 2026-05-31 (5/5 plans, local build+verify; AUTH-08/09 + ADMIN-04/05/06 satisfied). Live deploy + login/evict/coin smokes remain a deferred separate step before the phase fully closes.**
+- [ ] **Phase 15: Admin Web Forms + Login** - Discord OAuth2 login gated on guild Discord membership; eviction, bank-coin, and admin-management as authenticated web forms. **Code-complete + locally verified 2026-05-31 (5/5 plans, local build+verify; AUTH-08/09 + ADMIN-04/05/06 satisfied; verification human_needed 5/5 must-haves, no gaps). Code review (2 BLOCKER + 7 WARNING + INFO) all fixed — incl. the two node-only-suite-invisible blockers (now regression-covered) + the WR-05 owner-floor fail-open→fail-closed fix; full Go + 172 web tests green. Live deploy + 7 login/evict/coin/visual smokes (15-HUMAN-UAT.md) remain a deferred separate step before the phase fully closes; P16 is blocked on that deploy.**
 - [ ] **Phase 16: Cutover + Decommission** - shadow-mode soak alongside the live Sheet (1–2 wk), one-time human-data backfill, one coordinated watcher self-update flip, then decommission the Sheet + Apps Script + Google OAuth client.
 
 ## Phase Details
@@ -191,15 +191,15 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
-| v2.0 | 6 | 13/TBD | 🚧 In progress | — |
+| v2.0 | 6 | 25/TBD | 🚧 In progress (P11–15 code-complete; P15 + P16 deploy/cutover pending) | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Backend Foundation + Ingest API | v2.0 | 7/7 | ✅ Complete | 2026-05-29 |
 | 12. Enrichment Job Migration | v2.0 | 5/5 | ✅ Complete | 2026-05-29 |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 4/4 | ✅ Complete | 2026-05-30 |
-| 14. Web Frontend | v2.0 | 3/4 | 🔧 In progress | - |
-| 15. Admin Web Forms + Login | v2.0 | 5/5 | 🔧 Code-complete (live deploy deferred) | - |
+| 14. Web Frontend | v2.0 | 4/4 | ✅ Complete (deployed live) | 2026-05-30 |
+| 15. Admin Web Forms + Login | v2.0 | 5/5 | 🔧 Code-complete + verified 5/5 (deploy + 7 UAT smokes deferred) | - |
 | 16. Cutover + Decommission | v2.0 | 0/TBD | Not started | - |
 
 ## Backlog

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T03:11:00.000Z"
-last_activity: 2026-05-31
+last_updated: "2026-05-31T03:35:00.000Z"
+last_activity: "2026-05-31 -- Phase 15 EXECUTED (5/5 plans, build+verify local): all suites green; code-review (2 BLOCKER + 7 WARNING + INFO) ALL fixed (172 web tests, +7 blocker regressions); verification human_needed 5/5 must-haves (no gaps); 15-HUMAN-UAT.md tracks the deferred deploy/visual smokes. Did NOT auto-advance -- P16 blocked on the P15 live deploy."
 progress:
   total_phases: 6
   completed_phases: 5
@@ -29,8 +29,16 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 ## Current Position
 
-Phase: 15 (Admin Web Forms + Login) — CODE-COMPLETE (5/5 plans; live deploy is the deferred separate step)
+Phase: 15 (Admin Web Forms + Login) — CODE-COMPLETE + LOCALLY VERIFIED (5/5 plans; 5/5 must-haves; code-review BLOCKERs fixed). Live deploy + 7 UAT smokes (15-HUMAN-UAT.md) are the deferred separate step; P16 (Cutover) is blocked on that deploy. Did NOT auto-advance (build-only directive).
 Plan: 5 of 5 — complete
+
+### Phase 15 execution-run outcome (2026-05-31, /gsd-execute-phase 15)
+- **Executed** all 5 plans sequentially (one plan per wave, on master, no worktrees). 21 task commits + 10 fix commits.
+- **15-02 checkpoint** resolved "build-only" per directive — built + httptest-faked; live login smoke deferred.
+- **Code review (standard, 37 source files):** 2 BLOCKER + 7 WARNING + 5 INFO. User chose "fix everything" → 13/14 fixed (IN-01 was a no-op), 10 atomic `fix(15)` commits. The 2 BLOCKERs (BankCoinForm number-input crash; eviction epoch-seconds date) were invisible to the node-only suite — each now carries a node-only regression. WR-05 owner-floor guard flipped fail-open→fail-closed. Artifacts: 15-REVIEW.md + 15-REVIEW-FIX.md (uncommitted, commit_docs:false).
+- **Verification:** human_needed, 5/5 must-haves verified against live source (no gaps). human_needed is solely the deploy/visual smokes. 15-VERIFICATION.md written.
+- **Suites at close:** Go build + linux/amd64 cross-compile + vet + `go test ./...` all green; web `npm run check` 0/0, 172/172 vitest, `npm run build` OK.
+- **Deferred to deploy (a deliberate separate step):** systemd `DISCORD_*` secrets, `00004` on the live DB, `set-owner-floor` seed, and the 7 live/visual smokes in 15-HUMAN-UAT.md.
 
 ### Phase 15 execution directives (user-set 2026-05-30, honor on /gsd-execute-phase 15)
 

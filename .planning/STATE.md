@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
-status: verifying
-last_updated: "2026-05-30T20:58:21.480Z"
-last_activity: "2026-05-30 -- Phase 14 COMPLETE: all 4 plans executed + verified (human_needed, no code gaps) + code-reviewed (WR-01 fixed d14e4ab). Deploy + human UAT are the remaining operational steps."
+status: planned
+last_updated: "2026-05-30T22:39:09.466Z"
+last_activity: "2026-05-30 -- Phase 15 PLANNED: 5 plans (15-01..15-05), RESEARCH+PATTERNS, verification PASS (5/5 reqs, 12/12 decisions, ASVS-L1 safety); ready to execute. 15-02 autonomous:false pending Discord app provisioning."
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 20
+  total_plans: 25
   completed_plans: 20
-  percent: 100
+  percent: 80
 ---
 
 # State: SquireBot
@@ -23,16 +23,16 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — now delivered via a self-hosted website instead of the Google Sheet.
-- **Current focus:** Phase 15 — Admin Web Forms + Login (next). Phase 14 (Web Frontend) code-complete + automated-verified + **DEPLOYED LIVE 2026-05-30** (https://squirebot.quest). **Deploy = Caddy on the VPS at the apex `https://squirebot.quest`** (deviation from the planned Cloudflare Pages `app.` subdomain — lower friction, one control plane, keeps the P15 same-origin option open). Backend `defaultCORSOrigin` → `https://squirebot.quest` (commit 277a322); `api.squirebot.quest` unchanged (watchers hardcode it). Remaining: per-character views empty until guildie watcher uploads — visual/data UAT walkable then (14-HUMAN-UAT.md).
+- **Current focus:** Phase 15 — Admin Web Forms + Login — **CONTEXT + UI-SPEC done 2026-05-30** (`15-CONTEXT.md` + `15-UI-SPEC.md`; 4 gray areas decided, UI checker 6/6 PASS). Next: `/gsd-plan-phase 15`. Phase 14 (Web Frontend) code-complete + automated-verified + **DEPLOYED LIVE 2026-05-30** (https://squirebot.quest). **Deploy = Caddy on the VPS at the apex `https://squirebot.quest`** (deviation from the planned Cloudflare Pages `app.` subdomain — lower friction, one control plane, keeps the P15 same-origin option open). Backend `defaultCORSOrigin` → `https://squirebot.quest` (commit 277a322); `api.squirebot.quest` unchanged (watchers hardcode it). Remaining: per-character views empty until guildie watcher uploads — visual/data UAT walkable then (14-HUMAN-UAT.md).
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: 14 (web-frontend) — ✅ COMPLETE (4/4 plans; verification human_needed — code-complete + automated-verified, deploy + visual UAT pending). NEXT: Phase 15 (Admin Web Forms + Login).
-Plan: 4 of 4 complete (14-01 compute/data + 14-02 logic/theme ports + 14-03 read handlers/CORS + 14-04 wired UI)
-Status: Phase 14 verified human_needed — 6/6 must-haves code-verified (Go whole-repo suite + 60 web tests green; WEB-02 Go parity table-tests translated from v1 vitest fixtures pass; `npm run build` emits the static site). Code review: 0 Critical / 4 Warning / 5 Info — WR-01 (wiki-URL `safeHttpUrl` scheme allow-list) fixed in d14e4ab; WR-02/03/04 + Info deferred to optional `/gsd-code-review-fix 14`. **DEPLOYED LIVE 2026-05-30** — frontend at `https://squirebot.quest` (Caddy on the VPS at the apex; valid Let's Encrypt cert; the original ERR_SSL_VERSION_OR_CIPHER_MISMATCH resolved by repointing the apex DNS off Porkbun parking) + the P14 binary on the box (`/api/v1/meta` + `/api/v1/views/*` → 200, CORS = exactly-one `https://squirebot.quest`, preflight 204, DG-1 clean); rollback `.bak` kept for binary + Caddyfile. Per-character views are empty (`characters:[]`) until guildies' re-targeted (P13) watchers upload. **Human UAT COMPLETE 2026-05-30 — all 5/5 PASS** (user-confirmed over demo data `Demoknight`; the walk found + fixed the WEB-04 wiki-link gap, commit `f12ad9b`: links now name-derived at render time). Demo char `Demoknight` + the `demo-remove-me` code were REMOVED 2026-05-30 (prod clean — `chars=0`, all views empty, ready for real guildie uploads; one pre-existing **disabled** `VerifyP13` P13-verify code remains, inert). Phase 14 fully closed: code + automated-verify + deploy (squirebot.quest) + human-UAT + code-review + security all green.
-Last activity: 2026-05-30 -- Phase 14 COMPLETE: all 4 plans executed + verified (human_needed, no code gaps) + code-reviewed (WR-01 fixed d14e4ab). Deploy + human UAT are the remaining operational steps.
+Phase: 15 (admin-web-forms-login) -- PLANNED 2026-05-30: 5 plans (15-01..15-05, waves 1-5) + RESEARCH + PATTERNS; verification PASS (5/5 reqs, 12/12 decisions D-01..D-12, ASVS-L1 safety surface, Discord-provisioning checkpoint). NEXT: /gsd-execute-phase 15 -- provision the Discord app first; 15-02 is autonomous:false on it. (Phase 14 COMPLETE + LIVE https://squirebot.quest.)
+Plan: Phase 15 = 5 of 5 plans written, 0 executed (15-01 schema/store; 15-02 OAuth/session/CORS/owner-floor CLI [autonomous:false]; 15-03 eviction/coin/admin enforcement + archive; 15-04 auth gate + ConfirmDialog; 15-05 the three forms).
+Status: Ready to execute
+Last activity: 2026-05-30 -- Phase 15 planning complete
 
 ### v2.0 Phase Plan (2026-05-28)
 

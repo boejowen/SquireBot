@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
@@ -351,6 +352,40 @@ func TestCORS_OPTIONS_Preflight204(t *testing.T) {
 	body, _ := io.ReadAll(rec.Body)
 	if len(body) != 0 {
 		t.Fatalf("OPTIONS preflight body = %q, want empty", string(body))
+	}
+}
+
+// TestCORS_Credentials_OnGETandPreflight proves the P15 credential-aware upgrade
+// (D-05 / T-15-10): the credentialed cross-subdomain cookie requires
+// Access-Control-Allow-Credentials:true on BOTH the actual response and the
+// preflight, the origin must be the EXACT origin (never "*", which the browser
+// rejects with credentials), and POST must be allowed (15-03 write forms).
+func TestCORS_Credentials_OnGETandPreflight(t *testing.T) {
+	inner := readapi.NewViews(seedStore(t), "view")
+	h := readapi.CORS(testOrigin, inner)
+
+	// Actual GET.
+	getRec := httptest.NewRecorder()
+	h.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/api/v1/views/view", nil))
+	if got := getRec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Errorf("GET Access-Control-Allow-Credentials = %q, want true", got)
+	}
+	if got := getRec.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Errorf("GET Access-Control-Allow-Origin must never be the wildcard with credentials")
+	}
+	if got := getRec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "POST") {
+		t.Errorf("GET Access-Control-Allow-Methods = %q, want it to include POST", got)
+	}
+
+	// Preflight OPTIONS — credentials header REQUIRED here too.
+	optRec := httptest.NewRecorder()
+	preInner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	readapi.CORS(testOrigin, preInner).ServeHTTP(optRec, httptest.NewRequest(http.MethodOptions, "/api/v1/views/view", nil))
+	if got := optRec.Header().Get("Access-Control-Allow-Credentials"); got != "true" {
+		t.Errorf("preflight Access-Control-Allow-Credentials = %q, want true", got)
+	}
+	if got := optRec.Header().Get("Access-Control-Allow-Origin"); got == "*" {
+		t.Errorf("preflight Access-Control-Allow-Origin must never be the wildcard with credentials")
 	}
 }
 

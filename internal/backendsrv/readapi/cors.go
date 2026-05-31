@@ -9,13 +9,15 @@ package readapi
 // is the only cross-origin control in P14 (the data is intentionally public per
 // D-04; P15's Discord login walls it).
 //
-// SECURITY (T-14.03-01): the allow-origin is the EXACT locked origin, never a
-// wildcard — a wildcard leaks the data to any site and, combined with
+// SECURITY (T-14.03-01 / T-15-10): the allow-origin is the EXACT locked origin,
+// never a wildcard — a wildcard leaks the data to any site and, combined with
 // Access-Control-Allow-Credentials, is an outright spec violation the browser
-// rejects. We deliberately do NOT set Access-Control-Allow-Credentials in P14
-// (there are no cookies/sessions yet), so echoing the exact origin keeps the P15
-// credentialed upgrade a one-line change (a wildcard could never carry
-// credentials). `Vary: Origin` keeps any shared cache from serving one origin's
+// rejects. P15 (D-05) turned the read API into a members-only surface: the
+// session rides a cross-subdomain httpOnly cookie, so this middleware now ALSO
+// sets Access-Control-Allow-Credentials:true (on both the actual response and
+// the preflight) and admits POST for the write forms. Echoing the exact origin
+// is what makes that credentialed upgrade safe — a wildcard could never carry
+// credentials. `Vary: Origin` keeps any shared cache from serving one origin's
 // CORS decision to another.
 //
 // DEPLOY-TIME VERIFICATION (Pitfall 5 / T-14.03-06): CORS is set ONCE, here in
@@ -36,11 +38,24 @@ import "net/http"
 func CORS(allowOrigin string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", allowOrigin) // exact origin, never a wildcard
+		// P15 (D-05 / T-15-10): the session cookie rides cross-subdomain
+		// (squirebot.quest -> api.squirebot.quest, same registrable domain) on
+		// credentialed fetches, so the API MUST advertise Allow-Credentials:true.
+		// This is REQUIRED on BOTH the actual response AND the preflight, so it is
+		// set BEFORE the OPTIONS short-circuit below. The wildcard-origin +
+		// credentials combination is an outright spec violation the browser
+		// rejects — which is exactly why the allow-origin above is the EXACT
+		// locked origin, never a wildcard.
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		// POST added for the P15 write forms (bank-coin / eviction / admin-mgmt).
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		// Sessions ride the httpOnly cookie, NOT an Authorization header, so the
+		// allowed request headers stay Content-Type only (no custom auth header).
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		// Preflight: answer before the handler body, no content. The headers above
-		// are already written, so the browser sees the allow decision on the 204.
+		// (incl. Allow-Credentials) are already written, so the browser sees the
+		// full allow decision on the 204.
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

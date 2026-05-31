@@ -42,7 +42,7 @@
 
 <div class="site-shell">
 	<header class="shell-header">
-		<span class="wordmark">SquireBot</span>
+		<a href="/" class="wordmark">SquireBot</a>
 		<div class="shell-controls">
 			{#if session?.isOfficer}
 				<!-- Officer-only Admin nav (Layer-1 UX suppression; /admin lands in
@@ -92,6 +92,12 @@
 		line-height: 1.2;
 		color: var(--accent);
 		letter-spacing: 0.02em;
+		text-decoration: none; /* it's an <a href="/"> home link — no underline (looks identical to the old span) */
+	}
+	.wordmark:focus-visible {
+		/* Keyboard accessibility, consistent with .admin-nav. */
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 	.shell-controls {
 		display: inline-flex;

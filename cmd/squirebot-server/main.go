@@ -329,6 +329,13 @@ func runServe(args []string) int {
 	mux.Handle("GET /api/v1/coin/bank-toons", webauth.RequireSession(db, webadmin.BankToonsHandler(db)))
 	mux.Handle("POST /api/v1/coin", webauth.RequireSession(db, webadmin.CoinSetHandler(db)))
 
+	// Char-meta — LOGIN-ONLY (D-03): RequireSession. Any signed-in member sets any
+	// existing character's class/level/race/is_bank_toon (non-sensitive shared data,
+	// the bank-coin precedent). NEVER RequireOfficer — the officer-only block is
+	// above (lines 319-326); char-meta belongs with the login-only coin block.
+	mux.Handle("GET /api/v1/char/meta-list", webauth.RequireSession(db, webadmin.CharMetaListHandler(db)))
+	mux.Handle("POST /api/v1/char/meta", webauth.RequireSession(db, webadmin.CharMetaSetHandler(db)))
+
 	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
 	// route (D-04). P15 made CORS credential-aware (Access-Control-Allow-Credentials:
 	// true + POST) so the cross-subdomain session cookie rides the credentialed

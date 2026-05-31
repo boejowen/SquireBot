@@ -82,13 +82,20 @@ type WikiSpellRow struct {
 // CharMeta is one character's identity + metadata (class/level/race nullable in
 // the schema → resolved to zero-values). Consumed by compute.GearCheck and
 // compute.SpellCheck (which filter on class/level/race themselves so missing
-// metadata is observable, mirroring the v1 builders).
+// metadata is observable, mirroring the v1 builders). It ALSO crosses the API
+// boundary as the char-meta form's pick-list/pre-fill payload (P16 CharMetaListHandler),
+// so it carries snake_case JSON tags matching the frontend CharMetaItem interface;
+// the compute consumers use field access (not JSON), unaffected by the tags.
+//
+// IsBankToon was added at the right edge (extend-only) for the form's pre-fill —
+// CharsWithMeta selects it; the compute consumers ignore the extra field.
 type CharMeta struct {
-	ID    int64
-	Name  string
-	Class string
-	Level int64
-	Race  string
+	ID         int64  `json:"character_id"`
+	Name       string `json:"name"`
+	Class      string `json:"class"`
+	Level      int64  `json:"level"`
+	Race       string `json:"race"`
+	IsBankToon bool   `json:"is_bank_toon"`
 }
 
 // InvSlotItem is one inventory_item row reduced to the fields gear_check's
@@ -278,7 +285,7 @@ func (s *Store) WikiSpells(ctx context.Context) ([]WikiSpellRow, error) {
 // read all char rows and skip the metadata-less ones in the builder body).
 func (s *Store) CharsWithMeta(ctx context.Context) ([]CharMeta, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, class, level, race
+		`SELECT id, name, class, level, race, is_bank_toon
 		 FROM character
 		 WHERE is_removed = 0
 		 ORDER BY name`)
@@ -290,17 +297,19 @@ func (s *Store) CharsWithMeta(ctx context.Context) ([]CharMeta, error) {
 	var out []CharMeta
 	for rows.Next() {
 		var (
-			c     CharMeta
-			class sql.NullString
-			level sql.NullInt64
-			race  sql.NullString
+			c          CharMeta
+			class      sql.NullString
+			level      sql.NullInt64
+			race       sql.NullString
+			isBankToon int
 		)
-		if err := rows.Scan(&c.ID, &c.Name, &class, &level, &race); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &class, &level, &race, &isBankToon); err != nil {
 			return nil, fmt.Errorf("scan char meta row: %w", err)
 		}
 		c.Class = class.String
 		c.Level = level.Int64
 		c.Race = race.String
+		c.IsBankToon = isBankToon == 1
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {

@@ -28,6 +28,15 @@ var CLASSES = []string{
 	"ROG", "SHM", "NEC", "WIZ", "MAG", "ENC",
 }
 
+// RACES is the canonical ordered list of the 14 P1999 race abbreviations,
+// ported verbatim from eq-constants.ts (`RACES`). Used for char-meta server-side
+// validation; the frontend <select> mirrors it. ("IKS" is load-bearing — compute/
+// gearcheck.go keys the Iksar gear tier on this exact literal.)
+var RACES = []string{
+	"HUM", "BAR", "ERU", "ELF", "HIE", "DEF", "HEF", "DWF",
+	"TRL", "OGR", "HFL", "GNM", "IKS", "VAH",
+}
+
 // CLASS_DISPLAY_TO_ABBREV maps a wiki class display name (e.g. "Necromancer")
 // to its 3-letter abbreviation. Used by the spell + gear-tier parsers when
 // normalizing class names from wiki page section headers. Ported verbatim from

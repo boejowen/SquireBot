@@ -294,6 +294,30 @@ export interface SaveCoinResult {
 	coin: Coin;
 }
 
+/**
+ * A char-meta row (`GET /api/v1/char/meta-list` element) — every existing
+ * (non-removed) character with its current metadata (P16 / CUTOVER-02). The
+ * char-meta form pre-fills from these. `level` is null where unset; `class`/`race`
+ * are '' where unset (the Go zero-values). Mirrors BankToon.
+ */
+export interface CharMetaItem {
+	character_id: number;
+	name: string;
+	class: string;
+	level: number | null;
+	race: string;
+	is_bank_toon: boolean;
+}
+
+/** The `POST /api/v1/char/meta` reply: the character name + the persisted metadata. */
+export interface SaveCharMetaResult {
+	character: string;
+	class: string;
+	level: number | null;
+	race: string;
+	is_bank_toon: boolean;
+}
+
 /** An officer entry (`officers[]`). `is_floor` marks the un-removable owner-floor. */
 export interface Officer {
 	discord_user_id: string;
@@ -392,6 +416,19 @@ export function saveCoin(
 	fetchFn: typeof fetch = fetch
 ): Promise<SaveCoinResult> {
 	return postJSON<SaveCoinResult>('/api/v1/coin', body, fetchFn);
+}
+
+/** GET /api/v1/char/meta-list → CharMetaItem[] ([] when none). Login-only (D-03). */
+export function fetchCharsForMeta(fetchFn: typeof fetch = fetch): Promise<CharMetaItem[]> {
+	return getJSON<CharMetaItem[]>('/api/v1/char/meta-list', fetchFn);
+}
+
+/** POST /api/v1/char/meta → { character, class, level, race, is_bank_toon }. Login-only (D-03). */
+export function saveCharMeta(
+	body: { character_id: number; class: string; level: number | null; race: string; is_bank_toon: boolean },
+	fetchFn: typeof fetch = fetch
+): Promise<SaveCharMetaResult> {
+	return postJSON<SaveCharMetaResult>('/api/v1/char/meta', body, fetchFn);
 }
 
 /** GET /api/v1/admin/officers → { officers, promotable }. Officer-only (403 not_authorized for a member). */

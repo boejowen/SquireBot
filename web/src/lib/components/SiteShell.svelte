@@ -52,6 +52,12 @@
 			{/if}
 			<ThemePicker bind:theme />
 			{#if session?.authenticated}
+				<!-- Char-meta is LOGIN-ONLY / member-accessible (D-03): any signed-in
+				     member sets a character's class/level/race/is_bank_toon. It is
+				     surfaced under session?.authenticated (NOT the officer block above) —
+				     gating it to officers would wrongly deny members the form they're
+				     entitled to. A plain <a href> suffices (no officer-style handler). -->
+				<a href="/char-meta" class="char-meta-nav">Character details</a>
 				<SessionIndicator {session} />
 			{/if}
 		</div>
@@ -126,6 +132,32 @@
 		color: var(--accent);
 	}
 	.admin-nav:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	/* Char-meta nav entry — a plain link styled like .admin-nav / the +page view
+	   .tab (UI-SPEC). Member-accessible (D-03), not an officer marker. */
+	.char-meta-nav {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px; /* touch target (UI-SPEC) */
+		padding: 8px 16px;
+		border-bottom: 2px solid transparent;
+		color: var(--text);
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		text-decoration: none;
+		cursor: pointer;
+		opacity: 0.7;
+	}
+	.char-meta-nav:hover {
+		opacity: 1;
+		color: var(--accent);
+	}
+	.char-meta-nav:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}

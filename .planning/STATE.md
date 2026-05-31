@@ -31,7 +31,14 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 Phase: 15 (admin-web-forms-login) -- PLANNED 2026-05-30: 5 plans (15-01..15-05, waves 1-5) + RESEARCH + PATTERNS; verification PASS (5/5 reqs, 12/12 decisions D-01..D-12, ASVS-L1 safety surface, Discord-provisioning checkpoint). NEXT: /gsd-execute-phase 15 -- provision the Discord app first; 15-02 is autonomous:false on it. (Phase 14 COMPLETE + LIVE https://squirebot.quest.)
 Plan: Phase 15 = 5 of 5 plans written, 0 executed (15-01 schema/store; 15-02 OAuth/session/CORS/owner-floor CLI [autonomous:false]; 15-03 eviction/coin/admin enforcement + archive; 15-04 auth gate + ConfirmDialog; 15-05 the three forms).
-Status: Ready to execute
+
+### Phase 15 execution directives (user-set 2026-05-30, honor on /gsd-execute-phase 15)
+- **15-02 checkpoint = answer "build-only".** Build + unit-test the Discord OAuth2 / session / CORS code against httptest fakes; DEFER the live end-to-end login smoke. (User HAS the Discord app provisioned — CLIENT_ID/SECRET/GUILD_ID in hand + redirect URI `https://api.squirebot.quest/api/v1/auth/callback` registered — but the live values are NOT entered during this run; they go on the box at deploy time only.)
+- **Scope = build + verify LOCALLY only.** Execute all 5 plans, run Go + web test suites, commit per plan. NO live deploy this run — do NOT drop the binary on the VPS, do NOT run 00004 on the live DB, do NOT touch systemd. Deploy is a separate deliberate step (this is the first auth/destructive surface).
+- **Secret handling (at deploy, later):** the 4 DISCORD_* vars go in the squirebot-server **systemd** unit (Environment= / root-only EnvironmentFile=, chmod 600). Secret never enters the repo, the static bundle, or chat.
+- **Owner-floor seed (at deploy, later):** run `squirebot-server set-owner-floor <maintainer-discord-USER-id>` once on the box.
+
+Status: Ready to execute (build + verify locally; 15-02 checkpoint -> "build-only")
 Last activity: 2026-05-30 -- Phase 15 planning complete
 
 ### v2.0 Phase Plan (2026-05-28)

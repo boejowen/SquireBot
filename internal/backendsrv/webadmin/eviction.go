@@ -37,6 +37,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/auth"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
@@ -278,23 +280,45 @@ func callerMayNotEvictFloor(ctx context.Context, db *sql.DB, targetOwnerID int64
 		return false, nil // nothing seeded, or the floor acting on its own data
 	}
 	// Resolve the floor's username (the owner-label bridge). A missing web_user or
-	// no matching owner ⇒ no protected owner ⇒ not protected.
+	// an empty username ⇒ the bridge has nothing to match on. This is the WR-05
+	// fail-OPEN risk: if we cannot resolve which owner the floor protects, a peer
+	// would be able to evict the maintainer's data. We CANNOT fully close this in
+	// phase (there is no owner↔discord FK — the longer-term fix is an explicit
+	// owner_floor_owner_id seeded by set-owner-floor), so we (a) harden the textual
+	// match (trim + case-insensitive, since Discord usernames and watcher-supplied
+	// owner.labels drift in case/whitespace) and (b) emit a LOUD warning whenever a
+	// floor is seeded but the protection cannot be resolved to an owner row — so the
+	// operator knows the D-09 guarantee is inert rather than silently failing open.
 	var floorUsername string
 	err = db.QueryRowContext(ctx,
 		`SELECT username FROM web_user WHERE discord_user_id = ?`, floor,
 	).Scan(&floorUsername)
-	if errors.Is(err, sql.ErrNoRows) || floorUsername == "" {
-		return false, nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
+	floorUsername = strings.TrimSpace(floorUsername)
+	if errors.Is(err, sql.ErrNoRows) || floorUsername == "" {
+		// The floor is seeded but has no display username yet (e.g. it never logged
+		// in, so username is still the snowflake placeholder, or the row is missing).
+		// Protection is inert — say so loudly (WR-05).
+		slog.Warn("owner-floor protection INERT: floor seeded but its web_user has no username to bridge to an owner.label; a peer can evict the maintainer's data until the floor logs in or an explicit owner link is added",
+			"floor_discord_user_id", floor)
+		return false, nil
+	}
+	// Match owner.label to the floor username, case-insensitively and trimmed (the
+	// best-available textual bridge — WR-05 hardening). TRIM() both sides in SQL so
+	// stored leading/trailing whitespace on either column does not defeat the match.
 	var floorOwnerID int64
 	err = db.QueryRowContext(ctx,
-		`SELECT id FROM owner WHERE label = ?`, floorUsername,
+		`SELECT id FROM owner WHERE TRIM(label) = TRIM(?) COLLATE NOCASE`, floorUsername,
 	).Scan(&floorOwnerID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil // the floor has no owner row ⇒ no protected data
+		// Floor seeded + has a username, but no owner.label matches it ⇒ the
+		// protection points at no data. Loud warning so the operator can reconcile
+		// the floor's Discord username with the watcher's owner label (WR-05).
+		slog.Warn("owner-floor protection INERT: no owner.label matches the floor's username; the maintainer's guildie data is NOT floor-protected against peer eviction",
+			"floor_discord_user_id", floor, "floor_username", floorUsername)
+		return false, nil
 	}
 	if err != nil {
 		return false, err
@@ -316,19 +340,20 @@ func ownerLabelOf(ctx context.Context, db *sql.DB, ownerID int64) (string, error
 }
 
 // parseOwnerIDQuery reads ?owner_id=N as a positive int64.
+//
+// WR-04: strconv.ParseInt (not a hand-rolled id=id*10+digit accumulator) so an
+// oversized digit string is REJECTED rather than silently wrapping int64 — a
+// wrap to a positive, in-range value would otherwise be accepted as a legitimate
+// owner id on a destructive endpoint. ParseInt returns ErrRange on overflow and
+// ErrSyntax on any non-digit/sign, both of which fail the parse here; the >0
+// check then rejects zero and negatives.
 func parseOwnerIDQuery(r *http.Request) (int64, bool) {
 	raw := r.URL.Query().Get("owner_id")
 	if raw == "" {
 		return 0, false
 	}
-	var id int64
-	for _, c := range raw {
-		if c < '0' || c > '9' {
-			return 0, false
-		}
-		id = id*10 + int64(c-'0')
-	}
-	if id <= 0 {
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
 		return 0, false
 	}
 	return id, true

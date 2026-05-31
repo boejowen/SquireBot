@@ -210,6 +210,55 @@ func TestEvict_PeerCannotEvictFloorData(t *testing.T) {
 	}
 }
 
+// TestEvict_PeerCannotEvictFloorData_CaseAndWhitespaceInsensitive is the WR-05
+// regression: the owner.label↔floor-username bridge must match case- and
+// whitespace-insensitively. Before the fix the match was a plain `label = ?`, so
+// a floor username of "MaintainerLabel" against an owner label of "  maintainerlabel "
+// (Discord usernames + watcher-supplied labels drift in case/whitespace) FAILED
+// to match → callerMayNotEvictFloor returned "not protected" → a peer COULD evict
+// the maintainer's data (fail-OPEN). The hardened TRIM(...) COLLATE NOCASE query
+// must still protect it.
+func TestEvict_PeerCannotEvictFloorData_CaseAndWhitespaceInsensitive(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	peer := "222222222222222222"
+	// Floor username in one casing.
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, floor, "MaintainerLabel"); err != nil {
+		t.Fatalf("seed floor web_user: %v", err)
+	}
+	if err := store.SetOwnerFloor(ctx, db, floor, 1700000000); err != nil {
+		t.Fatalf("SetOwnerFloor: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, peer, "PeerOfficer"); err != nil {
+		t.Fatalf("seed peer web_user: %v", err)
+	}
+	if err := commitTxHelper(t, ctx, db, peer, floor); err != nil {
+		t.Fatalf("promote peer: %v", err)
+	}
+
+	// The owner label differs ONLY by case + surrounding whitespace from the floor
+	// username — it must still resolve as the floor's protected owner.
+	floorOwnerID := evInsertOwner(t, ctx, db, "  maintainerlabel ")
+	cf := evInsertChar(t, ctx, db, floorOwnerID, "Floortoon")
+
+	h := withCaller(peer, EvictHandler(db))
+	rec := postJSON(t, h, `{"owner_id":`+itoa(floorOwnerID)+`}`)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if got := decodeErr(t, rec); got != "owner_floor_protected" {
+		t.Errorf("error = %q, want owner_floor_protected", got)
+	}
+	if charIsRemoved(t, ctx, db, cf) != 0 {
+		t.Errorf("floor's char was evicted by a peer despite a case/whitespace-only label drift (WR-05 fail-open)")
+	}
+}
+
 // --- restore (re-mint) ------------------------------------------------------
 
 func TestRestore_DuringGrace_ReMintsCode_Audits(t *testing.T) {

@@ -65,17 +65,33 @@ func AppendAuditTx(ctx context.Context, tx *sql.Tx, event, actor string, detail 
 // so db.BeginTx issues BEGIN IMMEDIATE — the write lock is taken up front, which
 // (together with the store mutators' in-tx officer re-check) closes the v1 WR-04
 // TOCTOU window. A commit failure is returned for the handler to map to 500.
+//
+// WR-03: the rollback is a DEFERRED guard keyed on a `committed` flag, not an
+// inline rollback on the error path. If fn PANICS (it marshals arbitrary detail
+// + runs store mutators), an inline-only rollback would never run and — with the
+// store's SetMaxOpenConns(1) — the single pooled writer connection would be left
+// holding an open BEGIN IMMEDIATE tx, wedging every subsequent write (and read)
+// until the GC finalizer eventually closed the orphaned *sql.Tx. The deferred
+// rollback unwinds the tx as the panic propagates, freeing the connection.
+// database/sql makes a Rollback after a successful Commit a harmless no-op, so the
+// flag is the clean idiom (the panic still propagates — we do not recover it).
 func withTx(ctx context.Context, db *sql.DB, fn func(tx *sql.Tx) error) error {
 	tx, err := db.BeginTx(ctx, nil) // _txlock=immediate DSN ⇒ BEGIN IMMEDIATE
 	if err != nil {
 		return fmt.Errorf("begin webadmin tx: %w", err)
 	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback() // no-op after a successful Commit; frees the conn on a panic/error
+		}
+	}()
 	if ferr := fn(tx); ferr != nil {
-		_ = tx.Rollback()
 		return ferr
 	}
 	if cerr := tx.Commit(); cerr != nil {
 		return fmt.Errorf("commit webadmin tx: %w", cerr)
 	}
+	committed = true
 	return nil
 }

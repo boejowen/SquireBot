@@ -174,8 +174,27 @@ func EvictHandler(db *sql.DB) http.HandlerFunc {
 // characters. If restored == 0 (already archived / past grace / never evicted) →
 // 409 grace_expired (archived data is NEVER silently revived). Otherwise re-MINT a
 // fresh guild code for the owner (the old one stays disabled — codes are not
-// un-revoked, so restore necessarily issues a NEW one); audit "eviction_restore";
-// return {restored_count, new_code_issued:true}.
+// un-revoked, so restore necessarily issues a NEW one); audit "eviction_restore".
+//
+// WR-01 (post-commit mint is recoverable, not a 500): the owner label is resolved
+// BEFORE the tx (it cannot change during a restore), so the ONLY fallible step
+// after the commit is auth.MintCode itself. If that mint fails, the restore has
+// already committed (the characters are live again) — returning a generic 500
+// would leave the guildie restored-but-codeless with the officer believing nothing
+// happened. Instead we log at error with owner_id and return a 200 success-with-
+// warning shape {restored_count, new_code_issued:false, code_mint_failed:true} so
+// the caller can tell the officer the restore succeeded but a code must be
+// re-issued out-of-band. OPERATOR RECOVERY: run
+//
+//	squirebot-server mint-code --owner <label>
+//
+// to issue the replacement code (its plaintext prints to the server stdout/journald).
+//
+// WR-02 (the minted code is NOT web-deliverable): auth.MintCode prints the one-time
+// plaintext to the server's stdout (journald) ONLY — never the HTTP response (V7).
+// So new_code_issued:true means "a fresh code now EXISTS", not "the officer has it";
+// the maintainer must read it from journald (or re-run mint-code) and hand it off
+// out-of-band. The success copy must not imply the officer holds a deliverable code.
 func RestoreHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -191,10 +210,24 @@ func RestoreHandler(db *sql.DB) http.HandlerFunc {
 		callerID := caller(ctx)
 		now := nowUnix()
 
+		// WR-01: resolve the owner label BEFORE the tx so the only post-commit
+		// fallible step is the mint. A missing owner here means a bad request (it
+		// would restore 0 and 409 anyway); fail fast with nothing committed.
+		ownerLabel, err := ownerLabelOf(ctx, db, req.OwnerID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeJSONError(w, http.StatusBadRequest, "invalid_input")
+				return
+			}
+			slog.Error("restore: resolve owner label failed", "owner_id", req.OwnerID, "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+
 		// errGraceExpired is the in-tx sentinel signalling "nothing was in grace" so
 		// the tx rolls back (no audit row) and the handler maps it to 409.
 		var restoredCount int
-		err := withTx(ctx, db, func(tx *sql.Tx) error {
+		err = withTx(ctx, db, func(tx *sql.Tx) error {
 			okOfficer, e := store.IsOfficerTx(ctx, tx, callerID)
 			if e != nil {
 				return e
@@ -225,19 +258,23 @@ func RestoreHandler(db *sql.DB) http.HandlerFunc {
 		// *sql.DB (it manages its own INSERT) so it is necessarily AFTER the restore
 		// tx commits — the restore (un-set is_removed) is the load-bearing reversal;
 		// the re-mint is the follow-on that lets the watcher resume. The old code
-		// stays disabled (codes are not un-revoked); this issues a NEW one. A mint
-		// failure here is a 500 (the restore already committed — the maintainer can
-		// re-issue via the mint-code CLI); we never echo the minted plaintext (V7 —
-		// MintCode prints it to the server's stdout once, as the CLI does).
-		ownerLabel, err := ownerLabelOf(ctx, db, req.OwnerID)
-		if err != nil {
-			slog.Error("restore: resolve owner label failed", "owner_id", req.OwnerID, "err", err)
-			writeJSONError(w, http.StatusInternalServerError, "internal")
-			return
-		}
+		// stays disabled (codes are not un-revoked); this issues a NEW one. We never
+		// echo the minted plaintext (V7/WR-02 — MintCode prints it to the server's
+		// stdout/journald once, as the CLI does).
+		//
+		// WR-01: a mint failure here is NOT a 500. The restore already committed (the
+		// characters are live again), so a generic 500 would strand the guildie
+		// restored-but-codeless while the officer believes nothing happened. Surface
+		// it as a success-with-warning so the caller can tell the officer to re-issue
+		// the code out-of-band (squirebot-server mint-code --owner <label>).
 		if _, err := auth.MintCode(db, ownerLabel); err != nil {
-			slog.Error("restore: re-mint guild code failed", "owner_id", req.OwnerID, "err", err)
-			writeJSONError(w, http.StatusInternalServerError, "internal")
+			slog.Error("restore: re-mint guild code failed AFTER restore committed; the guildie is restored but has NO active code — re-issue via `mint-code --owner <label>`",
+				"owner_id", req.OwnerID, "owner_label", ownerLabel, "err", err)
+			writeJSON(w, map[string]any{
+				"restored_count":   restoredCount,
+				"new_code_issued":  false,
+				"code_mint_failed": true,
+			})
 			return
 		}
 

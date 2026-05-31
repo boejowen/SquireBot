@@ -349,10 +349,20 @@ export interface EvictResult {
 	grace_until: number;
 }
 
-/** The `POST /api/v1/admin/eviction/restore` reply (re-mints a fresh guild code per D-10). */
+/**
+ * The `POST /api/v1/admin/eviction/restore` reply (re-mints a fresh guild code
+ * per D-10). WR-01: when the post-commit re-mint fails, the restore still
+ * committed — the server returns new_code_issued:false + code_mint_failed:true so
+ * the form can tell the officer "restored, but re-issue a code via the CLI"
+ * instead of implying nothing happened. WR-02: new_code_issued:true means a fresh
+ * code now EXISTS (printed to the server's journald only — never the response),
+ * NOT that the officer holds a deliverable code; it must be handed off out-of-band.
+ */
 export interface RestoreResult {
 	restored_count: number;
 	new_code_issued: boolean;
+	/** Present + true ONLY when the restore committed but the follow-on code mint failed (WR-01). */
+	code_mint_failed?: boolean;
 }
 
 // --- Typed admin/coin wrappers (one per 15-03 route) ---------------------

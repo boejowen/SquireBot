@@ -177,8 +177,13 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
   2. A one-time backfill imports only human-supplied data — owner/character metadata (class/level/race/is_bank_toon/is_hidden/is_removed), bank coin, and archive entries — read-only from the Sheet and idempotently re-runnable; inventory + dimension data self-populates from the next upload / next enrichment run (CUTOVER-02)
   3. A single coordinated watcher self-update flips ingest from the Sheet to the backend across the guild, and within the rollout window all ~12 watchers report in on the new endpoint (CUTOVER-03)
   4. After a confirmed-successful cutover, the Google Sheet, the Apps Script project, and the Google OAuth client are decommissioned — no Google dependency remains anywhere in the system (CUTOVER-04)
-**Plans**: TBD
-**UI hint**: no (operational cutover; no new UI built)
+**Plans**: 4 plans (Wave 1: char-meta build ∥ v2.0.0 release-publish → Wave 2: deploy + mint + herd → Wave 3: decommission + checklist)
+- [ ] 16-01-PLAN.md — Char-meta web form + login-only backend endpoint (CUTOVER-02; the ONLY code build, autonomous). Clone of the bank-coin trio; RACES port; CR-01 text+numeric level input; no migration.
+- [ ] 16-02-PLAN.md — Publish the clean v2.0.0 GitHub Release (CUTOVER-03 trigger; human-gated). Fires release.yml; the re-targeted Google-free binary is NOT yet published (latest = v1.0.2) — this arms the auto-update flip.
+- [ ] 16-03-PLAN.md — Flip ops: deploy the char-meta surface + mint ~12 per-guildie codes + Discord-herd (CUTOVER-03; human runbook). Depends on 16-01 + 16-02.
+- [ ] 16-04-PLAN.md — Decommission the live Google machinery (disable Apps Script triggers + retire OAuth client) + the decommission-checklist proof artifact, folding in the CUTOVER-01 reporting-in confirmation (CUTOVER-01 + CUTOVER-04; human + a docs file). Depends on 16-03.
+**Reframed by discussion (16-CONTEXT.md, 2026-05-31 — supersedes the Goal/Success-Criteria/Note above):** the guild has been dark on the Sheet since 2026-05-15 and P13/P14/P15 are already live, so the classic shadow-soak/backfill/parity dance is VOID. CUTOVER-01 → no formal soak; a brief "guildies reporting in" SQL-count confirmation (D-05). CUTOVER-02 → NO Sheet backfill; a clean fresh start via a new char-meta form for class/level/race/is_bank_toon (D-01/D-02). CUTOVER-03 → auto-update + Discord herding, no %-gate (D-06/D-08). CUTOVER-04 → kill the LIVE Google machinery (triggers + OAuth client) + ABANDON the Sheet in place (no export/delete/freeze), proven by a decommission checklist (D-10/D-11/D-12/D-13).
+**UI hint**: yes (reframed by 16-CONTEXT D-02 — the char-meta form is the one UI surface; the rest is operational)
 **Note**: cutover is the hybrid shadow-mode path (finding 04 §4.2) — the new system never writes to the Sheet, so a backend bug cannot corrupt the live product; both inventory and enrichment data are self-healing, so a botched flip is recoverable. The old Sheet can stay read-only through the 24-h auto-update window before retirement. Includes ~1–2 weeks of calendar soak beyond active development.
 **Ship gate**: all ~12 watchers confirmed on the backend; Sheet + Apps Script + Google OAuth client decommissioned — the milestone's "Off Google" goal is met.
 
@@ -191,7 +196,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
-| v2.0 | 6 | 25/TBD | 🚧 In progress (P11–15 code-complete; P15 + P16 deploy/cutover pending) | — |
+| v2.0 | 6 | 25/29 | 🚧 In progress (P11–15 code-complete; P16 planned — 4 plans; P15 + P16 deploy/cutover pending) | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -200,7 +205,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | 13. Watcher Re-Target + Onboarding | v2.0 | 4/4 | ✅ Complete | 2026-05-30 |
 | 14. Web Frontend | v2.0 | 4/4 | ✅ Complete (deployed live) | 2026-05-30 |
 | 15. Admin Web Forms + Login | v2.0 | 5/5 | 🔧 Code-complete + verified 5/5 (deploy + 7 UAT smokes deferred) | - |
-| 16. Cutover + Decommission | v2.0 | 0/TBD | Not started | - |
+| 16. Cutover + Decommission | v2.0 | 0/4 | 📋 Planned (4 plans, 3 waves; 1 autonomous build + 3 human/ops) | - |
 
 ## Backlog
 
@@ -225,6 +230,7 @@ Carried forward from v1.0 / v1.0.1 / v1.0.2 (candidates for a future Sheet-ortho
 - **999.28** `searchIndex.ts` `didYouMean('')` contract bug — **port-relevant**: the search logic ports to the frontend in P14 (WEB-03); fix the empty-query contract during the port.
 - **999.29** `test-helpers.ts` CacheService mock TTL nit (Sheet) — mooted by decommission.
 - **999.30** `searchIndex.test.ts` Test 4 `didYouMean` Levenshtein contract mismatch — **port-relevant**: resolve when porting `didYouMean` to the frontend in P14 (WEB-03).
+- **999.31** Self-service **"Link your watcher via Discord"** onboarding — ⭐ **TOP PRIORITY / first feature after the v2.0 cutover** (user, 2026-05-31). Guildie logs into squirebot.quest with the P15 Discord login → a "Link my watcher" action mints a guild code tied to their Discord identity → paste once into the watcher. Replaces the maintainer manually minting + DMing ~12 codes (no plaintext through the maintainer's hands; unifies web + watcher identity; self-service scales as the guild grows). **HARD CONSTRAINT:** the watcher credential stays a static bearer token — do NOT put Discord OAuth *in the watcher* (that reintroduces the exact v2.0 "Off Google" fragility: ~7-day token expiry/refresh on an unattended uploader, a public desktop client secret, a browser/loopback flow; P13 made the watcher browser-free on purpose). Discord is the identity at **link-time only**. Scope: a session-scoped, self-service `mint-code` backend endpoint + a frontend "link your watcher" page (ideally tying the minted owner to the Discord identity / owner-floor) + redeploy + tests. Dovetails with **999.12** (v2 Wantlist/Discord-pinger) — AUTH-09 already pre-paid the Discord-identity prerequisite.
 
 ---
 

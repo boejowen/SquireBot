@@ -39,16 +39,22 @@ function rawToTrimmed(raw: CoinRaw): string {
 	return raw.trim();
 }
 
-/** The UI-SPEC inline error copy (verbatim). */
+/**
+ * The inline error copy. All four denominations are now a non-negative whole
+ * number with no upper bound (260531-2qk lifted the 0–999 sub-unit cap), so the
+ * sub-unit copy matches the platinum copy. Both kept as distinct exports so each
+ * field can surface its own message and call-sites stay stable.
+ */
 export const PLAT_ERROR = 'Enter a whole number (0 or more).';
-export const SUBUNIT_ERROR = 'Enter 0–999.';
+export const SUBUNIT_ERROR = 'Enter a whole number (0 or more).';
 
 /**
- * Validate ONE coin field's raw string. Platinum is a free non-negative integer
- * (no upper bound — a guild bank can hold large plat). Gold/silver/copper are
- * bounded 0–999 (EQ carries at 1000 → the next denomination, D-11). An empty
- * string is treated as 0 (a blank field = zero coin, valid). Returns the exact
- * UI-SPEC error string, or undefined when valid.
+ * Validate ONE coin field's raw string. ALL four denominations (plat, gold,
+ * silver, copper) are a free non-negative integer — no upper bound. The original
+ * 0–999 sub-unit cap on gold/silver/copper was lifted in 260531-2qk so the guild
+ * can record large raw-coin amounts; g/s/c now validate identically to platinum.
+ * An empty string is treated as 0 (a blank field = zero coin, valid). Returns the
+ * exact UI-SPEC error string, or undefined when valid.
  */
 export function validateCoinField(field: CoinField, raw: CoinRaw): string | undefined {
 	const trimmed = rawToTrimmed(raw);
@@ -59,13 +65,12 @@ export function validateCoinField(field: CoinField, raw: CoinRaw): string | unde
 	if (!/^\d+$/.test(trimmed)) {
 		return field === 'plat' ? PLAT_ERROR : SUBUNIT_ERROR;
 	}
+	// Every denomination is a non-negative integer with no upper bound (260531-2qk).
+	// The regex already excludes negatives/decimals; the safe-integer guard rejects
+	// values past JS's exact-integer range. Each field still reports its own copy.
 	const n = Number(trimmed);
-	if (field === 'plat') {
-		// Non-negative integer; the regex already excludes negatives/decimals.
-		return Number.isSafeInteger(n) ? undefined : PLAT_ERROR;
-	}
-	// gold/silver/copper: 0..999 inclusive.
-	return n >= 0 && n <= 999 ? undefined : SUBUNIT_ERROR;
+	if (Number.isSafeInteger(n)) return undefined;
+	return field === 'plat' ? PLAT_ERROR : SUBUNIT_ERROR;
 }
 
 /** Per-field errors for the whole quad (a field maps to undefined when valid). */

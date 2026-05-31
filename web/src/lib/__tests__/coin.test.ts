@@ -48,16 +48,19 @@ describe('validateCoinField — D-11 ranges + the exact UI-SPEC copy', () => {
 		expect(validateCoinField('plat', 'abc')).toBe(PLAT_ERROR);
 	});
 
-	it('gold/silver/copper: 0..999 inclusive is valid', () => {
+	it('gold/silver/copper: any non-negative integer is valid — no upper bound (260531-2qk)', () => {
 		for (const f of ['gold', 'silver', 'copper'] as const) {
 			expect(validateCoinField(f, '0')).toBeUndefined();
 			expect(validateCoinField(f, '999')).toBeUndefined();
 			expect(validateCoinField(f, '500')).toBeUndefined();
+			// The old 0–999 cap is gone: 1000 and large raw-coin amounts are valid.
+			expect(validateCoinField(f, '1000')).toBeUndefined();
+			expect(validateCoinField(f, '5000')).toBeUndefined();
+			expect(validateCoinField(f, '1000000')).toBeUndefined();
 		}
 	});
 
-	it('gold/silver/copper: 1000+ or negative or non-integer → the exact 0–999 error', () => {
-		expect(validateCoinField('gold', '1000')).toBe(SUBUNIT_ERROR);
+	it('gold/silver/copper: negative or non-integer → the sub-unit error', () => {
 		expect(validateCoinField('silver', '-1')).toBe(SUBUNIT_ERROR);
 		expect(validateCoinField('copper', '12.3')).toBe(SUBUNIT_ERROR);
 		expect(validateCoinField('gold', 'x')).toBe(SUBUNIT_ERROR);
@@ -69,12 +72,12 @@ describe('coinIsValid + validateCoin', () => {
 		expect(coinIsValid(inputs())).toBe(true);
 	});
 
-	it('one out-of-range subunit invalidates the quad and reports only that field', () => {
-		const errs = validateCoin(inputs({ gold: '1000' }));
+	it('one invalid subunit invalidates the quad and reports only that field', () => {
+		const errs = validateCoin(inputs({ gold: '-1' }));
 		expect(errs.gold).toBe(SUBUNIT_ERROR);
 		expect(errs.plat).toBeUndefined();
 		expect(errs.silver).toBeUndefined();
-		expect(coinIsValid(inputs({ gold: '1000' }))).toBe(false);
+		expect(coinIsValid(inputs({ gold: '-1' }))).toBe(false);
 	});
 
 	it('a bad platinum invalidates the quad', () => {
@@ -167,7 +170,8 @@ describe('CR-01 input-contract: helpers tolerate the value types the DOM binding
 		// A bare number must validate like its string form (no TypeError).
 		expect(validateCoinField('plat', 5 as unknown as string)).toBeUndefined();
 		expect(validateCoinField('gold', 999 as unknown as string)).toBeUndefined();
-		expect(validateCoinField('gold', 1000 as unknown as string)).toBe(SUBUNIT_ERROR);
+		// 1000 is now valid for a sub-unit (the 0–999 cap was lifted, 260531-2qk).
+		expect(validateCoinField('gold', 1000 as unknown as string)).toBeUndefined();
 		expect(validateCoinField('silver', -1 as unknown as string)).toBe(SUBUNIT_ERROR);
 		// An emptied number input writes back null; a fractional number is invalid.
 		expect(validateCoinField('plat', null as unknown as string)).toBeUndefined();

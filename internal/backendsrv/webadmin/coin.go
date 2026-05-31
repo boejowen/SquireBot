@@ -11,8 +11,10 @@ package webadmin
 // proven by coin_test.go's TestCoinSet_NonOfficerCanWrite.
 //
 // Server-side range validation (T-15-15 — never trust the client's disabled-button
-// UX): plat >= 0; gold/silver/copper each in [0,999]. Out-of-range → 400
-// invalid_input. The store's SetCoinTx additionally refuses a non-bank-toon target
+// UX): plat, gold, silver, and copper are each a non-negative integer (>= 0) with
+// NO upper bound (the guild banks large raw-coin amounts; the original 0–999 sub-unit
+// cap was lifted in 260531-2qk). Out-of-range (negative) → 400 invalid_input. The
+// JSON decoder already rejects non-integers. The store's SetCoinTx additionally refuses a non-bank-toon target
 // (ErrNotBankToon → 400 not_bank_toon) — the D-11 bank-toon gate enforced at the
 // data layer too. The write + its audit row compose in ONE BEGIN IMMEDIATE tx
 // (withTx), so they land atomically.
@@ -77,7 +79,8 @@ func CoinSetHandler(db *sql.DB) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, "invalid_input")
 			return
 		}
-		// Server-side range validation (T-15-15): plat >= 0; g/s/c in [0,999].
+		// Server-side range validation (T-15-15): plat/gold/silver/copper each >= 0,
+		// no upper bound (the 0–999 sub-unit cap was lifted in 260531-2qk).
 		if !validCoin(req) {
 			writeJSONError(w, http.StatusBadRequest, "invalid_input")
 			return
@@ -124,14 +127,14 @@ func CoinSetHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// validCoin enforces the D-11/UI-SPEC ranges: plat >= 0 (a whole number, 0 or
-// more) and gold/silver/copper each in [0,999]. Returns true iff all four pass.
+// validCoin enforces the range contract (260531-2qk): plat, gold, silver, and
+// copper are each a non-negative integer (>= 0) with NO upper bound. The original
+// 0–999 cap on gold/silver/copper was lifted so the guild can record large raw-coin
+// amounts; all four denominations now validate identically to platinum. Returns true
+// iff all four are non-negative.
 func validCoin(req coinReq) bool {
-	if req.Plat < 0 {
-		return false
-	}
-	for _, v := range []int64{req.Gold, req.Silver, req.Copper} {
-		if v < 0 || v > 999 {
+	for _, v := range []int64{req.Plat, req.Gold, req.Silver, req.Copper} {
+		if v < 0 {
 			return false
 		}
 	}

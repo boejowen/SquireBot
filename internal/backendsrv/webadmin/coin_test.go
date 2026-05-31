@@ -2,8 +2,9 @@ package webadmin
 
 // coin_test.go — Task 3 (TDD). Proves the bank-coin endpoints are gated by login
 // ONLY (D-12/B-1 — a NON-officer authenticated member can write, and the coin
-// columns actually change), range-validated (gold/silver/copper 0–999, plat >= 0),
-// bank-toon-gated (not_bank_toon), and audited. The route-level gate (RequireSession
+// columns actually change), range-validated (plat/gold/silver/copper each >= 0 with
+// NO upper bound — the 0–999 sub-unit cap was lifted in 260531-2qk; only negatives
+// are rejected), bank-toon-gated (not_bank_toon), and audited. The route-level gate (RequireSession
 // vs RequireOfficer) is asserted in cmd/squirebot-server/main_test.go; here we
 // exercise the handler logic with the caller injected via withCaller — and the
 // caller is a PLAIN MEMBER (never seeded into guild_admins) to prove D-12.
@@ -122,14 +123,16 @@ func TestCoinSet_RejectsOutOfRange(t *testing.T) {
 
 	h := withCaller(member, CoinSetHandler(db))
 
+	// Only NEGATIVE values are out of range now (the 0–999 sub-unit upper cap was
+	// lifted in 260531-2qk — see TestCoinSet_AcceptsLargeSubunit for the >999 path).
 	cases := []struct {
 		name string
 		body string
 	}{
-		{"gold=1000", `{"character_id":` + itoa(charID) + `,"plat":0,"gold":1000,"silver":0,"copper":0}`},
-		{"silver=1000", `{"character_id":` + itoa(charID) + `,"plat":0,"gold":0,"silver":1000,"copper":0}`},
-		{"copper=-1", `{"character_id":` + itoa(charID) + `,"plat":0,"gold":0,"silver":0,"copper":-1}`},
 		{"plat=-1", `{"character_id":` + itoa(charID) + `,"plat":-1,"gold":0,"silver":0,"copper":0}`},
+		{"gold=-1", `{"character_id":` + itoa(charID) + `,"plat":0,"gold":-1,"silver":0,"copper":0}`},
+		{"silver=-5", `{"character_id":` + itoa(charID) + `,"plat":0,"gold":0,"silver":-5,"copper":0}`},
+		{"copper=-1", `{"character_id":` + itoa(charID) + `,"plat":0,"gold":0,"silver":0,"copper":-1}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,6 +149,29 @@ func TestCoinSet_RejectsOutOfRange(t *testing.T) {
 	plat, gold, silver, copper := readCoin(t, ctx, db, charID)
 	if plat.Valid || gold.Valid || silver.Valid || copper.Valid {
 		t.Errorf("coin written despite all-invalid attempts: %v/%v/%v/%v", plat, gold, silver, copper)
+	}
+}
+
+// TestCoinSet_AcceptsLargeSubunit proves the 260531-2qk uncap: a gold/silver/copper
+// value far above the old 999 cap (5000) is now accepted AND written. Platinum was
+// already uncapped; this locks the new sub-unit contract.
+func TestCoinSet_AcceptsLargeSubunit(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	member := "555555555555555555"
+	seedPlainMember(t, ctx, db, member, "PlainMember")
+	charID := coinInsertBankToon(t, ctx, db, "Banktoon")
+
+	h := withCaller(member, CoinSetHandler(db))
+	rec := postJSON(t, h, `{"character_id":`+itoa(charID)+`,"plat":0,"gold":5000,"silver":5000,"copper":5000}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+
+	// The large sub-unit values were actually written (not clamped, not rejected).
+	_, gold, silver, copper := readCoin(t, ctx, db, charID)
+	if !gold.Valid || gold.Int64 != 5000 || !silver.Valid || silver.Int64 != 5000 || !copper.Valid || copper.Int64 != 5000 {
+		t.Errorf("g/s/c = %v/%v/%v, want 5000/5000/5000", gold, silver, copper)
 	}
 }
 

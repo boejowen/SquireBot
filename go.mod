@@ -9,6 +9,7 @@ require (
 	github.com/minio/selfupdate v0.6.0
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.45.0
 	golang.org/x/text v0.37.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

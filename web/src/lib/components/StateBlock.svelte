@@ -14,7 +14,11 @@
 		// officers-only refusal). Copy is verbatim from the 15-UI-SPEC Copywriting
 		// Contract.
 		| 'auth-loading'
-		| 'officers-only';
+		| 'officers-only'
+		// 15-05: the picker-empty states for the three forms (when there's nothing
+		// to act on). Copy is verbatim from the 15-UI-SPEC Copywriting Contract.
+		| 'no-bank-toons'
+		| 'no-promotable-users';
 </script>
 
 <script lang="ts">
@@ -63,6 +67,23 @@
 		<p class="state-body">
 			This area is for guild officers. If you think you should have access, ask an officer to add
 			you.
+		</p>
+	</div>
+{:else if kind === 'no-bank-toons'}
+	<!-- BankCoinForm: no is_bank_toon character exists yet (15-UI-SPEC Copywriting). -->
+	<div class="state state-empty">
+		<h2 class="state-heading">No bank characters yet</h2>
+		<p class="state-body">
+			No character is marked as a bank toon yet. Once one is, you can record its coin here.
+		</p>
+	</div>
+{:else if kind === 'no-promotable-users'}
+	<!-- AdminMgmtForm: no signed-in non-officer to promote (15-UI-SPEC Copywriting). -->
+	<div class="state state-empty">
+		<h2 class="state-heading">No one to promote yet</h2>
+		<p class="state-body">
+			Only members who've signed in at least once can be promoted. Once another member signs in,
+			they'll show up here.
 		</p>
 	</div>
 {:else if kind === 'error'}

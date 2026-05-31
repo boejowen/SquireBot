@@ -24,11 +24,14 @@
 		fetchSpellCheck,
 		fetchBank,
 		fetchMeta,
+		fetchBankToons,
 		type ViewRow,
 		type GearCheckRow,
 		type SpellCheckRow,
-		type MetaResponse
+		type MetaResponse,
+		type BankToon
 	} from '$lib/api';
+	import { hasRecordedCoin } from '$lib/coin';
 	import {
 		viewColumns,
 		gearCheckColumns,
@@ -84,22 +87,29 @@
 	let spellRows = $state<SpellCheckRow[]>([]);
 	let bankRows = $state<ViewRow[]>([]);
 	let meta = $state<MetaResponse>({ characters: [] });
+	// 15-05 (D-11): the read bank endpoint's `coin` is still null (15-03 did not
+	// change it), so the recorded coin is surfaced by ALSO loading the bank-toons
+	// (the same login-only source BankCoinForm writes). This replaces P14's
+	// "Coin: not yet recorded" placeholder once any toon has a recorded value.
+	let bankToons = $state<BankToon[]>([]);
 
 	async function load() {
 		status = 'loading';
 		try {
-			const [v, g, s, b, m] = await Promise.all([
+			const [v, g, s, b, m, bt] = await Promise.all([
 				fetchView(),
 				fetchGearCheck(),
 				fetchSpellCheck(),
 				fetchBank(),
-				fetchMeta()
+				fetchMeta(),
+				fetchBankToons()
 			]);
 			viewRows = v;
 			gearRows = g;
 			spellRows = s;
 			bankRows = b.rows;
 			meta = m;
+			bankToons = bt;
 			status = 'ready';
 		} catch (err) {
 			// Server-truth (B-2): a 401/403 from ANY of the read endpoints means the
@@ -135,6 +145,15 @@
 	let noCharacters = $derived(
 		status === 'ready' && meta.characters.length === 0 && viewRows.length === 0
 	);
+
+	// 15-05 (D-11): the bank-coin toons that actually have a recorded value drive
+	// the coin summary; when none do, the P14 "not yet recorded" affordance stays.
+	let coinToons = $derived(bankToons.filter(hasRecordedCoin));
+
+	/** Render a toon's coin as a compact "Np Ng Ns Nc" line (null → 0; tabular). */
+	function coinLine(t: BankToon): string {
+		return `${t.plat ?? 0}p ${t.gold ?? 0}g ${t.silver ?? 0}s ${t.copper ?? 0}c`;
+	}
 </script>
 
 <svelte:head>
@@ -192,7 +211,29 @@
 		{:else if active === 'bank'}
 			<!-- coin is null in P14 (ADMIN-05 fills it in P15) — render the
 			     not-yet-recorded affordance, never a fabricated zero-platinum value. -->
-			<StateBlock kind="no-coin" />
+			<div class="bank-toolbar">
+				{#if coinToons.length > 0}
+					<!-- Recorded coin surfaces here (15-05 D-11), replacing P14's null
+					     placeholder. Character names render via plain {} (auto-escaped,
+					     T-15-28). -->
+					<div class="coin-summary">
+						<h3 class="coin-summary-title">Bank coin</h3>
+						<ul class="coin-list">
+							{#each coinToons as t (t.character_id)}
+								<li class="coin-item">
+									<span class="coin-char">{t.name}</span>
+									<span class="coin-amount">{coinLine(t)}</span>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{:else}
+					<StateBlock kind="no-coin" />
+				{/if}
+				<!-- "Record coin" affordance to /bank-coin (UI-SPEC IA: a control near
+				     the bank view, reachable by any authenticated member, D-12). -->
+				<a class="record-coin" href="/bank-coin">Record coin</a>
+			</div>
 			{#if bankRows.length === 0}
 				<!-- bank may be legitimately empty until P16 sets is_bank_toon — empty
 				     state, NOT an error (RESEARCH Open-Q4 / A7). -->
@@ -247,5 +288,71 @@
 		flex-direction: column;
 		gap: 16px;
 		min-height: 0;
+	}
+	/* Bank toolbar: the coin summary + the "Record coin" affordance (15-05 D-11). */
+	.bank-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 16px;
+	}
+	.coin-summary {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.coin-summary-title {
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px; /* Label (UI-SPEC) */
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
+	.coin-list {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.coin-item {
+		display: flex;
+		gap: 12px;
+		font-family: var(--font-body);
+		font-size: 16px;
+	}
+	.coin-char {
+		font-weight: 600;
+		min-width: 12ch;
+	}
+	.coin-amount {
+		font-variant-numeric: tabular-nums; /* plat/gold/silver/copper align (UI-SPEC) */
+		opacity: 0.9;
+	}
+	/* "Record coin" link — styled like the .tab nav affordance (UI-SPEC). */
+	.record-coin {
+		min-height: 44px; /* touch target */
+		display: inline-flex;
+		align-items: center;
+		padding: 8px 16px;
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--accent);
+		text-decoration: none;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+	}
+	.record-coin:hover {
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+	}
+	.record-coin:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 </style>

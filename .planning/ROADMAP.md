@@ -160,7 +160,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
   4. Manual bank-coin entry (platinum/gold/silver/copper) is an authenticated web form that persists the four values (the file format still carries no coin data) (ADMIN-05)
   5. Admin/officer management (the `guild_admins` allowlist + owner-floor protection) is an authenticated web form; the workbook-owner-floor equivalent cannot be removed by a peer admin (ADMIN-06)
 **Plans**: 5 plans (strictly sequential waves — each depends on the prior; no in-wave file collisions)
-- [ ] 15-01-PLAN.md — Schema + store foundation (Wave 1): `00004_web_auth.sql` (web_user/web_session[hashed]/guild_admins/app_config/coin cols/eviction grace+archive/audit_log generic cols) + the session/officer/owner-floor/eviction/coin store methods. Ports v1 admin.ts semantics. (AUTH-08/09 + ADMIN-04/05/06.)
+- [x] 15-01-PLAN.md — Schema + store foundation (Wave 1): `00004_web_auth.sql` (web_user/web_session[hashed]/guild_admins/app_config/coin cols/eviction grace+archive/audit_log generic cols) + the session/officer/owner-floor/eviction/coin store methods. Ports v1 admin.ts semantics. (AUTH-08/09 + ADMIN-04/05/06.) ✅ 2026-05-31 (local build+verify; 3 commits abb92a0/78d7e24/4b39e40)
 - [ ] 15-02-PLAN.md — Discord OAuth2 + opaque session + CORS-creds + `set-owner-floor` CLI (Wave 2): hand-rolled `golang.org/x/oauth2` login/callback/whoami-web/logout, membership gate via guilds list, RequireSession/RequireOfficer, read API session-gated. **autonomous:false** — Discord-app provisioning is a maintainer prerequisite (checkpoint). (AUTH-08/09.)
 - [ ] 15-03-PLAN.md — Backend write surface (Wave 3): eviction/bank-coin/officer-mgmt handlers with authorize-under-transaction (WR-04 TOCTOU close), owner-floor protection, audit_log writes, the eviction-archive scheduler job. (ADMIN-04/05/06.)
 - [ ] 15-04-PLAN.md — Frontend auth gate (Wave 4): `auth.ts` + credentialed fetch, AuthGate/LoginScreen/NotMemberScreen/SessionIndicator/ConfirmDialog, `--destructive` token, officer-only Admin nav. (AUTH-08/09.)
@@ -191,7 +191,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | v1.0 | 5 | 31/31 | ✅ Shipped | 2026-05-11 |
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
-| v2.0 | 6 | 12/TBD | 🚧 In progress | — |
+| v2.0 | 6 | 13/TBD | 🚧 In progress | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -199,7 +199,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | 12. Enrichment Job Migration | v2.0 | 5/5 | ✅ Complete | 2026-05-29 |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 4/4 | ✅ Complete | 2026-05-30 |
 | 14. Web Frontend | v2.0 | 3/4 | 🔧 In progress | - |
-| 15. Admin Web Forms + Login | v2.0 | 0/TBD | Not started | - |
+| 15. Admin Web Forms + Login | v2.0 | 1/5 | 🔧 In progress | - |
 | 16. Cutover + Decommission | v2.0 | 0/TBD | Not started | - |
 
 ## Backlog

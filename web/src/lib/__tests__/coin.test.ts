@@ -153,3 +153,44 @@ describe('hasRecordedCoin — the bank-view surfacing predicate', () => {
 		expect(hasRecordedCoin(toon({ copper: 12 }))).toBe(true);
 	});
 });
+
+describe('CR-01 input-contract: helpers tolerate the value types the DOM binding produces', () => {
+	// Regression for CR-01. The string-literal tests above never exercised the
+	// types Svelte's bind:value actually writes back: a number-like input coerces
+	// to `number` (or `null` when emptied). Before the fix every helper called
+	// `.trim()` and threw `TypeError: raw.trim is not a function` on the first
+	// keystroke. These drive the helpers with `number`/`null`/`undefined` directly
+	// — the shapes the binding produces — to lock the crash-proof contract even if
+	// the input element is ever switched back to type="number".
+
+	it('validateCoinField does NOT throw on a number / null / undefined', () => {
+		// A bare number must validate like its string form (no TypeError).
+		expect(validateCoinField('plat', 5 as unknown as string)).toBeUndefined();
+		expect(validateCoinField('gold', 999 as unknown as string)).toBeUndefined();
+		expect(validateCoinField('gold', 1000 as unknown as string)).toBe(SUBUNIT_ERROR);
+		expect(validateCoinField('silver', -1 as unknown as string)).toBe(SUBUNIT_ERROR);
+		// An emptied number input writes back null; a fractional number is invalid.
+		expect(validateCoinField('plat', null as unknown as string)).toBeUndefined();
+		expect(validateCoinField('plat', undefined as unknown as string)).toBeUndefined();
+		expect(validateCoinField('copper', 1.5 as unknown as string)).toBe(SUBUNIT_ERROR);
+	});
+
+	it('coinValue does NOT throw on a number / null and returns the integer (blank→0)', () => {
+		expect(coinValue(5 as unknown as string)).toBe(5);
+		expect(coinValue(0 as unknown as string)).toBe(0);
+		expect(coinValue(null as unknown as string)).toBe(0);
+		expect(coinValue(undefined as unknown as string)).toBe(0);
+	});
+
+	it('coinIsValid / validateCoin / coinPayload survive a number-coerced quad', () => {
+		const coerced = {
+			plat: 10 as unknown as string,
+			gold: null as unknown as string,
+			silver: 999 as unknown as string,
+			copper: 0 as unknown as string
+		};
+		expect(() => validateCoin(coerced)).not.toThrow();
+		expect(coinIsValid(coerced)).toBe(true);
+		expect(coinPayload(coerced)).toEqual({ plat: 10, gold: 0, silver: 999, copper: 0 });
+	});
+});

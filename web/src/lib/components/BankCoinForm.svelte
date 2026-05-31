@@ -156,14 +156,20 @@
 			<div class="coin-row">
 				{#each COIN_FIELDS as f (f)}
 					<FormField label={FIELD_LABEL[f]} id={`coin-${f}`} error={fieldErrors[f]}>
+						<!-- CR-01: a text input + numeric keypad, NOT type="number". Svelte 5's
+						     bind:value on a number-like input coerces the written-back value
+						     through to_number() (→ number|null), but inputs[f] is typed/used as
+						     a string (the coin.ts helpers call .trim()). type="text" with
+						     inputmode="numeric" keeps the on-screen numeric keypad WITHOUT the
+						     coercion, so the binding stays a string and the strict /^\d+$/
+						     validation holds. -->
 						<input
 							id={`coin-${f}`}
 							class="field coin-input"
 							class:invalid={!!fieldErrors[f]}
-							type="number"
+							type="text"
 							inputmode="numeric"
-							min="0"
-							max={f === 'plat' ? undefined : 999}
+							pattern="[0-9]*"
 							bind:value={inputs[f]}
 							aria-invalid={fieldErrors[f] ? 'true' : undefined}
 						/>

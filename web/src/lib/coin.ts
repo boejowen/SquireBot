@@ -12,8 +12,32 @@ import type { BankToon } from './api';
 export const COIN_FIELDS = ['plat', 'gold', 'silver', 'copper'] as const;
 export type CoinField = (typeof COIN_FIELDS)[number];
 
-/** The four inputs as raw strings (a number input's value is a string). */
+/** The four inputs as raw strings (a text input's value is a string). */
 export type CoinInputs = Record<CoinField, string>;
+
+/**
+ * The value type a single coin helper accepts (CR-01 input contract). The form
+ * binds these to a text input so the value is a string, but Svelte's
+ * number-input coercion (and any future re-introduction of type="number") can
+ * write a `number` or `null` back into the bound store. Accepting the union
+ * here makes the helpers crash-proof regardless of the input element — the
+ * earlier `.trim()`-on-a-number TypeError (CR-01) is structurally impossible.
+ */
+export type CoinRaw = string | number | null | undefined;
+
+/**
+ * Normalize whatever the binding produced (string | number | null | undefined)
+ * to the trimmed string the validation logic expects. null/undefined → '' (an
+ * empty field = 0, valid); a number → its string form (no NaN/Infinity leaks —
+ * a non-finite number becomes '' so it validates as blank→0, and a fractional
+ * number keeps its decimal so the /^\d+$/ check still rejects it). This is the
+ * single choke point that lets every helper below treat its input as a string.
+ */
+function rawToTrimmed(raw: CoinRaw): string {
+	if (raw === null || raw === undefined) return '';
+	if (typeof raw === 'number') return Number.isFinite(raw) ? String(raw) : '';
+	return raw.trim();
+}
 
 /** The UI-SPEC inline error copy (verbatim). */
 export const PLAT_ERROR = 'Enter a whole number (0 or more).';
@@ -26,8 +50,8 @@ export const SUBUNIT_ERROR = 'Enter 0–999.';
  * string is treated as 0 (a blank field = zero coin, valid). Returns the exact
  * UI-SPEC error string, or undefined when valid.
  */
-export function validateCoinField(field: CoinField, raw: string): string | undefined {
-	const trimmed = raw.trim();
+export function validateCoinField(field: CoinField, raw: CoinRaw): string | undefined {
+	const trimmed = rawToTrimmed(raw);
 	// Blank = 0 (valid). Otherwise it must be a non-negative integer (no sign, no
 	// decimal, no exponent) — a strict digits-only check (parseInt would accept
 	// "5abc"; Number("") is 0; both are wrong here).
@@ -59,9 +83,9 @@ export function coinIsValid(inputs: CoinInputs): boolean {
 	return COIN_FIELDS.every((f) => validateCoinField(f, inputs[f]) === undefined);
 }
 
-/** Coerce a raw field string to its integer value (blank → 0). Assumes validity. */
-export function coinValue(raw: string): number {
-	const t = raw.trim();
+/** Coerce a raw field value to its integer (blank → 0). Assumes validity. */
+export function coinValue(raw: CoinRaw): number {
+	const t = rawToTrimmed(raw);
 	return t === '' ? 0 : Number(t);
 }
 

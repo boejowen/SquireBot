@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T07:05:00.000Z"
-last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE to the VPS (binary + 00004 migration to v4 + DISCORD_* systemd EnvironmentFile + new frontend bundle + owner-floor seeded as broccolifart; Discord login verified end-to-end; demo char Demoknight loaded). THEN quick task 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) done LOCALLY -- redeploy pending to push 2qk live."
+last_updated: "2026-05-31T07:20:00.000Z"
+last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE to the VPS (binary + 00004 migration to v4 + DISCORD_* systemd EnvironmentFile + frontend bundle + owner-floor seeded as broccolifart; Discord login verified end-to-end; demo char Demoknight loaded). THEN quick task 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) executed AND REDEPLOYED LIVE (binary+bundle on the VPS, sha-verified). squirebot.quest is fully live with both."
 progress:
   total_phases: 6
   completed_phases: 5
@@ -155,7 +155,7 @@ None. Roadmap created; Phase 11 ready to plan.
 |---|-------------|------|--------|-----------|
 | 260531-2qk | Uncap bank-coin gold/silver/copper (free non-negative integers, both layers) + link header wordmark to home | 2026-05-31 | bcfd353 | [260531-2qk](./quick/260531-2qk-uncap-bank-coin-gold-silver-copper-link-/) |
 
-> Note: 260531-2qk is committed LOCALLY only — it needs the VPS redeploy (backend binary for coin.go + frontend bundle for coin.ts/SiteShell) to go live.
+> 260531-2qk DEPLOYED LIVE 2026-05-31 — binary (coin.go) + frontend bundle (coin.ts/SiteShell) redeployed to the VPS (sha-verified); rollback at /usr/local/bin/squirebot-server.bak + /var/www/squirebot.prev.
 
 ## Session Continuity
 

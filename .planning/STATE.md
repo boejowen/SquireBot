@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T07:20:00.000Z"
-last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE to the VPS (binary + 00004 migration to v4 + DISCORD_* systemd EnvironmentFile + frontend bundle + owner-floor seeded as broccolifart; Discord login verified end-to-end; demo char Demoknight loaded). THEN quick task 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) executed AND REDEPLOYED LIVE (binary+bundle on the VPS, sha-verified). squirebot.quest is fully live with both."
+last_updated: "2026-05-31T07:40:00.000Z"
+last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE + HUMAN-VERIFIED: all 7 UAT smokes PASS (15-HUMAN-UAT.md = complete) -- login/identity/read-gate/eviction/bank-coin/officer-mgmt/theme all confirmed on squirebot.quest. Quick task 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) also redeployed live. Demo char loaded -> evicted (test) -> restored. Open: G-1 (low) eviction RESTORE has no web UI (backend+API only)."
 progress:
   total_phases: 6
   completed_phases: 5

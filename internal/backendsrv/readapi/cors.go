@@ -47,7 +47,11 @@ func CORS(allowOrigin string, next http.Handler) http.Handler {
 		// rejects — which is exactly why the allow-origin above is the EXACT
 		// locked origin, never a wildcard.
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Vary", "Origin")
+		// IN-05: Add (append), not Set (overwrite) — the defensive idiom for Vary, so
+		// a future handler or middleware layer that adds its own Vary value (e.g.
+		// Accept-Encoding from a compressor) is not clobbered. Nothing upstream sets
+		// Vary today, so this is behavior-neutral now but future-proof.
+		w.Header().Add("Vary", "Origin")
 		// POST added for the P15 write forms (bank-coin / eviction / admin-mgmt).
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		// Sessions ride the httpOnly cookie, NOT an Authorization header, so the

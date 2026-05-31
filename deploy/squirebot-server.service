@@ -5,6 +5,11 @@ Wants=network-online.target
 
 [Service]
 ExecStart=/usr/local/bin/squirebot-server serve --addr 127.0.0.1:8090 --db /var/lib/squirebot/squirebot.db
+# Phase 15 auth secrets (DISCORD_CLIENT_ID/SECRET/GUILD_ID, DISCORD_REDIRECT_URI,
+# SQUIREBOT_WEB_ORIGIN, SQUIREBOT_COOKIE_DOMAIN) live here, root-only chmod 600 —
+# never in the repo/bundle/logs. The leading `-` makes it OPTIONAL so a box (or a
+# local/test start) without the file still boots; see docs/backend-deploy.md §7.
+EnvironmentFile=-/etc/squirebot/squirebot.env
 Restart=always
 RestartSec=3
 User=squirebot

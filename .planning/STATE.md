@@ -32,6 +32,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 Phase: 16 (Cutover + Decommission) — executing. **16-01 (char-meta web form + backend write endpoint, CUTOVER-02) CODE-COMPLETE + LOCALLY VERIFIED** (the ONLY code build in Phase 16). 16-02/03/04 are human-gated ops runbooks (mint ~12 codes, publish the v2.0.0 binary + flip + the live browser smoke, disable Apps Script triggers + retire the Google OAuth client + decommission checklist).
 Plan: 1 of (16-01 code build) complete — 16-02/03/04 are operational, not code plans
+**Resume:** after the human runbook (16-02 publish v2.0.0 Release → 16-03 deploy+mint+herd → flip), re-run `/gsd-execute-phase 16`. It will skip 16-01 (has SUMMARY), draft 16-04's `docs/decommission-checklist.md` (auto Task 1), present the final decommission gates (disable Apps Script triggers + retire OAuth client), then run phase verification + milestone close. Pre-flight verified 2026-05-31: no v2.x tag/release exists; v1.0.2 is still GitHub "Latest"; clear to cut `v2.0.0`.
 
 ### Phase 16 Plan 01 outcome (2026-05-31, /gsd-execute-phase 16)
 

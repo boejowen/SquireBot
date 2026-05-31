@@ -9,7 +9,7 @@
 // SyntaxError that escapes the contract the UI error state depends on.
 
 import { describe, it, expect } from 'vitest';
-import { fetchView, ApiError } from '../api';
+import { fetchView, ApiError, Unauthenticated, Forbidden } from '../api';
 
 /** Build a minimal Response-like stub for the injected fetchFn. */
 function jsonResponse(ok: boolean, status: number, body: unknown): Response {
@@ -18,6 +18,19 @@ function jsonResponse(ok: boolean, status: number, body: unknown): Response {
 		status,
 		json: async () => body
 	} as unknown as Response;
+}
+
+/**
+ * Capture the RequestInit the wrapper passes to fetch, so a test can assert the
+ * credentialed-fetch contract (15-04 B-2 / D-05 cross-subdomain cookie).
+ */
+function capturingFetch(body: unknown): { fetchFn: typeof fetch; init: () => RequestInit | undefined } {
+	let seen: RequestInit | undefined;
+	const fetchFn = (async (_url: string, init?: RequestInit) => {
+		seen = init;
+		return jsonResponse(true, 200, body);
+	}) as unknown as typeof fetch;
+	return { fetchFn, init: () => seen };
 }
 
 /** A 2xx Response whose .json() rejects, mimicking a malformed/empty body. */
@@ -62,5 +75,45 @@ describe('getJSON ApiError contract (via fetchView)', () => {
 		expect(err).toBeInstanceOf(ApiError);
 		expect(err).not.toBeInstanceOf(SyntaxError);
 		expect((err as ApiError).status).toBe(200);
+	});
+});
+
+describe('15-04 B-2: typed auth errors + credentialed fetch', () => {
+	it('sends credentials:"include" on every call (cross-subdomain cookie, D-05)', async () => {
+		const cap = capturingFetch([]);
+		await fetchView(cap.fetchFn);
+		expect(cap.init()?.credentials).toBe('include');
+	});
+
+	it('maps a 401 response to a typed Unauthenticated error (instanceof both Unauthenticated and ApiError)', async () => {
+		const fetchFn = async () => jsonResponse(false, 401, { error: 'unauthenticated' });
+		const err = await fetchView(fetchFn as unknown as typeof fetch).catch((e) => e);
+		expect(err).toBeInstanceOf(Unauthenticated);
+		expect(err).toBeInstanceOf(ApiError);
+		expect((err as Unauthenticated).status).toBe(401);
+	});
+
+	it('maps a 403 response to a typed Forbidden error carrying the server {error} code', async () => {
+		const fetchFn = async () => jsonResponse(false, 403, { error: 'not_authorized' });
+		const err = await fetchView(fetchFn as unknown as typeof fetch).catch((e) => e);
+		expect(err).toBeInstanceOf(Forbidden);
+		expect(err).toBeInstanceOf(ApiError);
+		expect((err as Forbidden).status).toBe(403);
+		expect((err as Forbidden).code).toBe('not_authorized');
+	});
+
+	it('Forbidden carries a not_member code so the gate can route to NotMemberScreen', async () => {
+		const fetchFn = async () => jsonResponse(false, 403, { error: 'not_member' });
+		const err = await fetchView(fetchFn as unknown as typeof fetch).catch((e) => e);
+		expect(err).toBeInstanceOf(Forbidden);
+		expect((err as Forbidden).code).toBe('not_member');
+	});
+
+	it('still throws a plain ApiError (not Unauthenticated/Forbidden) on other non-2xx (e.g. 503)', async () => {
+		const fetchFn = async () => jsonResponse(false, 503, null);
+		const err = await fetchView(fetchFn as unknown as typeof fetch).catch((e) => e);
+		expect(err).toBeInstanceOf(ApiError);
+		expect(err).not.toBeInstanceOf(Unauthenticated);
+		expect(err).not.toBeInstanceOf(Forbidden);
 	});
 });

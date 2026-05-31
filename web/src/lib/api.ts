@@ -23,10 +23,53 @@ export const API_BASE: string = (env.PUBLIC_API_BASE || DEFAULT_API_BASE).replac
 /** Thrown on any non-2xx response or network/transport failure. */
 export class ApiError extends Error {
 	readonly status: number;
-	constructor(message: string, status: number) {
+	/** The server's `{"error":"<code>"}` value when present (auth errors carry it). */
+	readonly code?: string;
+	constructor(message: string, status: number, code?: string) {
 		super(message);
 		this.name = 'ApiError';
 		this.status = status;
+		this.code = code;
+	}
+}
+
+// --- Typed auth errors (15-04 B-2, server-truth) -------------------------
+// The read API is session-gated (15-02): a missing/expired session → 401, a
+// member hitting an officer-only write → 403. AuthGate (15-04) catches these
+// SUBCLASSES on any descendant call and re-routes (401→LoginScreen,
+// 403→NotMember/Officers-only) so the user never sits on a stale authorized
+// view after the server has said no. Both are instanceof-checkable and also
+// instanceof ApiError, so existing `catch (e) { if (e instanceof ApiError) }`
+// sites keep working.
+
+/** A 401 from the API — no/expired session. The gate drops auth state → LoginScreen. */
+export class Unauthenticated extends ApiError {
+	constructor(message: string, status = 401, code?: string) {
+		super(message, status, code);
+		this.name = 'Unauthenticated';
+	}
+}
+
+/** A 403 from the API — authenticated but refused (not a member / not an officer). */
+export class Forbidden extends ApiError {
+	constructor(message: string, status = 403, code?: string) {
+		super(message, status, code);
+		this.name = 'Forbidden';
+	}
+}
+
+/**
+ * Best-effort parse of a `{"error":"<code>"}` body WITHOUT consuming the stream
+ * twice or throwing. Returns the code string or undefined. Used to attach the
+ * server's discriminator (`not_member` vs `not_authorized`) to the typed 403 so
+ * the gate can pick the matching refusal.
+ */
+async function readErrorCode(res: Response): Promise<string | undefined> {
+	try {
+		const body = (await res.json()) as { error?: unknown };
+		return typeof body?.error === 'string' ? body.error : undefined;
+	} catch {
+		return undefined;
 	}
 }
 
@@ -113,13 +156,30 @@ async function getJSON<T>(path: string, fetchFn: typeof fetch = fetch): Promise<
 	try {
 		res = await fetchFn(`${API_BASE}${path}`, {
 			method: 'GET',
-			headers: { Accept: 'application/json' }
+			headers: { Accept: 'application/json' },
+			// D-05 / 15-02: the session cookie is Domain=squirebot.quest and rides
+			// cross-subdomain to api.squirebot.quest ONLY when the request is
+			// credentialed; the API's CORS sends Access-Control-Allow-Credentials.
+			credentials: 'include'
 		});
 	} catch (cause) {
 		// Network / CORS / DNS failure — no HTTP status available.
 		throw new ApiError(`network error fetching ${path}`, 0);
 	}
 	if (!res.ok) {
+		// 15-04 B-2 server-truth: classify the two auth statuses into typed
+		// subclasses the AuthGate catches and re-routes on (401→Login,
+		// 403→matching refusal). The {error} code rides along so the gate can
+		// distinguish not-member from not-officer. Any other non-2xx stays a
+		// plain ApiError (the generic error StateBlock).
+		if (res.status === 401) {
+			const code = await readErrorCode(res);
+			throw new Unauthenticated(`unauthenticated fetching ${path}`, 401, code);
+		}
+		if (res.status === 403) {
+			const code = await readErrorCode(res);
+			throw new Forbidden(`forbidden fetching ${path}`, 403, code);
+		}
 		throw new ApiError(`unexpected ${res.status} fetching ${path}`, res.status);
 	}
 	// A 2xx body that isn't valid JSON (e.g. an interposing proxy/Cloudflare

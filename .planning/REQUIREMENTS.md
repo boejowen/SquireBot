@@ -45,8 +45,8 @@
 
 ### Website login (AUTH)
 
-- [ ] **AUTH-08**: Website visitors sign in with Discord OAuth2, gated on membership in the guild's Discord server (no allowlist upkeep).
-- [ ] **AUTH-09**: Each signed-in user's Discord identity is captured and stored, pre-paying the v2 Wantlist/Discord-pinger prerequisite (per-user Discord identity).
+- [x] **AUTH-08**: Website visitors sign in with Discord OAuth2, gated on membership in the guild's Discord server (no allowlist upkeep). _(15-02: hand-rolled `golang.org/x/oauth2` login/callback, server-side code exchange, fail-closed `IsGuildMember` via `/users/@me/guilds`, non-member refused with NO session; read API walled behind RequireSession. Code-complete + httptest-verified; live login smoke deferred to deploy per the build-only directive.)_ ✅ Plan 15-02 (2026-05-30)
+- [x] **AUTH-09**: Each signed-in user's Discord identity is captured and stored, pre-paying the v2 Wantlist/Discord-pinger prerequisite (per-user Discord identity). _(15-01 schema `web_user` + 15-02 `UpsertWebUser` captures discord_user_id/username/avatar on each login.)_ ✅ Plan 15-02 (2026-05-30)
 
 ### Admin web forms (ADMIN)
 
@@ -100,8 +100,8 @@
 | WEB-03 | P14 Web Frontend | 14-02 (**logic**: searchIndex ported, 999.28+999.30 fixed, `searchRows` in-memory engine, 17 tests) → 14-04 (**UI**: SearchBox/SearchResults — holders surfaced, >5 collapse, clickable inline did-you-mean re-runs) | ✅ Complete (2026-05-30) |
 | WEB-04 | P14 Web Frontend | 14-02 (**logic**: composeNotes → escaped rich HTML, malicious-name XSS test-proven, 15 tests) → 14-04 (**UI**: hover/tap ItemTooltip popover, Esc/outside dismiss, the sole `{@html}` on the escaped output, wiki `rel=noopener`) | ✅ Complete (2026-05-30) |
 | WEB-05 | P14 Web Frontend | 14-02 (**theme**: 5-theme CSS-custom-property registry, velious default, `[data-theme]` blocks in app.css, 11 tests) → 14-04 (**UI**: SiteShell+ThemePicker applies it via `applyTheme` — single `[data-theme]` write + localStorage, velious default) | ✅ Complete (2026-05-30) |
-| AUTH-08 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
-| AUTH-09 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
+| AUTH-08 | P15 Admin Web Forms + Login | 15-02 (oauth2 login/callback, fail-closed guild-membership gate, RequireSession on the read API) | ✅ Complete (2026-05-30; live smoke deferred to deploy) |
+| AUTH-09 | P15 Admin Web Forms + Login | 15-01 (web_user schema) → 15-02 (UpsertWebUser identity capture on login) | ✅ Complete (2026-05-30) |
 | ADMIN-04 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
 | ADMIN-05 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
 | ADMIN-06 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |

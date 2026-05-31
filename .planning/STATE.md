@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T01:31:06.000Z"
+last_updated: "2026-05-31T01:56:18.000Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 25
-  completed_plans: 21
-  percent: 84
+  completed_plans: 22
+  percent: 88
 ---
 
 # State: SquireBot
@@ -30,7 +30,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 ## Current Position
 
 Phase: 15 (Admin Web Forms + Login) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 ### Phase 15 execution directives (user-set 2026-05-30, honor on /gsd-execute-phase 15)
 
@@ -39,7 +39,7 @@ Plan: 2 of 5
 - **Secret handling (at deploy, later):** the 4 DISCORD_* vars go in the squirebot-server **systemd** unit (Environment= / root-only EnvironmentFile=, chmod 600). Secret never enters the repo, the static bundle, or chat.
 - **Owner-floor seed (at deploy, later):** run `squirebot-server set-owner-floor <maintainer-discord-USER-id>` once on the box.
 
-Status: 15-01 complete (schema + store foundation, build+verify local, 3/3 tasks). Next: 15-02 (Discord OAuth2 + session + CORS-creds + set-owner-floor CLI; checkpoint -> "build-only").
+Status: 15-02 complete (Discord OAuth2 login + opaque session + CORS-creds + set-owner-floor CLI, build+verify local, 4/4 tasks; checkpoint pre-resolved "build-only" — code built + httptest-verified against fakes, NO live Discord creds entered, live login smoke deferred to deploy; AUTH-08/09 satisfied; new internal/backendsrv/webauth package; golang.org/x/oauth2 v0.36.0 added; commits b75cf71/8fa642c/394522d/0dc73ab). Next: 15-03 (backend write surface — eviction/bank-coin/officer-mgmt handlers with authorize-under-tx + audit_log + eviction-archive job).
 Last activity: 2026-05-31
 
 ### v2.0 Phase Plan (2026-05-28)
@@ -52,7 +52,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | ✅ Complete (5/5; 12-01 schema/store SQL + 12-02 the 4 pure parsers + 12-03 politeFetch + 12-04 the 2 jobs + 12-05 scheduler/wiring done — `RunPigparse` (D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip) + `RunWiki` (single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue); 12-05 db-backed Job registry: `pigparse_daily` (>=24h) + `wiki_weekly` (Sunday UTC) with immediate-check-on-startup + advance-always job_run cursor + per-job sync.Mutex, `run-job pigparse|wiki` D-7 entrypoint; zero inline SQL; ENRICH-10/11 proven end-to-end) |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | ✅ Complete (4/4 — sink re-pointed to backend; Google stack deleted; native guild-code onboarding; binary 57% smaller + Google-secret-free; SemVer pre-release auto-update twin in place) |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + `@tanstack/table-core` (local adapter; svelte-table is Svelte-4-only) + Tailwind v4; Go read API | P11 (read API) + P12 (data) | ✅ Complete 2026-05-30 (4/4 — human_needed: 6/6 must-haves code-verified, WEB-02 Go parity green, 60 web tests; code-review 0 Critical, WR-01 fixed; deploy + 5 visual UAT pending in 14-HUMAN-UAT.md) |
-| 15 | Admin Web Forms + Login | AUTH-08, AUTH-09, ADMIN-04, ADMIN-05, ADMIN-06 | Discord OAuth2 login; web forms | P14 + P11 | 🔄 Executing (1/5 — 15-01 schema+store foundation done: `00004_web_auth.sql` + websession/admins/eviction/coin store methods, ported v1 admin.ts + eviction semantics; local build+verify only) |
+| 15 | Admin Web Forms + Login | AUTH-08, AUTH-09, ADMIN-04, ADMIN-05, ADMIN-06 | Discord OAuth2 login; web forms | P14 + P11 | 🔄 Executing (2/5 — 15-01 schema+store foundation + 15-02 Discord OAuth2 login/session/CORS-creds/set-owner-floor CLI done; AUTH-08/09 satisfied; new `internal/backendsrv/webauth` package, hand-rolled `golang.org/x/oauth2`, RequireSession walls all 5 read routes, W-4 hardcoded-origin redirect; local build+verify only, live login smoke deferred to deploy) |
 | 16 | Cutover + Decommission | CUTOVER-01, CUTOVER-02, CUTOVER-03, CUTOVER-04 | shadow soak + backfill + coordinated self-update flip | P13 + P14 + P15 + P12 | Not started |
 
 **Sequencing rationale (FRONT-LOAD THE INGEST PATH):**

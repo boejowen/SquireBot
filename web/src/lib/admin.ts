@@ -40,6 +40,11 @@ export function removeResultMessage(result: RemoveOfficerResult): string {
  * not_authorized / bare-403 case is handled by the caller via authGuard (it
  * collapses the whole admin UI — see classifyAdminError in api.ts), so it is
  * NOT a string here.
+ *
+ * WR-07: the 'lock-busy' copy is defense-in-depth only — the backend never emits
+ * lock_busy today (busy_timeout + maxconns=1 serialize writes; see classifyAdminError
+ * in api.ts and webadmin/audit.go). It is retained so the handling is ready if a
+ * future busy_timeout change ever makes SQLITE_BUSY reachable.
  */
 export const ADMIN_ERROR_COPY = {
 	'owner-floor': 'Owner-floor protected — only the maintainer can remove themselves. No changes were written.',

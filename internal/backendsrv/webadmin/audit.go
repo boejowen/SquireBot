@@ -9,8 +9,18 @@
 // Handler convention (mirrors internal/backendsrv/ingest/handler.go + the
 // webauth handlers): method-check first; JSON {"error":"code"} bodies via
 // writeJSONError with the EXACT v1 error codes the frontend routes
-// (not_authorized / owner_floor_protected / lock_busy / not_bank_toon /
-// invalid_input / grace_expired); never log a secret or raw body (V7). Every
+// (not_authorized / owner_floor_protected / not_bank_toon / invalid_input /
+// grace_expired); never log a secret or raw body (V7). Every
+//
+// WR-07: `lock_busy` is INTENTIONALLY NOT emitted by any handler here. The store
+// uses busy_timeout(5000) (the writer waits rather than erroring on contention)
+// and SetMaxOpenConns(1) (writes are serialized), so SQLITE_BUSY is engineered
+// away — there is no contention surface to surface. The frontend keeps a
+// `lock_busy` branch (classifyAdminError → 'lock-busy') purely as defense-in-depth
+// for a hypothetical future where busy_timeout is lowered; it is unreachable from
+// this backend today. If you ever add a code path that CAN return lock_busy, wire
+// it through writeJSONError(w, 403, "lock_busy") so the existing frontend handling
+// activates. Every
 // mutating handler opens ONE *sql.Tx (the store DSN is _txlock=immediate ⇒ BEGIN
 // IMMEDIATE), composes the store *Tx mutator + AppendAuditTx in that single tx,
 // and commits — so the write and its audit row land atomically or not at all.

@@ -463,6 +463,11 @@ export function classifyAdminError(err: unknown): AdminErrorRoute {
 	if (err instanceof Forbidden) {
 		const code = (err.code ?? '').toLowerCase();
 		if (code === 'owner_floor_protected') return 'owner-floor';
+		// WR-07: 'lock_busy' is UNREACHABLE from the current backend — the store's
+		// busy_timeout(5000) + maxconns=1 serialize writes and wait rather than
+		// erroring, so SQLITE_BUSY never surfaces. This branch is kept purely as
+		// defense-in-depth for a future where busy_timeout is lowered; the matching
+		// backend emitter does not exist today (see webadmin/audit.go WR-07 note).
 		if (code === 'lock_busy') return 'lock-busy';
 		// not_authorized, or any other/absent 403 code → collapse to the refusal.
 		return 'officers-only';

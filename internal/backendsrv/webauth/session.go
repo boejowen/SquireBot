@@ -114,6 +114,17 @@ func UserFromContext(ctx context.Context) (string, bool) {
 	return v, ok
 }
 
+// WithUser returns a child context carrying discordUserID under the same
+// unexported key RequireSession/RequireOfficer use, so UserFromContext reads it
+// back. The middleware uses it internally; it is exported so the 15-03 webadmin
+// handler tests (a different package) can inject the acting identity exactly as
+// the gate would, without standing up the full session machinery. Production code
+// outside this package should NEVER call this to forge an identity — the gates are
+// the only legitimate setters in the request path.
+func WithUser(ctx context.Context, discordUserID string) context.Context {
+	return context.WithValue(ctx, userCtxKey, discordUserID)
+}
+
 // writeJSONError writes a {"error":"code"} JSON body with the given status —
 // the established error shape (mirrors the ingest handlers / the v1 error
 // strings the store returns).
@@ -163,7 +174,7 @@ func RequireSession(db *sql.DB, next http.Handler) http.Handler {
 			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		ctx := context.WithValue(r.Context(), userCtxKey, uid)
+		ctx := WithUser(r.Context(), uid)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -196,7 +207,7 @@ func RequireOfficer(db *sql.DB, next http.Handler) http.Handler {
 			writeJSONError(w, http.StatusForbidden, "not_authorized")
 			return
 		}
-		ctx := context.WithValue(r.Context(), userCtxKey, uid)
+		ctx := WithUser(r.Context(), uid)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T07:40:00.000Z"
-last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE + HUMAN-VERIFIED: all 7 UAT smokes PASS (15-HUMAN-UAT.md = complete) -- login/identity/read-gate/eviction/bank-coin/officer-mgmt/theme all confirmed on squirebot.quest. Quick task 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) also redeployed live. Demo char loaded -> evicted (test) -> restored. Open: G-1 (low) eviction RESTORE has no web UI (backend+API only)."
+last_updated: "2026-05-31T08:00:00.000Z"
+last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE + HUMAN-VERIFIED (all 7 UAT smokes PASS). Quick tasks 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) and 260531-3ml (eviction RESTORE web UI -> closes G-1 + Phase 15 deploy docs) both shipped + redeployed live (sha-verified). Demo data cleaned from prod (real-data-only). squirebot.quest fully live + verified. Remaining v2.0 work: Phase 16 (Cutover + Decommission) -- not started."
 progress:
   total_phases: 6
   completed_phases: 5
@@ -154,8 +154,9 @@ None. Roadmap created; Phase 11 ready to plan.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260531-2qk | Uncap bank-coin gold/silver/copper (free non-negative integers, both layers) + link header wordmark to home | 2026-05-31 | bcfd353 | [260531-2qk](./quick/260531-2qk-uncap-bank-coin-gold-silver-copper-link-/) |
+| 260531-3ml | Eviction restore web UI (close G-1: new GET /api/v1/admin/restorable + EvictionForm Restore section) + Phase 15 deploy wrap-up docs | 2026-05-31 | 2b2f263 | [260531-3ml](./quick/260531-3ml-eviction-restore-web-ui-close-g-1-phase-/) |
 
-> 260531-2qk DEPLOYED LIVE 2026-05-31 — binary (coin.go) + frontend bundle (coin.ts/SiteShell) redeployed to the VPS (sha-verified); rollback at /usr/local/bin/squirebot-server.bak + /var/www/squirebot.prev.
+> 260531-2qk + 260531-3ml both DEPLOYED LIVE 2026-05-31 (binary + bundle, sha-verified; rollback at /usr/local/bin/squirebot-server.bak + /var/www/squirebot.prev). 3ml closes UAT gap G-1. Demo data (DemoGuildie/Demoknight) cleaned from prod — real-data-only again.
 
 ## Session Continuity
 

@@ -59,4 +59,4 @@ blocked: 0
 
 ## Gaps
 
-- **G-1 (low, UI gap):** Eviction restore (D-10 reversibility) is fully built in the backend + the `restoreEviction` API wrapper, but **not surfaced in the EvictionForm UI** — there is no Restore control, so un-eviction is not possible from the web (it was done via SQL/server-side here). Candidate for a small follow-up: add an evicted-owners list + Restore action to the admin UI. Does not block Phase 15 (eviction itself works; restore is a rare recovery action).
+- **G-1 — RESOLVED 2026-05-31 (quick task 260531-3ml, deployed live):** the eviction-restore web UI now exists — added `GET /api/v1/admin/restorable` (officer-only, lists evicted-within-grace owners) + a Restore section in the EvictionForm (list → ConfirmDialog → `restoreEviction`, with WR-02-correct copy: the re-minted code is retrieved server-side, not shown in-browser). Originally: D-10 restore was backend/API-only with no UI control.

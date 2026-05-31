@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
+	"github.com/boejowen/SquireBot/internal/backendsrv/webadmin"
 	"github.com/boejowen/SquireBot/internal/backendsrv/webauth"
 )
 
@@ -220,4 +223,93 @@ func TestReadRoutes_RequireSession_401(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newMemberSession mints a real (member, non-officer) session and returns the
+// opaque session id to attach as the sb_session cookie. The web_user is NOT added
+// to guild_admins, so RequireOfficer must 403 it while RequireSession admits it —
+// the exact pair the 15-03 gate test needs.
+func newMemberSession(t *testing.T, ctx context.Context, db *sql.DB, discordUserID string) string {
+	t.Helper()
+	// Use the REAL current time so expires_at (now+TTL) is in the future —
+	// ResolveSession checks the row against time.Now(), so a fixed past `now` would
+	// mint an already-expired session and the gate would (correctly) 401 it.
+	now := time.Now().Unix()
+	if err := store.UpsertWebUser(ctx, db, discordUserID, "Member", "", now); err != nil {
+		t.Fatalf("upsert web_user: %v", err)
+	}
+	sid, err := store.GenerateSessionID()
+	if err != nil {
+		t.Fatalf("generate session id: %v", err)
+	}
+	if err := store.CreateSession(ctx, db, discordUserID, sid, now, store.SessionTTLSeconds); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	return sid
+}
+
+// TestWriteRoutes_Gates is the 15-03 / D-01 / D-12 (B-1) route-gate proof:
+//   - the officer-only admin routes are RequireOfficer-wrapped (a MEMBER session →
+//     403), and unauthenticated → 401;
+//   - the bank-coin routes are RequireSession-wrapped (no session → 401), and a
+//     plain MEMBER session is ADMITTED past the gate (NOT 401/403 — D-12).
+//
+// The wiring here MIRRORS runServe's RequireOfficer/RequireSession wraps exactly.
+func TestWriteRoutes_Gates(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+
+	// Mirror the serve mux's write-surface wiring (same wraps, same handlers).
+	mux := http.NewServeMux()
+	mux.Handle("POST /api/v1/admin/evict", webauth.RequireOfficer(db, webadmin.EvictHandler(db)))
+	mux.Handle("POST /api/v1/admin/officers/add", webauth.RequireOfficer(db, webadmin.OfficerAddHandler(db)))
+	mux.Handle("GET /api/v1/coin/bank-toons", webauth.RequireSession(db, webadmin.BankToonsHandler(db)))
+	mux.Handle("POST /api/v1/coin", webauth.RequireSession(db, webadmin.CoinSetHandler(db)))
+
+	// A plain member session (NOT an officer).
+	member := "555555555555555555"
+	sid := newMemberSession(t, ctx, db, member)
+	cookie := &http.Cookie{Name: webauth.SessionCookieName, Value: sid}
+
+	// 1) Officer route, MEMBER session → 403 (RequireOfficer).
+	t.Run("admin/evict member→403", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/evict", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("POST /api/v1/admin/evict (member) = %d, want 403", rec.Code)
+		}
+	})
+
+	// 2) Officer route, NO session → 401.
+	t.Run("admin/evict anon→401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/evict", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("POST /api/v1/admin/evict (anon) = %d, want 401", rec.Code)
+		}
+	})
+
+	// 3) Coin route, NO session → 401 (RequireSession).
+	t.Run("coin anon→401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/coin", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("POST /api/v1/coin (anon) = %d, want 401", rec.Code)
+		}
+	})
+
+	// 4) Coin route, MEMBER session → ADMITTED past the gate (D-12: NOT 401/403).
+	// The bank-toons GET with a member session returns 200 (empty []), proving a
+	// non-officer is allowed through RequireSession.
+	t.Run("coin/bank-toons member→admitted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/coin/bank-toons", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+			t.Errorf("GET /api/v1/coin/bank-toons (member) = %d, want admitted (D-12 login-only)", rec.Code)
+		}
+	})
 }

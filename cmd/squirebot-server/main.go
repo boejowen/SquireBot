@@ -46,6 +46,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
 	"github.com/boejowen/SquireBot/internal/backendsrv/scheduler"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
+	"github.com/boejowen/SquireBot/internal/backendsrv/webadmin"
 	"github.com/boejowen/SquireBot/internal/backendsrv/webauth"
 )
 
@@ -298,6 +299,34 @@ func runServe(args []string) int {
 	mux.Handle("GET /api/v1/views/gear_check", webauth.RequireSession(db, readapi.NewViews(st, "gear_check")))
 	mux.Handle("GET /api/v1/views/spell_check", webauth.RequireSession(db, readapi.NewViews(st, "spell_check")))
 	mux.Handle("GET /api/v1/views/bank", webauth.RequireSession(db, readapi.NewViews(st, "bank")))
+
+	// P15 / 15-03 write surface (ADMIN-04/05/06). The SERVER is the authorization
+	// boundary (D-01) — these gates are the real ones; the frontend (15-04/15-05)
+	// only gates UX. The gate choice is load-bearing (D-01/D-12):
+	//
+	//   - OFFICER-ONLY (webauth.RequireOfficer): eviction + officer-management. A
+	//     valid-but-non-officer session → 403 not_authorized. The officer-only
+	//     MUTATORS additionally re-authorize INSIDE their write tx (store.*Tx /
+	//     the eviction handler's store.IsOfficerTx re-check) to close the v1 WR-04
+	//     TOCTOU window — this middleware is the cheap outer gate, not a substitute.
+	//   - LOGIN-ONLY (webauth.RequireSession): bank-coin. D-12 (B-1) — ADMIN-05 says
+	//     "authenticated", so ANY signed-in member may record the shared bank's coin;
+	//     the coin handler NEVER checks officer status (proven by
+	//     TestCoinSet_NonOfficerCanWrite). The writer's discord id is audited.
+	//
+	// All are POST/GET on the same mux, so the outer CORS wrap (credential-aware,
+	// 15-02) covers them too.
+	mux.Handle("GET /api/v1/admin/officers", webauth.RequireOfficer(db, webadmin.OfficersListHandler(db)))
+	mux.Handle("POST /api/v1/admin/officers/add", webauth.RequireOfficer(db, webadmin.OfficerAddHandler(db)))
+	mux.Handle("POST /api/v1/admin/officers/remove", webauth.RequireOfficer(db, webadmin.OfficerRemoveHandler(db)))
+	mux.Handle("GET /api/v1/admin/evictable", webauth.RequireOfficer(db, webadmin.EvictableListHandler(db)))
+	mux.Handle("GET /api/v1/admin/eviction/preview", webauth.RequireOfficer(db, webadmin.EvictionPreviewHandler(db)))
+	mux.Handle("POST /api/v1/admin/evict", webauth.RequireOfficer(db, webadmin.EvictHandler(db)))
+	mux.Handle("POST /api/v1/admin/eviction/restore", webauth.RequireOfficer(db, webadmin.RestoreHandler(db)))
+
+	// Bank-coin — LOGIN-ONLY (D-12): RequireSession, NOT RequireOfficer.
+	mux.Handle("GET /api/v1/coin/bank-toons", webauth.RequireSession(db, webadmin.BankToonsHandler(db)))
+	mux.Handle("POST /api/v1/coin", webauth.RequireSession(db, webadmin.CoinSetHandler(db)))
 
 	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
 	// route (D-04). P15 made CORS credential-aware (Access-Control-Allow-Credentials:

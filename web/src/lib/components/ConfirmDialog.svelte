@@ -83,8 +83,10 @@
 		onCancel: () => void;
 	} = $props();
 
-	// A stable id so aria-labelledby points at the heading (W-5).
-	const headingId = `confirm-dialog-heading-${Math.random().toString(36).slice(2)}`;
+	// A stable per-instance id so aria-labelledby points at the heading (W-5).
+	// IN-03: crypto.randomUUID() (collision-free, deterministic uniqueness) rather
+	// than Math.random() — a guaranteed-unique id even if several dialogs mount.
+	const headingId = `confirm-dialog-heading-${crypto.randomUUID()}`;
 
 	let dialogEl: HTMLDivElement | undefined = $state();
 	let cancelBtn: HTMLButtonElement | undefined = $state();

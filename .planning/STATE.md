@@ -3,14 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T08:00:00.000Z"
-last_activity: "2026-05-31 -- Phase 15 DEPLOYED LIVE + HUMAN-VERIFIED (all 7 UAT smokes PASS). Quick tasks 260531-2qk (uncap bank-coin g/s/c + wordmark home-link) and 260531-3ml (eviction RESTORE web UI -> closes G-1 + Phase 15 deploy docs) both shipped + redeployed live (sha-verified). Demo data cleaned from prod (real-data-only). squirebot.quest fully live + verified. Remaining v2.0 work: Phase 16 (Cutover + Decommission) -- not started."
+stopped_at: Phase 16 (Cutover + Decommission) — 16-01 code build COMPLETE + locally verified; 16-02/03/04 human runbook remain
+last_updated: "2026-05-31T18:05:00.000Z"
+last_activity: 2026-05-31
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 25
-  completed_plans: 25
-  percent: 100
+  total_plans: 29
+  completed_plans: 26
+  percent: 90
 ---
 
 # State: SquireBot
@@ -29,10 +30,19 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 ## Current Position
 
-Phase: 15 (Admin Web Forms + Login) — CODE-COMPLETE + LOCALLY VERIFIED (5/5 plans; 5/5 must-haves; code-review BLOCKERs fixed). Live deploy + 7 UAT smokes (15-HUMAN-UAT.md) are the deferred separate step; P16 (Cutover) is blocked on that deploy. Did NOT auto-advance (build-only directive).
-Plan: 5 of 5 — complete
+Phase: 16 (Cutover + Decommission) — executing. **16-01 (char-meta web form + backend write endpoint, CUTOVER-02) CODE-COMPLETE + LOCALLY VERIFIED** (the ONLY code build in Phase 16). 16-02/03/04 are human-gated ops runbooks (mint ~12 codes, publish the v2.0.0 binary + flip + the live browser smoke, disable Apps Script triggers + retire the Google OAuth client + decommission checklist).
+Plan: 1 of (16-01 code build) complete — 16-02/03/04 are operational, not code plans
+
+### Phase 16 Plan 01 outcome (2026-05-31, /gsd-execute-phase 16)
+
+- **16-01 (char-meta form + endpoint, CUTOVER-02) done — code-complete, locally verified.** Both tasks TDD (RED test commit -> GREEN feat commit). The fresh-start replacement for the Sheet backfill (D-01/D-02): the `class/level/race/is_bank_toon` columns already existed in `00001_init.sql`, so NO migration — just a handler, a store mutator, the RACES value-set port, a Svelte form, and node-only tests in both repo styles.
+- **Backend:** `POST /api/v1/char/meta` + `GET /api/v1/char/meta-list`, login-only under `webauth.RequireSession` (D-03 — NEVER `RequireOfficer`/`IsOfficer`; the non-officer-write-persists path is proven by `TestCharMetaSet_NonOfficerCanWrite` reading the columns back). `validCharMeta` re-validates `class ∈ enrich.CLASSES` / `race ∈ enrich.RACES` / level blank->NULL or 1–60 server-side (T-15-29/Pitfall 5); one BEGIN IMMEDIATE tx composes `store.SetCharMetaTx` (param `?` only, `is_removed=0`-scoped, `ErrCharNotFound` fail-closed) + the `char_meta_set` audit row. `enrich.RACES` ported (IKS load-bearing); `CharMeta`/`CharsWithMeta` extended by `is_bank_toon` at the right edge (extend-only) + snake_case JSON tags. Commits `64b9f9d`(test)/`9f6407b`(feat).
+- **Frontend:** `/char-meta` route + `CharMetaForm.svelte` (a strict clone of the code-reviewed `BankCoinForm`) with the **CR-01-safe `type="text" inputmode="numeric"` level input** (NEVER number-typed — the node suite is DOM-blind to that crash), class/race `<select>`s, `is_bank_toon` checkbox, plain-`{}` name render (T-16-03, no `{@html}`), NO ConfirmDialog (D-12). Pure helpers in `charmeta.ts` (rawToTrimmed choke point); `fetchCharsForMeta`/`saveCharMeta` over the existing credentialed cores. `/char-meta` shell-nav link under `{#if session?.authenticated}` (D-03 — member-accessible, NOT the officer block). Commits `80fbb23`(test)/`8fbbce3`(feat).
+- **Verification:** Go `build`/`vet` clean from repo root + full `go test ./internal/backendsrv/...` green (no regression from the CharMeta change). Web `npm run check` 0/0, `npx vitest run` 200/200 (charmeta.test.ts: +28, incl. the CR-01 number/null regression + the Style-B source assertions for the input type and the member-accessible nav), `npm run build` emits index.html + 200.html. One self-inflicted deviation (Style-B assertions tripped by the form's own copied comments containing `type="number"`/`isOfficer` literals) auto-fixed before the GREEN commit. Summary: `.planning/phases/16-cutover-decommission/16-01-SUMMARY.md`.
+- **Deferred (by design):** the REQUIRED browser smoke of the level field + save round-trip is performed in **Plan 16-03 Task 1 against the live deploy** (the node-only suite cannot see the CR-01 crash). No live deploy / mint / release / Google-console action in this run — those are 16-02/03/04.
 
 ### Phase 15 execution-run outcome (2026-05-31, /gsd-execute-phase 15)
+
 - **Executed** all 5 plans sequentially (one plan per wave, on master, no worktrees). 21 task commits + 10 fix commits.
 - **15-02 checkpoint** resolved "build-only" per directive — built + httptest-faked; live login smoke deferred.
 - **Code review (standard, 37 source files):** 2 BLOCKER + 7 WARNING + 5 INFO. User chose "fix everything" → 13/14 fixed (IN-01 was a no-op), 10 atomic `fix(15)` commits. The 2 BLOCKERs (BankCoinForm number-input crash; eviction epoch-seconds date) were invisible to the node-only suite — each now carries a node-only regression. WR-05 owner-floor guard flipped fail-open→fail-closed. Artifacts: 15-REVIEW.md + 15-REVIEW-FIX.md (uncommitted, commit_docs:false).
@@ -161,6 +171,8 @@ None. Roadmap created; Phase 11 ready to plan.
 ## Session Continuity
 
 ### Last Session Summary
+
+**2026-05-31 (session resumed via /gsd-resume-work — Phase 15 confirmed SHIPPED + LIVE; proceeding to discuss Phase 16):** Restored context. **Reconciled a body↔frontmatter drift:** the frontmatter (`completed_phases: 5`, `last_activity` = Phase 15 deployed + UAT-verified) and git history are AUTHORITATIVE — Phase 15 is done, deployed, and human-verified (all 7 UAT smokes PASS, commit `c748b4b`); quick tasks 260531-2qk + 260531-3ml shipped + redeployed live (sha-verified); the eviction-restore UI closed UAT gap G-1; demo data scrubbed from prod (real-data-only). **The dated entries BELOW this one stop at Plan 15-01 and predate 15-02…15-05 + deploy — treat them as historical, not current.** Only **Phase 16 (Cutover + Decommission)** remains in v2.0; it has no phase dir / CONTEXT yet. Cleaned two stale checkpoint artifacts (HANDOFF.json pointing at the already-done discuss-phase-15; a `.continue-here.md` in the completed Phase 14). No pending todos; every PLAN has a SUMMARY (no incomplete executions). **Real-world gate to confirm at P16 kickoff:** are the ~12 guildies' re-targeted (P13) watchers actually uploading yet? — the shadow-soak's premise. **Stopped at:** Phase 16 (Cutover + Decommission) context gathered
 
 **2026-05-31 (Plan 15-01 executed — Phase 15 schema + store foundation: `00004_web_auth.sql` + websession/admins/eviction/coin store methods; AUTH-08/09 + ADMIN-04/05/06; LOCAL build+verify only, Wave 1):** The hard prerequisite for the whole phase, built in 3 tasks (Tasks 1+2 TDD RED→GREEN, Task 3 impl+tests grouped) across 3 atomic feat commits (~13 min). **Task 1 (`abb92a0`):** forward-only `00004_web_auth.sql` — `web_user`/`web_session`(hash-only, T-15-01)/`guild_admins`(Discord-ID-keyed)/`app_config`(owner-floor singleton) tables + 4 nullable coin columns + `grace_until`/`archived_at` + GENERIC `audit_log` `actor`/`detail`/`at` columns (D-06 reuse-not-duplicate); extended migrate_test.go (fresh-DB Up over 00001→00004 + idempotent re-run + PRAGMA column assertions). **Task 2 (`78d7e24`):** `websession.go` — GenerateSessionID(crypto/rand+hex)/HashSession(sha256)/UpsertWebUser(idempotent, first_seen immutable)/CreateSession(hash-only)/ResolveSession(FAIL-CLOSED ErrSessionExpired/ErrSessionNotFound)/TouchSession(rolling 30d)/DeleteSession/GetWebUser; `SessionTTLSeconds=2592000`; the websession_test PROVES the plaintext id is never stored. **Task 3 (`4b39e40`):** `admins.go`+`eviction.go`+`coin.go` — ports v1 admin.ts (fail-closed IsOfficer, idempotent Add/RemoveOfficerTx with authorize-under-transaction [WR-04 first-in-tx-SELECT re-check], owner-floor protection [ErrOwnerFloorProtected before any write], self-removal orphan rule; SetOwnerFloor seeds a placeholder web_user + bootstrap officer) + eviction (EvictOwnerTx cascades is_removed+grace_until AND revokes guild_code.disabled_at in one tx [D-10], RestoreOwnerTx reverses during grace, ArchiveExpiredEvictions idempotent) + coin (SetCoinTx bank-toon-gated → ErrNotBankToon [T-15-04], `*int64` so entered-0 ≠ unset). **`go build ./...` + `GOOS=linux GOARCH=amd64 go build ./cmd/squirebot-server` + `go vet ./internal/backendsrv/...` + full `go test ./...` all green** (cross-compile artifact gitignored+removed). **1 Rule-3 deviation:** renamed the new commit-on-success test helper `withTx`→`commitTx` (collision with enrich_test.go's rollback-only `withTx`) across the 3 test files — test-only. **Scope honored:** NO deploy, NO live-DB migration, NO systemd touch (user's locked build-only scope); the 4 `DISCORD_*` systemd vars + `set-owner-floor` seed are deploy-time steps deferred to a later deliberate run. **Phase 15 now 1/5.** Next: 15-02 (Discord OAuth2 + opaque session + CORS-creds + `set-owner-floor` CLI) — its checkpoint answer is pre-locked to "build-only" per the Phase 15 execution directives (the user has the Discord app provisioned but the live values go on the box at deploy only).
 

@@ -320,6 +320,7 @@ func runServe(args []string) int {
 	mux.Handle("POST /api/v1/admin/officers/add", webauth.RequireOfficer(db, webadmin.OfficerAddHandler(db)))
 	mux.Handle("POST /api/v1/admin/officers/remove", webauth.RequireOfficer(db, webadmin.OfficerRemoveHandler(db)))
 	mux.Handle("GET /api/v1/admin/evictable", webauth.RequireOfficer(db, webadmin.EvictableListHandler(db)))
+	mux.Handle("GET /api/v1/admin/restorable", webauth.RequireOfficer(db, webadmin.RestorableListHandler(db)))
 	mux.Handle("GET /api/v1/admin/eviction/preview", webauth.RequireOfficer(db, webadmin.EvictionPreviewHandler(db)))
 	mux.Handle("POST /api/v1/admin/evict", webauth.RequireOfficer(db, webadmin.EvictHandler(db)))
 	mux.Handle("POST /api/v1/admin/eviction/restore", webauth.RequireOfficer(db, webadmin.RestoreHandler(db)))

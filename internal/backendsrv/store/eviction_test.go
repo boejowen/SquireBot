@@ -301,3 +301,63 @@ func TestListEvictableOwners_AndPreview(t *testing.T) {
 		t.Errorf("PreviewEviction = %v, want [Aone Atwo] (sorted)", names)
 	}
 }
+
+// TestListRestorableOwners proves the inverse of ListEvictableOwners: only owners
+// with >=1 character STILL IN GRACE (evicted, grace not yet expired, not archived)
+// are returned — a live owner and a past-grace/archived owner are both EXCLUDED.
+func TestListRestorableOwners(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	// (1) LIVE owner — never evicted. Must be EXCLUDED (nothing in grace).
+	live := insertOwner(t, ctx, db, "Live-Owner")
+	insertChar(t, ctx, db, live, "Livetoon", false)
+
+	// (2) IN-GRACE owner — evicted now, grace runs to now+30d. The two chars must
+	//     both be counted; grace_until is the (single shared) deadline.
+	inGrace := insertOwner(t, ctx, db, "Grace-Owner")
+	insertChar(t, ctx, db, inGrace, "Graceone", false)
+	insertChar(t, ctx, db, inGrace, "Gracetwo", false)
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, _, e := EvictOwnerTx(ctx, tx, inGrace, now)
+		return e
+	}); err != nil {
+		t.Fatalf("evict in-grace owner: %v", err)
+	}
+
+	// (3) PAST-GRACE owner — evicted with grace already expired, then archived. Must
+	//     be EXCLUDED (archived data is never restorable).
+	expired := insertOwner(t, ctx, db, "Expired-Owner")
+	insertChar(t, ctx, db, expired, "Expiredtoon", false)
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, _, e := EvictOwnerTx(ctx, tx, expired, now-EvictionGraceSeconds-10)
+		return e
+	}); err != nil {
+		t.Fatalf("evict past-grace owner: %v", err)
+	}
+	if n, err := ArchiveExpiredEvictions(ctx, db, now); err != nil || n != 1 {
+		t.Fatalf("archive past-grace owner: n=%d err=%v, want 1/nil", n, err)
+	}
+
+	owners, err := ListRestorableOwners(ctx, db, now)
+	if err != nil {
+		t.Fatalf("ListRestorableOwners: %v", err)
+	}
+	if len(owners) != 1 {
+		t.Fatalf("ListRestorableOwners = %+v, want exactly 1 (only the in-grace owner)", owners)
+	}
+	got := owners[0]
+	if got.OwnerID != inGrace {
+		t.Errorf("owner_id = %d, want %d (the in-grace owner; live + archived must be excluded)", got.OwnerID, inGrace)
+	}
+	if got.Label != "Grace-Owner" {
+		t.Errorf("label = %q, want Grace-Owner", got.Label)
+	}
+	if got.CharCount != 2 {
+		t.Errorf("char_count = %d, want 2", got.CharCount)
+	}
+	if got.GraceUntil != now+EvictionGraceSeconds {
+		t.Errorf("grace_until = %d, want %d (now + 30d)", got.GraceUntil, now+EvictionGraceSeconds)
+	}
+}

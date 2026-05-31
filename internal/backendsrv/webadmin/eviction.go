@@ -65,6 +65,28 @@ func EvictableListHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// RestorableListHandler (GET) returns the owners with >=1 character still in grace
+// (evicted, grace not yet expired, not archived) — the eviction-RESTORE picker
+// source, the inverse of EvictableListHandler. Officer-only at the route.
+func RestorableListHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		owners, err := store.ListRestorableOwners(r.Context(), db, nowUnix())
+		if err != nil {
+			slog.Error("restorable list failed", "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		if owners == nil {
+			owners = []store.RestorableOwner{}
+		}
+		writeJSON(w, owners)
+	}
+}
+
 // EvictionPreviewHandler (GET ?owner_id=N) returns the owner's live character
 // names + a preview grace_until (now + 30d) — what the confirm-before-commit UI
 // lists. Officer-only at the route. An empty cascade yields characters:[] so the

@@ -262,6 +262,7 @@ func TestWriteRoutes_Gates(t *testing.T) {
 	// Mirror the serve mux's write-surface wiring (same wraps, same handlers).
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/admin/evict", webauth.RequireOfficer(db, webadmin.EvictHandler(db)))
+	mux.Handle("GET /api/v1/admin/restorable", webauth.RequireOfficer(db, webadmin.RestorableListHandler(db)))
 	mux.Handle("POST /api/v1/admin/officers/add", webauth.RequireOfficer(db, webadmin.OfficerAddHandler(db)))
 	mux.Handle("GET /api/v1/coin/bank-toons", webauth.RequireSession(db, webadmin.BankToonsHandler(db)))
 	mux.Handle("POST /api/v1/coin", webauth.RequireSession(db, webadmin.CoinSetHandler(db)))
@@ -288,6 +289,26 @@ func TestWriteRoutes_Gates(t *testing.T) {
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/admin/evict", nil))
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("POST /api/v1/admin/evict (anon) = %d, want 401", rec.Code)
+		}
+	})
+
+	// 2a) Restorable list (officer-only GET), MEMBER session → 403 (RequireOfficer).
+	t.Run("admin/restorable member→403", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/restorable", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("GET /api/v1/admin/restorable (member) = %d, want 403", rec.Code)
+		}
+	})
+
+	// 2b) Restorable list, NO session → 401.
+	t.Run("admin/restorable anon→401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/restorable", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET /api/v1/admin/restorable (anon) = %d, want 401", rec.Code)
 		}
 	})
 

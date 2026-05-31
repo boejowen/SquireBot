@@ -80,6 +80,58 @@ func ListEvictableOwners(ctx context.Context, db *sql.DB) ([]EvictableOwner, err
 	return out, nil
 }
 
+// RestorableOwner is one row of the eviction-RESTORE picker
+// (ListRestorableOwners): an owner with at least one character that is still in
+// grace (is_removed=1, grace_until in the future, not yet archived) — the inverse
+// of EvictableOwner. CharCount is how many of the owner's characters the restore
+// would un-remove; GraceUntil is the SOONEST deadline across them (MIN), so the UI
+// shows how long the officer still has. snake_case JSON tags (crosses the API
+// boundary).
+type RestorableOwner struct {
+	OwnerID    int64  `json:"owner_id"`
+	Label      string `json:"label"`
+	CharCount  int    `json:"char_count"`
+	GraceUntil int64  `json:"grace_until"`
+}
+
+// ListRestorableOwners returns owners that have >=1 character STILL IN GRACE —
+// is_removed=1 AND grace_until IS NOT NULL AND grace_until > now AND archived_at IS
+// NULL — the set RestoreOwnerTx can still reverse (the inverse of
+// ListEvictableOwners). Live owners (nothing removed) and past-grace/archived
+// owners are excluded. char_count is the count of still-in-grace characters;
+// grace_until is the soonest (MIN) deadline. Ordered by label. Parameterized `?`
+// only (V5).
+func ListRestorableOwners(ctx context.Context, db *sql.DB, now int64) ([]RestorableOwner, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT o.id, o.label, COUNT(c.id) AS char_count, MIN(c.grace_until) AS grace_until
+		   FROM owner o
+		   JOIN character c ON c.owner_id = o.id
+		          AND c.is_removed = 1
+		          AND c.grace_until IS NOT NULL
+		          AND c.grace_until > ?
+		          AND c.archived_at IS NULL
+		  GROUP BY o.id, o.label
+		 HAVING char_count > 0
+		  ORDER BY o.label COLLATE NOCASE`, now)
+	if err != nil {
+		return nil, fmt.Errorf("list restorable owners: %w", err)
+	}
+	defer rows.Close()
+
+	var out []RestorableOwner
+	for rows.Next() {
+		var r RestorableOwner
+		if err := rows.Scan(&r.OwnerID, &r.Label, &r.CharCount, &r.GraceUntil); err != nil {
+			return nil, fmt.Errorf("scan restorable owner: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate restorable owners: %w", err)
+	}
+	return out, nil
+}
+
 // PreviewEviction returns the sorted names of the owner's live characters — what
 // the confirm-before-commit UI lists (v1's previewEviction.chars). Read-only.
 func PreviewEviction(ctx context.Context, db *sql.DB, ownerID int64) ([]string, error) {

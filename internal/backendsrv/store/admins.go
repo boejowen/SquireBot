@@ -99,6 +99,18 @@ func isOfficerTx(ctx context.Context, tx *sql.Tx, discordUserID string) (bool, e
 	return true, nil
 }
 
+// IsOfficerTx is the exported tx-scoped officer re-check: the same fail-closed
+// test as IsOfficer, executed on the caller-supplied *sql.Tx so it sees the tx's
+// snapshot. The 15-03 eviction/restore handlers call this as the FIRST statement
+// inside their write tx to close the v1 WR-04 TOCTOU window — EvictOwnerTx /
+// RestoreOwnerTx (unlike AddOfficerTx / RemoveOfficerTx) do NOT self-authorize, so
+// the composing handler owns the in-tx re-check. Delegates to the package-private
+// isOfficerTx (the same implementation AddOfficerTx/RemoveOfficerTx use), so there
+// is one authorization read, not two.
+func IsOfficerTx(ctx context.Context, tx *sql.Tx, discordUserID string) (bool, error) {
+	return isOfficerTx(ctx, tx, discordUserID)
+}
+
 // GetOwnerFloor reads the CLI-seeded owner-floor Discord id from
 // app_config['owner_floor_discord_id'] ("" when unset — the floor has not been
 // seeded yet). D-08.

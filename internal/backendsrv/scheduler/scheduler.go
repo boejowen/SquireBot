@@ -128,6 +128,23 @@ func Start(ctx context.Context, db *sql.DB) {
 				return jobs.RunWiki(ctx, db, politefetch.Fetch)
 			},
 		},
+		{
+			// eviction_archive (15-03 / D-10, W-3): hard-archive evicted characters
+			// once their 30-day grace has passed. DAILY cadence — reuses the daily
+			// duePigparse predicate (now-last >= 24h), NOT the Sunday-only weekly one,
+			// so a past-grace owner is archived within a day of grace expiry.
+			// store.ArchiveExpiredEvictions is a predicate sweep guarded by
+			// `archived_at IS NULL`, so a re-run archives 0 more (idempotent — the W-3
+			// requirement, proven by webadmin's TestArchiveJob_Idempotent). No fetch —
+			// purely a local DB sweep.
+			Name: "eviction_archive",
+			Due:  duePigparse, // daily: now-last >= 24h (the daily predicate, not the weekly one — W-3)
+			Run: func(ctx context.Context) error {
+				n, err := store.ArchiveExpiredEvictions(ctx, db, time.Now().Unix())
+				slog.Info("eviction_archive", "archived", n)
+				return err
+			},
+		},
 	}
 	go run(ctx, db, registry)
 }

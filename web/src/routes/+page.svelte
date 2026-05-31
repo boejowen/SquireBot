@@ -11,11 +11,13 @@
 	// per-view-empty StateBlock; loading -> the skeleton. (The bank coin affordance
 	// renders the "not yet recorded" copy, never a fabricated zero-platinum value.)
 
-	import { onMount } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 	import DataGrid from '$lib/components/DataGrid.svelte';
 	import SearchBox from '$lib/components/SearchBox.svelte';
 	import StateBlock from '$lib/components/StateBlock.svelte';
 	import StatusLegend from '$lib/components/StatusLegend.svelte';
+	import { AUTH_GUARD_KEY, type AuthGuard } from '$lib/components/AuthGate.svelte';
+	import { Unauthenticated, Forbidden } from '$lib/api';
 	import {
 		fetchView,
 		fetchGearCheck,
@@ -71,6 +73,9 @@
 		]
 	};
 
+	// The AuthGate guard from context (server-truth re-routing on a 401/403, B-2).
+	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
+
 	let active = $state<ViewId>('view');
 	let status = $state<Status>('loading');
 
@@ -96,9 +101,17 @@
 			bankRows = b.rows;
 			meta = m;
 			status = 'ready';
-		} catch {
-			// api.ts already logged nothing sensitive; surface the error state.
-			status = 'error';
+		} catch (err) {
+			// Server-truth (B-2): a 401/403 from ANY of the read endpoints means the
+			// session is gone or refused — hand it to the AuthGate guard so the whole
+			// site re-routes (401→LoginScreen, 403→matching refusal) instead of
+			// showing a stale "Couldn't load" view with dead controls. Any other
+			// failure (network/5xx) stays the generic error StateBlock + Retry.
+			if (authGuard && (err instanceof Unauthenticated || err instanceof Forbidden)) {
+				authGuard(err);
+			} else {
+				status = 'error';
+			}
 		}
 	}
 

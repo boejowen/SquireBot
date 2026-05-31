@@ -8,7 +8,10 @@
 	// CC-BY-SA attribution (UI-SPEC Copywriting). prefers-reduced-motion makes
 	// theme transitions instant (handled globally in app.css).
 
+	import { getContext } from 'svelte';
 	import ThemePicker from './ThemePicker.svelte';
+	import SessionIndicator from './SessionIndicator.svelte';
+	import { SESSION_KEY, type SessionGetter } from './AuthGate.svelte';
 	import type { ThemeKey } from '$lib/theme/themes';
 
 	// The active theme is owned by +layout.svelte (which seeds it via loadTheme
@@ -19,12 +22,39 @@
 		theme = $bindable(),
 		children
 	}: { theme: ThemeKey; children: import('svelte').Snippet } = $props();
+
+	// The session comes from AuthGate via context. SiteShell only renders when the
+	// gate has admitted an authenticated member (AuthGate shows the pre-auth
+	// screens otherwise), so `session` is normally an authed member here — but we
+	// guard defensively. The shell shows the SessionIndicator (AUTH-09) when
+	// authenticated, and an Admin nav entry ONLY for an officer (Layer-1 UX
+	// suppression; the server is the real gate — 15-03).
+	const getSession = getContext<SessionGetter>(SESSION_KEY);
+	let session = $derived(getSession ? getSession() : null);
+
+	function goAdmin() {
+		// Layer-1 UX nav only; /admin is built in 15-05. The server re-checks
+		// officer status on every admin endpoint (15-03) — the hidden nav is never
+		// the gate.
+		window.location.href = '/admin';
+	}
 </script>
 
 <div class="site-shell">
 	<header class="shell-header">
 		<span class="wordmark">SquireBot</span>
-		<ThemePicker bind:theme />
+		<div class="shell-controls">
+			{#if session?.isOfficer}
+				<!-- Officer-only Admin nav (Layer-1 UX suppression; /admin lands in
+				     15-05). A non-officer never sees this affordance — but the server
+				     re-checks officer status on every admin endpoint (15-03). -->
+				<button type="button" class="admin-nav" onclick={goAdmin}>Admin</button>
+			{/if}
+			<ThemePicker bind:theme />
+			{#if session?.authenticated}
+				<SessionIndicator {session} />
+			{/if}
+		</div>
 	</header>
 
 	<main class="shell-main">
@@ -62,6 +92,36 @@
 		line-height: 1.2;
 		color: var(--accent);
 		letter-spacing: 0.02em;
+	}
+	.shell-controls {
+		display: inline-flex;
+		align-items: center;
+		gap: 16px;
+		flex-wrap: wrap;
+	}
+	/* Admin nav entry — styled like the +page view .tab (UI-SPEC). */
+	.admin-nav {
+		min-height: 44px; /* touch target (UI-SPEC) */
+		padding: 8px 16px;
+		background: none;
+		border: none;
+		border-bottom: 2px solid transparent;
+		color: var(--text);
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+		opacity: 0.7;
+	}
+	.admin-nav:hover {
+		opacity: 1;
+		color: var(--accent);
+	}
+	.admin-nav:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 	.shell-main {
 		flex: 1;

@@ -9,6 +9,7 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import SiteShell from '$lib/components/SiteShell.svelte';
+	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { loadTheme, applyTheme, type ThemeKey } from '$lib/theme/themes';
 
 	let { children } = $props();
@@ -27,10 +28,17 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
+<!-- The [data-theme] root stays OUTERMOST so the themed shell (wordmark +
+     ThemePicker + footer) shows on the login / not-member screens too. AuthGate
+     wraps the page content inside the shell: it provides the session via
+     context (SiteShell reads it for the SessionIndicator + the officer-only
+     Admin nav) and renders the pre-auth screens or the app (D-01). -->
 <div class="theme-root" data-theme={theme} bind:this={rootEl}>
-	<SiteShell bind:theme>
-		{@render children()}
-	</SiteShell>
+	<AuthGate>
+		<SiteShell bind:theme>
+			{@render children()}
+		</SiteShell>
+	</AuthGate>
 </div>
 
 <style>

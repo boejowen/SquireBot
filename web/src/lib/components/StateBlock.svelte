@@ -3,11 +3,23 @@
 	// presentation (14-UI-SPEC Copywriting Contract). All copy is the EXACT
 	// UI-SPEC string; tone is plain + guild-casual. Color is never load-bearing
 	// here — these are text blocks.
-	export type StateKind = 'empty' | 'view-empty' | 'error' | 'loading' | 'no-results' | 'no-coin';
+	export type StateKind =
+		| 'empty'
+		| 'view-empty'
+		| 'error'
+		| 'loading'
+		| 'no-results'
+		| 'no-coin'
+		// 15-04: the auth lifecycle states (AuthGate resolution + the direct-nav
+		// officers-only refusal). Copy is verbatim from the 15-UI-SPEC Copywriting
+		// Contract.
+		| 'auth-loading'
+		| 'officers-only';
 </script>
 
 <script lang="ts">
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 
 	let {
 		kind,
@@ -33,6 +45,25 @@
 			<span class="shimmer"></span>
 		</div>
 		<p class="state-body">Loading…</p>
+	</div>
+{:else if kind === 'auth-loading'}
+	<!-- Brief while AuthGate resolves the session against whoami-web (15-UI-SPEC). -->
+	<div class="state state-loading" role="status" aria-live="polite">
+		<div class="skeleton" aria-hidden="true">
+			<span class="shimmer"></span>
+			<span class="shimmer"></span>
+		</div>
+		<p class="state-body">Checking your access…</p>
+	</div>
+{:else if kind === 'officers-only'}
+	<!-- Direct-nav-to-/admin refusal for a non-officer (15-UI-SPEC Copywriting). -->
+	<div class="state state-empty" role="alert">
+		<ShieldAlert size={28} aria-hidden="true" class="state-icon" />
+		<h2 class="state-heading">Officers only</h2>
+		<p class="state-body">
+			This area is for guild officers. If you think you should have access, ask an officer to add
+			you.
+		</p>
 	</div>
 {:else if kind === 'error'}
 	<div class="state state-error" role="alert">

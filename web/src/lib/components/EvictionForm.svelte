@@ -24,13 +24,16 @@
 	import { AUTH_GUARD_KEY, type AuthGuard } from './AuthGate.svelte';
 	import {
 		fetchEvictable,
+		fetchRestorable,
 		previewEviction,
 		evict,
+		restoreEviction,
 		classifyAdminError,
 		type EvictableOwner,
-		type EvictionPreview
+		type EvictionPreview,
+		type RestorableOwner
 	} from '$lib/api';
-	import { graceDate } from '$lib/eviction';
+	import { graceDate, restoreResultMessage } from '$lib/eviction';
 
 	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
 
@@ -52,6 +55,16 @@
 	// Set when the SERVER says owner_floor_protected — the inline floor block.
 	let floorBlocked = $state(false);
 
+	// --- Restore (close G-1): the evicted-within-grace guildies + a Restore row.
+	// Loaded alongside the evictable picker on mount. An empty list renders nothing
+	// (it is NOT an error — most of the time no one is in grace).
+	let restorable = $state<RestorableOwner[]>([]);
+	let restoreTarget = $state<RestorableOwner | null>(null); // the row pending confirm
+	let restoreDialogOpen = $state(false);
+	let restoring = $state(false);
+	let restoreSuccessMsg = $state('');
+	let restoreErrorMsg = $state('');
+
 	let selectedOwner = $derived(owners.find((o) => String(o.owner_id) === selectedId) ?? null);
 	let cascadeEmpty = $derived(!!preview && preview.characters.length === 0);
 	// Evict is enabled only with a non-empty preview, not floor-blocked, idle.
@@ -67,7 +80,12 @@
 		phase = 'loading';
 		errorMsg = '';
 		try {
-			owners = await fetchEvictable();
+			// Both pickers in one pass — the evictable set drives `phase`, the
+			// restorable set (close G-1) is rendered as its own section below. A 401/403
+			// on either routes through the SAME server-truth handler.
+			const [ev, re] = await Promise.all([fetchEvictable(), fetchRestorable()]);
+			owners = ev;
+			restorable = re;
 			phase = 'ready';
 		} catch (err) {
 			if (route(err)) return;
@@ -118,6 +136,40 @@
 		}
 	}
 
+	// --- Restore handlers (close G-1) ----------------------------------------
+
+	function openRestoreConfirm(owner: RestorableOwner) {
+		if (restoring) return;
+		restoreTarget = owner;
+		restoreDialogOpen = true;
+	}
+
+	async function doRestore() {
+		restoreDialogOpen = false;
+		const target = restoreTarget;
+		if (!target || restoring) return;
+		restoring = true;
+		restoreSuccessMsg = '';
+		restoreErrorMsg = '';
+		try {
+			const res = await restoreEviction(target.owner_id);
+			// WR-02: the re-minted code is server-side only — the copy says so and never
+			// implies it is shown here. Both outcomes (issued / mint-failed) are mapped
+			// by the pure restoreResultMessage helper. The label renders via {} below.
+			restoreSuccessMsg = restoreResultMessage(res, target.label);
+			// Drop the now-restored owner from the list.
+			restorable = restorable.filter((o) => o.owner_id !== target.owner_id);
+			restoreTarget = null;
+		} catch (err) {
+			// Same server-truth router as the evict path: officers-only collapse / 401
+			// bubble / owner-floor inline; a grace_expired 409 falls through to generic.
+			if (route(err)) return;
+			restoreErrorMsg = `Restore failed: ${reason(err)}. No changes were written.`;
+		} finally {
+			restoring = false;
+		}
+	}
+
 	/**
 	 * Route a caught error by its server-truth verdict (B-2). Returns true when
 	 * the error was handled as a re-route (officers-only collapse via authGuard,
@@ -162,8 +214,11 @@
 {:else if phase === 'error'}
 	<StateBlock kind="error" onRetry={load} />
 {:else if owners.length === 0}
-	<!-- No evictable guildies — an empty picker, not the form (UI-SPEC). -->
+	<!-- No evictable guildies — an empty picker, not the form (UI-SPEC). The
+	     Restore section still renders below (an evicted guildie may be in grace
+	     even when no live guildie is currently evictable). -->
 	<StateBlock kind="view-empty" viewName="evictable guildies" />
+	{@render restoreSection()}
 {:else}
 	<div class="evict-form">
 		<FormField label="Guildie" id="evict-owner">
@@ -224,7 +279,66 @@
 		onConfirm={doEvict}
 		onCancel={() => (dialogOpen = false)}
 	/>
+
+	{@render restoreSection()}
 {/if}
+
+<!--
+	Restore evicted guildies (close G-1). Rendered in BOTH ready branches (whether or
+	not there is a live evictable guildie) via this snippet. An empty restorable list
+	renders a quiet note — it is NOT an error. Each row offers a Restore button gated
+	by a ConfirmDialog (confirm-before-commit). Re-mints a guild code that is NOT
+	web-deliverable (WR-02) — the success copy makes that explicit. Every guildie
+	label renders via plain {} (Svelte auto-escapes; never the raw-HTML directive,
+	T-15-28).
+-->
+{#snippet restoreSection()}
+	<section class="restore-section" aria-label="Restore evicted guildies">
+		<h3 class="restore-heading">Restore evicted guildies</h3>
+		{#if restoreSuccessMsg}
+			<p class="result success" aria-live="polite">{restoreSuccessMsg}</p>
+		{/if}
+		{#if restoreErrorMsg}
+			<p class="result error" aria-live="polite">{restoreErrorMsg}</p>
+		{/if}
+		{#if restorable.length === 0}
+			<p class="restore-empty">No evicted guildies are within the grace period.</p>
+		{:else}
+			<ul class="restore-list">
+				{#each restorable as o (o.owner_id)}
+					<li class="restore-row">
+						<span class="restore-info">
+							<span class="restore-label">{o.label}</span>
+							<span class="restore-meta"
+								>{o.char_count} character(s) · grace until {graceDate(o.grace_until)}</span
+							>
+						</span>
+						<button
+							type="button"
+							class="primary restore-btn"
+							disabled={restoring}
+							onclick={() => openRestoreConfirm(o)}
+						>
+							{restoring && restoreTarget?.owner_id === o.owner_id ? 'Restoring…' : 'Restore'}
+						</button>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
+
+	<ConfirmDialog
+		open={restoreDialogOpen}
+		heading="Restore guildie"
+		body={`This un-removes ${restoreTarget?.char_count ?? 0} character(s) for ${restoreTarget?.label ?? 'this guildie'} and re-issues a guild code. The new code is retrieved on the server (from the logs / \`mint-code\`) and must be handed off out-of-band — it is not shown here.`}
+		confirmLabel={`Restore ${restoreTarget?.label ?? ''}`}
+		onConfirm={doRestore}
+		onCancel={() => {
+			restoreDialogOpen = false;
+			restoreTarget = null;
+		}}
+	/>
+{/snippet}
 
 <style>
 	.evict-form {
@@ -354,5 +468,71 @@
 	.primary:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
+	}
+	/* --- Restore section (close G-1) --- */
+	.restore-section {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		max-width: 640px;
+		margin-top: 32px;
+		padding-top: 24px;
+		border-top: 1px solid var(--border, var(--accent));
+	}
+	.restore-heading {
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 16px;
+		letter-spacing: 0.04em;
+		margin: 0;
+	}
+	.restore-empty {
+		font-family: var(--font-body);
+		font-size: 16px;
+		opacity: 0.75;
+		margin: 0;
+	}
+	.restore-list {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.restore-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 8px 12px;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+		background: var(--panel);
+	}
+	.restore-info {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		font-family: var(--font-body);
+	}
+	.restore-label {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.restore-meta {
+		font-size: 13px;
+		opacity: 0.75;
+	}
+	/* The Restore action is non-destructive — the standard accent primary, NOT the
+	   destructive token the Evict button uses. */
+	.restore-btn {
+		color: var(--bg);
+		background: var(--accent);
+		flex: none;
+	}
+	:global([data-theme='heavy']) .restore-btn {
+		color: var(--bg);
 	}
 </style>

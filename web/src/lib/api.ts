@@ -334,6 +334,20 @@ export interface EvictableOwner {
 	char_count: number;
 }
 
+/**
+ * A restorable owner (`GET /api/v1/admin/restorable` element) — an evicted guildie
+ * still within the grace window (the inverse of EvictableOwner). char_count is how
+ * many characters the restore would un-remove; grace_until is the SOONEST deadline
+ * (Unix epoch SECONDS, like EvictionPreview.grace_until — NOT a string).
+ */
+export interface RestorableOwner {
+	owner_id: number;
+	label: string;
+	char_count: number;
+	/** Unix epoch SECONDS (mirrors the Go side: MIN(grace_until)). NOT a string. */
+	grace_until: number;
+}
+
 /** The `GET /api/v1/admin/eviction/preview` reply: the affected character names + grace deadline. */
 export interface EvictionPreview {
 	owner_id: number;
@@ -404,6 +418,11 @@ export function removeOfficer(
 /** GET /api/v1/admin/evictable → EvictableOwner[]. Officer-only. */
 export function fetchEvictable(fetchFn: typeof fetch = fetch): Promise<EvictableOwner[]> {
 	return getJSON<EvictableOwner[]>('/api/v1/admin/evictable', fetchFn);
+}
+
+/** GET /api/v1/admin/restorable → RestorableOwner[] ([] when none). Officer-only. */
+export function fetchRestorable(fetchFn: typeof fetch = fetch): Promise<RestorableOwner[]> {
+	return getJSON<RestorableOwner[]>('/api/v1/admin/restorable', fetchFn);
 }
 
 /** GET /api/v1/admin/eviction/preview?owner_id=N → EvictionPreview. Officer-only. */

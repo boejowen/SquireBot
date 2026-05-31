@@ -6,7 +6,19 @@
 // bug shipped green.
 
 import { describe, it, expect } from 'vitest';
-import { graceDate } from '../eviction';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { graceDate, restoreResultMessage } from '../eviction';
+import type { RestoreResult } from '../api';
+
+// Source-inspect the form the way AuthGate.test.ts / ConfirmDialog.test.ts do
+// (node-only; the repo runs vitest with NO jsdom / @testing-library — see the file
+// header). Proves the Restore section is actually wired to restoreEviction + the
+// ConfirmDialog rather than mounting the component.
+const EVICTION_FORM_SOURCE = readFileSync(
+	fileURLToPath(new URL('../components/EvictionForm.svelte', import.meta.url)),
+	'utf8'
+);
 
 describe('graceDate — epoch SECONDS → human date (CR-02)', () => {
 	it('converts an epoch-SECONDS value to its real date, NOT 1970', () => {
@@ -37,5 +49,68 @@ describe('graceDate — epoch SECONDS → human date (CR-02)', () => {
 	it('a non-finite value falls back to its string form (never "Invalid Date")', () => {
 		expect(graceDate(NaN)).toBe('NaN');
 		expect(graceDate(Infinity)).toBe('Infinity');
+	});
+});
+
+describe('restoreResultMessage — WR-01/WR-02 success copy (close G-1)', () => {
+	const label = 'Slampeach';
+
+	it('new_code_issued → says the code is SERVER-SIDE, never shown in-browser (WR-02)', () => {
+		const res: RestoreResult = { restored_count: 2, new_code_issued: true };
+		const msg = restoreResultMessage(res, label);
+		expect(msg).toContain(label);
+		// WR-02: the copy must locate the code on the SERVER and explicitly deny it is
+		// shown here — it must NOT imply the officer already holds a deliverable code.
+		expect(msg).toContain('SERVER');
+		expect(msg).toContain('mint-code');
+		expect(msg.toLowerCase()).toContain('not shown here');
+	});
+
+	it('code_mint_failed → tells the officer to re-issue the code on the server (WR-01)', () => {
+		// The restore committed but the follow-on re-mint failed: the guildie is
+		// restored-but-codeless; the copy must surface the re-issue step.
+		const res: RestoreResult = {
+			restored_count: 1,
+			new_code_issued: false,
+			code_mint_failed: true
+		};
+		const msg = restoreResultMessage(res, label);
+		expect(msg).toContain(label);
+		expect(msg).toContain('mint-code');
+		expect(msg.toLowerCase()).toContain('failed');
+	});
+
+	it('neither outcome leaks a literal code value into the copy (WR-02: not web-deliverable)', () => {
+		// Whatever the server returns, the message never carries a code plaintext — it
+		// only ever references how to retrieve it server-side.
+		const issued = restoreResultMessage({ restored_count: 1, new_code_issued: true }, label);
+		const failed = restoreResultMessage(
+			{ restored_count: 1, new_code_issued: false, code_mint_failed: true },
+			label
+		);
+		for (const msg of [issued, failed]) {
+			// The copy points at the server-side retrieval path, not an in-band secret.
+			expect(msg).toContain('mint-code');
+		}
+	});
+});
+
+describe('EvictionForm Restore section is wired (source inspection, close G-1)', () => {
+	it('imports + calls restoreEviction and restoreResultMessage', () => {
+		expect(EVICTION_FORM_SOURCE).toContain('restoreEviction');
+		expect(EVICTION_FORM_SOURCE).toContain('fetchRestorable');
+		expect(EVICTION_FORM_SOURCE).toContain('restoreResultMessage');
+	});
+
+	it('gates the Restore action behind a ConfirmDialog (confirm-before-commit)', () => {
+		expect(EVICTION_FORM_SOURCE).toContain('ConfirmDialog');
+		// The restore dialog wires doRestore as its confirm handler.
+		expect(EVICTION_FORM_SOURCE).toContain('onConfirm={doRestore}');
+		expect(EVICTION_FORM_SOURCE).toContain('Restore evicted guildies');
+	});
+
+	it('renders owner labels via Svelte auto-escape, never {@html} (T-15-28)', () => {
+		// No raw-HTML directive anywhere in the form — every user/Discord string is {}.
+		expect(EVICTION_FORM_SOURCE).not.toContain('{@html');
 	});
 });

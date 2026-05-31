@@ -301,6 +301,47 @@ func TestWhoamiWebHandler_AuthedShape(t *testing.T) {
 	}
 }
 
+// TestWhoamiWebHandler_DoesNotRollExpiry is the WR-06 regression: whoami-web is
+// the documented side-effect-free AuthGate feed (hit on every mount/refresh), so
+// it must NOT bump expires_at (which would re-arm a 30-day session on a passive
+// reload and weaken the "departed guildie's session lapses" property). The rolling
+// bump belongs only on the gated RequireSession/RequireOfficer hits.
+func TestWhoamiWebHandler_DoesNotRollExpiry(t *testing.T) {
+	db := store.NewTestDB(t)
+	cfg := Config{GuildID: testGuildID}
+	ctx := context.Background()
+	now := time.Now().Unix()
+
+	const uid = "555555555555555555"
+	if err := store.UpsertWebUser(ctx, db, uid, "TheMember", "", now); err != nil {
+		t.Fatalf("upsert web_user: %v", err)
+	}
+	sid, _ := store.GenerateSessionID()
+	// Create the session with a known expiry well short of now+TTL, so a TouchSession
+	// would visibly bump it.
+	const initialExpiry = int64(2000000000) // a fixed future epoch, < now+TTL
+	if err := store.CreateSession(ctx, db, uid, sid, now, initialExpiry-now); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/whoami-web", nil)
+	req.AddCookie(&http.Cookie{Name: SessionCookieName, Value: sid})
+	rec := httptest.NewRecorder()
+	WhoamiWebHandler(db, cfg).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("whoami status = %d, want 200", rec.Code)
+	}
+
+	var got int64
+	if err := db.QueryRow(`SELECT expires_at FROM web_session WHERE session_hash = ?`,
+		store.HashSession(sid)).Scan(&got); err != nil {
+		t.Fatalf("read expires_at: %v", err)
+	}
+	if got != initialExpiry {
+		t.Errorf("expires_at = %d, want %d UNCHANGED (whoami-web must not roll the session — WR-06)", got, initialExpiry)
+	}
+}
+
 func TestWhoamiWebHandler_AnonShape(t *testing.T) {
 	db := store.NewTestDB(t)
 	cfg := Config{GuildID: testGuildID}

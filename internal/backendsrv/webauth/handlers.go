@@ -208,7 +208,11 @@ func WhoamiWebHandler(db *sql.DB, cfg Config) http.HandlerFunc {
 			"avatar":          "",
 			"discord_user_id": "",
 		}
-		uid, ok := resolveSessionUser(r, db)
+		// WR-06: the READ-ONLY resolve (no TouchSession) — whoami-web is the
+		// documented side-effect-free AuthGate feed the frontend hits on every
+		// mount/refresh, so it must not roll the session's expiry. The rolling-window
+		// bump happens only on the gated API hits (RequireSession/RequireOfficer).
+		uid, ok := resolveSessionUserReadOnly(r, db)
 		if !ok {
 			_ = json.NewEncoder(w).Encode(out)
 			return

@@ -163,6 +163,30 @@ func resolveSessionUser(r *http.Request, db *sql.DB) (string, bool) {
 	return uid, true
 }
 
+// resolveSessionUserReadOnly validates the session cookie WITHOUT rolling the
+// expiry (no TouchSession). Same fail-closed contract as resolveSessionUser. This
+// is the path WhoamiWebHandler uses (WR-06): whoami-web is the documented
+// side-effect-free AuthGate feed and the frontend calls it on every mount/refresh,
+// so it must NOT mutate the DB — re-arming a 30-day session on a passive page
+// reload would weaken the "a departed guildie's session lapses" property, and with
+// the store's maxconns=1 it is an extra serialized write on every gate resolution.
+// The rolling-window bump belongs only on the GATED hits (RequireSession /
+// RequireOfficer), which keep calling the touching resolveSessionUser.
+func resolveSessionUserReadOnly(r *http.Request, db *sql.DB) (string, bool) {
+	c, err := r.Cookie(SessionCookieName)
+	if err != nil || c.Value == "" {
+		return "", false // no cookie → fail-closed
+	}
+	uid, err := store.ResolveSession(r.Context(), db, c.Value, time.Now().Unix())
+	if err != nil {
+		if !errors.Is(err, store.ErrSessionNotFound) && !errors.Is(err, store.ErrSessionExpired) {
+			slog.Warn("session resolve failed", "err", err)
+		}
+		return "", false
+	}
+	return uid, true
+}
+
 // RequireSession is the D-01 read-API gate. It resolves the session cookie; a
 // missing/invalid/expired session → 401 {"error":"unauthorized"} and next does
 // NOT run (fail-closed — the gate is at the API, not just the frontend). A valid

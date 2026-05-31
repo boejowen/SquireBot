@@ -164,3 +164,86 @@ func TestMigrate_00003_AddsEnrichColumnsAndTables(t *testing.T) {
 		t.Fatalf("second RunMigrations after 00003 should be a no-op, got error: %v", err)
 	}
 }
+
+// webAuthTables are the four NEW tables 00004_web_auth.sql creates (Phase 15
+// plan 15-01): the Discord-login web user, opaque hashed sessions, the officer
+// allowlist keyed by Discord ID, and the singleton key/value config (which
+// holds the CLI-seeded owner-floor under key 'owner_floor_discord_id').
+var webAuthTables = []string{"web_user", "web_session", "guild_admins", "app_config"}
+
+// characterCoinAndEvictionColumns are the six NEW character columns 00004 adds:
+// the four nullable bank-coin columns (ADMIN-05 / D-11) + the eviction
+// grace/archive columns (ADMIN-04 / D-10). All extend-only ALTER ADD COLUMN.
+var characterCoinAndEvictionColumns = []string{
+	"plat", "gold", "silver", "copper", "grace_until", "archived_at",
+}
+
+// auditLogGenericColumns are the three generic columns 00004 adds to the
+// EXISTING audit_log (D-06: reuse/extend, do NOT invent a parallel log) so
+// 15-03's officer/eviction/coin web-write events can be appended alongside the
+// existing ingest cross_owner_reject rows.
+var auditLogGenericColumns = []string{"actor", "detail", "at"}
+
+// columnSet returns the set of column names for table via PRAGMA table_info.
+func columnSet(t *testing.T, db *sql.DB, table string) map[string]bool {
+	t.Helper()
+	cols := map[string]bool{}
+	// #nosec G201 -- table is from a fixed in-test allow-list, not user input.
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(%s) failed: %v", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			ctype     string
+			notnull   int
+			dfltValue sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dfltValue, &pk); err != nil {
+			t.Fatalf("scanning table_info(%s) row failed: %v", table, err)
+		}
+		cols[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterating table_info(%s) rows failed: %v", table, err)
+	}
+	return cols
+}
+
+// TestMigrate_00004_AddsWebAuthSchema proves the Phase 15 forward-only migration
+// 00004 applied on a fresh DB (NewTestDB runs goose.Up over ALL four migrations):
+// the four new tables exist, the six new character columns exist, the three new
+// audit_log columns exist, and a second Up is a clean no-op.
+func TestMigrate_00004_AddsWebAuthSchema(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00004) + t.Cleanup
+
+	for _, tbl := range webAuthTables {
+		if !tableExists(t, db, tbl) {
+			t.Errorf("expected table %q to exist after 00004, but it does not", tbl)
+		}
+	}
+
+	charCols := columnSet(t, db, "character")
+	for _, c := range characterCoinAndEvictionColumns {
+		if !charCols[c] {
+			t.Errorf("expected character to have column %q after 00004 (have: %v)", c, charCols)
+		}
+	}
+
+	auditCols := columnSet(t, db, "audit_log")
+	for _, c := range auditLogGenericColumns {
+		if !auditCols[c] {
+			t.Errorf("expected audit_log to have generic column %q after 00004 (have: %v)", c, auditCols)
+		}
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00004 DB
+	// returns nil (goose records applied versions).
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00004 should be a no-op, got error: %v", err)
+	}
+}

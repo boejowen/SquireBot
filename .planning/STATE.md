@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
 status: executing
-last_updated: "2026-05-31T01:56:18.000Z"
+last_updated: "2026-05-31T02:47:00.000Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 25
-  completed_plans: 23
-  percent: 92
+  completed_plans: 24
+  percent: 96
 ---
 
 # State: SquireBot
@@ -30,7 +30,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 ## Current Position
 
 Phase: 15 (Admin Web Forms + Login) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ### Phase 15 execution directives (user-set 2026-05-30, honor on /gsd-execute-phase 15)
 
@@ -39,7 +39,7 @@ Plan: 4 of 5
 - **Secret handling (at deploy, later):** the 4 DISCORD_* vars go in the squirebot-server **systemd** unit (Environment= / root-only EnvironmentFile=, chmod 600). Secret never enters the repo, the static bundle, or chat.
 - **Owner-floor seed (at deploy, later):** run `squirebot-server set-owner-floor <maintainer-discord-USER-id>` once on the box.
 
-Status: 15-03 complete (backend write surface — eviction/bank-coin/officer-mgmt handlers, build+verify local, 3/3 tasks; new internal/backendsrv/webadmin package: officers.go/eviction.go/coin.go/audit.go + the shared BEGIN IMMEDIATE withTx composer; every officer-only mutator re-authorizes INSIDE the write tx [store.*Tx self-check for add/remove; new exported store.IsOfficerTx for evict/restore] = WR-04 TOCTOU close, RequireOfficer the outer gate; eviction cascades is_removed + revokes the guild code + 30d grace in one tx, restore re-mints a fresh code + 409 grace_expired once archived [D-10/W-2], owner-floor data protection via owner.label==floor-username; bank-coin is LOGIN-only [RequireSession, NOT officer — D-12/B-1, proven by TestCoinSet_NonOfficerCanWrite + a comment-stripped grep gate], range-validated + bank-toon-gated; every write appends an append-only audit_log row [D-06 reuse]; eviction_archive DAILY scheduler job [reuses duePigparse, idempotent W-3]; 9 routes wired into serve [7 RequireOfficer + 2 RequireSession], main_test TestWriteRoutes_Gates proves member→403 on admin/evict + member-admitted on coin; exported webauth.WithUser for cross-package handler tests; ADMIN-04/05/06 satisfied; commits 433f971/000ac6b/78a2bfe). Next: 15-04 (frontend auth gate — auth.ts + credentialed fetch, AuthGate/LoginScreen/NotMemberScreen/SessionIndicator/ConfirmDialog, officer-only Admin nav).
+Status: 15-04 complete (frontend Discord login gate — build+verify local, 3/3 tasks; the public P14 site is now a members-only app. `web/src/lib/api.ts` upgraded: `credentials:'include'` on every read [cross-subdomain cookie, D-05] + typed `Unauthenticated`(401)/`Forbidden`(403) subclasses carrying the server `{error}` code [B-2 server-truth]. New `web/src/lib/auth.ts`: `Session` type + `ANON` + login/logout URLs + fail-safe `fetchSession`(whoami-web, never throws) + `logout` + the PURE `classifyAuthError` + `resolveGate` routing reducer. `AuthGate.svelte` = the whole-site gate [D-01]: resolves session on mount → auth-loading → Login → NotMember → officers-only → app via `resolveGate`; provides session + an `authGuard` to descendants via context; reads `?not_member=1`; catches a mid-session typed 401/403 on ANY descendant call and re-routes [401 drops auth → Login; 403 → matching refusal; never a stale authorized view, never a cached officer bit past a 403 — T-15-25]. `LoginScreen`/`NotMemberScreen`/`SessionIndicator` [AUTH-08/09; usernames escaped via {} — T-15-22] + the officer-only Admin nav in SiteShell [Layer-1 UX; server is the real gate — T-15-23]. Shared accessible `ConfirmDialog` for 15-05 [role=dialog + aria-modal + Cancel-focused-on-open + Esc/backdrop dismiss + focus-trap/restore — W-5]. `--destructive` token [= per-theme `--status-missing`] in all 5 [data-theme] blocks. Tests adapted to the repo's node-only philosophy [no @testing-library/svelte/DOM; user installs toolchains themselves] via extracted PURE helpers + .svelte source assertions — 121/121 web tests green [+51], `npm run check` 0/0, `npm run build` emits index.html+200.html; AUTH-08/09 satisfied on the frontend; commits 95b2600/2063ffc/47c4cab). Next: 15-05 (the three write forms — BankCoinForm/EvictionForm/AdminMgmtForm at /admin, reusing the Session context + authGuard + ConfirmDialog + --destructive).
 Last activity: 2026-05-31
 
 ### v2.0 Phase Plan (2026-05-28)
@@ -52,7 +52,7 @@ Coverage: 26/26 v2.0 requirements mapped to exactly one phase. No orphans, no du
 | 12 | Enrichment Job Migration | ENRICH-10, ENRICH-11 | Go in-process scheduler (PigParse + wiki parsers ported) | P11 | ✅ Complete (5/5; 12-01 schema/store SQL + 12-02 the 4 pure parsers + 12-03 politeFetch + 12-04 the 2 jobs + 12-05 scheduler/wiring done — `RunPigparse` (D-9 WTS filter, D-4 truncation-guard-as-LOG, 304-skip) + `RunWiki` (single uninterrupted run, 1s sleep, SHA-1 short-circuit, gear full-replace, log-but-continue); 12-05 db-backed Job registry: `pigparse_daily` (>=24h) + `wiki_weekly` (Sunday UTC) with immediate-check-on-startup + advance-always job_run cursor + per-job sync.Mutex, `run-job pigparse|wiki` D-7 entrypoint; zero inline SQL; ENRICH-10/11 proven end-to-end) |
 | 13 | Watcher Re-Target + Onboarding | WATCH-08, WATCH-09, WATCH-10, WATCH-11 | Go watcher (`internal/backend` HTTP client; OAuth/Sheets/Picker deleted) | P11 | ✅ Complete (4/4 — sink re-pointed to backend; Google stack deleted; native guild-code onboarding; binary 57% smaller + Google-secret-free; SemVer pre-release auto-update twin in place) |
 | 14 | Web Frontend | BACKEND-05, WEB-01, WEB-02, WEB-03, WEB-04, WEB-05 | SvelteKit static + `@tanstack/table-core` (local adapter; svelte-table is Svelte-4-only) + Tailwind v4; Go read API | P11 (read API) + P12 (data) | ✅ Complete 2026-05-30 (4/4 — human_needed: 6/6 must-haves code-verified, WEB-02 Go parity green, 60 web tests; code-review 0 Critical, WR-01 fixed; deploy + 5 visual UAT pending in 14-HUMAN-UAT.md) |
-| 15 | Admin Web Forms + Login | AUTH-08, AUTH-09, ADMIN-04, ADMIN-05, ADMIN-06 | Discord OAuth2 login; web forms | P14 + P11 | 🔄 Executing (3/5 — 15-01 schema+store + 15-02 OAuth2 login/session/CORS-creds/set-owner-floor CLI + 15-03 backend write surface done; AUTH-08/09 + ADMIN-04/05/06 satisfied; new `internal/backendsrv/webadmin` package — eviction/bank-coin/officer-mgmt handlers re-authorize INSIDE the write tx [WR-04 TOCTOU close] + audit_log + DAILY eviction-archive job; bank-coin login-only [D-12], eviction officer-only + owner-floor protected; 9 routes wired; local build+verify only, live smokes deferred to deploy) |
+| 15 | Admin Web Forms + Login | AUTH-08, AUTH-09, ADMIN-04, ADMIN-05, ADMIN-06 | Discord OAuth2 login; web forms | P14 + P11 | 🔄 Executing (4/5 — 15-01 schema+store + 15-02 OAuth2 login/session/CORS-creds/set-owner-floor CLI + 15-03 backend write surface + 15-04 frontend login gate done; AUTH-08/09 + ADMIN-04/05/06 satisfied; backend: `internal/backendsrv/webadmin` re-authorizes INSIDE the write tx [WR-04 TOCTOU close] + audit_log + DAILY eviction-archive job, 9 routes wired; frontend: `web/src/lib/auth.ts` + credentialed api.ts [401→Unauthenticated/403→Forbidden, B-2] + AuthGate whole-site gate [server-truth re-routing] + Login/NotMember/SessionIndicator + officer-only Admin nav + shared accessible ConfirmDialog + `--destructive` token, 121/121 web tests green; local build+verify only, live smokes deferred to deploy. Next: 15-05 the three write forms at /admin) |
 | 16 | Cutover + Decommission | CUTOVER-01, CUTOVER-02, CUTOVER-03, CUTOVER-04 | shadow soak + backfill + coordinated self-update flip | P13 + P14 + P15 + P12 | Not started |
 
 **Sequencing rationale (FRONT-LOAD THE INGEST PATH):**

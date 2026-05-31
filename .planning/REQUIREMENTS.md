@@ -102,9 +102,9 @@
 | WEB-05 | P14 Web Frontend | 14-02 (**theme**: 5-theme CSS-custom-property registry, velious default, `[data-theme]` blocks in app.css, 11 tests) → 14-04 (**UI**: SiteShell+ThemePicker applies it via `applyTheme` — single `[data-theme]` write + localStorage, velious default) | ✅ Complete (2026-05-30) |
 | AUTH-08 | P15 Admin Web Forms + Login | 15-02 (oauth2 login/callback, fail-closed guild-membership gate, RequireSession on the read API) | ✅ Complete (2026-05-30; live smoke deferred to deploy) |
 | AUTH-09 | P15 Admin Web Forms + Login | 15-01 (web_user schema) → 15-02 (UpsertWebUser identity capture on login) | ✅ Complete (2026-05-30) |
-| ADMIN-04 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
-| ADMIN-05 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
-| ADMIN-06 | P15 Admin Web Forms + Login | (filled by `/gsd-plan-phase 15`) | Pending |
+| ADMIN-04 | P15 Admin Web Forms + Login | 15-01 (**store**: EvictOwnerTx cascade+revoke+grace, RestoreOwnerTx, ArchiveExpiredEvictions) → 15-03 (**backend**: officer-only evict/restore/preview + re-mint-on-restore + 409 grace_expired + DAILY archive job, authorize-under-tx, owner-floor protected, audited) → 15-05 (**UI**: EvictionForm) | 🔧 Backend complete (2026-05-30); UI form in 15-05 |
+| ADMIN-05 | P15 Admin Web Forms + Login | 15-01 (**store**: SetCoinTx bank-toon-gated, ListBankToons/GetCoin, coin columns) → 15-03 (**backend**: login-only [D-12] coin POST + range validation + bank-toon gate + audit, non-officer write proven) → 15-05 (**UI**: BankCoinForm + bank-view coin surfacing) | 🔧 Backend complete (2026-05-30); UI form in 15-05 |
+| ADMIN-06 | P15 Admin Web Forms + Login | 15-01 (**store**: Add/RemoveOfficerTx authorize-under-tx, owner-floor protection, ListOfficers/ListPromotableUsers) → 15-03 (**backend**: officer-only add/remove/list, idempotent, owner-floor protected, audited) → 15-05 (**UI**: AdminMgmtForm) | 🔧 Backend complete (2026-05-30); UI form in 15-05 |
 | CUTOVER-01 | P16 Cutover + Decommission | (filled by `/gsd-plan-phase 16`) | Pending |
 | CUTOVER-02 | P16 Cutover + Decommission | (filled by `/gsd-plan-phase 16`) | Pending |
 | CUTOVER-03 | P16 Cutover + Decommission | (filled by `/gsd-plan-phase 16`) | Pending |

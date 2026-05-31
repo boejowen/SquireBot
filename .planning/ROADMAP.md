@@ -162,7 +162,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 **Plans**: 5 plans (strictly sequential waves — each depends on the prior; no in-wave file collisions)
 - [x] 15-01-PLAN.md — Schema + store foundation (Wave 1): `00004_web_auth.sql` (web_user/web_session[hashed]/guild_admins/app_config/coin cols/eviction grace+archive/audit_log generic cols) + the session/officer/owner-floor/eviction/coin store methods. Ports v1 admin.ts semantics. (AUTH-08/09 + ADMIN-04/05/06.) ✅ 2026-05-31 (local build+verify; 3 commits abb92a0/78d7e24/4b39e40)
 - [x] 15-02-PLAN.md — Discord OAuth2 + opaque session + CORS-creds + `set-owner-floor` CLI (Wave 2): hand-rolled `golang.org/x/oauth2` login/callback/whoami-web/logout, membership gate via guilds list, RequireSession/RequireOfficer, read API session-gated. (AUTH-08/09.) ✅ 2026-05-30 (local build+verify; checkpoint pre-resolved "build-only"; 4 commits b75cf71/8fa642c/394522d/0dc73ab; live login smoke deferred to deploy)
-- [ ] 15-03-PLAN.md — Backend write surface (Wave 3): eviction/bank-coin/officer-mgmt handlers with authorize-under-transaction (WR-04 TOCTOU close), owner-floor protection, audit_log writes, the eviction-archive scheduler job. (ADMIN-04/05/06.)
+- [x] 15-03-PLAN.md — Backend write surface (Wave 3): eviction/bank-coin/officer-mgmt handlers with authorize-under-transaction (WR-04 TOCTOU close), owner-floor protection, audit_log writes, the eviction-archive scheduler job. (ADMIN-04/05/06.) ✅ 2026-05-30 (local build+verify; new `internal/backendsrv/webadmin` package; bank-coin login-only [D-12], eviction officer-only + re-mint-on-restore [D-10/W-2], DAILY archive job [W-3]; 9 routes wired; 3 commits 433f971/000ac6b/78a2bfe; live smokes deferred to deploy)
 - [ ] 15-04-PLAN.md — Frontend auth gate (Wave 4): `auth.ts` + credentialed fetch, AuthGate/LoginScreen/NotMemberScreen/SessionIndicator/ConfirmDialog, `--destructive` token, officer-only Admin nav. (AUTH-08/09.)
 - [ ] 15-05-PLAN.md — The three web forms (Wave 5): BankCoinForm (member, range-validated) + EvictionForm (officer, preview+confirm) + AdminMgmtForm (officer, promote-by-pick+confirm) + `/admin` + `/bank-coin` routes + bank-view coin surfacing. (ADMIN-04/05/06.)
 **UI hint**: yes
@@ -199,7 +199,7 @@ Binary `v1.0.2` shipped 2026-05-13; its milestone close was superseded by the v2
 | 12. Enrichment Job Migration | v2.0 | 5/5 | ✅ Complete | 2026-05-29 |
 | 13. Watcher Re-Target + Onboarding | v2.0 | 4/4 | ✅ Complete | 2026-05-30 |
 | 14. Web Frontend | v2.0 | 3/4 | 🔧 In progress | - |
-| 15. Admin Web Forms + Login | v2.0 | 1/5 | 🔧 In progress | - |
+| 15. Admin Web Forms + Login | v2.0 | 3/5 | 🔧 In progress | - |
 | 16. Cutover + Decommission | v2.0 | 0/TBD | Not started | - |
 
 ## Backlog

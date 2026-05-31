@@ -42,6 +42,10 @@
   --font-display: "Cinzel Decorative", serif;
   --font-body: "IM Fell English", serif;
   --weight-display: 600;
+  /* Destructive affordances (eviction/admin-remove confirm + their callouts)
+     reuse the per-theme status-missing token so they stay theme-consistent
+     (15-UI-SPEC § Color; P14 left this unset — no destructive actions then). */
+  --destructive: var(--status-missing);
 }
 
 [data-theme="vanilla"] {
@@ -55,6 +59,7 @@
   --font-display: "Cinzel", serif;
   --font-body: "Crimson Text", serif;
   --weight-display: 600;
+  --destructive: var(--status-missing);
 }
 
 [data-theme="kunark"] {
@@ -68,6 +73,7 @@
   --font-display: "Cinzel", serif;
   --font-body: "IM Fell English", serif;
   --weight-display: 600;
+  --destructive: var(--status-missing);
 }
 
 [data-theme="minimalist"] {
@@ -81,6 +87,7 @@
   --font-display: "Cinzel", serif;
   --font-body: "Inter", system-ui, sans-serif;
   --weight-display: 400;
+  --destructive: var(--status-missing);
 }
 
 [data-theme="heavy"] {
@@ -94,6 +101,11 @@
   --font-display: "MedievalSharp", cursive;
   --font-body: "IM Fell English", serif;
   --weight-display: 600;
+  /* Heavy's status-missing is dark (#6b1a1a). It's still the destructive token
+     for consistency, BUT a destructive button filled with it can't carry dark
+     --bg text (dark-on-dark). The ConfirmDialog scopes accent-colored text to
+     Heavy for that button (15-UI-SPEC § Color contrast caveat). */
+  --destructive: var(--status-missing);
   /* Heavy is the one inverting theme: light parchment data rows on a dark
      frame. The data-grid surface tokens flip to parchment for Heavy. */
   --row-bg: #c9b072;

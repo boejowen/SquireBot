@@ -273,6 +273,17 @@ The web app is a static SvelteKit build (`@sveltejs/adapter-static`) served by C
 cd web; npm run build           # emits web/build/ (index.html + 200.html + assets)
 scp -r web/build/* root@<vps-ip>:/var/www/squirebot/
 ```
+⚠️ **Permissions (load-bearing — caused a blank-screen incident on the P16 deploy):** copying as
+root can leave the `_app/` directories `drwx------` (root's umask), so the `caddy` user can't
+traverse them and Caddy serves the `200.html` fallback for every nested asset — the HTML loads
+but the JS arrives as `text/html` and the app never boots (**blank white screen**). Always
+normalize perms after the copy:
+```bash
+sudo chmod -R a+rX /var/www/squirebot   # world-readable files + traversable dirs (public static assets)
+```
+Symptom if skipped: `curl -sI https://squirebot.quest/_app/immutable/entry/start.*.js` returns
+`Content-Type: text/html` instead of `text/javascript`.
+
 `deploy/Caddyfile` currently holds only the `api.squirebot.quest` reverse-proxy block;
 add an apex `file_server` block to serve the bundle (with the SPA fallback to `200.html`):
 ```

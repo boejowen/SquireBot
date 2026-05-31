@@ -99,10 +99,12 @@
 		successMsg = '';
 		errorMsg = '';
 		try {
-			const res = await saveCoin({ character_id: selectedToon.character_id, ...coinPayload(inputs) });
+			// IN-04: compute the payload ONCE and reuse it for both the POST and the
+			// optimistic local update (it was previously built twice).
+			const payload = coinPayload(inputs);
+			const res = await saveCoin({ character_id: selectedToon.character_id, ...payload });
 			// Reflect the persisted coin back into the loaded toon so the Save gate
 			// re-disables (no diff now) and the bank view (which re-fetches) is fresh.
-			const payload = coinPayload(inputs);
 			toons = toons.map((t) =>
 				t.character_id === selectedToon!.character_id ? { ...t, ...payload } : t
 			);

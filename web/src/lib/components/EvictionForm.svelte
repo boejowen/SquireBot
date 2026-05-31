@@ -30,6 +30,7 @@
 		type EvictableOwner,
 		type EvictionPreview
 	} from '$lib/api';
+	import { graceDate } from '$lib/eviction';
 
 	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
 
@@ -58,11 +59,9 @@
 		!!selectedOwner && !!preview && !cascadeEmpty && !floorBlocked && !evicting
 	);
 
-	/** A human date for the grace line (the server sends an ISO/date string). */
-	function graceDate(iso: string): string {
-		const d = new Date(iso);
-		return Number.isNaN(d.getTime()) ? iso : d.toDateString();
-	}
+	// graceDate (the human grace-deadline string) is the pure $lib/eviction helper
+	// — it converts the backend's epoch-SECONDS grace_until to ms before building
+	// the Date (CR-02; feeding raw epoch seconds to new Date() rendered Jan 1970).
 
 	async function load() {
 		phase = 'loading';

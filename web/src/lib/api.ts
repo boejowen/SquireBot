@@ -334,17 +334,19 @@ export interface EvictableOwner {
 	char_count: number;
 }
 
-/** The `GET /api/v1/admin/eviction/preview` reply: the affected character names + grace date. */
+/** The `GET /api/v1/admin/eviction/preview` reply: the affected character names + grace deadline. */
 export interface EvictionPreview {
 	owner_id: number;
 	characters: string[];
-	grace_until: string;
+	/** Unix epoch SECONDS (mirrors the Go side: nowUnix()+EvictionGraceSeconds). NOT a string. */
+	grace_until: number;
 }
 
 /** The `POST /api/v1/admin/evict` reply. */
 export interface EvictResult {
 	removed_count: number;
-	grace_until: string;
+	/** Unix epoch SECONDS (CR-02/IN-02: the backend sends a JSON number, not a string). */
+	grace_until: number;
 }
 
 /** The `POST /api/v1/admin/eviction/restore` reply (re-mints a fresh guild code per D-10). */

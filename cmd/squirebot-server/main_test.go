@@ -2,10 +2,14 @@ package main
 
 import (
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
+	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
+	"github.com/boejowen/SquireBot/internal/backendsrv/webauth"
 )
 
 // TestRun_MintDispatch drives the mint-code subcommand through run() against a
@@ -134,4 +138,86 @@ func openForAssert(t *testing.T, dbPath string) *sql.DB {
 		t.Fatalf("open db for assert: %v", err)
 	}
 	return db
+}
+
+// TestRun_SetOwnerFloorDispatch drives the set-owner-floor subcommand through
+// run() against a temp DB and asserts exit 0 plus BOTH the app_config owner-floor
+// pointer AND a guild_admins row for that id (the floor is the bootstrap officer
+// — D-08). This is the unit-testable proof of the os.Args dispatch + the store
+// wiring (the on-box run is the deploy step).
+func TestRun_SetOwnerFloorDispatch(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "squirebot-floor.db")
+	const floorID = "123456789012345678"
+
+	if code := run([]string{"set-owner-floor", floorID, "--db", dbPath}); code != 0 {
+		t.Fatalf("run(set-owner-floor) exit = %d, want 0", code)
+	}
+
+	db := openForAssert(t, dbPath)
+	defer db.Close()
+
+	// app_config['owner_floor_discord_id'] points at the seeded id.
+	var floorVal string
+	if err := db.QueryRow(`SELECT value FROM app_config WHERE key = 'owner_floor_discord_id'`).Scan(&floorVal); err != nil {
+		t.Fatalf("query app_config owner_floor_discord_id: %v", err)
+	}
+	if floorVal != floorID {
+		t.Errorf("owner_floor_discord_id = %q, want %q", floorVal, floorID)
+	}
+
+	// The floor is the bootstrap officer (guild_admins row exists).
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM guild_admins WHERE discord_user_id = ?`, floorID).Scan(&n); err != nil {
+		t.Fatalf("query guild_admins: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("guild_admins rows for floor = %d, want 1 (bootstrap officer)", n)
+	}
+}
+
+// TestRun_SetOwnerFloorDispatch_MissingArg: set-owner-floor without a discord id
+// is a usage error (exit 2).
+func TestRun_SetOwnerFloorDispatch_MissingArg(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "squirebot-floor.db")
+	if code := run([]string{"set-owner-floor", "--db", dbPath}); code != 2 {
+		t.Fatalf("run(set-owner-floor without id) exit = %d, want 2", code)
+	}
+}
+
+// TestReadRoutes_RequireSession_401 is the W-1 (D-01 / T-15-11) read-gate proof:
+// EVERY read route must be wrapped in webauth.RequireSession so a request with NO
+// session cookie returns 401. The table MUST list all FIVE read routes the serve
+// mux registers (the 4 views + meta) — leaving any one un-gated is the
+// frontend-only-gating bypass D-01 forbids. The handler wiring here MIRRORS the
+// serve mux's RequireSession(db, ...) wrap in runServe.
+func TestReadRoutes_RequireSession_401(t *testing.T) {
+	db := store.NewTestDB(t)
+	st := store.NewStore(db)
+
+	// Mirror the serve mux's gated read routes exactly (same wrap, same handlers).
+	mux := http.NewServeMux()
+	mux.Handle("GET /api/v1/meta", webauth.RequireSession(db, readapi.NewMeta(st)))
+	mux.Handle("GET /api/v1/views/view", webauth.RequireSession(db, readapi.NewViews(st, "view")))
+	mux.Handle("GET /api/v1/views/gear_check", webauth.RequireSession(db, readapi.NewViews(st, "gear_check")))
+	mux.Handle("GET /api/v1/views/spell_check", webauth.RequireSession(db, readapi.NewViews(st, "spell_check")))
+	mux.Handle("GET /api/v1/views/bank", webauth.RequireSession(db, readapi.NewViews(st, "bank")))
+
+	// The table MUST enumerate all five read routes (W-1).
+	routes := []string{
+		"/api/v1/meta",
+		"/api/v1/views/view",
+		"/api/v1/views/gear_check",
+		"/api/v1/views/spell_check",
+		"/api/v1/views/bank",
+	}
+	for _, route := range routes {
+		t.Run(route, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			// No session cookie attached → must be 401.
+			mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, route, nil))
+			if rec.Code != http.StatusUnauthorized {
+				t.Errorf("GET %s with no session = %d, want 401 (read route not session-gated)", route, rec.Code)
+			}
+		})
+	}
 }

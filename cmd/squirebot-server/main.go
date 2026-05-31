@@ -11,9 +11,10 @@
 // parallel to the Sheet's "Refresh … Now" menu items: it invokes one enrichment
 // job once on demand (run on the box) and exits.
 //
-//	squirebot-server mint-code   --owner <label>     # print a guild code ONCE (D-05)
-//	squirebot-server revoke-code <id|label>          # disable a guild code (D-09)
-//	squirebot-server run-job     pigparse|wiki       # run one enrichment job once (D-7 parity)
+//	squirebot-server mint-code      --owner <label>  # print a guild code ONCE (D-05)
+//	squirebot-server revoke-code    <id|label>       # disable a guild code (D-09)
+//	squirebot-server run-job        pigparse|wiki    # run one enrichment job once (D-7 parity)
+//	squirebot-server set-owner-floor <discord-id>    # seed the un-removable owner-floor + bootstrap officer (15-02 / D-08)
 //	squirebot-server serve --addr 127.0.0.1:8090 --db /var/lib/squirebot/squirebot.db
 //
 // v2.0 "Off-the-cloud-suite" invariant (CLAUDE.md): the backend introduces NO
@@ -45,6 +46,7 @@ import (
 	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
 	"github.com/boejowen/SquireBot/internal/backendsrv/scheduler"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
+	"github.com/boejowen/SquireBot/internal/backendsrv/webauth"
 )
 
 const (
@@ -79,6 +81,8 @@ func run(args []string) int {
 			return runRevoke(args[1:])
 		case "run-job":
 			return runJobCmd(args[1:])
+		case "set-owner-floor":
+			return runSetOwnerFloor(args[1:])
 		case "serve":
 			return runServe(args[1:])
 		}
@@ -269,24 +273,47 @@ func runServe(args []string) int {
 	mux.Handle("POST /api/v1/ingest", ingest.New(auth.New(db), db))
 	mux.Handle("GET /api/v1/whoami", ingest.NewWhoami(auth.New(db), db))
 
-	// P14 read API (BACKEND-05): the four consolidated views + a small meta feed,
-	// PUBLIC + read-only (D-04 — no bearer guard; P15's Discord login gates them).
+	// P15 Discord-login auth routes (D-01..D-05). These are registered UNGATED —
+	// login/callback/whoami-web/logout MUST be reachable WITHOUT a session (they
+	// are how a visitor obtains one). The Discord OAuth config comes from the env
+	// (DISCORD_* systemd secrets); the client secret is backend-only (never the
+	// static bundle, never logged — T-15-09). whoami-web is the always-200
+	// AuthGate feed; the other read routes below are session-gated.
+	cfg := webauth.ConfigFromEnv()
+	mux.Handle("GET /api/v1/auth/login", webauth.LoginHandler(db, cfg))
+	mux.Handle("GET /api/v1/auth/callback", webauth.CallbackHandler(db, cfg))
+	mux.Handle("GET /api/v1/auth/whoami-web", webauth.WhoamiWebHandler(db, cfg))
+	mux.Handle("POST /api/v1/auth/logout", webauth.LogoutHandler(db, cfg))
+
+	// P14 read API (BACKEND-05): the four consolidated views + a small meta feed.
+	// P15 / D-01 (T-15-11) closes P14's public-but-unlisted stopgap: EVERY read
+	// route is now wrapped in webauth.RequireSession, so a request with no valid
+	// session cookie gets 401 — the membership gate is at the API, not just the
+	// (bypassable) SvelteKit frontend. NO read route is left un-gated. The ingest
+	// (bearer) + whoami (bearer) + the four auth routes above stay ungated.
 	// readapi composes Plan 14-01's compute package over this read-side store.
 	st := store.NewStore(db)
-	mux.Handle("GET /api/v1/meta", readapi.NewMeta(st))
-	mux.Handle("GET /api/v1/views/view", readapi.NewViews(st, "view"))
-	mux.Handle("GET /api/v1/views/gear_check", readapi.NewViews(st, "gear_check"))
-	mux.Handle("GET /api/v1/views/spell_check", readapi.NewViews(st, "spell_check"))
-	mux.Handle("GET /api/v1/views/bank", readapi.NewViews(st, "bank"))
+	mux.Handle("GET /api/v1/meta", webauth.RequireSession(db, readapi.NewMeta(st)))
+	mux.Handle("GET /api/v1/views/view", webauth.RequireSession(db, readapi.NewViews(st, "view")))
+	mux.Handle("GET /api/v1/views/gear_check", webauth.RequireSession(db, readapi.NewViews(st, "gear_check")))
+	mux.Handle("GET /api/v1/views/spell_check", webauth.RequireSession(db, readapi.NewViews(st, "spell_check")))
+	mux.Handle("GET /api/v1/views/bank", webauth.RequireSession(db, readapi.NewViews(st, "bank")))
 
 	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
-	// route (D-04). The ingest/whoami routes are functionally unaffected — they
+	// route (D-04). P15 made CORS credential-aware (Access-Control-Allow-Credentials:
+	// true + POST) so the cross-subdomain session cookie rides the credentialed
+	// fetches (D-05). The ingest/whoami routes are functionally unaffected — they
 	// still require their bearer guard; the extra CORS headers are harmless on a
 	// POST/authed-GET. CORS is set ONCE here, in Go: the on-box Caddyfile fronting
 	// 443 MUST NOT also emit Access-Control-Allow-Origin — a duplicated header
 	// makes the browser reject the response (Pitfall 5 / T-14.03-06). Verify on the
 	// VPS that Caddy's reverse_proxy block adds no CORS headers (deploy-time check,
 	// mirroring P11's manual-deploy posture).
+	//
+	// LIVE DEPLOY ENV (set on the box, not here): SQUIREBOT_WEB_ORIGIN=
+	// https://squirebot.quest (the W-4 callback redirect target) + SQUIREBOT_COOKIE_DOMAIN=
+	// squirebot.quest (the cross-subdomain cookie scope). cors-origin already
+	// defaults to the apex.
 	srv := &http.Server{
 		Addr:    *addr,
 		Handler: readapi.CORS(*corsOrigin, mux),

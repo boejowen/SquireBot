@@ -52,11 +52,15 @@
 			{/if}
 			<ThemePicker bind:theme />
 			{#if session?.authenticated}
-				<!-- Char-meta is LOGIN-ONLY / member-accessible (D-03): any signed-in
-				     member sets a character's class/level/race/is_bank_toon. It is
-				     surfaced under session?.authenticated (NOT the officer block above) —
-				     gating it to officers would wrongly deny members the form they're
-				     entitled to. A plain <a href> suffices (no officer-style handler). -->
+				<!-- Account + Char-meta are LOGIN-ONLY / member-accessible (D-03/D-09):
+				     any signed-in member manages their watcher codes (/account, 17-03)
+				     and sets a character's class/level/race/is_bank_toon (/char-meta).
+				     Both sit under session?.authenticated (NOT the officer block above) —
+				     gating them to officers would wrongly deny members surfaces they're
+				     entitled to. Plain <a href>s suffice (no officer-style handler). The
+				     hidden-from-anon nav is UX; the server RequireSession gate is the real
+				     boundary (D-02/D-08). -->
+				<a href="/account" class="char-meta-nav">Account</a>
 				<a href="/char-meta" class="char-meta-nav">Character details</a>
 				<SessionIndicator {session} />
 			{/if}

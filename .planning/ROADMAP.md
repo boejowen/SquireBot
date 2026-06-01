@@ -8,6 +8,7 @@
 - ✅ **v1.0.1** — Installer + Permissions Hardening — shipped 2026-05-12 (binary tag `v1.0.1`)
 - ✅ **v1.0.2** — Robustness Polish — binary shipped 2026-05-13 (tag `v1.0.2`); milestone close superseded by v2.0
 - ✅ **v2.0** — "Off Google" — Website Frontend — Phases 11–16 (shipped 2026-05-31 as tag `v2.0.0`) — archive: [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md)
+- 🔄 **v2.1** — Self-Service Watcher Linking — opened 2026-06-01; Phases 17–18 (LINK-01..06 + WATCH-12/13/14)
 
 ## Phases
 
@@ -66,6 +67,33 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 **Total:** 29 plans · 6 phases · 4 days kickoff to ship (2026-05-28 → 2026-05-31). The cutover was REFRAMED by 16-CONTEXT: fresh-start char-meta form (no Sheet backfill) + abandon-Sheet-in-place. All 26 v2.0 requirements shipped.
 
 </details>
+
+## v2.1 — Self-Service Watcher Linking (Phases 17–18)
+
+**Milestone Goal:** Let any guildie link their own watcher from squirebot.quest via Discord login — no maintainer hand-minting + DMing codes — while keeping the watcher credential a static, reusable bearer token (no watcher change).
+
+### Phase 17: Self-Service Watcher Linking (web feature)
+**Goal**: A signed-in guildie can mint, view, and revoke their own watcher codes from squirebot.quest — owner derived from their Discord session — with no maintainer involvement and no watcher change.
+**Depends on**: v2.0 Phase 15 (Discord OAuth2 login + sessions + per-user Discord identity) and Phase 11 (`auth.MintCode` hashed-token minting + `guild_code`/`owner`/`web_user` tables). No intra-milestone dependency.
+**Requirements**: LINK-01, LINK-02, LINK-03, LINK-04, LINK-05, LINK-06
+**Success Criteria** (what must be TRUE):
+  1. A signed-in guildie can click "Link my watcher" and receive a freshly minted code, with the owner derived server-side from their Discord session (never free-typed or client-supplied).
+  2. The page shows the new code's plaintext exactly once with copy-to-clipboard and clear paste-into-watcher instructions; reloading or revisiting never re-reveals it (hash-only at rest).
+  3. Minting again issues an additional valid code without invalidating any existing one — a guildie running watchers on two PCs sees both keep uploading.
+  4. A guildie can see a list of their own active codes (each identifiable by label / created date / last-seen) and revoke any single one; the revoked watcher stops uploading while the others continue.
+  5. The minted code's owner is tied to the guildie's Discord identity (`web_user`), so the website's eviction/owner-floor path resolves ownership through that link rather than the loose `owner.label == web_user.username` string match.
+  6. The `mint-code` CLI subcommand no longer exists; the self-service endpoint is the only way to mint a watcher code (the `revoke-code` CLI is retained as an ops backstop).
+**Plans**: 3 plans
+- [ ] 17-01-PLAN.md — Foundation: 00005 migration (owner.discord_user_id FK + guild_code.last_seen) + bearer-guard codeID thread + ingest last-seen stamp
+- [ ] 17-02-PLAN.md — Backend: resolve-or-create-owner + MintCodeForOwnerTx + the 3 login-only account handlers + routes + D-05 eviction-floor FK rewire + mint-code CLI removal
+- [ ] 17-03-PLAN.md — Frontend: /account page + WatcherCodesPanel (show-once copy-to-clipboard + list + confirm-revoke) + api.ts wrappers + Account nav (browser-smoke checkpoint)
+**UI hint**: yes
+
+### Phase 18: Watcher Cleanups — Verify-or-Close
+**Goal**: Confirm the live watcher state and close any residual from the v2.0 carry-forward cleanups (gofmt, freeConsole log noise, SemVer-aware auto-update).
+**Depends on**: none (independent watcher cleanups).
+**Requirements**: WATCH-12, WATCH-13, WATCH-14
+**Plans**: TBD
 
 ## Progress
 

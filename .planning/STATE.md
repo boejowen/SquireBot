@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
-status: executing
-stopped_at: Phase 16 (Cutover + Decommission) — 16-01 code build COMPLETE + locally verified; 16-02/03/04 human runbook remain
+status: verifying
+stopped_at: Phase 16 (Cutover + Decommission) COMPLETE 2026-05-31 — all 4 plans done; v2.0 "Off Google" goal met (Google triggers + OAuth client retired; 3/11 guildies live, climbing). Formal milestone archive (/gsd-complete-milestone) pending.
 last_updated: "2026-05-31T18:05:00.000Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 29
-  completed_plans: 26
-  percent: 90
+  completed_plans: 29
+  percent: 100
 ---
 
 # State: SquireBot

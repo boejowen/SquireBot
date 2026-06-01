@@ -9,59 +9,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/boejowen/SquireBot/internal/backendsrv/migrations"
 	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 	"github.com/boejowen/SquireBot/internal/backendsrv/webadmin"
 	"github.com/boejowen/SquireBot/internal/backendsrv/webauth"
 )
 
-// TestRun_MintDispatch drives the mint-code subcommand through run() against a
-// temp DB and asserts exit code 0 plus a guild_code row persisted (the dispatch
-// opens the DB, runs goose.Up so a fresh box can mint before the first serve,
-// and mints a code). This is the unit-testable proof of the os.Args dispatch
-// (the build-level check covers serve; the on-box run is 11-06/11-07).
-func TestRun_MintDispatch(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "squirebot-mint.db")
-
-	code := run([]string{"mint-code", "--owner", "alice", "--db", dbPath})
-	if code != 0 {
-		t.Fatalf("run(mint-code) exit = %d, want 0", code)
-	}
-
-	// The mint must have created the schema (goose.Up) and inserted a guild_code
-	// row for the owner label. Open the same DB and assert exactly one active code.
-	db := openForAssert(t, dbPath)
-	defer db.Close()
-
-	var n int
-	if err := db.QueryRow(`
-		SELECT COUNT(*) FROM guild_code gc
-		JOIN owner o ON o.id = gc.owner_id
-		WHERE o.label = ? AND gc.disabled_at IS NULL`, "alice").Scan(&n); err != nil {
-		t.Fatalf("query guild_code: %v", err)
-	}
-	if n != 1 {
-		t.Errorf("active guild_code rows for alice = %d, want 1", n)
-	}
-}
-
-// TestRun_MintDispatch_MissingOwner: mint-code without --owner is a usage error
-// (exit 2), and no DB mutation happens.
-func TestRun_MintDispatch_MissingOwner(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "squirebot-mint.db")
-	if code := run([]string{"mint-code", "--db", dbPath}); code != 2 {
-		t.Fatalf("run(mint-code without --owner) exit = %d, want 2", code)
-	}
-}
-
-// TestRun_RevokeDispatch: revoke-code after a mint disables the code (exit 0) and
-// the row is no longer active.
+// TestRun_RevokeDispatch: revoke-code disables an existing code (exit 0) and the
+// row is no longer active. The v1 `mint-code` CLI is gone (LINK-06 — self-service
+// minting is the /account web path), so this test seeds a code directly via the
+// store before exercising the retained revoke-code ops backstop.
 func TestRun_RevokeDispatch(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "squirebot-revoke.db")
 
-	if code := run([]string{"mint-code", "--owner", "bob", "--db", dbPath}); code != 0 {
-		t.Fatalf("mint exit = %d, want 0", code)
-	}
+	// Seed an owner + active guild_code labeled "bob" directly (no mint-code CLI).
+	seedActiveCode(t, dbPath, "bob")
+
 	if code := run([]string{"revoke-code", "bob", "--db", dbPath}); code != 0 {
 		t.Fatalf("revoke exit = %d, want 0", code)
 	}
@@ -77,6 +41,34 @@ func TestRun_RevokeDispatch(t *testing.T) {
 	}
 	if active != 0 {
 		t.Errorf("active guild_code rows for bob after revoke = %d, want 0", active)
+	}
+}
+
+// seedActiveCode opens (and migrates) the DB at dbPath and inserts an owner labeled
+// `label` plus one active guild_code for it — the fixture the revoke-code dispatch
+// test needs now that the mint-code CLI is gone (LINK-06).
+func seedActiveCode(t *testing.T, dbPath, label string) {
+	t.Helper()
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("seedActiveCode: open db: %v", err)
+	}
+	defer db.Close()
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("seedActiveCode: migrate: %v", err)
+	}
+	res, err := db.Exec(`INSERT INTO owner (label) VALUES (?)`, label)
+	if err != nil {
+		t.Fatalf("seedActiveCode: insert owner: %v", err)
+	}
+	ownerID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("seedActiveCode: owner last insert id: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO guild_code (owner_id, token_hash, label) VALUES (?, ?, ?)`,
+		ownerID, []byte("hash-"+label), label); err != nil {
+		t.Fatalf("seedActiveCode: insert guild_code: %v", err)
 	}
 }
 
@@ -274,6 +266,9 @@ func TestWriteRoutes_Gates(t *testing.T) {
 	mux.Handle("POST /api/v1/coin", webauth.RequireSession(db, webadmin.CoinSetHandler(db)))
 	mux.Handle("GET /api/v1/char/meta-list", webauth.RequireSession(db, webadmin.CharMetaListHandler(db)))
 	mux.Handle("POST /api/v1/char/meta", webauth.RequireSession(db, webadmin.CharMetaSetHandler(db)))
+	mux.Handle("POST /api/v1/account/codes", webauth.RequireSession(db, webadmin.MintOwnCodeHandler(db)))
+	mux.Handle("GET /api/v1/account/codes", webauth.RequireSession(db, webadmin.ListOwnCodesHandler(db)))
+	mux.Handle("POST /api/v1/account/codes/revoke", webauth.RequireSession(db, webadmin.RevokeOwnCodeHandler(db)))
 
 	// A plain member session (NOT an officer).
 	member := "555555555555555555"
@@ -362,6 +357,29 @@ func TestWriteRoutes_Gates(t *testing.T) {
 		mux.ServeHTTP(rec, req)
 		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
 			t.Errorf("GET /api/v1/char/meta-list (member) = %d, want admitted (D-03 login-only)", rec.Code)
+		}
+	})
+
+	// 7) Account-codes route, NO session → 401 (RequireSession — Phase 17 / D-09).
+	t.Run("account/codes anon→401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/account/codes", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET /api/v1/account/codes (anon) = %d, want 401", rec.Code)
+		}
+	})
+
+	// 8) Account-codes route, MEMBER session → ADMITTED past the gate (D-09: every
+	// signed-in member, NOT officer-gated). A never-minted member's list returns 200
+	// ([]), proving RequireSession admits a non-officer (a RequireOfficer swap would
+	// 403 this member — the bypass this route-level test exists to catch).
+	t.Run("account/codes member→admitted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/account/codes", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+			t.Errorf("GET /api/v1/account/codes (member) = %d, want admitted (D-09 login-only)", rec.Code)
 		}
 	})
 }

@@ -338,6 +338,25 @@ func callerMayNotEvictFloor(ctx context.Context, db *sql.DB, targetOwnerID int64
 	if floor == "" || callerID == floor {
 		return false, nil // nothing seeded, or the floor acting on its own data
 	}
+	// D-05 (LINK-02 payoff): prefer the real owner.discord_user_id FK. Once the
+	// maintainer has self-minted once (stamping their owner.discord_user_id via the
+	// Phase-17 resolve-or-create), the floor's protected owner resolves DIRECTLY by
+	// the FK — closing the WR-05 fail-open for that linked owner. Only when the
+	// floor's owner is not-yet-linked (no FK row) do we fall back to the legacy
+	// TRIM(label) COLLATE NOCASE username bridge below.
+	var fkOwnerID int64
+	err = db.QueryRowContext(ctx,
+		`SELECT id FROM owner WHERE discord_user_id = ?`, floor,
+	).Scan(&fkOwnerID)
+	switch {
+	case err == nil:
+		// The floor's owner is linked — the FK is authoritative (no fail-open).
+		return targetOwnerID == fkOwnerID, nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, err
+	}
+	// Not-yet-linked floor owner → fall back to the legacy label bridge (WR-05).
+
 	// Resolve the floor's username (the owner-label bridge). A missing web_user or
 	// an empty username ⇒ the bridge has nothing to match on. This is the WR-05
 	// fail-OPEN risk: if we cannot resolve which owner the floor protects, a peer

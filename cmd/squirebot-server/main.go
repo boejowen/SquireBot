@@ -11,8 +11,7 @@
 // parallel to the Sheet's "Refresh … Now" menu items: it invokes one enrichment
 // job once on demand (run on the box) and exits.
 //
-//	squirebot-server mint-code      --owner <label>  # print a guild code ONCE (D-05)
-//	squirebot-server revoke-code    <id|label>       # disable a guild code (D-09)
+//	squirebot-server revoke-code    <id|label>       # disable a guild code (D-09; ops backstop — self-service mint is the /account web path, LINK-06)
 //	squirebot-server run-job        pigparse|wiki    # run one enrichment job once (D-7 parity)
 //	squirebot-server set-owner-floor <discord-id>    # seed the un-removable owner-floor + bootstrap officer (15-02 / D-08)
 //	squirebot-server serve --addr 127.0.0.1:8090 --db /var/lib/squirebot/squirebot.db
@@ -67,17 +66,17 @@ func main() {
 }
 
 // run is the testable entrypoint: main calls os.Exit(run(os.Args[1:])). It
-// dispatches the subcommand (mint-code / revoke-code / serve) and returns the
-// process exit code. Splitting the body out of main lets a test exercise the mint
-// dispatch against a temp DB and assert the exit code without spawning a process.
+// dispatches the subcommand (revoke-code / run-job / set-owner-floor / serve) and
+// returns the process exit code. Splitting the body out of main lets a test
+// exercise a subcommand against a temp DB and assert the exit code without spawning
+// a process. (LINK-06: the v1 `mint-code` CLI is gone — self-service minting is the
+// session-gated /account web path; `revoke-code` is retained as the ops backstop.)
 func run(args []string) int {
 	// Sniff args[0] (= os.Args[1]) for a CLI subcommand; the two maintainer
 	// subcommands run and exit BEFORE the server starts (mirroring the watcher's
 	// --uninstall-wipe-credentials / --quit early-exit).
 	if len(args) >= 1 {
 		switch args[0] {
-		case "mint-code":
-			return runMint(args[1:])
 		case "revoke-code":
 			return runRevoke(args[1:])
 		case "run-job":
@@ -92,37 +91,6 @@ func run(args []string) int {
 	// bare invocation as `serve` so systemd's `squirebot-server serve …` and a
 	// plain run both work.
 	return runServe(args)
-}
-
-// runMint implements `mint-code --owner <label>`: open the DB, ensure the schema
-// exists (goose.Up so a fresh box can mint before the first serve), mint a code
-// (MintCode prints the plaintext to stdout ONCE — D-05), and exit 0.
-func runMint(args []string) int {
-	fs := flag.NewFlagSet("mint-code", flag.ContinueOnError)
-	owner := fs.String("owner", "", "owner label for the new guild code (required)")
-	dbPath := fs.String("db", defaultDB, "path to the SQLite database file")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	if *owner == "" {
-		fmt.Fprintln(os.Stderr, "mint-code: --owner <label> is required")
-		return 2
-	}
-
-	db, err := openMigratedDB(*dbPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "mint-code: %v\n", err)
-		return 1
-	}
-	defer db.Close()
-
-	// MintCode prints the plaintext code to stdout once (and returns it). We do
-	// not re-print or log it (V7) — the stdout print IS the one-time disclosure.
-	if _, err := auth.MintCode(db, *owner); err != nil {
-		fmt.Fprintf(os.Stderr, "mint-code: %v\n", err)
-		return 1
-	}
-	return 0
 }
 
 // runRevoke implements `revoke-code <id|label>`: open the DB, ensure the schema
@@ -335,6 +303,15 @@ func runServe(args []string) int {
 	// above (lines 319-326); char-meta belongs with the login-only coin block.
 	mux.Handle("GET /api/v1/char/meta-list", webauth.RequireSession(db, webadmin.CharMetaListHandler(db)))
 	mux.Handle("POST /api/v1/char/meta", webauth.RequireSession(db, webadmin.CharMetaSetHandler(db)))
+
+	// Self-service watcher codes (Phase 17 / LINK-01/03/05 / D-09) — LOGIN-ONLY:
+	// RequireSession, NEVER RequireOfficer. Every signed-in member mints/lists/
+	// revokes their OWN codes; the owner is derived server-side from the Discord
+	// session (D-02), so the request body carries no owner. The replaced v1
+	// `mint-code --owner <label>` free-text CLI path is gone (LINK-06).
+	mux.Handle("POST /api/v1/account/codes", webauth.RequireSession(db, webadmin.MintOwnCodeHandler(db)))
+	mux.Handle("GET /api/v1/account/codes", webauth.RequireSession(db, webadmin.ListOwnCodesHandler(db)))
+	mux.Handle("POST /api/v1/account/codes/revoke", webauth.RequireSession(db, webadmin.RevokeOwnCodeHandler(db)))
 
 	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
 	// route (D-04). P15 made CORS credential-aware (Access-Control-Allow-Credentials:

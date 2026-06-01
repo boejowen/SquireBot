@@ -247,3 +247,65 @@ func TestMigrate_00004_AddsWebAuthSchema(t *testing.T) {
 		t.Fatalf("second RunMigrations after 00004 should be a no-op, got error: %v", err)
 	}
 }
+
+// indexExists reports whether index name exists on table via PRAGMA index_list.
+func indexExists(t *testing.T, db *sql.DB, table, name string) bool {
+	t.Helper()
+	// #nosec G201 -- table is from a fixed in-test literal, not user input.
+	rows, err := db.Query(`PRAGMA index_list(` + table + `)`)
+	if err != nil {
+		t.Fatalf("PRAGMA index_list(%s) failed: %v", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		// PRAGMA index_list columns: seq, name, unique, origin, partial.
+		var (
+			seq     int
+			idxName string
+			unique  int
+			origin  string
+			partial int
+		)
+		if err := rows.Scan(&seq, &idxName, &unique, &origin, &partial); err != nil {
+			t.Fatalf("scanning index_list(%s) row failed: %v", table, err)
+		}
+		if idxName == name {
+			return true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterating index_list(%s) rows failed: %v", table, err)
+	}
+	return false
+}
+
+// TestMigrate_00005_AddsSelfServiceLinking proves the Phase 17 forward-only
+// migration 00005 applied on a fresh DB (NewTestDB runs goose.Up over ALL five
+// migrations): owner gained the discord_user_id FK column, the partial unique
+// index owner_discord_user_id_uidx exists, guild_code gained last_seen, and a
+// second Up is a clean no-op. The migration must apply WITHOUT goose hitting the
+// "Cannot add a UNIQUE column" error (the SQLite ADD-UNIQUE landmine — Pitfall 1):
+// a successful NewTestDB here is itself that proof, since NewTestDB runs goose.Up.
+func TestMigrate_00005_AddsSelfServiceLinking(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00005) + t.Cleanup
+
+	ownerCols := columnSet(t, db, "owner")
+	if !ownerCols["discord_user_id"] {
+		t.Errorf("expected owner to have column %q after 00005 (have: %v)", "discord_user_id", ownerCols)
+	}
+
+	if !indexExists(t, db, "owner", "owner_discord_user_id_uidx") {
+		t.Errorf("expected partial unique index %q on owner after 00005", "owner_discord_user_id_uidx")
+	}
+
+	codeCols := columnSet(t, db, "guild_code")
+	if !codeCols["last_seen"] {
+		t.Errorf("expected guild_code to have column %q after 00005 (have: %v)", "last_seen", codeCols)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00005 DB
+	// returns nil (goose records applied versions).
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00005 should be a no-op, got error: %v", err)
+	}
+}

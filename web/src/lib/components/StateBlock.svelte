@@ -18,7 +18,11 @@
 		// 15-05: the picker-empty states for the three forms (when there's nothing
 		// to act on). Copy is verbatim from the 15-UI-SPEC Copywriting Contract.
 		| 'no-bank-toons'
-		| 'no-promotable-users';
+		| 'no-promotable-users'
+		// 17-03: the /account page empty state — the caller has zero active watcher
+		// codes (brand-new guildie, or after revoking their last). Copy is verbatim
+		// from the 17-UI-SPEC Copywriting Contract.
+		| 'no-codes';
 </script>
 
 <script lang="ts">
@@ -84,6 +88,18 @@
 		<p class="state-body">
 			Only members who've signed in at least once can be promoted. Once another member signs in,
 			they'll show up here.
+		</p>
+	</div>
+{:else if kind === 'no-codes'}
+	<!-- WatcherCodesPanel: the caller has no active watcher codes yet (17-UI-SPEC
+	     Copywriting). Reuses the circle-alert glyph + the shared empty layout. The
+	     Generate CTA stays visible above this block (one click to the next step). -->
+	<div class="state state-empty">
+		<CircleAlert size={28} aria-hidden="true" class="state-icon" />
+		<h2 class="state-heading">No watcher codes yet</h2>
+		<p class="state-body">
+			You haven't linked any PCs yet. Generate a code above, then paste it into the SquireBot
+			watcher on the PC you want to link.
 		</p>
 	</div>
 {:else if kind === 'error'}

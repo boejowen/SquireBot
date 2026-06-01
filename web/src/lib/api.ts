@@ -530,3 +530,35 @@ export function classifyAdminError(err: unknown): AdminErrorRoute {
 	}
 	return 'generic';
 }
+
+// --- Self-service watcher codes (17-03 / LINK-01/03/04/05) ----------------
+// The three login-only /account/codes endpoints (POST mint / GET list / POST
+// revoke), all cookie-credentialed via the shared getJSON/postJSON cores (D-02:
+// the owner is session-derived server-side — the mint body is `{}`, never an
+// owner). The plaintext `code` crosses to the show-once panel EXACTLY once and
+// is never re-fetched (the list returns only #N/created/last-seen — LINK-04).
+
+/** One of the caller's own active watcher codes (GET /api/v1/account/codes). */
+export interface OwnCode {
+	id: number;
+	/** 1-based per-owner ordinal over the active set (the auto-label #N, D-06). */
+	ordinal: number;
+	created_at: string;
+	/** Last upload time; null until the code's watcher first uploads. */
+	last_seen: string | null;
+}
+
+/** GET /api/v1/account/codes → OwnCode[] ([] when never minted). */
+export function fetchOwnCodes(f: typeof fetch = fetch): Promise<OwnCode[]> {
+	return getJSON<OwnCode[]>('/api/v1/account/codes', f);
+}
+
+/** POST /api/v1/account/codes → { code } (the plaintext, shown ONCE). Body is {} — owner is session-derived (D-02). */
+export function mintOwnCode(f: typeof fetch = fetch): Promise<{ code: string }> {
+	return postJSON<{ code: string }>('/api/v1/account/codes', {}, f);
+}
+
+/** POST /api/v1/account/codes/revoke → { revoked } (false = not the caller's / already revoked — a no-op, not an error). */
+export function revokeOwnCode(id: number, f: typeof fetch = fetch): Promise<{ revoked: boolean }> {
+	return postJSON<{ revoked: boolean }>('/api/v1/account/codes/revoke', { id }, f);
+}

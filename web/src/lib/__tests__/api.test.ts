@@ -9,7 +9,16 @@
 // SyntaxError that escapes the contract the UI error state depends on.
 
 import { describe, it, expect } from 'vitest';
-import { fetchView, ApiError, Unauthenticated, Forbidden } from '../api';
+import {
+	fetchView,
+	ApiError,
+	Unauthenticated,
+	Forbidden,
+	fetchOwnCodes,
+	mintOwnCode,
+	revokeOwnCode,
+	type OwnCode
+} from '../api';
 
 /** Build a minimal Response-like stub for the injected fetchFn. */
 function jsonResponse(ok: boolean, status: number, body: unknown): Response {
@@ -115,5 +124,70 @@ describe('15-04 B-2: typed auth errors + credentialed fetch', () => {
 		expect(err).toBeInstanceOf(ApiError);
 		expect(err).not.toBeInstanceOf(Unauthenticated);
 		expect(err).not.toBeInstanceOf(Forbidden);
+	});
+});
+
+// --- 17-03: self-service watcher-code wrappers ---------------------------
+// Prove each wrapper hits the right path + method, that mint POSTs an EMPTY body
+// (the owner is session-derived server-side, D-02 — never sent), that revoke
+// POSTs {id}, and that all three ride the credentialed-fetch contract. The
+// wrappers reuse getJSON/postJSON, so the typed-error mapping is already covered
+// by the suites above; these tests pin the request shape.
+
+/** Capture the URL + RequestInit each wrapper passes to fetch, returning `body`. */
+function recordingFetch(body: unknown): {
+	fetchFn: typeof fetch;
+	url: () => string | undefined;
+	init: () => RequestInit | undefined;
+} {
+	let seenUrl: string | undefined;
+	let seenInit: RequestInit | undefined;
+	const fetchFn = (async (url: string, init?: RequestInit) => {
+		seenUrl = url;
+		seenInit = init;
+		return jsonResponse(true, 200, body);
+	}) as unknown as typeof fetch;
+	return { fetchFn, url: () => seenUrl, init: () => seenInit };
+}
+
+describe('17-03 account-code wrappers', () => {
+	it('fetchOwnCodes GETs /api/v1/account/codes with credentials and resolves the array', async () => {
+		const rows: OwnCode[] = [
+			{ id: 7, ordinal: 1, created_at: '2026-05-12T00:00:00Z', last_seen: null }
+		];
+		const rec = recordingFetch(rows);
+		await expect(fetchOwnCodes(rec.fetchFn)).resolves.toEqual(rows);
+		expect(rec.url()).toMatch(/\/api\/v1\/account\/codes$/);
+		expect(rec.init()?.method).toBe('GET');
+		expect(rec.init()?.credentials).toBe('include');
+	});
+
+	it('fetchOwnCodes returns [] when the caller has never minted', async () => {
+		const rec = recordingFetch([]);
+		await expect(fetchOwnCodes(rec.fetchFn)).resolves.toEqual([]);
+	});
+
+	it('mintOwnCode POSTs /api/v1/account/codes with an EMPTY body (owner is session-derived, D-02)', async () => {
+		const rec = recordingFetch({ code: 'plaintext-token-xyz' });
+		await expect(mintOwnCode(rec.fetchFn)).resolves.toEqual({ code: 'plaintext-token-xyz' });
+		expect(rec.url()).toMatch(/\/api\/v1\/account\/codes$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		// The body MUST be `{}` — no owner ever rides the request (D-02).
+		expect(JSON.parse(rec.init()?.body as string)).toEqual({});
+	});
+
+	it('revokeOwnCode POSTs /api/v1/account/codes/revoke with the {id} body', async () => {
+		const rec = recordingFetch({ revoked: true });
+		await expect(revokeOwnCode(42, rec.fetchFn)).resolves.toEqual({ revoked: true });
+		expect(rec.url()).toMatch(/\/api\/v1\/account\/codes\/revoke$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		expect(JSON.parse(rec.init()?.body as string)).toEqual({ id: 42 });
+	});
+
+	it('revokeOwnCode surfaces { revoked: false } as a resolved no-op (not a throw)', async () => {
+		const rec = recordingFetch({ revoked: false });
+		await expect(revokeOwnCode(99, rec.fetchFn)).resolves.toEqual({ revoked: false });
 	});
 });

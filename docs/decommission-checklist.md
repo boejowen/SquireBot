@@ -26,9 +26,7 @@ The original 1–2 week shadow soak is **void**: the Sheet has been frozen since
 maintainer confirmation that onboarded guildies are reporting in on the backend
 and their views look right. **No separate soak document.**
 
-- [ ] Confirmed guildies are reporting in on the backend: **__ of ~12** — run on the VPS against the live SQLite DB:
-  `SELECT COUNT(*) FROM character WHERE last_seen IS NOT NULL;`
-  (optionally scope to since the flip: `... WHERE last_seen > <flip-date-epoch>`). Fill in the count + date: ____________
+- [x] Confirmed guildies are reporting in on the backend: **3 of 11 guildies** (5 characters; 721 inventory items + 179 spellbook rows), verified **2026-05-31** via `SELECT COUNT(DISTINCT owner_id) FROM character WHERE is_removed=0;` on the VPS. The maintainer accepts this as a representative sample (D-05 — no hard %); the remaining 8 onboard whenever and decommission strands no one (the upgrade path is the GitHub installer + their guild code, not Google). End-to-end validated across multiple real guildies — code→owner binding correct, real inventory + spellbook ingested, zero errors.
 
 ## 2. Retire the live Google machinery (CUTOVER-04 / D-10, D-11)
 

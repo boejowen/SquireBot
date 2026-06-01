@@ -71,6 +71,46 @@ Historical record of shipped versions. Each entry links to the milestone archive
 
 **Deferred to v1.0.2 / v1.1 / v2:** 4 v1.0.2 candidates surfaced during Phase 6 UAT (999.13–999.16: Reauthorize on boot-time `invalid_grant`, tray `OnReady` queuing, UTF-8 BOM stripping in config loader, console-detach or `Start-Process` documentation); Admin-Mgmt sidebar inline-JS test coverage (999.17); Phase 8 advisory test-quality findings (999.18); SignPath OSS approval still in flight (999.9); v1.1 polish (bank-coin permission lock 999.1, theme picker tile UI 999.2, `SIDEBAR_BODY` extraction 999.7); v2 Wantlist + Discord pinger (999.12 / WANT-01..08).
 
+> Note: v1.0.2 (Robustness Polish, Phases 9–10, binary tag `v1.0.2` 2026-05-13) shipped as a binary but its milestone close was **superseded by the v2.0 "Off Google" pivot** (the Sheet it targeted was being replaced). It was never written up as a standalone MILESTONES entry; its 6 robustness requirements are reconciled in the v2.0 archive's Validated block.
+
 ---
 
-*This file accumulates one entry per shipped milestone. Next entry will be v1.0.2 (patch) or v1.1 (feature) or v2 (Wantlist + Discord) — start via `/gsd-new-milestone`.*
+## v2.0 — "Off Google" — Website Frontend
+
+**Shipped:** 2026-05-31
+**Tag:** `v2.0.0` (the clean Google-free watcher binary; published 2026-05-31 by the Phase 16 cutover)
+**Archive:** [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md) · [`milestones/v2.0-REQUIREMENTS.md`](milestones/v2.0-REQUIREMENTS.md) · _no audit (closed via `/gsd-complete-milestone`; every phase verifier PASSED, the cutover was validated end-to-end live, and the 16-REVIEW code review flagged no Critical/High — MD-01/LR-01 fixed post-close)_
+
+**Stats:** 6 phases · 29 plans · 4 days kickoff to ship (2026-05-28 → 2026-05-31) · watcher binary 57% smaller (16.44 MB → 7.07 MB, Google-free) · backend a static linux/amd64 ELF on a Hetzner VPS · SQLite schema at `goose` migration `00004` · the old apps-script suite (336 vitest) retired with the Sheet; web tests node-only (200 vitest at close)
+
+**Phases:** All shipped sequentially.
+
+| Phase | Name | Shipped As | Date |
+|-------|------|-----------|------|
+| 11 | Backend Foundation + Ingest API | LIVE at `api.squirebot.quest` (Hetzner VPS) | 2026-05-29 |
+| 12 | Enrichment Job Migration | in-process scheduled jobs (deployed in the bundled redeploy) | 2026-05-29 |
+| 13 | Watcher Re-Target + Onboarding | Google-free watcher (built; shipped as `v2.0.0` at cutover) | 2026-05-30 |
+| 14 | Web Frontend | LIVE at `squirebot.quest` (apex on Caddy) | 2026-05-30 |
+| 15 | Admin Web Forms + Login | Discord login + officer forms (deployed live) | 2026-05-31 |
+| 16 | Cutover + Decommission | `v2.0.0` published + Google decommissioned | 2026-05-31 |
+
+**Key accomplishments:**
+
+1. **Self-hosted Go + SQLite backend, live.** A single Go binary on a Hetzner Cloud VPS (US, amd64) behind Caddy auto-HTTPS, systemd `Restart=always`, a `goose`-migrated SQLite schema, per-guildie hashed bearer-token auth, and the atomic-replace ingest endpoint — with a nightly Cloudflare R2 off-box backup + a drilled restore. Live at `api.squirebot.quest`.
+2. **Enrichment migrated to in-process scheduled jobs.** Daily PigParse + weekly P1999 wiki run as db-backed in-process jobs (job_run cursor, immediate-check-on-startup, per-job mutex); the 4 pure parsers + `politeFetch` were byte-parity-ported from Apps Script (SHA-1 byte-identical; exact-count parity cross-checked against the TS parsers in Node).
+3. **Watcher re-targeted fully off Google.** Swapped the Sheets client for an `internal/backend` HTTP client, DELETED ~8k LOC of Google OAuth/PKCE/Sheets/Drive-Picker code (41 files), shed the entire Google dependency tree, and shipped native "paste your guild code" onboarding via the existing auto-updater. The binary is 57% smaller with zero Google secret.
+4. **Read UI rebuilt as a static SvelteKit site.** The 4 views render as one reusable filterable/sortable `DataGrid` (instantiated 4×, never per-character) over a versioned Go read API, with cross-character fuzzy search + "did you mean?", rich HTML item tooltips (XSS-escaped), and a 5-theme EQ aesthetic. Live at `squirebot.quest`.
+5. **Discord login + officer web forms.** Discord OAuth2 login gated on guild Discord membership (capturing per-user Discord identity — pre-paying a v2 prerequisite) + eviction / bank-coin / admin-management as authenticated web forms porting v1 enforcement (owner-floor, 30-day grace), with authorize-under-transaction + an `audit_log`.
+6. **Cutover + decommission — "Off Google" goal met.** Published the clean `v2.0.0` release, minted 11 per-guildie codes, flipped the guild via auto-update + Discord herding, and decommissioned Google (all 10 Apps Script triggers + the OAuth client deleted; Sheet abandoned in place) — proven by a committed decommission checklist.
+
+**Requirements coverage:** 26 / 26 (all complete; zero partials; zero waivers; zero orphans). CUTOVER-01..04 were reframed by 16-CONTEXT (fresh-start char-meta form, no Sheet backfill; abandon-Sheet-in-place) and satisfied. See archive for full reconciliation.
+
+**Status:** SHIPPED. The "Off Google" goal is MET — no Google dependency remains anywhere in the system. The guild migration is operational (3/11 reporting in at close, climbing).
+
+Known deferred items at close: deferred HUMAN-UAT smokes for P12/P14/P15 (see STATE.md Deferred Items); 0 pending todos.
+
+**Deferred / carried forward:** 999.31 self-service Discord watcher-linking (⭐ top next-milestone candidate); 999.22 prerelease-stuck-watcher manual-reinstall caveat; 999.9 SignPath OSS (still in flight); 999.12 / WANT-01..08 v2 Wantlist + Discord pinger (AUTH-09 pre-paid the per-user Discord-identity prerequisite). The Sheet-side backlog items (999.1/2/7/24/25/26/27/29) are mooted by the decommission.
+
+---
+
+*This file accumulates one entry per shipped milestone. Next entry will be the post-v2.0 milestone (top candidate: self-service Discord watcher-linking 999.31, or the v2 Wantlist + Discord pinger 999.12) — start via `/gsd-new-milestone`.*

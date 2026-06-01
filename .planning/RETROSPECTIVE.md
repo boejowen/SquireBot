@@ -121,9 +121,70 @@ Phase-by-phase output:
 
 ---
 
+## Milestone: v2.0 — "Off Google"
+
+**Shipped:** 2026-05-31
+**Phases:** 6 (Phases 11–16) | **Plans:** 29 | **Timeline:** 4 calendar days (2026-05-28 → 2026-05-31)
+
+### What Was Built
+
+The whole product, replatformed off Google. A self-hosted Go + SQLite backend on a Hetzner VPS (LIVE at `api.squirebot.quest`) replaced the Sheet as both data store and query layer; a static SvelteKit site (LIVE at `squirebot.quest`) replaced the Sheet's UI; the watcher was re-pointed off Google and ~8k LOC of OAuth/Sheets/Picker code deleted; Discord OAuth2 login + officer web forms ported v1's enforcement; and Google was decommissioned (triggers + OAuth client deleted, Sheet abandoned in place) — meeting the "Off Google" goal.
+
+Phase-by-phase output:
+
+- **P11 — Backend foundation + ingest API** — single Go binary behind Caddy auto-HTTPS on a Hetzner VPS, `goose` SQLite schema, per-guildie hashed bearer-token auth, atomic-replace ingest endpoint, nightly R2 backup + drilled restore. PocketBase evaluated and rejected (hand-rolled `net/http` + `modernc.org/sqlite`).
+- **P12 — Enrichment migration** — daily PigParse + weekly P1999 wiki as in-process scheduled jobs; the 4 pure parsers + `politeFetch` byte-parity-ported from Apps Script (SHA-1 byte-identical; verified against the LIVE APIs).
+- **P13 — Watcher re-target** — sink re-pointed to `backend.Ingest` (raw UTF-8 POST), the entire Google stack DELETED (binary 57% smaller, no Google secret), native "paste your guild code" onboarding via the auto-updater, WATCH-11 first-launch migration.
+- **P14 — Web frontend** — versioned Go read API + a greenfield `web/` SvelteKit SPA: one reusable DataGrid ×4, fuzzy search + "did you mean?", escaped rich-HTML tooltips, 5-theme EQ aesthetic. WEB-02 parity proven by Go table-tests translated from the v1 vitest fixtures.
+- **P15 — Admin web forms + login** — hand-rolled Discord OAuth2 login (guild-membership-gated, per-user identity captured), + the 3 officer write forms with authorize-under-transaction + `audit_log`.
+- **P16 — Cutover + decommission** — a fresh-start char-meta form (no Sheet backfill), the `v2.0.0` release published + the guild flipped via auto-update, Google decommissioned, proven by a committed decommission checklist.
+
+### What Worked
+
+- **Front-loading the ingest path.** The deliberate sequencing — P11 (ingest) + P13 (watcher re-target) before the polished P14 frontend and P15 forms — restored the dark guild's data pipeline first. By the time the website existed there was already something to show; by cutover the first real guildie (Slampeach: 135 items + 54 spells) had validated the whole EQ→fsnotify→upload→auth→SQLite path end-to-end.
+- **TDD RED→GREEN as the default execution rhythm.** Nearly every build plan committed a failing test (RED) then the implementation (GREEN) as separate atomic commits. The backend's parser port leaned on this hardest: **byte-parity proof** (SHA-1 byte-identical, exact-count cross-checks by running the TS parsers in Node) was the strongest possible signal that the Apps Script→Go transliteration was faithful.
+- **Clone-the-reviewed-original as a quality pattern.** P16's char-meta trio was a line-by-line clone of the already-code-reviewed P15 bank-coin trio (same RequireSession, audited-tx, pure-helpers-in-`.ts`, node-only tests) — including copying the CR-01-safe `type="text" inputmode="numeric"` level input verbatim. Cloning a reviewed-clean original carries its fixes forward for free.
+- **Compute-parity via translated fixtures.** WEB-02 (gear/spell progression) was proven by translating the v1 `buildGearCheck`/`buildSpellCheck` vitest seed-arrays + expected tuples into Go table-tests over a temp DB — the cleanest way to prove a reimplementation matches the original semantics without trusting "looks right."
+- **Locked decisions surfaced and held.** The "consolidated DataGrid ×4, never per-character views" lock (carried from v1) and the "watcher stays a static bearer token, Discord only at link-time" constraint (999.31) both prevented entire categories of rework. The PocketBase spike verdict was captured in CONTEXT and never re-litigated.
+- **The reframe-on-reality discipline.** When 16-CONTEXT recognized the guild had been dark on the Sheet since 2026-05-15, it voided the planned shadow-soak/backfill/parity dance and reframed CUTOVER-01..04 to a fresh-start form + abandon-in-place — turning a 1–2 week soak into a same-day cutover with no loss of safety (inventory + enrichment self-heal).
+
+### What Was Inefficient
+
+- **The node-only web test suite is DOM-blind — a recurring, expensive lesson.** Because the repo deliberately has no `@testing-library/svelte` (the toolchain-install rule), web vitest exercises pure helpers + `.svelte` source assertions, not a real DOM. This let **green suites hide real crashing bugs twice**: P15 shipped 165 green tests yet two BLOCKERs (a BankCoinForm number-input coercion crash, an eviction epoch-seconds date) that only a browser/code-review caught; P16's CR-01 level input had the same hazard (guarded by copying the reviewed-safe input + a number/null regression, then a live browser smoke). The mitigation — always code-review + browser-smoke a frontend before calling it verified — works, but it's a standing tax the test suite should be carrying.
+- **Human-gated ops plans had to be reconciled after the fact.** 16-02/03/04 are `autonomous:false`; they were executed conversationally by the orchestrator (over SSH) + the maintainer (plaintext minting + Google-console actions in their own session), NOT a gsd-executor. Their SUMMARYs were **back-filled** afterward to keep GSD state consistent (and to stop a re-run from re-publishing/re-deploying). It worked, but the workflow has no first-class slot for "the human did this step; record it" — so the bookkeeping was manual.
+- **A deploy foot-gun cost a live debugging detour.** The 16-03 deploy hit a blank white screen because `sudo cp -r` left the `_app/` dirs `drwx------` (root umask) so Caddy's user couldn't traverse them → 200.html served for every JS asset. Diagnosed + fixed live (`chmod -R a+rX`) and documented (`backend-deploy.md §7.5`), but it's the kind of thing a deploy script should enforce, not a runbook step to remember.
+- **Live UAT checklists never formally ticked.** P12/P14/P15 each have a HUMAN-UAT file; most of P14/P15's smokes were actually exercised during the 16-03 live deploy (login gate 401, Slampeach end-to-end, char-meta CR-01 browser smoke PASSED), but the checklists weren't ticked — so the artifacts read "pending" even though the behavior was observed. Carried as acknowledged deferred items at close.
+
+### Patterns Established
+
+- **Byte-parity port verification.** When transliterating logic across languages (Apps Script TS → Go), prove equivalence by (a) hashing identical inputs to identical digests and (b) running BOTH implementations against the same fixtures and asserting exact output counts/tuples. Stronger than any "looks correct" review.
+- **Clone-the-reviewed-original.** When a new surface is structurally a sibling of an already-code-reviewed one, clone it line-by-line (including its safety quirks and comments) rather than re-deriving — the review's fixes ride along. (Bank-coin trio → char-meta trio.)
+- **Authorize-under-transaction (WR-04 close).** Officer/owner-floor write handlers re-check the caller's authority as their FIRST in-tx SELECT (not just at the route), closing the TOCTOU window between gate and write.
+- **One version-compare doctrine, per side.** The watcher's `IsNewer` and the server's `ingest.IsOlder` are deliberate *separate copies* with the same pre-release-ranking direction but opposite fail-safety (watcher fails-closed on the update decision; server fails-closed on the gate) — no cross-import. Load-bearing for the coordinated auto-update flip.
+- **Server-side ground-truth verification of every write.** UI/visual success is never trusted alone (a direct consequence of the DOM-blind-suite lesson) — the char-meta smoke and the Slampeach ingest were both confirmed by reading the rows back out of SQLite over SSH.
+- **Reframe success criteria when the world changed under the plan.** A CONTEXT doc can supersede a phase's Goal/Success-Criteria when the premise (here: a live Sheet to soak against) no longer holds — recorded explicitly so the requirements archive can map the reframed outcome.
+
+### Key Lessons
+
+1. **A green test suite is not "verified" when the suite can't see the DOM.** This caused real, shipping-blocking bugs in P15 and a near-miss in P16. Until the repo adopts a DOM-capable frontend test layer (deferred by the toolchain-install rule), frontend work MUST get a code review + a live browser smoke before it's called done. This is now the single most-repeated lesson of the milestone.
+2. **Front-load the path that delivers value / de-risks the most.** With the guild dark, the ingest path was both the value (data flows again) and the risk (does the whole new pipeline work?). Building it first meant every later phase was decorating a working core, not betting on one.
+3. **Reframe, don't force.** The original P16 plan (shadow-soak + backfill + parity) was written when the Sheet was live; by execution it wasn't. Recognizing that and reframing to fresh-start + abandon-in-place saved ~1–2 weeks and removed an entire class of backfill bugs — at no safety cost because the data self-heals.
+4. **Self-hosting trades a platform's gate for ops responsibility — mostly worth it here.** Escaping Google's brand-verification gate cost a ~$67/yr VPS + a handful of ops foot-guns (the `chmod` blank-screen, systemd secret handling, the prerelease-stuck-watcher caveat). For a system Google had simply walled off, that trade was clearly correct.
+5. **Human-in-the-loop ops need a bookkeeping slot.** The `autonomous:false` cutover plans worked, but their SUMMARYs were back-filled by hand. Treating "the maintainer performed this step; here's the verification" as a first-class artifact (rather than a reconciliation afterthought) would keep GSD state honest without manual catch-up.
+6. **Keep the watcher dumb on purpose.** The hard constraint that the watcher stays a static bearer token (no Discord OAuth *in* the watcher) is what makes 999.31 self-service linking safe to build next — and is the whole reason v2.0's "Off Google" doesn't quietly reintroduce a 7-day-token/refresh fragility on an unattended uploader.
+
+### Cost Observations
+
+- **Model mix this milestone:** still primarily Opus (1M context) for orchestrator + executor + planner + reviewer subagents; Sonnet routing for executors remained unimplemented (flagged as an opportunity since v1.0). The TDD RED→GREEN per-plan loops are the obvious candidate to route cheaper.
+- **Sessions:** spread across the 4-day window via `/gsd-resume-work`; the cutover (16-02/03/04) interleaved real-world latency (release.yml build, SSH deploys, the maintainer's Google-console actions, guildie herding) rather than continuous model time.
+- **Notable efficiency observation:** 29 plans in 4 calendar days (~7.25 plans/day) — the highest throughput of any milestone, driven by small TDD plans + wave parallelism (P11/P12/P14 each ran parallel Wave-1 foundation plans). Front-loading + clone-the-reviewed-original both cut planning overhead.
+- **Notable inefficiency observation:** the DOM-blind-suite tax shows up as cost too — two code-review-and-fix cycles (P15's 2 BLOCKERs + 7 WARNINGs; P16's MD-01/LR-01) that a DOM-capable suite might have caught at execution time instead of review time.
+
+---
+
 ## Cross-Milestone Trends
 
-*This section accumulates as more milestones close. After v1.0.1, it has two data points — patterns are starting to emerge but anchor heavily on v1.0 (5 phases, 11 days, 31 plans) vs. v1.0.1 (3 phases, 2 days, 12 plans, patch-sized).*
+*This section accumulates as more milestones close. After v2.0 it has three data points — v1.0 (5 phases, 11 days, 31 plans, foundation), v1.0.1 (3 phases, 2 days, 12 plans, patch), and v2.0 (6 phases, 4 days, 29 plans, replatform).*
 
 ### Decision Quality
 
@@ -131,6 +192,7 @@ Phase-by-phase output:
 |-----------|------------------|---------------------|---------------------|
 | v1.0 | 11 (PROJECT.md Key Decisions) + 12 (Phase 5 CONTEXT D-NN) | 3 scope reductions (ENRICH-09 waived, INST-05/DOC-03 image-drop, SEARCH-03 Path 2) | 0 |
 | v1.0.1 | 11 (CONTEXT D-NN across Phases 6/7/8) | 2 mid-phase fixes (Plan 07-03 Test 12 reframe; Plan 07-03 mid-smoke OAuth manifest scope add) | 0 |
+| v2.0 | 6 (PROJECT.md Key Decisions) + per-phase CONTEXT D-NN across P11–16 | 1 host re-pick (Oracle → Hetzner, pre-build) + 1 deploy re-pick (Cloudflare Pages → apex-on-Caddy, P14) + the P16 CUTOVER-01..04 reframe | 0 |
 
 ### Phase Velocity
 
@@ -138,6 +200,7 @@ Phase-by-phase output:
 |-----------|--------|-------|------|-----------|-------|
 | v1.0 | 5 | 31 | 11 | 2.8 | One-person project; sequential phases |
 | v1.0.1 | 3 | 12 | 2 | 6.0 | Patch-sized plans (doc backfill, persistence swap, single-IPC primitive); two-wave parallelism on Phases 7+8 |
+| v2.0 | 6 | 29 | 4 | 7.25 | Highest throughput yet — small TDD RED→GREEN plans + Wave-1 parallelism on P11/P12/P14; a full replatform (backend + website + watcher re-target) in 4 days, with the cutover interleaving real-world latency |
 
 ### Test Coverage Trajectory (apps-script vitest)
 
@@ -163,6 +226,7 @@ Phase-by-phase output:
 |-----------|-----|-------|
 | v1.0 | 14,189 | Includes tests; production-only would be substantially less |
 | v1.0.1 | 14,507 | +318 LOC: new `internal/system` Windows named-event IPC package + `--quit` CLI handler + listener goroutine + 5 Windows-only tests |
+| v2.0 (watcher) | shrank materially | The ~8k-LOC Google stack (`internal/auth/sheet/scaffold/picker/wizard/heartbeat` + reauth.go, 41 files) DELETED; ~1k re-target LOC added (`internal/backend/credstore/onboarding`); go.mod shed the oauth2/google-api tree. **Binary 7.07 MB vs the pre-deletion 16.44 MB = 57% smaller; 0 Google strings.** (A new Go *backend* — `internal/backendsrv/*` + `cmd/squirebot-server` — was also built this milestone, separate from the watcher.) |
 
 ### TypeScript LOC Trajectory (apps-script)
 
@@ -170,6 +234,7 @@ Phase-by-phase output:
 |-----------|-----|-------|
 | v1.0 | ~11,000 | Baseline at v1.0.0 |
 | v1.0.1 | 13,266 | +~2k LOC: `lib/admin.ts` (357) + `admin.test.ts` (462) + `triggers/showAdminMgmtSidebar.ts` (263) + `adminMgmtSidebar.test.ts` (219) + 4 sidebar inline-JS test files + 8 retroactive Phase 3+4 SUMMARY.md backfills |
+| v2.0 | 13,266 (apps-script, frozen) → **decommissioned** | The apps-script project (+ its 336 vitest suite) was retired with the Sheet at cutover. NEW frontend LOC moved to `web/` (SvelteKit/TS, node-only vitest — 200 tests at close); the enrichment parsers + politeFetch were ported from this apps-script TS to Go (`internal/backendsrv/enrich`). |
 
 ### Tags Shipped
 
@@ -177,8 +242,9 @@ Phase-by-phase output:
 |-----------|--------------|---------------------|
 | v1.0 | v0.1.0 → v0.2.0/v0.2.1 → v0.3.0 → v0.4.0/v0.4.0-rc1 → v1.0.0 | clasp-push at end of Phase 5 to dev workbook |
 | v1.0.1 | v1.0.1 (binary release; pushed by Phase 6 ship gate 2026-05-11) | clasp-push for Phase 7 (Plan 07-03) + Phase 8 to dev workbook |
+| v2.0 | v2.0.0 (the clean Google-free binary; published 2026-05-31 at the Phase 16 cutover) | n/a — apps-script DECOMMISSIONED; replaced by VPS deploys of `squirebot-server` + the `web/` static bundle (served by Caddy) |
 
-### Milestone Sizing Heuristic (emerging from 2 data points)
+### Milestone Sizing Heuristic (3 data points)
 
 A "patch milestone" should hit roughly:
 
@@ -188,8 +254,13 @@ A "patch milestone" should hit roughly:
 - 0 schema changes
 - Plans/day ≥ 5 (smaller plans drive higher throughput)
 
-If 2+ of these bound break, it's a "minor milestone" (v1.1-style) instead. v1.0.1 fit cleanly in this envelope; v1.0 didn't (it was the foundation milestone).
+If 2+ of these bound break, it's a "minor milestone" (v1.1-style) or larger. v1.0.1 fit cleanly in this envelope; v1.0 didn't (foundation). **v2.0 is a third archetype — a "replatform milestone":** 29 plans / 26 requirements / 4 days / multiple schema migrations (00001→00004) / 7.25 plans/day. It breaks every patch bound but shipped fast because the plans were small + TDD'd + wave-parallel — high plan count and high throughput aren't mutually exclusive when each plan is a tight RED→GREEN slice.
+
+### Recurring Lesson Watch (verified across milestones)
+
+- **Live smokes / code review catch what tests don't.** v1.0 (3 fix-packs in the v0.4.0 smoke), v1.0.1 (the `userinfo.email` manifest gap surfaced by two-account UAT), v2.0 (the P15 node-suite-invisible BLOCKERs + the deploy blank-screen). Three milestones, same lesson — for v2.0 it sharpened into "the node-only web suite is DOM-blind; a frontend isn't verified without a code review + browser smoke."
+- **Spec ≠ contract / reverify load-bearing external assumptions.** v1.0's Google `client_secret`-with-PKCE; v1.0.1's EV-cert reverification; v2.0's brand-verification gate that ultimately forced the whole "Off Google" replatform. External platform behavior shifts under you — when it's load-bearing, verify against the real thing.
 
 ---
 
-*Last appended: 2026-05-12 during `/gsd-complete-milestone v1.0.1`.*
+*Last appended: 2026-05-31 during `/gsd-complete-milestone v2.0`.*

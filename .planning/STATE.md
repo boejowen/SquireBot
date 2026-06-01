@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: — "Off Google" — Website Frontend
-status: verifying
-stopped_at: Phase 16 (Cutover + Decommission) COMPLETE 2026-05-31 — all 4 plans done; v2.0 "Off Google" goal met (Google triggers + OAuth client retired; 3/11 guildies live, climbing). Formal milestone archive (/gsd-complete-milestone) pending.
-last_updated: "2026-05-31T18:05:00.000Z"
+status: shipped
+stopped_at: v2.0 "Off Google" milestone ARCHIVED 2026-05-31 — all 6 phases / 29 plans done; goal met (backend + website live, Google fully decommissioned; guild migrating, 3/11 reporting in at close). Archive at .planning/milestones/v2.0-{ROADMAP,REQUIREMENTS}.md. Next milestone TBD (top candidate: 999.31 self-service Discord watcher-linking).
+last_updated: "2026-05-31T20:00:00.000Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 6
@@ -17,23 +17,36 @@ progress:
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-05-28 (v2.0 "Off Google" Website Frontend ROADMAP created — Phases 11–16)
+**Last updated:** 2026-05-31 (v2.0 "Off Google" milestone shipped + archived — Phases 11–16; backend + website live, Google fully decommissioned)
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (updated 2026-05-28 with v2.0 milestone scope)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — now delivered via a self-hosted website instead of the Google Sheet.
-- **Current focus:** Phase 15 — Admin Web Forms + Login
+- **Current focus:** v2.0 shipped — planning next milestone (top candidate: 999.31 self-service Discord watcher-linking)
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: 16 (Cutover + Decommission) — executing. **16-01 (char-meta web form + backend write endpoint, CUTOVER-02) CODE-COMPLETE + LOCALLY VERIFIED** (the ONLY code build in Phase 16). 16-02/03/04 are human-gated ops runbooks (mint ~12 codes, publish the v2.0.0 binary + flip + the live browser smoke, disable Apps Script triggers + retire the Google OAuth client + decommission checklist).
-Plan: 1 of (16-01 code build) complete — 16-02/03/04 are operational, not code plans
-**Deploy progress (2026-05-31):** 16-03 Task 1 DONE — char-meta backend+frontend deployed live to the Hetzner VPS / squirebot.quest (orchestrator drove the ssh deploy via the user's loaded ssh-agent). The deferred 16-01 browser smoke PASSED (CR-01 level input validated live; server-side persistence confirmed class=WAR/level=50/race=HFL/bank=1 on a seeded throwaway char, since deleted). Found+fixed a deploy perm bug: `sudo cp -r` left `_app/` dirs `drwx------` (root umask) → caddy (the `caddy` user) couldn't traverse → Caddy served 200.html for every JS asset → blank white screen. Fix = `sudo chmod -R a+rX /var/www/squirebot`; now documented in docs/backend-deploy.md §7.5. DB chars=0 (clean). Leftover PRE-EXISTING demo rows remain (owner `demo-remove-me` + disabled code `VerifyP13` from P13) — pending user OK to delete. 16-03 mint DONE 2026-05-31: 11 unique active guild codes minted on the box (one per guildie: 747_8i/infinityparalax/.littleyo/scumy_03029/.guandi/ancientwolfshirt_49909/areyouafraidoftheclark/tontinethearistocrat/broccolifart/bayne7400/lern41), user ran the mint script in their terminal (plaintext never entered chat), orchestrator verified count=11 over SSH. Leftover P13 demo rows (owner demo-remove-me + code VerifyP13) deleted → DB pristine (0/0/0 pre-mint). **16-02 publish DONE 2026-05-31:** orchestrator pushed master (188 commits) + tag v2.0.0; release.yml built it (1m34s); verified isPrerelease=false + GitHub /releases/latest=v2.0.0 + latest.json version 2.0.0 w/ v2.0.0 binary_url. **Flip ARMED** — running v1.0.2 watchers auto-update on next poll. Remaining 16-03 = send code DMs + post channel announce + herd (human); then 16-04 = decommission Google (disable Apps Script triggers + retire OAuth client) + verify + milestone close. Re-run /gsd-execute-phase 16 after the flip to draft-verify the decommission checklist + close.
-**Resume:** 16-01/02/03 are DONE and now all carry SUMMARY.md files (16-02 + 16-03 SUMMARYs reconciled 2026-05-31 — those plans were executed by hand by the orchestrator/maintainer, NOT a gsd-executor, so their SUMMARYs were back-filled to keep GSD state consistent and stop a re-run from re-publishing/re-deploying). Only **16-04 (decommission Google + milestone close)** remains, and it is **intentionally DEFERRED** until a representative share of the guild has migrated — **1/11 reporting in** as of 2026-05-31 (Slampeach/owner=broccolifart validated end-to-end: 135 items + 54 spells). When enough guildies are in (user's call; D-05 wants a representative count, no hard %): re-run `/gsd-execute-phase 16` (skips 16-01/02/03 via their SUMMARYs, runs ONLY 16-04 — `docs/decommission-checklist.md` already drafted, then the two Google-console retirements + phase verification + milestone close), OR have the orchestrator walk the two console actions + close manually. Decommission strands no one (Google dead since 2026-05-15). NOTE: the maintainer's own watcher was a stuck 0.4.0-rc1 prerelease (won't auto-update — 999.22); manual reinstall fixes it; v1.0.x FINAL watchers auto-update fine.
+**v2.0 "Off Google" SHIPPED + ARCHIVED 2026-05-31.** All 6 phases / 29 plans done; all 26 requirements satisfied. The "Off Google" goal is MET — the self-hosted Go + SQLite backend is live at `api.squirebot.quest`, the SvelteKit website is live at `squirebot.quest`, the watcher is off Google, and Google is fully decommissioned (all 10 Apps Script triggers + the OAuth 2.0 client deleted; the Sheet abandoned in place). Guild migration is operational (3/11 reporting in at the decommission, climbing). The milestone archive lives at `.planning/milestones/v2.0-ROADMAP.md` + `v2.0-REQUIREMENTS.md`; the per-plan SUMMARYs remain under `.planning/phases/11..16/`.
+
+**Next:** no active milestone — between milestones. Top next candidate is **999.31 self-service Discord watcher-linking** (a session-scoped self-service `mint-code` endpoint + a "link your watcher" page, replacing the maintainer manually minting + DMing codes; watcher stays a static bearer token, Discord at link-time only). Start the next cycle via `/gsd-new-milestone`.
+
+> The detailed cutover/deploy narrative (the live deploy, the `chmod a+rX` blank-screen fix, the 11-code mint, the v2.0.0 publish, the Google-console retirements) is preserved in the dated execution-log sub-sections below + the 16-0{1,2,3,4} SUMMARYs. NOTE: the maintainer's own watcher was a stuck `0.4.0-rc1` prerelease (won't auto-update — 999.22); a manual reinstall fixes it; v1.0.x FINAL watchers auto-update fine.
+
+## Deferred Items
+
+Acknowledged deferrals at the v2.0 close (none blocking; recorded so they aren't lost):
+
+| Item | Source | Status / note |
+|------|--------|---------------|
+| P12 backend-vs-Sheet enrichment parity spot-check (SC-4) | `12-HUMAN-UAT.md` | Deferred + now moot — the Sheet is decommissioned, so there's nothing to spot-check against; the jobs were verified against the LIVE PigParse + P1999 APIs during P12. Never formally ticked. |
+| P14 5 visual UAT items | `14-HUMAN-UAT.md` | Deferred; most were exercised during the 16-03 live deploy (the site/theme/empty-state are walkable live at `squirebot.quest`). Checklist never formally ticked. |
+| P15 7 login/evict/coin/visual smokes | `15-HUMAN-UAT.md` | Deferred; most were exercised live during the 16-03 deploy — the live login gate returns 401, Slampeach end-to-end validated (135 items + 54 spells), the char-meta CR-01 browser smoke PASSED. Checklist never formally ticked. |
+
+> Note: most P14/P15 smokes WERE exercised live during the 16-03 deploy, but the HUMAN-UAT checklists were never formally ticked — so the artifacts still read "pending" even though the behavior was observed. Pending todos: 0.
 
 ### Phase 16 Plan 01 outcome (2026-05-31, /gsd-execute-phase 16)
 

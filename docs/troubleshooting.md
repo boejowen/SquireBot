@@ -4,45 +4,39 @@ layout: default
 
 # Troubleshooting
 
-Tray icon turned red? Workbook stopped updating? Start here.
+Tray icon red? Data not showing up on the site? Start here.
 
 ## Tray icon is red
 
-The most common cause is an OAuth token failure (`invalid_grant`). Under the Testing-mode consent screen the refresh token silently expires after 7 days, but SquireBot ships with a Production consent screen so this should be rare.
+A red tray icon means SquireBot can't upload to the guild backend. The usual causes:
 
-1. Right-click the tray icon and select `Reauthorize…`. Your browser opens; complete the Google sign-in flow.
-2. If the tray stays red after reauthorizing, open `%LOCALAPPDATA%\SquireBot\squirebot.log` and read the most recent `ERROR` line.
-3. If the error mentions `invalid_grant` after a Reauthorize, your Google account may have revoked the app at [https://myaccount.google.com/permissions](https://myaccount.google.com/permissions) — restore the grant and try again.
+1. **Guild-code problem.** If your code was never entered, was mistyped, or was revoked/re-issued, the server rejects uploads. Ask your maintainer to confirm (or re-issue) your code, then re-run the [installer](https://github.com/boejowen/SquireBot/releases/latest/download/SquireBot-Setup.exe) and paste the code again.
+2. **Network or server unreachable.** Confirm you have internet and that `https://api.squirebot.quest` loads in a browser. Corporate VPNs or DNS filtering can block it.
+3. Open `%LOCALAPPDATA%\SquireBot\squirebot.log` and read the most recent `ERROR` line — it names the exact cause (for example a `401` rejected code or a network error).
 
-## Workbook isn't updating
+## My data isn't showing at squirebot.quest
 
-1. Check the tray color first. Red is auth; orange is a Sheets API problem; green means the watcher thinks it is fine.
-2. If green, check `%LOCALAPPDATA%\SquireBot\squirebot.log` for `WATCH-09 catch-up` lines — the watcher rescans on restart.
-3. If the watcher is fine, the workbook's Apps Script side may need a manual trigger run. Open the workbook and select `SquireBot → Install Triggers` from the menu.
+1. Make sure you're **signed in with Discord** at [squirebot.quest](https://squirebot.quest).
+2. Check the tray color — green means SquireBot thinks its uploads are succeeding.
+3. In EverQuest, run `/outputfile inventory` (and `/outputfile spellbook` for casters). Uploads land within about 30 seconds.
+4. If the tray is green but nothing appears, check `%LOCALAPPDATA%\SquireBot\squirebot.log` for the most recent upload line.
+
+## My watcher is on an old version / won't update
+
+SquireBot auto-updates itself from GitHub, but a watcher installed from an old **pre-release** build can get stuck and never update (it misjudges newer versions). The fix is always the same — download and run the latest installer manually; it replaces the running copy in place:
+
+[**SquireBot-Setup.exe** (latest)](https://github.com/boejowen/SquireBot/releases/latest/download/SquireBot-Setup.exe)
+
+On its next launch it asks for your guild code (your EverQuest folder setting is kept).
 
 ## SmartScreen warning won't go away
 
-Windows builds reputation per-binary-hash. Every SquireBot update re-triggers SmartScreen until the new binary's reputation accrues. There is no shortcut around this: follow the same `More info → Run anyway` flow each time. (EV code-signing certificates lost the instant-reputation perk in March 2024, so signing would not help.) SignPath OSS approval is the only path that could change this; status lives at [docs/signpath-application.md](https://github.com/boejowen/SquireBot/blob/main/docs/signpath-application.md).
+Windows builds reputation per-binary-hash, so every SquireBot update re-triggers SmartScreen until the new binary's reputation accrues. There is no shortcut: follow the same `More info → Run anyway` flow each time. (EV code-signing certificates lost the instant-reputation perk in March 2024, so signing would not help.) SignPath OSS approval is the only path that could change this; status lives at [docs/signpath-application.md](https://github.com/boejowen/SquireBot/blob/main/docs/signpath-application.md).
 
-## "ErrSchemaTooNew" in the log
+## I need to remove a guildie (officers)
 
-The workbook is at a higher `_meta.schema_version` than this watcher binary supports. The watcher refuses to write rather than corrupt data.
+Eviction now lives on the website, not in a spreadsheet. Sign in at [squirebot.quest](https://squirebot.quest) as an officer and use the **Admin** page to evict a guildie. A 30-day grace period applies before their characters are archived, and you can restore them on the same page within that window.
 
-1. Right-click the tray icon and select `Check for updates`.
-2. If no update is offered, download the latest installer manually from [GitHub Releases](https://github.com/boejowen/SquireBot/releases/latest) and run it.
-3. After the new binary launches, the schema check passes and uploads resume.
+---
 
-## drive.file permission propagation (~50 minute delay)
-
-After a fresh `Reauthorize…` plus a Google Drive Picker pick, write access to the workbook can take up to about 50 minutes to propagate on Google's side. The read side returns immediately; only `batchUpdate` writes return `401` during the window. SquireBot's startup probe goroutine waits up to 90 minutes for this and surfaces a yellow tray during the wait.
-
-1. Wait. The tray flips back to green when the probe succeeds.
-2. If the wait exceeds 90 minutes (the cap), file an issue at [github.com/boejowen/SquireBot/issues](https://github.com/boejowen/SquireBot/issues) — that is past the worst observed propagation delay.
-
-## Hidden tabs (`_meta`, `_char_owner`, etc.) reappeared
-
-Any editor of the workbook can right-click a tab and choose `Unhide sheet`. The underscore-prefixed system tabs are hidden by default. To re-hide them, open the workbook and select `SquireBot → Install Triggers`. The `hideAllSystemTabs` step is idempotent — it always re-hides every underscore-prefixed tab without other side effects.
-
-## I need to remove a guildie
-
-See the [Eviction runbook](https://github.com/boejowen/SquireBot/blob/main/docs/eviction-runbook.md). Short version: `SquireBot → Evict Guildie…`, select the email, confirm. A 30-day grace period applies before the chars are auto-archived; un-evict is a manual `_char_owner.is_removed = FALSE` cell edit before grace expires.
+Still stuck? File an issue at [github.com/boejowen/SquireBot/issues](https://github.com/boejowen/SquireBot/issues).

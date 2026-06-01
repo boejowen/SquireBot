@@ -4,28 +4,36 @@ layout: default
 
 # Install SquireBot
 
-Five steps. Takes about three minutes.
+Four steps, about three minutes. **No Google sign-in and no browser** — just a one-time guild code your maintainer gives you.
 
 ## 1. Download
 
-Grab the latest installer from the [GitHub Releases page](https://github.com/boejowen/SquireBot/releases/latest). The file is named `SquireBot-Setup-v0.4.0.exe` (or whatever the current latest tag is) and weighs about 12 MB. SquireBot installs per-user, so you will not see a User Account Control prompt.
+Grab the latest installer from the [GitHub Releases page](https://github.com/boejowen/SquireBot/releases/latest), or download it directly:
+
+[**SquireBot-Setup.exe**](https://github.com/boejowen/SquireBot/releases/latest/download/SquireBot-Setup.exe)
+
+SquireBot installs per-user, so you will **not** see a User Account Control (admin) prompt.
 
 ## 2. Run the installer
 
-The binary is unsigned, so Windows SmartScreen will warn you on first run. This is expected — code-signing certificates no longer grant instant SmartScreen reputation (Microsoft removed the EV reputation perk in March 2024). The warning dialog has a single blue button (`Don't run`) and a small `More info` link near the top. Click `More info`, and the dialog expands to reveal a `Run anyway` button — click that. The installer itself completes in about five seconds.
+The binary is unsigned, so Windows SmartScreen will warn you on first run. This is expected — code-signing certificates no longer grant instant SmartScreen reputation (Microsoft removed the EV reputation perk in March 2024). The warning dialog shows a single blue `Don't run` button and a small `More info` link near the top. Click `More info`, then click `Run anyway`. The installer finishes in about five seconds and SquireBot starts in your system tray.
 
-## 3. Authorize Google
+## 3. Paste your guild code
 
-SquireBot opens your default browser once to ask for Google authorization. The OAuth scope is `drive.file` — Google describes it as `See, edit, create, and delete only the specific Google Drive files you use with this app`. The consent screen is in Production state, so your refresh token will not silently expire.
+On first launch, SquireBot opens a small **"Paste your guild code"** dialog — a plain text box, no browser and no Google. Paste the one-time code your guild maintainer DM'd you and click OK. SquireBot checks it with the server, stores it securely on your PC (Windows DPAPI), and never asks again.
 
-## 4. Pick the workbook and EQ folder
+> Don't have a code? Ask your maintainer — each guildie gets their own unique code.
 
-SquireBot opens two more browser tabs in sequence. The first is the Google Drive Picker — select your guild's shared workbook. The second is a local folder picker for your EverQuest install root (for example, `C:\P99\EverQuest\`). SquireBot tries to auto-detect the EQ folder via known paths and a heuristic scan; if it cannot, you will pick manually.
+## 4. Pick your EQ folder, then sync
 
-## 5. Trigger your first sync
+Next, SquireBot asks for your EverQuest install folder (for example, `C:\P99\EverQuest\`). It tries to auto-detect this; if it can't, pick it manually.
 
-In EverQuest, type `/outputfile inventory`. EQ writes `<YourChar>-Inventory.txt` to the configured folder. SquireBot detects the new file (fsnotify, 500 ms debounce), parses the five columns (`Location, Name, ID, Count, Slots`), and writes the rows to a new `inv:<YourChar>` tab in the workbook within about 30 seconds. Casters can then run `/outputfile spellbook` to populate `spell:<YourChar>` the same way.
+Then, in EverQuest, type `/outputfile inventory`. EQ writes `<YourChar>-Inventory.txt` to that folder; SquireBot detects the new file (fsnotify, 500 ms debounce), parses the columns (`Location, Name, ID, Count, Slots`), and uploads the rows to the guild backend within about 30 seconds. Casters can then run `/outputfile spellbook` to upload their spellbook the same way.
+
+View everything — your inventory, gear and spell checklists, and the shared guild bank — at **[squirebot.quest](https://squirebot.quest)** (sign in with Discord).
 
 ---
+
+**Upgrading from an older SquireBot?** Just install over the top. On its first launch the new version automatically clears the old Google login and asks for your guild code instead; your EverQuest folder setting is kept. (If your old watcher never auto-updated, downloading and running this installer is the fix.)
 
 If you hit a snag, see [Troubleshooting]({{ "/troubleshooting/" | relative_url }}).

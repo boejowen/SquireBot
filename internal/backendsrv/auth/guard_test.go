@@ -52,7 +52,7 @@ func TestResolveToken_Table(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotOwner, gotOK := a.resolveToken(ctx, tc.header)
+			gotOwner, gotCode, gotOK := a.resolveToken(ctx, tc.header)
 			if gotOK != tc.wantOK {
 				t.Fatalf("resolveToken(%q) ok = %v, want %v", tc.header, gotOK, tc.wantOK)
 			}
@@ -61,6 +61,15 @@ func TestResolveToken_Table(t *testing.T) {
 			}
 			if !tc.wantOwner && gotOwner != 0 {
 				t.Fatalf("resolveToken(%q) ownerID = %d, want 0", tc.header, gotOwner)
+			}
+			// codeID tracks ownerID's presence: a match yields a non-zero code-row
+			// id (threaded out for last_seen stamping, Phase 17); every miss/error
+			// path returns 0 (the "401 yields no code" guarantee).
+			if tc.wantOK && gotCode == 0 {
+				t.Fatalf("resolveToken(%q) codeID = 0 on a match, want non-zero", tc.header)
+			}
+			if !tc.wantOK && gotCode != 0 {
+				t.Fatalf("resolveToken(%q) codeID = %d, want 0 on a non-match", tc.header, gotCode)
 			}
 		})
 	}
@@ -90,12 +99,17 @@ func TestResolveToken_ReturnsMintingOwner(t *testing.T) {
 		t.Fatalf("read Alice owner id: %v", err)
 	}
 
-	gotOwner, ok := a.resolveToken(ctx, "Bearer "+aliceCode)
+	gotOwner, gotCode, ok := a.resolveToken(ctx, "Bearer "+aliceCode)
 	if !ok {
 		t.Fatal("Alice's valid code did not resolve")
 	}
 	if gotOwner != wantOwner {
 		t.Fatalf("resolveToken returned owner %d, want Alice's %d", gotOwner, wantOwner)
+	}
+	// The matched guild_code.id is threaded out (Phase 17 / D-07) so the ingest
+	// path can stamp last_seen — a valid code must yield a non-zero row id.
+	if gotCode == 0 {
+		t.Fatalf("resolveToken returned codeID = 0 for Alice's valid code, want the minted code's non-zero row id")
 	}
 }
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: — Self-Service Watcher Linking
 status: executing
-last_updated: "2026-06-01T22:47:00.000Z"
-last_activity: 2026-06-01 -- Executed 17-01 (schema + bearer-guard foundation)
+last_updated: "2026-06-01T23:01:00.000Z"
+last_activity: 2026-06-01 -- Executed 17-02 (backend handlers + resolve-or-create-owner + CLI removal)
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 17
+  completed_plans: 2
+  percent: 33
 ---
 
 # State: SquireBot
@@ -30,10 +30,10 @@ See: `.planning/PROJECT.md` (updated 2026-06-01 with v2.1 milestone scope)
 ## Current Position
 
 Phase: 17 — Self-Service Watcher Linking (executing)
-Plan: 17-01 complete; next 17-02 (backend handlers + resolve-or-create-owner + CLI removal)
+Plan: 17-01 + 17-02 complete; next 17-03 (frontend /account page — show-once panel, list/revoke UI, nav entry)
 Status: Executing
-Last activity: 2026-06-01 -- Executed 17-01 (00005 migration + bearer-guard codeID thread + ingest last_seen stamp); all backendsrv tests green
-Progress: [#.........] 17% — 1/3 Phase 17 plans complete (0/2 phases)
+Last activity: 2026-06-01 -- Executed 17-02 (MintCodeForOwnerTx + resolve-or-create-owner store funcs + 3 login-only /account handlers + eviction FK floor rewire + mint-code CLI removal); go build ./... + full backend/cmd suite green
+Progress: [###.......] 33% — 2/3 Phase 17 plans complete (0/2 phases)
 
 ## v2.1 Phase Plan (created 2026-06-01)
 

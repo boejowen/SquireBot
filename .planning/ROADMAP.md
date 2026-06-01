@@ -90,7 +90,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
   6. The `mint-code` CLI subcommand no longer exists; the self-service endpoint is the only way to mint a watcher code (the `revoke-code` CLI is retained as an ops backstop).
 **Plans**: 3 plans
 - [x] 17-01-PLAN.md — Foundation: `00005` migration (`owner.discord_user_id` FK + partial unique index + `guild_code.last_seen`) + bearer-guard `codeID` thread + ingest last-seen stamp (outside the hot-path tx) — SUMMARY: `17-01-SUMMARY.md`
-- [ ] 17-02-PLAN.md — Backend: resolve-or-create-owner (D-03/D-04) + `MintCodeForOwnerTx` sibling + the 3 login-only account handlers + route wiring + D-05 eviction-floor FK rewire + `mint-code` CLI removal (LINK-06)
+- [x] 17-02-PLAN.md — Backend: resolve-or-create-owner (D-03/D-04) + `MintCodeForOwnerTx` sibling + the 3 login-only account handlers + route wiring + D-05 eviction-floor FK rewire + `mint-code` CLI removal (LINK-06) — SUMMARY: `17-02-SUMMARY.md`
 - [ ] 17-03-PLAN.md — Frontend: `/account` page + `WatcherCodesPanel` (show-once copy-to-clipboard panel + list + confirm-before-commit revoke) + `api.ts` wrappers + all-members Account nav (ends in a browser-smoke checkpoint — vitest is DOM-blind)
 **UI hint**: yes
 
@@ -115,7 +115,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
-| v2.1 | 2 | 0/3 | 🔄 Planning | — |
+| v2.1 | 2 | 2/3 | 🔄 Executing | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -125,7 +125,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 | 14. Web Frontend | v2.0 | 4/4 | ✅ Complete (deployed live) | 2026-05-30 |
 | 15. Admin Web Forms + Login | v2.0 | 5/5 | ✅ Complete (deployed live; most UAT smokes exercised during the 16-03 deploy) | 2026-05-31 |
 | 16. Cutover + Decommission | v2.0 | 4/4 | ✅ Complete (Google decommissioned; guild migrating) | 2026-05-31 |
-| 17. Self-Service Watcher Linking | v2.1 | 0/3 | Planned | - |
+| 17. Self-Service Watcher Linking | v2.1 | 2/3 | 🔄 Executing | - |
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 0/? | Not started | - |
 
 ## Backlog

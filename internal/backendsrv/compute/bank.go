@@ -23,6 +23,12 @@ import (
 // (same enrichment-inline shape as View), plus a nil Coin (P14). Rows are in the
 // store's item→location order (the bankOnly join is scoped to the single
 // is_bank_toon character; Char is constant within it).
+//
+// The "single is_bank_toon character" assumption is upheld by the write side:
+// store.SetCharMetaTx (the only production writer of is_bank_toon=true) demotes any
+// other live bank toon in the same tx when it promotes one, so at most one live
+// character is ever flagged (MD-01, P16 review). There is no schema-level
+// partial-unique index; the store mutator is the enforcement point.
 func Bank(ctx context.Context, s *store.Store) (BankView, error) {
 	joinRows, err := s.InventoryJoin(ctx, true) // bankOnly
 	if err != nil {

@@ -6,10 +6,11 @@ package webadmin
 // validated server-side (class ∈ enrich.CLASSES, race ∈ enrich.RACES, level blank
 // → NULL or 1–60 — never trust the form's <select>, T-15-29 / Pitfall 5), scoped to
 // existing non-removed characters (ErrCharNotFound → 400 invalid_input), and
-// audited ("char_meta_set"). The route-level gate (RequireSession vs
-// RequireOfficer) is asserted in cmd/squirebot-server/main_test.go; here we
-// exercise the handler logic with the caller injected via withCaller — and the
-// caller is a PLAIN MEMBER (never seeded into guild_admins) to prove D-03.
+// audited ("char_meta_set"). The route-level gate (RequireSession, NOT
+// RequireOfficer) is asserted by TestWriteRoutes_Gates in
+// cmd/squirebot-server/main_test.go (anon → 401, plain MEMBER session → admitted);
+// here we exercise the handler logic with the caller injected via withCaller — and
+// the caller is a PLAIN MEMBER (never seeded into guild_admins) to prove D-03.
 //
 // Shared helpers reused from officers_test.go / coin_test.go / eviction_test.go
 // (same package): withCaller, postJSON, decodeErr, auditCount, seedPlainMember,

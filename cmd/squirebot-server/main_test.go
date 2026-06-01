@@ -248,11 +248,17 @@ func newMemberSession(t *testing.T, ctx context.Context, db *sql.DB, discordUser
 	return sid
 }
 
-// TestWriteRoutes_Gates is the 15-03 / D-01 / D-12 (B-1) route-gate proof:
+// TestWriteRoutes_Gates is the 15-03 / 16-01 / D-01 / D-12 (B-1) / D-03 route-gate
+// proof:
 //   - the officer-only admin routes are RequireOfficer-wrapped (a MEMBER session →
 //     403), and unauthenticated → 401;
 //   - the bank-coin routes are RequireSession-wrapped (no session → 401), and a
 //     plain MEMBER session is ADMITTED past the gate (NOT 401/403 — D-12).
+//   - the char-meta routes are RequireSession-wrapped (no session → 401), and a
+//     plain MEMBER session is ADMITTED past the gate (NOT 401/403 — D-03 login-only;
+//     LR-01, P16 review). A future edit that swapped in RequireOfficer would fail
+//     here — which is the bypass this route-level test exists to catch (the handler
+//     layer is gate-agnostic, so it cannot).
 //
 // The wiring here MIRRORS runServe's RequireOfficer/RequireSession wraps exactly.
 func TestWriteRoutes_Gates(t *testing.T) {
@@ -266,6 +272,8 @@ func TestWriteRoutes_Gates(t *testing.T) {
 	mux.Handle("POST /api/v1/admin/officers/add", webauth.RequireOfficer(db, webadmin.OfficerAddHandler(db)))
 	mux.Handle("GET /api/v1/coin/bank-toons", webauth.RequireSession(db, webadmin.BankToonsHandler(db)))
 	mux.Handle("POST /api/v1/coin", webauth.RequireSession(db, webadmin.CoinSetHandler(db)))
+	mux.Handle("GET /api/v1/char/meta-list", webauth.RequireSession(db, webadmin.CharMetaListHandler(db)))
+	mux.Handle("POST /api/v1/char/meta", webauth.RequireSession(db, webadmin.CharMetaSetHandler(db)))
 
 	// A plain member session (NOT an officer).
 	member := "555555555555555555"
@@ -331,6 +339,29 @@ func TestWriteRoutes_Gates(t *testing.T) {
 		mux.ServeHTTP(rec, req)
 		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
 			t.Errorf("GET /api/v1/coin/bank-toons (member) = %d, want admitted (D-12 login-only)", rec.Code)
+		}
+	})
+
+	// 5) Char-meta route, NO session → 401 (RequireSession — D-03; LR-01).
+	t.Run("char/meta anon→401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/char/meta", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("POST /api/v1/char/meta (anon) = %d, want 401", rec.Code)
+		}
+	})
+
+	// 6) Char-meta route, MEMBER session → ADMITTED past the gate (D-03: NOT
+	// 401/403). The meta-list GET with a member session returns 200 (empty []),
+	// proving a non-officer is allowed through RequireSession — and that the route
+	// is NOT RequireOfficer-wrapped (which would 403 this member).
+	t.Run("char/meta-list member→admitted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/char/meta-list", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+			t.Errorf("GET /api/v1/char/meta-list (member) = %d, want admitted (D-03 login-only)", rec.Code)
 		}
 	})
 }

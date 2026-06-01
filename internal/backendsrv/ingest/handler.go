@@ -91,7 +91,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// unknown/revoked token ⇒ 401 and we RETURN immediately, having touched the
 	// store zero times (the "401 writes nothing" guarantee — BACKEND-04 / V2 /
 	// T-11.05-01). NEVER log the token (V7).
-	ownerID, ok := h.guard.ResolveToken(r.Context(), r.Header.Get("Authorization"))
+	ownerID, codeID, ok := h.guard.ResolveToken(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		slog.Info("ingest rejected", "reason", "unauthenticated", "status", http.StatusUnauthorized)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -151,6 +151,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Error("ingest failed", "char", env.Character, "kind", env.Kind, "err", err, "status", http.StatusInternalServerError)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+
+	// [5] Best-effort last_seen stamp (D-07 / LINK-05). A SEPARATE, non-blocking
+	// UPDATE OUTSIDE the atomic replace tx (bindAndReplace above): last_seen is
+	// advisory UI metadata ("which PC, is it dead?"), NOT data integrity, so a
+	// failed/slow stamp logs and is dropped — it must NEVER change the ingest
+	// response (RESEARCH A1). codeID is the matched guild_code.id threaded out of
+	// the bearer guard. NEVER log the token (V7) — only code_id + err.
+	if _, serr := h.db.ExecContext(r.Context(),
+		`UPDATE guild_code SET last_seen = datetime('now') WHERE id = ?`, codeID); serr != nil {
+		slog.Warn("stamp last_seen failed (non-fatal)", "code_id", codeID, "err", serr)
 	}
 
 	slog.Info("ingest ok", "char", env.Character, "kind", env.Kind, "rows", len(rows), "status", status)

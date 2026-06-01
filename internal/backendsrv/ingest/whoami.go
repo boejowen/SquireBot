@@ -63,7 +63,9 @@ func (h *WhoamiHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Bearer guard — reused VERBATIM from the ingest path. A missing/malformed/
 	// unknown/revoked token ⇒ 401, and we RETURN. The endpoint is read-only, so a
 	// 401 trivially touches nothing. NEVER log the token (V7).
-	ownerID, ok := h.guard.ResolveToken(r.Context(), r.Header.Get("Authorization"))
+	// whoami is read-only and does NOT stamp last_seen, so the matched codeID is
+	// discarded with `_` (only the ingest WRITE path stamps).
+	ownerID, _, ok := h.guard.ResolveToken(r.Context(), r.Header.Get("Authorization"))
 	if !ok {
 		slog.Info("whoami rejected", "reason", "unauthenticated", "status", http.StatusUnauthorized)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)

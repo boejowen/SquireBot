@@ -103,7 +103,8 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
   2. A no-console (GUI/Explorer) launch logs at Debug rather than emitting a spurious Warn, and `freeConsole()`'s doc matches its implementation.
   3. A watcher parked on a pre-release version (e.g. `0.4.0-rc1`) correctly recognizes a final release as newer and updates to it (SemVer-aware comparison).
   4. The maintainer's own watcher is no longer stuck on `0.4.0-rc1` — it is on the current release (via in-place self-update if the SemVer fix reaches it, otherwise a one-time manual reinstall).
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 18-01-PLAN.md — Verify-or-close WATCH-12/13/14 (gofmt + freeConsole Debug + SemVer IsNewer incl. D-05 pre-release→final test) + D-02 stale-version survey + HUMAN-UAT reinstall of the maintainer's stuck 0.4.0-rc1 watcher to v2.0.0
 
 ## Progress
 

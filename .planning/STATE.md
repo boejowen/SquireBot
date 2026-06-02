@@ -4,11 +4,11 @@ milestone: v2.1
 milestone_name: — Self-Service Watcher Linking
 status: executing
 last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 -- Phase 18 discuss complete — 4 gray areas locked in one pass; 18-CONTEXT.md ready for planning
+last_activity: 2026-06-02 -- Phase 18 planned (--skip-research): 1 plan, verification PASSED; ready to execute
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 3
+  total_plans: 4
   completed_plans: 3
   percent: 50
 ---
@@ -29,11 +29,11 @@ See: `.planning/PROJECT.md` (updated 2026-06-01 with v2.1 milestone scope)
 
 ## Current Position
 
-Phase: 18 — Watcher Cleanups (Verify-or-Close) — context gathered; ready to plan
-Plan: — (next: /gsd-plan-phase 18)
-Status: Phase 18 context captured (18-CONTEXT.md); ready to plan
-Last activity: 2026-06-02 -- Phase 18 discuss-phase complete. All 3 code fixes (WATCH-12/13/14, from v2.0 Plan 13-04) confirmed live during scouting (gofmt clean, freeConsole Debug-level, IsNewer SemVer). 4 gray areas locked in one pass under the user's "simplest guildie experience" rule → verify+ops phase, near-zero code: manual reinstall for the stuck 0.4.0-rc1 watcher (in-place self-heal can't reach a broken pre-release client); D-02 optional stale-version survey IFF watcher_version is queryable (research flag); D-05 = confirm/add the pre-release→final IsNewer test (the one possible hidden gap). 18-CONTEXT.md + 18-DISCUSSION-LOG.md written.
-Progress: [#####.....] 50% — 1/2 phases complete; Phase 18 ready to plan
+Phase: 18 — Watcher Cleanups (Verify-or-Close) — PLANNED (1 plan); ready to execute
+Plan: 18-01 (not started)
+Status: Ready to execute
+Last activity: 2026-06-02 -- Phase 18 planned (--skip-research): 1 plan (18-01), plan-checker PASSED (no blockers/warnings). Verify-or-close confirmed near-zero-code — planner resolved BOTH research flags: D-05 pre-release→final IsNewer test ALREADY exists (manifest_test.go TestIsNewer_SemVerPreRelease), and watcher_version IS queryable (character.watcher_version, 00001), so the D-02 stale-version survey runs without new code. Plan 18-01 = confirm WATCH-12/13/14 live (gofmt/Debug/IsNewer) + read-only stale-version survey + HUMAN-UAT reinstall of the stuck 0.4.0-rc1 watcher to v2.0.0 (autonomous: false). HARD CONSTRAINT upheld (no watcher OAuth).
+Progress: [#####.....] 50% — Phase 17 done; Phase 18 planned, ready to execute
 
 ## v2.1 Phase Plan (created 2026-06-01)
 

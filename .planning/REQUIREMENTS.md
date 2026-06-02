@@ -23,8 +23,8 @@
 - [x] **LINK-01**: A signed-in guildie can mint a new watcher code for themselves via a session-scoped backend endpoint, with the owner derived server-side from the Discord session (never free-typed or passed by the client). *(Backend done in 17-02: `MintOwnCodeHandler` + `ResolveOrCreateOwnerByDiscordTx`; frontend trigger in 17-03.)*
 - [x] **LINK-02**: A minted code's owner is associated with the guildie's Discord identity (`web_user`), unifying website-login identity with watcher ownership — replacing the loose `owner.label == web_user.username` bridge the v2.0 eviction/owner-floor path relies on. *(17-01 FK + 17-02 resolve-or-create stamp + D-05 eviction-floor FK rewire.)*
 - [x] **LINK-03**: Minting is additive — a new code is issued without revoking the guildie's existing codes, so the watcher can run on multiple PCs at once. *(17-02: `MintCodeForOwnerTx` only INSERTs; verified additive in `TestMintOwnCode_…`.)*
-- [ ] **LINK-04**: A "Link your watcher" page (behind the Discord login) shows the freshly minted code's plaintext exactly once, with copy-to-clipboard and clear paste-into-watcher instructions; the plaintext is never retrievable again (hash-only at rest). *(Frontend — 17-03. Backend returns plaintext once + hash-only at rest already done in 17-02.)*
-- [ ] **LINK-05**: A guildie can view their own active watcher codes (each identifiable, e.g. by label / created date / last-seen) and revoke any one individually, without affecting their other codes (per-token revocation). *(Backend endpoints done in 17-02: `ListOwnCodesHandler` / `RevokeOwnCodeHandler`, owner-scoped; the view/revoke UI is 17-03.)*
+- [x] **LINK-04**: A "Link your watcher" page (behind the Discord login) shows the freshly minted code's plaintext exactly once, with copy-to-clipboard and clear paste-into-watcher instructions; the plaintext is never retrievable again (hash-only at rest). *(17-03: `/account` + `WatcherCodesPanel` show-once panel; plaintext in component state only, never persisted/re-fetched/logged. Browser-smoke verified live — reload never re-reveals.)*
+- [x] **LINK-05**: A guildie can view their own active watcher codes (each identifiable, e.g. by label / created date / last-seen) and revoke any one individually, without affecting their other codes (per-token revocation). *(17-03: active-codes list #N/created/last-seen + confirm-before-commit per-code revoke w/ optimistic collapse; browser-smoke verified scoped revoke + additive mint live.)*
 - [x] **LINK-06**: The manual `mint-code` CLI subcommand is removed; the self-service endpoint is the only path to mint a watcher code. *(17-02: `runMint` + `case "mint-code"` deleted; `revoke-code` retained.)*
 
 ### Watcher cleanups carried forward (WATCH)
@@ -65,8 +65,8 @@ _Maps each REQ-ID to exactly one phase. Phases continue at 17. 9/9 mapped — no
 | LINK-01 | Phase 17 | ✅ Done (17-02 backend) |
 | LINK-02 | Phase 17 | ✅ Done (17-01 FK + 17-02 resolve/floor) |
 | LINK-03 | Phase 17 | ✅ Done (17-02) |
-| LINK-04 | Phase 17 | Pending (17-03 frontend) |
-| LINK-05 | Phase 17 | Backend done (17-02); UI pending (17-03) |
+| LINK-04 | Phase 17 | ✅ Done (17-03 frontend; browser-smoke verified) |
+| LINK-05 | Phase 17 | ✅ Done (17-03 UI; browser-smoke verified) |
 | LINK-06 | Phase 17 | ✅ Done (17-02) |
 | WATCH-12 | Phase 18 | Pending |
 | WATCH-13 | Phase 18 | Pending |

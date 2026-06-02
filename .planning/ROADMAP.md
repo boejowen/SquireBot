@@ -91,7 +91,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 **Plans**: 3 plans
 - [x] 17-01-PLAN.md — Foundation: `00005` migration (`owner.discord_user_id` FK + partial unique index + `guild_code.last_seen`) + bearer-guard `codeID` thread + ingest last-seen stamp (outside the hot-path tx) — SUMMARY: `17-01-SUMMARY.md`
 - [x] 17-02-PLAN.md — Backend: resolve-or-create-owner (D-03/D-04) + `MintCodeForOwnerTx` sibling + the 3 login-only account handlers + route wiring + D-05 eviction-floor FK rewire + `mint-code` CLI removal (LINK-06) — SUMMARY: `17-02-SUMMARY.md`
-- [ ] 17-03-PLAN.md — Frontend: `/account` page + `WatcherCodesPanel` (show-once copy-to-clipboard panel + list + confirm-before-commit revoke) + `api.ts` wrappers + all-members Account nav (ends in a browser-smoke checkpoint — vitest is DOM-blind)
+- [x] 17-03-PLAN.md — Frontend: `/account` page + `WatcherCodesPanel` (show-once copy-to-clipboard panel + list + confirm-before-commit revoke) + `api.ts` wrappers + all-members Account nav (browser-smoke checkpoint APPROVED live — all 7 steps passed) — SUMMARY: `17-03-SUMMARY.md`
 **UI hint**: yes
 
 ### Phase 18: Watcher Cleanups — Verify-or-Close
@@ -115,7 +115,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
-| v2.1 | 2 | 2/3 | 🔄 Executing | — |
+| v2.1 | 2 | 3/3 | 🔄 Executing | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -125,7 +125,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 | 14. Web Frontend | v2.0 | 4/4 | ✅ Complete (deployed live) | 2026-05-30 |
 | 15. Admin Web Forms + Login | v2.0 | 5/5 | ✅ Complete (deployed live; most UAT smokes exercised during the 16-03 deploy) | 2026-05-31 |
 | 16. Cutover + Decommission | v2.0 | 4/4 | ✅ Complete (Google decommissioned; guild migrating) | 2026-05-31 |
-| 17. Self-Service Watcher Linking | v2.1 | 2/3 | 🔄 Executing | - |
+| 17. Self-Service Watcher Linking | v2.1 | 3/3 | 🔄 All plans complete (browser smoke approved; phase verification pending) | - |
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 0/? | Not started | - |
 
 ## Backlog

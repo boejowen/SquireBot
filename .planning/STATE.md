@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: — Self-Service Watcher Linking
 status: executing
-last_updated: "2026-06-01T23:01:00.000Z"
-last_activity: 2026-06-01 -- Executed 17-02 (backend handlers + resolve-or-create-owner + CLI removal)
+last_updated: "2026-06-02T00:00:00.000Z"
+last_activity: 2026-06-02 -- Executed 17-03 (/account page + WatcherCodesPanel show-once/list/revoke + nav) — browser smoke APPROVED live
 progress:
   total_phases: 2
   completed_phases: 0
   total_plans: 3
-  completed_plans: 2
-  percent: 33
+  completed_plans: 3
+  percent: 50
 ---
 
 # State: SquireBot
@@ -29,11 +29,11 @@ See: `.planning/PROJECT.md` (updated 2026-06-01 with v2.1 milestone scope)
 
 ## Current Position
 
-Phase: 17 — Self-Service Watcher Linking (executing)
-Plan: 17-01 + 17-02 complete; next 17-03 (frontend /account page — show-once panel, list/revoke UI, nav entry)
+Phase: 17 — Self-Service Watcher Linking (executing — all 3 plans complete; awaiting orchestrator phase-level verification)
+Plan: 17-01 + 17-02 + 17-03 complete (3/3)
 Status: Executing
-Last activity: 2026-06-01 -- Executed 17-02 (MintCodeForOwnerTx + resolve-or-create-owner store funcs + 3 login-only /account handlers + eviction FK floor rewire + mint-code CLI removal); go build ./... + full backend/cmd suite green
-Progress: [###.......] 33% — 2/3 Phase 17 plans complete (0/2 phases)
+Last activity: 2026-06-02 -- Executed 17-03 (/account form-card page + WatcherCodesPanel: generate→show-once copy-to-clipboard plaintext panel→active-codes list→confirm-before-commit revoke + fetchOwnCodes/mintOwnCode/revokeOwnCode wrappers + StateBlock no-codes kind + member-visible Account nav). Deployed to live VPS (api.squirebot.quest schema v5; squirebot.quest serves /account, 401-gated); blocking human browser-smoke APPROVED — all 7 steps passed. npm run check clean (443 files, 0 errors).
+Progress: [#####.....] 50% — 3/3 Phase 17 plans complete (0/2 phases; phase completion owned by orchestrator)
 
 ## v2.1 Phase Plan (created 2026-06-01)
 

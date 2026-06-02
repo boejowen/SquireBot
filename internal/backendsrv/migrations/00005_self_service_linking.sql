@@ -23,5 +23,7 @@ CREATE UNIQUE INDEX owner_discord_user_id_uidx
 ALTER TABLE guild_code ADD COLUMN last_seen TEXT;               -- TEXT/datetime('now') — matches 00001 guild_code cols
 
 -- +goose Down
-DROP INDEX owner_discord_user_id_uidx;
--- (column drops are best-effort; forward-only in practice — mirror 00004:86 comment)
+-- Forward-only in practice (mirrors 00004): a partial revert that drops ONLY the
+-- unique index would leave owner.discord_user_id writable WITHOUT its uniqueness
+-- guard. Make the down an explicit no-op instead.
+SELECT 1;

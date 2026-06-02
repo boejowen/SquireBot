@@ -4,7 +4,7 @@ milestone: v2.1
 milestone_name: — Self-Service Watcher Linking
 status: executing
 last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 -- Phase 17 COMPLETE — verified 15/15 must-haves, all 6 LINK reqs, deployed live, browser-smoke approved
+last_activity: 2026-06-02 -- Phase 18 discuss complete — 4 gray areas locked in one pass; 18-CONTEXT.md ready for planning
 progress:
   total_phases: 2
   completed_phases: 1
@@ -29,11 +29,11 @@ See: `.planning/PROJECT.md` (updated 2026-06-01 with v2.1 milestone scope)
 
 ## Current Position
 
-Phase: 18 — Watcher Cleanups (Verify-or-Close) — NEXT (Phase 17 complete; 18 not yet planned)
-Plan: — (Phase 18 has no plans yet; next: /gsd-discuss-phase 18 or /gsd-plan-phase 18)
-Status: Phase 17 complete; ready to start Phase 18
-Last activity: 2026-06-02 -- Phase 17 COMPLETE: verified 15/15 must-haves, all 6 LINK reqs satisfied (LINK-01..06), Go + web suites green, code review 0-critical (4 advisory warnings in 17-REVIEW.md). Deployed to live VPS (api.squirebot.quest schema v5; squirebot.quest serves /account, 401-gated); blocking human browser-smoke APPROVED — all 7 steps passed.
-Progress: [#####.....] 50% — 1/2 phases complete (Phase 17 done; Phase 18 pending)
+Phase: 18 — Watcher Cleanups (Verify-or-Close) — context gathered; ready to plan
+Plan: — (next: /gsd-plan-phase 18)
+Status: Phase 18 context captured (18-CONTEXT.md); ready to plan
+Last activity: 2026-06-02 -- Phase 18 discuss-phase complete. All 3 code fixes (WATCH-12/13/14, from v2.0 Plan 13-04) confirmed live during scouting (gofmt clean, freeConsole Debug-level, IsNewer SemVer). 4 gray areas locked in one pass under the user's "simplest guildie experience" rule → verify+ops phase, near-zero code: manual reinstall for the stuck 0.4.0-rc1 watcher (in-place self-heal can't reach a broken pre-release client); D-02 optional stale-version survey IFF watcher_version is queryable (research flag); D-05 = confirm/add the pre-release→final IsNewer test (the one possible hidden gap). 18-CONTEXT.md + 18-DISCUSSION-LOG.md written.
+Progress: [#####.....] 50% — 1/2 phases complete; Phase 18 ready to plan
 
 ## v2.1 Phase Plan (created 2026-06-01)
 

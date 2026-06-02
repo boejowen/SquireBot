@@ -158,9 +158,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// advisory UI metadata ("which PC, is it dead?"), NOT data integrity, so a
 	// failed/slow stamp logs and is dropped — it must NEVER change the ingest
 	// response (RESEARCH A1). codeID is the matched guild_code.id threaded out of
-	// the bearer guard. NEVER log the token (V7) — only code_id + err.
-	if _, serr := h.db.ExecContext(r.Context(),
-		`UPDATE guild_code SET last_seen = datetime('now') WHERE id = ?`, codeID); serr != nil {
+	// the bearer guard. NEVER log the token (V7) — only code_id + err. Routed via
+	// store.StampCodeLastSeen so the ingest path keeps its "no inline SQL"
+	// discipline and StampCodeLastSeen's test coverage is load-bearing.
+	if serr := store.StampCodeLastSeen(r.Context(), h.db, codeID); serr != nil {
 		slog.Warn("stamp last_seen failed (non-fatal)", "code_id", codeID, "err", serr)
 	}
 

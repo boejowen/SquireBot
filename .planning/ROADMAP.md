@@ -72,7 +72,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 
 **Milestone Goal:** Let any guildie link their own watcher from squirebot.quest via the existing P15 Discord login — no maintainer hand-minting + DMing codes — while keeping the watcher credential a static, reusable bearer token (the v2.0 model; **no watcher change** for the core feature). Composes existing infrastructure (P15 Discord-login + sessions, `auth.MintCode` hashed-token minting, the `web_user`/`owner`/`guild_code` tables).
 
-- [ ] **Phase 17: Self-Service Watcher Linking (web feature)** — session-scoped mint endpoint (owner derived server-side from the Discord session) + Discord-identity↔owner linkage + per-token list/revoke + the "Link your watcher" page (show-once plaintext, copy-to-clipboard, paste instructions) + a manage/revoke surface; removes the manual `mint-code` CLI.
+- [x] **Phase 17: Self-Service Watcher Linking (web feature)** — session-scoped mint endpoint (owner derived server-side from the Discord session) + Discord-identity↔owner linkage + per-token list/revoke + the "Link your watcher" page (show-once plaintext, copy-to-clipboard, paste instructions) + a manage/revoke surface; removes the manual `mint-code` CLI. ✅ 2026-06-02 (deployed live; browser-smoke approved; 15/15 must-haves verified)
 - [ ] **Phase 18: Watcher Cleanups — Verify-or-Close** — confirm the live state of 999.20/21/22 (recorded RESOLVED in v2.0 Plan 13-04) and close the only likely residual: the maintainer's own watcher stuck on `0.4.0-rc1` (one-time manual reinstall if the in-place SemVer-aware updater can't self-heal it).
 
 ## Phase Details
@@ -115,7 +115,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 | v1.0.1 | 3 | 12/12 | ✅ Shipped | 2026-05-12 |
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
-| v2.1 | 2 | 3/3 | 🔄 Executing | — |
+| v2.1 | 2 | 3/3 | 🔄 Executing (Phase 17 complete; Phase 18 pending) | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -125,7 +125,7 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 | 14. Web Frontend | v2.0 | 4/4 | ✅ Complete (deployed live) | 2026-05-30 |
 | 15. Admin Web Forms + Login | v2.0 | 5/5 | ✅ Complete (deployed live; most UAT smokes exercised during the 16-03 deploy) | 2026-05-31 |
 | 16. Cutover + Decommission | v2.0 | 4/4 | ✅ Complete (Google decommissioned; guild migrating) | 2026-05-31 |
-| 17. Self-Service Watcher Linking | v2.1 | 3/3 | 🔄 All plans complete (browser smoke approved; phase verification pending) | - |
+| 17. Self-Service Watcher Linking | v2.1 | 3/3 | ✅ Complete (deployed live; browser-smoke approved; 15/15 verified) | 2026-06-02 |
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 0/? | Not started | - |
 
 ## Backlog

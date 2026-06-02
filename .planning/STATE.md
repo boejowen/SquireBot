@@ -4,10 +4,10 @@ milestone: v2.1
 milestone_name: — Self-Service Watcher Linking
 status: executing
 last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 -- Executed 17-03 (/account page + WatcherCodesPanel show-once/list/revoke + nav) — browser smoke APPROVED live
+last_activity: 2026-06-02 -- Phase 17 COMPLETE — verified 15/15 must-haves, all 6 LINK reqs, deployed live, browser-smoke approved
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
   completed_plans: 3
   percent: 50
@@ -29,11 +29,11 @@ See: `.planning/PROJECT.md` (updated 2026-06-01 with v2.1 milestone scope)
 
 ## Current Position
 
-Phase: 17 — Self-Service Watcher Linking (executing — all 3 plans complete; awaiting orchestrator phase-level verification)
-Plan: 17-01 + 17-02 + 17-03 complete (3/3)
-Status: Executing
-Last activity: 2026-06-02 -- Executed 17-03 (/account form-card page + WatcherCodesPanel: generate→show-once copy-to-clipboard plaintext panel→active-codes list→confirm-before-commit revoke + fetchOwnCodes/mintOwnCode/revokeOwnCode wrappers + StateBlock no-codes kind + member-visible Account nav). Deployed to live VPS (api.squirebot.quest schema v5; squirebot.quest serves /account, 401-gated); blocking human browser-smoke APPROVED — all 7 steps passed. npm run check clean (443 files, 0 errors).
-Progress: [#####.....] 50% — 3/3 Phase 17 plans complete (0/2 phases; phase completion owned by orchestrator)
+Phase: 18 — Watcher Cleanups (Verify-or-Close) — NEXT (Phase 17 complete; 18 not yet planned)
+Plan: — (Phase 18 has no plans yet; next: /gsd-discuss-phase 18 or /gsd-plan-phase 18)
+Status: Phase 17 complete; ready to start Phase 18
+Last activity: 2026-06-02 -- Phase 17 COMPLETE: verified 15/15 must-haves, all 6 LINK reqs satisfied (LINK-01..06), Go + web suites green, code review 0-critical (4 advisory warnings in 17-REVIEW.md). Deployed to live VPS (api.squirebot.quest schema v5; squirebot.quest serves /account, 401-gated); blocking human browser-smoke APPROVED — all 7 steps passed.
+Progress: [#####.....] 50% — 1/2 phases complete (Phase 17 done; Phase 18 pending)
 
 ## v2.1 Phase Plan (created 2026-06-01)
 

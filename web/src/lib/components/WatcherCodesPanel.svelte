@@ -33,8 +33,12 @@
 		if (hr < 24) return `last used ${hr} hour${hr === 1 ? '' : 's'} ago`;
 		const day = Math.floor(hr / 24);
 		if (day < 30) return `last used ${day} day${day === 1 ? '' : 's'} ago`;
-		const mon = Math.floor(day / 30);
-		if (mon < 12) return `last used ${mon} month${mon === 1 ? '' : 's'} ago`;
+		if (day < 365) {
+			// Consistent 365-day boundary with the year tier closes the [360,364]
+			// gap that previously rendered "0 years ago".
+			const mon = Math.max(1, Math.floor(day / 30));
+			return `last used ${mon} month${mon === 1 ? '' : 's'} ago`;
+		}
 		const yr = Math.floor(day / 365);
 		return `last used ${yr} year${yr === 1 ? '' : 's'} ago`;
 	}
@@ -168,9 +172,11 @@
 		try {
 			const { revoked } = await revokeOwnCode(target.id);
 			if (revoked) {
-				// Optimistic-collapse the row (mirror EvictionForm's list-filter).
-				codes = codes.filter((c) => c.id !== target.id);
 				revokeSuccessMsg = `Code #${target.ordinal} revoked. That watcher will stop uploading on its next attempt.`;
+				// Re-load from the server so the remaining rows' #N ordinals stay
+				// authoritative (mirror generate()); a local filter would leave the
+				// survivors with stale server ordinals until the next full reload.
+				codes = await fetchOwnCodes();
 			} else {
 				// revoked:false = not the caller's / already revoked — a no-op, not a
 				// hard error. Keep the row; surface a quiet note via the error line.

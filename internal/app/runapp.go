@@ -303,19 +303,62 @@ func rescanCatchUp(ctx context.Context, cfg *config.Config, folders []string, on
 	}
 }
 
-// makeOnInventoryChange wraps the read → POST chain into a watch.OnChange
-// callback. Extracted for testability.
+// fileKind bundles the five tokens that vary between the inventory and spellbook
+// upload paths. Adding a third /outputfile type later = one literal.
+type fileKind struct {
+	kind       string                                  // backend.Ingest "kind": "inventory" | "spellbook"
+	suffix     string                                  // watch.InventorySuffix | watch.SpellbookSuffix
+	slogNoun   string                                  // "inventory" | "spellbook" — keeps slog ops greppable
+	traySuffix string                                  // "" | " spellbook" — preserves the v1 tray wording asymmetry
+	mtimeMap   func(*config.Config) *map[string]string // &cfg.LastKnownInventoryMtime | &cfg.LastKnownSpellbookMtime
+}
+
+// handleIngestErr maps a backend.Ingest error to its terminal tray/log reaction
+// and reports whether the caller should stop (true) before persisting the mtime.
+// nil err → returns false (proceed to persist). Extracted verbatim from the twin
+// handlers (was runapp.go:355-372 ≡ :419-437); NO behavior change. slogNoun keeps
+// the 5xx/default op string noun-specific ("upload inventory"/"upload spellbook")
+// per CLAUDE.md ("structured logging … keeps logs greppable"); traySuffix keeps
+// the failure tray text asymmetry ("Last upload failed: Foo" vs "… Foo spellbook").
+func handleIngestErr(err error, charName, slogNoun, traySuffix string, t *tray.Controller) (stop bool) {
+	switch {
+	case errors.Is(err, backend.ErrUnauthorized):
+		slog.Warn("upload 401 — guild code invalid", "char", charName)
+		t.SetIconHealth(tray.HealthRed)
+		t.SetStatus("Guild code invalid — re-enter via the tray menu")
+		return true // terminal; NO retry (D-5 / Pitfall 5)
+	case errors.Is(err, backend.ErrVersionTooOld):
+		slog.Warn("upload 426 — watcher too old", "char", charName)
+		t.SetStatus("Update needed — SquireBot will auto-update")
+		return true
+	case errors.Is(err, backend.ErrCrossOwner):
+		slog.Warn("cross-owner reject", "char", charName)
+		return true
+	case err != nil:
+		slog.Error("upload "+slogNoun, "char", charName, "err", err)
+		t.SetStatus("Last upload failed: " + charName + traySuffix)
+		return true
+	}
+	return false
+}
+
+// makeOnFileChange is the single shared upload-handler body for both the
+// inventory and spellbook paths, parameterized by a fileKind descriptor.
 //
 // Phase 13 (D-1/D-8): on a file event it re-stats (capturing mtime BEFORE the
 // read so a same-second re-fire is recognised as "already uploaded"), opens,
 // decodes CP1252→UTF-8 ONCE via parse.CP1252Reader, skips an empty body, and
 // POSTs the raw UTF-8 to the backend — it does NOT call parse.Parse. On success
-// it persists cfg.LastKnownInventoryMtime[char] + cfg.Save() (unchanged from v1).
-func makeOnInventoryChange(ctx context.Context, bc *backend.Client, cfg *config.Config, code, version string, t *tray.Controller) watch.OnChange {
+// it persists the kind's LastKnown*Mtime[char] + cfg.Save() (unchanged from v1).
+//
+// Phase 24 (C1/REFACTOR): collapses the byte-for-byte twin handlers
+// makeOnInventoryChange/makeOnSpellbookChange into this one body plus the
+// extracted handleIngestErr helper. NO behavior change to either path.
+func makeOnFileChange(ctx context.Context, bc *backend.Client, cfg *config.Config, code, version string, t *tray.Controller, fk fileKind) watch.OnChange {
 	return func(path string) {
-		charName := extractCharNameForSuffix(path, watch.InventorySuffix)
+		charName := extractCharNameForSuffix(path, fk.suffix)
 		if charName == "" {
-			slog.Warn("inventory file with unexpected name; skipping", "path", filepath.Base(path))
+			slog.Warn(fk.slogNoun+" file with unexpected name; skipping", "path", filepath.Base(path))
 			return
 		}
 		// Per CLAUDE.md / RESEARCH §8.3: re-stat + re-read fresh on every event.
@@ -324,14 +367,14 @@ func makeOnInventoryChange(ctx context.Context, bc *backend.Client, cfg *config.
 		// "already uploaded" by catch-up.
 		fi, statErr := os.Stat(path)
 		if statErr != nil {
-			slog.Error("stat inventory", "char", charName, "err", statErr)
+			slog.Error("stat "+fk.slogNoun, "char", charName, "err", statErr)
 			return
 		}
 		fileMtime := fi.ModTime().UTC().Format(time.RFC3339)
 
 		f, err := os.Open(path)
 		if err != nil {
-			slog.Error("open inventory", "char", charName, "err", err)
+			slog.Error("open "+fk.slogNoun, "char", charName, "err", err)
 			return
 		}
 		// Encoding contract A1/D-8: decode CP1252→UTF-8 ONCE here; the backend
@@ -341,111 +384,57 @@ func makeOnInventoryChange(ctx context.Context, bc *backend.Client, cfg *config.
 		utf8Bytes, rerr := io.ReadAll(parse.CP1252Reader(f))
 		_ = f.Close()
 		if rerr != nil {
-			slog.Error("read inventory", "char", charName, "err", rerr)
+			slog.Error("read "+fk.slogNoun, "char", charName, "err", rerr)
 			return
 		}
 		if len(bytes.TrimSpace(utf8Bytes)) == 0 {
 			// T-07-05 carry-over: skip an empty/mid-flush file (the server's
 			// full-snapshot replace would otherwise clear the character's rows).
-			slog.Info("inventory empty; skipping upload", "char", charName)
+			slog.Info(fk.slogNoun+" empty; skipping upload", "char", charName)
 			return
 		}
 
-		err = bc.Ingest(ctx, code, charName, "inventory", string(utf8Bytes), version)
-		switch {
-		case errors.Is(err, backend.ErrUnauthorized):
-			slog.Warn("upload 401 — guild code invalid", "char", charName)
-			t.SetIconHealth(tray.HealthRed)
-			t.SetStatus("Guild code invalid — re-enter via the tray menu")
-			return // terminal; NO retry (D-5 / Pitfall 5)
-		case errors.Is(err, backend.ErrVersionTooOld):
-			slog.Warn("upload 426 — watcher too old", "char", charName)
-			t.SetStatus("Update needed — SquireBot will auto-update")
-			return
-		case errors.Is(err, backend.ErrCrossOwner):
-			slog.Warn("cross-owner reject", "char", charName)
-			return
-		case err != nil:
-			slog.Error("upload inventory", "char", charName, "err", err)
-			t.SetStatus("Last upload failed: " + charName)
+		err = bc.Ingest(ctx, code, charName, fk.kind, string(utf8Bytes), version)
+		if handleIngestErr(err, charName, fk.slogNoun, fk.traySuffix, t) {
 			return
 		}
 
 		// Success → persist the mtime so the next catch-up sees it (UNCHANGED).
-		if cfg.LastKnownInventoryMtime == nil {
-			cfg.LastKnownInventoryMtime = make(map[string]string)
+		m := fk.mtimeMap(cfg)
+		if *m == nil {
+			*m = make(map[string]string)
 		}
-		cfg.LastKnownInventoryMtime[charName] = fileMtime
+		(*m)[charName] = fileMtime
 		if err := cfg.Save(); err != nil {
-			slog.Warn("save cfg after inventory upload", "char", charName, "err", err)
+			slog.Warn("save cfg after "+fk.slogNoun+" upload", "char", charName, "err", err)
 		}
-		slog.Info("uploaded inventory", "char", charName)
-		t.SetStatus(fmt.Sprintf("Last upload: %s at %s", charName, time.Now().Format("15:04")))
+		slog.Info("uploaded "+fk.slogNoun, "char", charName)
+		t.SetStatus(fmt.Sprintf("Last upload: %s%s at %s", charName, fk.traySuffix, time.Now().Format("15:04")))
 	}
 }
 
+// makeOnInventoryChange wraps the read → POST chain into a watch.OnChange
+// callback for <Char>-Inventory.txt files. Thin wrapper over makeOnFileChange.
+func makeOnInventoryChange(ctx context.Context, bc *backend.Client, cfg *config.Config, code, version string, t *tray.Controller) watch.OnChange {
+	return makeOnFileChange(ctx, bc, cfg, code, version, t, fileKind{
+		kind:       "inventory",
+		suffix:     watch.InventorySuffix,
+		slogNoun:   "inventory",
+		traySuffix: "",
+		mtimeMap:   func(c *config.Config) *map[string]string { return &c.LastKnownInventoryMtime },
+	})
+}
+
 // makeOnSpellbookChange mirrors makeOnInventoryChange for <Char>-Spellbook.txt
-// files (kind "spellbook").
+// files (kind "spellbook"). Thin wrapper over makeOnFileChange.
 func makeOnSpellbookChange(ctx context.Context, bc *backend.Client, cfg *config.Config, code, version string, t *tray.Controller) watch.OnChange {
-	return func(path string) {
-		charName := extractCharNameForSuffix(path, watch.SpellbookSuffix)
-		if charName == "" {
-			slog.Warn("spellbook file with unexpected name; skipping", "path", filepath.Base(path))
-			return
-		}
-		fi, statErr := os.Stat(path)
-		if statErr != nil {
-			slog.Error("stat spellbook", "char", charName, "err", statErr)
-			return
-		}
-		fileMtime := fi.ModTime().UTC().Format(time.RFC3339)
-
-		f, err := os.Open(path)
-		if err != nil {
-			slog.Error("open spellbook", "char", charName, "err", err)
-			return
-		}
-		utf8Bytes, rerr := io.ReadAll(parse.CP1252Reader(f))
-		_ = f.Close()
-		if rerr != nil {
-			slog.Error("read spellbook", "char", charName, "err", rerr)
-			return
-		}
-		if len(bytes.TrimSpace(utf8Bytes)) == 0 {
-			slog.Info("spellbook empty; skipping upload", "char", charName)
-			return
-		}
-
-		err = bc.Ingest(ctx, code, charName, "spellbook", string(utf8Bytes), version)
-		switch {
-		case errors.Is(err, backend.ErrUnauthorized):
-			slog.Warn("upload 401 — guild code invalid", "char", charName)
-			t.SetIconHealth(tray.HealthRed)
-			t.SetStatus("Guild code invalid — re-enter via the tray menu")
-			return
-		case errors.Is(err, backend.ErrVersionTooOld):
-			slog.Warn("upload 426 — watcher too old", "char", charName)
-			t.SetStatus("Update needed — SquireBot will auto-update")
-			return
-		case errors.Is(err, backend.ErrCrossOwner):
-			slog.Warn("cross-owner reject", "char", charName)
-			return
-		case err != nil:
-			slog.Error("upload spellbook", "char", charName, "err", err)
-			t.SetStatus("Last upload failed: " + charName + " spellbook")
-			return
-		}
-
-		if cfg.LastKnownSpellbookMtime == nil {
-			cfg.LastKnownSpellbookMtime = make(map[string]string)
-		}
-		cfg.LastKnownSpellbookMtime[charName] = fileMtime
-		if err := cfg.Save(); err != nil {
-			slog.Warn("save cfg after spellbook upload", "char", charName, "err", err)
-		}
-		slog.Info("uploaded spellbook", "char", charName)
-		t.SetStatus(fmt.Sprintf("Last upload: %s spellbook at %s", charName, time.Now().Format("15:04")))
-	}
+	return makeOnFileChange(ctx, bc, cfg, code, version, t, fileKind{
+		kind:       "spellbook",
+		suffix:     watch.SpellbookSuffix,
+		slogNoun:   "spellbook",
+		traySuffix: " spellbook",
+		mtimeMap:   func(c *config.Config) *map[string]string { return &c.LastKnownSpellbookMtime },
+	})
 }
 
 // extractCharName returns "<Char>" for "<Char>-Inventory.txt" or "" for any

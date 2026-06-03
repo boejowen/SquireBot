@@ -448,3 +448,150 @@ func TestMakeOnInventoryChange_426UpdateNeeded(t *testing.T) {
 		t.Errorf("mtime persisted on a 426; want untouched")
 	}
 }
+
+// TestMakeOnSpellbookChange_204PersistsMtime: a 204 persists the file's mtime
+// into cfg.LastKnownSpellbookMtime and saves config. Mirrors the inventory 204 test.
+func TestMakeOnSpellbookChange_204PersistsMtime(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusNoContent}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	spbPath := filepath.Join(dir, "Foo-Spellbook.txt")
+	if err := os.WriteFile(spbPath, []byte("9\tLifetap\n"), 0o644); err != nil {
+		t.Fatalf("write spb: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownSpellbookMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnSpellbookChange(context.Background(), bc, cfg, "CODE", "2.0.0", tc)
+	cb(spbPath)
+
+	if ir.requests() != 1 {
+		t.Fatalf("backend saw %d requests, want 1", ir.requests())
+	}
+	if cfg.LastKnownSpellbookMtime["Foo"] == "" {
+		t.Errorf("mtime not persisted for Foo after a 204")
+	}
+}
+
+// TestMakeOnSpellbookChange_401NoLoopSetsRed: a 401 does NOT retry (exactly one
+// request) and the mtime is NOT persisted. Mirrors the inventory 401 test.
+func TestMakeOnSpellbookChange_401NoLoopSetsRed(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusUnauthorized}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	spbPath := filepath.Join(dir, "Foo-Spellbook.txt")
+	if err := os.WriteFile(spbPath, []byte("9\tLifetap\n"), 0o644); err != nil {
+		t.Fatalf("write spb: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownSpellbookMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnSpellbookChange(context.Background(), bc, cfg, "BADCODE", "2.0.0", tc)
+	cb(spbPath)
+
+	if ir.requests() != 1 {
+		t.Fatalf("401 path made %d requests, want exactly 1 (no retry loop — D-5/Pitfall 5)", ir.requests())
+	}
+	if cfg.LastKnownSpellbookMtime["Foo"] != "" {
+		t.Errorf("mtime persisted on a 401; want untouched")
+	}
+}
+
+// TestMakeOnSpellbookChange_EmptyFileSkipsNoRequest: a whitespace-only spellbook
+// file is skipped with NO backend request. Mirrors the inventory empty-file test.
+func TestMakeOnSpellbookChange_EmptyFileSkipsNoRequest(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusNoContent}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	spbPath := filepath.Join(dir, "Foo-Spellbook.txt")
+	if err := os.WriteFile(spbPath, []byte("   \n\t\n"), 0o644); err != nil {
+		t.Fatalf("write spb: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownSpellbookMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnSpellbookChange(context.Background(), bc, cfg, "CODE", "2.0.0", tc)
+	cb(spbPath)
+
+	if ir.requests() != 0 {
+		t.Fatalf("empty-file path made %d requests, want 0 (skip-empty guard)", ir.requests())
+	}
+}
+
+// TestMakeOnSpellbookChange_426UpdateNeeded: a 426 surfaces "update needed" and
+// does NOT loop (single request). Mirrors the inventory 426 test.
+func TestMakeOnSpellbookChange_426UpdateNeeded(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusUpgradeRequired}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	spbPath := filepath.Join(dir, "Foo-Spellbook.txt")
+	if err := os.WriteFile(spbPath, []byte("9\tLifetap\n"), 0o644); err != nil {
+		t.Fatalf("write spb: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownSpellbookMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnSpellbookChange(context.Background(), bc, cfg, "CODE", "1.9.0", tc)
+	cb(spbPath)
+
+	if ir.requests() != 1 {
+		t.Fatalf("426 path made %d requests, want exactly 1 (no retry)", ir.requests())
+	}
+	if cfg.LastKnownSpellbookMtime["Foo"] != "" {
+		t.Errorf("mtime persisted on a 426; want untouched")
+	}
+}
+
+// TestMakeOnSpellbookChange_409CrossOwnerNoPersist: a 409 is terminal — exactly
+// one request, no retry, and the mtime is NOT persisted (upload was rejected).
+func TestMakeOnSpellbookChange_409CrossOwnerNoPersist(t *testing.T) {
+	p := withTempLOCALAPPDATA(t)
+	dir := filepath.Dir(filepath.Dir(p))
+
+	ir := &ingestRecorder{status: http.StatusConflict}
+	srv := httptest.NewServer(ir.handler())
+	defer srv.Close()
+	bc := fastBackend(t, srv)
+
+	spbPath := filepath.Join(dir, "Foo-Spellbook.txt")
+	if err := os.WriteFile(spbPath, []byte("9\tLifetap\n"), 0o644); err != nil {
+		t.Fatalf("write spb: %v", err)
+	}
+
+	cfg := &config.Config{Version: 1, LogLevel: "info", LastKnownSpellbookMtime: map[string]string{}}
+	tc := tray.NewController(tray.Config{})
+
+	cb := makeOnSpellbookChange(context.Background(), bc, cfg, "CODE", "2.0.0", tc)
+	cb(spbPath)
+
+	if ir.requests() != 1 {
+		t.Fatalf("409 path made %d requests, want exactly 1 (terminal, no retry)", ir.requests())
+	}
+	if cfg.LastKnownSpellbookMtime["Foo"] != "" {
+		t.Errorf("mtime persisted on a 409; want untouched")
+	}
+}

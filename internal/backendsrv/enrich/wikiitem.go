@@ -33,7 +33,7 @@ import (
 
 const minWikitextLength = 200
 
-const maxSummaryLen = 200
+const maxSummaryLength = 200
 
 // ParsedWikiItem is the item-summary shape parseItempage emits — ONLY the
 // fields _item_master persists (D-8 scope guard). ItemID is supplied by the
@@ -348,7 +348,7 @@ var (
 
 // extractSummary strips wiki-links (rendered as display text), HTML tags, and
 // leftover {{templates}} from the notes body, collapses whitespace, and
-// truncates to ~maxSummaryLen on a word boundary with an ellipsis. Mirrors the
+// truncates to ~maxSummaryLength on a word boundary with an ellipsis. Mirrors the
 // TS extractSummary exactly (including the ellipsis character "…").
 func extractSummary(notes string) string {
 	if notes == "" {
@@ -368,23 +368,23 @@ func extractSummary(notes string) string {
 
 	// Length + truncation are measured in RUNES, not bytes, to match the TS
 	// `text.length` (UTF-16 code units) + `text.slice(0, MAX_SUMMARY_LEN)`. A
-	// byte slice (text[:maxSummaryLen]) would cut a multi-byte UTF-8 rune in
+	// byte slice (text[:maxSummaryLength]) would cut a multi-byte UTF-8 rune in
 	// half on a summary whose 200th byte falls inside a non-ASCII character
 	// (em-dash, curly quote, accented zone/mob name) → invalid UTF-8 stored in
 	// the summary. P1999 notes are all BMP, where 1 rune == 1 UTF-16 unit, so
 	// the rune count matches the TS string.length exactly.
 	r := []rune(text)
-	if len(r) <= maxSummaryLen {
+	if len(r) <= maxSummaryLength {
 		return text
 	}
-	cut := string(r[:maxSummaryLen])
+	cut := string(r[:maxSummaryLength])
 	lastSpace := strings.LastIndex(cut, " ")
 	// The boundary check is on the RUNE-cut prefix (TS: cut.lastIndexOf(' ') vs
 	// MAX_SUMMARY_LEN-30). lastSpace is a BYTE offset; convert it to a rune index
 	// (== the TS UTF-16 index for BMP text) before comparing. lastSpace == -1
 	// (no space in cut) ⇒ keep the full cut, exactly like the TS `-1 > 170` =
 	// false branch (guarded here so cut[:-1] never panics).
-	if lastSpace >= 0 && utf8.RuneCountInString(cut[:lastSpace]) > maxSummaryLen-30 {
+	if lastSpace >= 0 && utf8.RuneCountInString(cut[:lastSpace]) > maxSummaryLength-30 {
 		cut = cut[:lastSpace]
 	}
 	return strings.TrimSpace(cut) + "…"

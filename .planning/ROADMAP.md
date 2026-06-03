@@ -101,6 +101,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 
 - [ ] **Phase 22: WTS Cross-Server Monitor** — bot reads the 3 Raid Alliance WTS channels → name/alias matcher → DM; matcher built/tested against fixtures so it's testable without live servers *(invite-gated)*
 - [ ] **Phase 23: Quest-Target Raid Monitor** — bot detects a raid-target NPC tied to a wanted item's quest → curated `quest → NPC` lookup → existing `quest_items` → DM *(invite-gated + needs the curated quest→NPC table)*
+- [ ] **Phase 24: Watcher test hardening (C1/C2 coverage)** — quality/tech-debt; close the Church audit's two CRITICAL coverage gaps (spellbook-upload path tests + `eqfind` walk tests) via a twin-handler refactor. Independent of the wantlist track — can run anytime.
 
 ## Phase Details
 
@@ -166,6 +167,19 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   3. When the resolved item is on a guildie's wantlist (reason = quest), that guildie receives a DM via the existing `notify`/`alert_log` path, deduped/cooled per Phase 20's policy; until the invites + curated table land, the monitor stays dark behind its feature flag.
 **Plans**: TBD
 
+### Phase 24: Watcher test hardening (C1/C2 coverage)
+**Goal**: Close the two CRITICAL test-coverage gaps from the Church of Clean Code audit (`.planning/CLEAN-CODE-REPORT.md`) so the watcher's spellbook-upload path and EQ-folder discovery are provably correct, not assumed.
+**Track**: Quality / tech-debt (cross-cutting — NOT part of the v2.2 wantlist feature theme; appended to the active milestone by sequential numbering).
+**Depends on**: Nothing — touches only watcher code (`internal/app/runapp.go`, `internal/eqfind`) that is orthogonal to the v2.2 wantlist/Discord track (web/server/bot). Can run before, during, or after Phases 19–23 without conflict.
+**Requirements**: Audit findings C1, C2 (+ the Size/Test twin-handler refactor). No new product requirement.
+**Success Criteria** (what must be TRUE):
+  1. The duplicated twin upload handlers `makeOnInventoryChange`/`makeOnSpellbookChange` (`internal/app/runapp.go:314`/`:389`) are collapsed into one shared `makeOnFileChange(kind, suffix, mtimeMap …)` helper with an extracted `handleIngestErr(...)` — removing ~50 lines of copy-paste and the verbatim error-switch (`:355-372` ≡ `:419-437`), with no behavior change to the inventory path (existing tests stay green).
+  2. The spellbook upload path has behavior tests mirroring the four existing inventory tests — 401-no-loop-sets-red, 426-update-needed, cross-owner reject, empty-file-skips-no-request, and 204-persists-mtime — so a future change to one path can no longer silently rot the other.
+  3. `internal/eqfind`'s real filesystem-walk discovery is tested: `walkRoot` + sentinel-matching exercised against a `t.TempDir()` tree with planted `eqgame.exe`/`eqclient.ini` at varying depths plus decoy dirs, lifting the package off its ~15% floor (orchestration-only) onto the actual discovery logic.
+**Plans**: 2 plans
+  - [ ] 24-01-PLAN.md — refactor twin upload handlers (makeOnFileChange + handleIngestErr) + spellbook behavior tests (C1, REFACTOR)
+  - [ ] 24-02-PLAN.md — eqfind walkRoot/sentinel-walk tests against a t.TempDir() tree (C2)
+
 ## Progress
 
 **Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently).
@@ -177,7 +191,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
 | v2.1 | 2 | 4/4 | ✅ Complete (Phases 17–18 shipped) | 2026-06-02 |
-| v2.2 | 5 | 0/TBD | 🔄 In progress (Phase 19 ready to plan) | — |
+| v2.2 | 6 | 0/TBD | 🔄 In progress (Phase 19 ready to plan; Phase 24 quality phase appended) | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -194,6 +208,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 21. EC-Tunnel Auction Monitor | v2.2 | 0/TBD | Not started | — |
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
+| 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 0/2 | Not started (quality/tech-debt; planned — 2 plans) | — |
 
 ## Backlog
 

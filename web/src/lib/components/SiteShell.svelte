@@ -60,6 +60,7 @@
 				     entitled to. Plain <a href>s suffice (no officer-style handler). The
 				     hidden-from-anon nav is UX; the server RequireSession gate is the real
 				     boundary (D-02/D-08). -->
+				<a href="/wantlist" class="char-meta-nav">Wantlist</a>
 				<a href="/account" class="char-meta-nav">Account</a>
 				<a href="/char-meta" class="char-meta-nav">Character details</a>
 				<SessionIndicator {session} />

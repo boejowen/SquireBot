@@ -13,13 +13,15 @@
 	// The label is "In guild" / "Not in guild" everywhere (NOT "In bank"): the join
 	// is the all-inventory fetchView() (worn + carried + bank, D-06), so "in guild"
 	// is the honest superset of "in the bank" (review MUST-FIX 3).
-	import { holdersFor } from '$lib/wantlist/holders';
 	import { COLLAPSE_THRESHOLD } from '$lib/search/searchIndex';
-	import type { WantlistRow, ViewRow } from '$lib/api';
+	import type { WantlistRow } from '$lib/api';
+	import type { Holder } from '$lib/wantlist/holders';
 
-	let { row, viewRows }: { row: WantlistRow; viewRows: ViewRow[] } = $props();
+	// `holders` is the already-summed holder list (the panel runs holdersFor once
+	// per item_id and passes the result — one reduce-by-char-and-SUM per item, not
+	// per render). A custom want (item_id null) gets an empty list → the "—" branch.
+	let { row, holders }: { row: WantlistRow; holders: Holder[] } = $props();
 
-	let holders = $derived(holdersFor(row.item_id, viewRows));
 	let collapsed = $derived(holders.length > COLLAPSE_THRESHOLD);
 	let expanded = $state(false);
 	let shown = $derived(collapsed && !expanded ? holders.slice(0, COLLAPSE_THRESHOLD) : holders);

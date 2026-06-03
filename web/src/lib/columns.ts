@@ -27,7 +27,7 @@ import { renderComponent } from '$lib/table';
 import { wikiUrlFor } from '$lib/tooltip/composeNotes';
 import type { ViewRow, GearCheckRow, SpellCheckRow, WantlistRow } from '$lib/api';
 import { priorityRank } from '$lib/wantlist/priority';
-import { holdersFor } from '$lib/wantlist/holders';
+import type { Holder } from '$lib/wantlist/holders';
 import StatusCell from '$lib/components/StatusCell.svelte';
 import ItemCell from '$lib/components/cells/ItemCell.svelte';
 import WikiCell from '$lib/components/cells/WikiCell.svelte';
@@ -181,9 +181,11 @@ function prioritySort(a: Row<WantlistRow>, b: Row<WantlistRow>): number {
 
 /**
  * Build the wantlist ColumnDef[] for the DataGrid. A factory (not a const) so the
- * computed In-guild cell can close over the current `viewRows` (the fetchView()
- * join, D-06) and the Remove cell over the panel's `onRemove` + `removeBusy` —
- * the interactive cells need runtime data the static view columns don't.
+ * computed In-guild cell can close over the panel's `holdersOf` lookup (the
+ * fetchView() join, D-06 — the panel runs holdersFor once per item_id and passes
+ * the summed result here) and the Remove cell over the panel's `onRemove` +
+ * `removeBusy`. The interactive cells need runtime data the static view columns
+ * don't.
  *
  * The In-guild column's accessor returns the COARSE status ('in'/'not'/'na') so
  * the secondary sort (D-08) and the facet filter work; the rich `↳ Char: count`
@@ -193,7 +195,7 @@ function prioritySort(a: Row<WantlistRow>, b: Row<WantlistRow>): number {
  * produce phantom matches.
  */
 export function wantlistColumns(
-	viewRows: ViewRow[],
+	holdersOf: (row: WantlistRow) => Holder[],
 	onRemove: (row: WantlistRow) => void,
 	removeBusy = false
 ): ColumnDef<WantlistRow, unknown>[] {
@@ -234,11 +236,11 @@ export function wantlistColumns(
 			// "not in guild" up only relative to the other states; the priority key
 			// dominates (D-08).
 			accessorFn: (row) =>
-				row.item_id === null ? 'na' : holdersFor(row.item_id, viewRows).length > 0 ? 'in' : 'not',
+				row.item_id === null ? 'na' : holdersOf(row).length > 0 ? 'in' : 'not',
 			header: 'In guild?',
 			enableGlobalFilter: false,
 			meta: { filter: 'facet' },
-			cell: (ctx) => renderComponent(InGuildCell, { row: ctx.row.original, viewRows })
+			cell: (ctx) => renderComponent(InGuildCell, { row: ctx.row.original, holders: holdersOf(ctx.row.original) })
 		},
 		{
 			id: 'note',

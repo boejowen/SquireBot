@@ -10,3 +10,15 @@ squirebot.log.*
 *.tmp
 coverage.out
 node_modules/
+
+# Local agent state (per-machine; not shared)
+.claude/
+
+# Secrets — defense-in-depth (no such files should ever be produced on a dev box)
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+credentials.json
+rclone.conf

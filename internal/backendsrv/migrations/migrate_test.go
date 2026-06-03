@@ -309,3 +309,84 @@ func TestMigrate_00005_AddsSelfServiceLinking(t *testing.T) {
 		t.Fatalf("second RunMigrations after 00005 should be a no-op, got error: %v", err)
 	}
 }
+
+// wantlistItemColumns are the eight columns 00006 creates on wantlist_item
+// (WANT-01/02): the FK identity, the nullable catalog item_id + snapshot
+// item_name, the reason/priority enums, the optional note, the soft-delete
+// active flag, and the epoch created_at.
+var wantlistItemColumns = []string{
+	"discord_user_id", "item_id", "item_name", "reason", "priority", "note", "active", "created_at",
+}
+
+// TestMigrate_00006_AddsWantlist proves the Phase 19 forward-only migration 00006
+// applied on a fresh DB (NewTestDB runs goose.Up over ALL six migrations):
+// wantlist_item + alert_log exist, wantlist_item has the eight expected columns,
+// BOTH partial unique indexes (catalog + custom) exist, alert_log is created
+// empty (Phase 19 writes zero alert rows), the reason/priority CHECK constraints
+// reject a bad enum (review #5 — DB-level defense-in-depth), a valid-enum insert
+// succeeds, and a second Up is a clean no-op.
+func TestMigrate_00006_AddsWantlist(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00006) + t.Cleanup
+
+	for _, tbl := range []string{"wantlist_item", "alert_log"} {
+		if !tableExists(t, db, tbl) {
+			t.Errorf("expected table %q to exist after 00006, but it does not", tbl)
+		}
+	}
+
+	wantCols := columnSet(t, db, "wantlist_item")
+	for _, c := range wantlistItemColumns {
+		if !wantCols[c] {
+			t.Errorf("expected wantlist_item to have column %q after 00006 (have: %v)", c, wantCols)
+		}
+	}
+
+	for _, idx := range []string{"wantlist_catalog_uidx", "wantlist_custom_uidx"} {
+		if !indexExists(t, db, "wantlist_item", idx) {
+			t.Errorf("expected partial unique index %q on wantlist_item after 00006", idx)
+		}
+	}
+
+	// alert_log is created at full shape but Phase 19 writes ZERO rows.
+	var alertN int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM alert_log`).Scan(&alertN); err != nil {
+		t.Fatalf("counting alert_log rows failed: %v", err)
+	}
+	if alertN != 0 {
+		t.Errorf("expected alert_log to be empty after 00006, got %d rows", alertN)
+	}
+
+	// Seed a web_user so the wantlist_item FK holds for the CHECK-constraint probes.
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-chk", "Chk"); err != nil {
+		t.Fatalf("seed web_user: %v", err)
+	}
+
+	// The reason CHECK bites: a bad-enum reason ('maybe') must be rejected at the DB.
+	if _, err := db.Exec(
+		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, created_at)
+		 VALUES (?, NULL, ?, 'maybe', 'med', NULL, 0)`, "disc-chk", "BadReason"); err == nil {
+		t.Errorf("expected reason='maybe' insert to fail the CHECK constraint, but it succeeded")
+	}
+
+	// The priority CHECK bites: a bad-enum priority ('urgent') must be rejected.
+	if _, err := db.Exec(
+		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, created_at)
+		 VALUES (?, NULL, ?, 'buy', 'urgent', NULL, 0)`, "disc-chk", "BadPriority"); err == nil {
+		t.Errorf("expected priority='urgent' insert to fail the CHECK constraint, but it succeeded")
+	}
+
+	// A valid-enum insert succeeds (the CHECK only rejects bad enums).
+	if _, err := db.Exec(
+		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, created_at)
+		 VALUES (?, NULL, ?, 'buy', 'high', NULL, 0)`, "disc-chk", "GoodWant"); err != nil {
+		t.Errorf("expected a valid-enum (reason='buy', priority='high') insert to succeed, got: %v", err)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00006 DB
+	// returns nil (goose records applied versions).
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00006 should be a no-op, got error: %v", err)
+	}
+}

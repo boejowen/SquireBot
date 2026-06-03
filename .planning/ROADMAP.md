@@ -8,7 +8,7 @@
 - ✅ **v1.0.1** — Installer + Permissions Hardening — shipped 2026-05-12 (binary tag `v1.0.1`)
 - ✅ **v1.0.2** — Robustness Polish — binary shipped 2026-05-13 (tag `v1.0.2`); milestone close superseded by v2.0
 - ✅ **v2.0** — "Off Google" — Website Frontend — Phases 11–16 (shipped 2026-05-31 as tag `v2.0.0`) — archive: [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md)
-- 🔄 **v2.1** — Self-Service Watcher Linking — Phases 17–18 (opened 2026-06-01)
+- ✅ **v2.1** — Self-Service Watcher Linking — Phases 17–18 (shipped 2026-06-02 as tag `v2.1`) — archive: [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md)
 
 ## Phases
 
@@ -68,43 +68,19 @@ Full details in [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md).
 
 </details>
 
-### 🔄 v2.1 — Self-Service Watcher Linking (Phases 17–18) — opened 2026-06-01
+<details>
+<summary>✅ v2.1 — Self-Service Watcher Linking (Phases 17–18) — SHIPPED 2026-06-02</summary>
 
-**Milestone Goal:** Let any guildie link their own watcher from squirebot.quest via the existing P15 Discord login — no maintainer hand-minting + DMing codes — while keeping the watcher credential a static, reusable bearer token (the v2.0 model; **no watcher change** for the core feature). Composes existing infrastructure (P15 Discord-login + sessions, `auth.MintCode` hashed-token minting, the `web_user`/`owner`/`guild_code` tables).
+Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 
-- [x] **Phase 17: Self-Service Watcher Linking (web feature)** — session-scoped mint endpoint (owner derived server-side from the Discord session) + Discord-identity↔owner linkage + per-token list/revoke + the "Link your watcher" page (show-once plaintext, copy-to-clipboard, paste instructions) + a manage/revoke surface; removes the manual `mint-code` CLI. ✅ 2026-06-02 (deployed live; browser-smoke approved; 15/15 must-haves verified)
-- [x] **Phase 18: Watcher Cleanups — Verify-or-Close** — confirmed 999.20/21/22 all live-correct with zero new code. The "stuck 0.4.0-rc1 watcher" residual was found to be the disposable Azure test VM, not a production watcher (this PC + all 7 reporting toons on 2.0.0) — closed as resolved. ✅ 2026-06-02
+**Milestone Goal:** Let any guildie link their own watcher from squirebot.quest via the existing P15 Discord login — no maintainer hand-minting + DMing codes — while keeping the watcher credential a static, reusable bearer token (the v2.0 model; **no watcher change**). Goal MET.
 
-## Phase Details
+- [x] Phase 17: Self-Service Watcher Linking (web feature) (3 plans) — `/account` self-mint (owner from Discord session) + Discord↔owner FK linkage + additive codes + per-token revoke + show-once copy-to-clipboard panel; `mint-code` CLI removed. Deployed live; 15/15 verified; browser-smoke approved. ✅ 2026-06-02
+- [x] Phase 18: Watcher Cleanups — Verify-or-Close (1 plan) — confirmed 999.20/21/22 all live-correct with zero new code; the "stuck 0.4.0-rc1 watcher" residual was found to be the disposable Azure test VM, not a production watcher. ✅ 2026-06-02
 
-### Phase 17: Self-Service Watcher Linking (web feature)
-**Goal**: A signed-in guildie can mint, view, and revoke their own watcher codes from squirebot.quest — owner derived from their Discord session — with no maintainer involvement and no watcher change.
-**Depends on**: v2.0 Phase 15 (Discord OAuth2 login + sessions + per-user Discord identity) and Phase 11 (`auth.MintCode` hashed-token minting + `guild_code`/`owner`/`web_user` tables). No intra-milestone dependency.
-**Requirements**: LINK-01, LINK-02, LINK-03, LINK-04, LINK-05, LINK-06
-**Success Criteria** (what must be TRUE):
-  1. A signed-in guildie can click "Link my watcher" and receive a freshly minted code, with the owner derived server-side from their Discord session (never free-typed or client-supplied).
-  2. The page shows the new code's plaintext exactly once with copy-to-clipboard and clear paste-into-watcher instructions; reloading or revisiting never re-reveals it (hash-only at rest).
-  3. Minting again issues an additional valid code without invalidating any existing one — a guildie running watchers on two PCs sees both keep uploading.
-  4. A guildie can see a list of their own active codes (each identifiable by label / created date / last-seen) and revoke any single one; the revoked watcher stops uploading while the others continue.
-  5. The minted code's owner is tied to the guildie's Discord identity (`web_user`), so the website's eviction/owner-floor path resolves ownership through that link rather than the loose `owner.label == web_user.username` string match.
-  6. The `mint-code` CLI subcommand no longer exists; the self-service endpoint is the only way to mint a watcher code (the `revoke-code` CLI is retained as an ops backstop).
-**Plans**: 3 plans
-- [x] 17-01-PLAN.md — Foundation: `00005` migration (`owner.discord_user_id` FK + partial unique index + `guild_code.last_seen`) + bearer-guard `codeID` thread + ingest last-seen stamp (outside the hot-path tx) — SUMMARY: `17-01-SUMMARY.md`
-- [x] 17-02-PLAN.md — Backend: resolve-or-create-owner (D-03/D-04) + `MintCodeForOwnerTx` sibling + the 3 login-only account handlers + route wiring + D-05 eviction-floor FK rewire + `mint-code` CLI removal (LINK-06) — SUMMARY: `17-02-SUMMARY.md`
-- [x] 17-03-PLAN.md — Frontend: `/account` page + `WatcherCodesPanel` (show-once copy-to-clipboard panel + list + confirm-before-commit revoke) + `api.ts` wrappers + all-members Account nav (browser-smoke checkpoint APPROVED live — all 7 steps passed) — SUMMARY: `17-03-SUMMARY.md`
-**UI hint**: yes
+**Total:** 4 plans · 2 phases · 2 days kickoff to ship · 20 commits since `v2.0`. All 9 requirements (LINK-01..06 + WATCH-12/13/14) shipped.
 
-### Phase 18: Watcher Cleanups — Verify-or-Close
-**Goal**: The three carried-forward watcher polish items (999.20/21/22) are confirmed live-correct, and the maintainer's stuck pre-release watcher is back on the current release.
-**Depends on**: Nothing within v2.1 (independent of Phase 17). Touches the watcher (`cmd/squirebot`, `internal/update`) which Phase 17 does not.
-**Requirements**: WATCH-12, WATCH-13, WATCH-14
-**Success Criteria** (what must be TRUE):
-  1. `cmd/squirebot/console_windows.go` passes `gofmt -l` clean (confirm the 13-04 fix is live, or fix any residual).
-  2. A no-console (GUI/Explorer) launch logs at Debug rather than emitting a spurious Warn, and `freeConsole()`'s doc matches its implementation.
-  3. A watcher parked on a pre-release version (e.g. `0.4.0-rc1`) correctly recognizes a final release as newer and updates to it (SemVer-aware comparison).
-  4. The maintainer's own watcher is no longer stuck on `0.4.0-rc1` — it is on the current release (via in-place self-update if the SemVer fix reaches it, otherwise a one-time manual reinstall).
-**Plans**: 1 plan
-- [ ] 18-01-PLAN.md — Verify-or-close WATCH-12/13/14 (gofmt + freeConsole Debug + SemVer IsNewer incl. D-05 pre-release→final test) + D-02 stale-version survey + HUMAN-UAT reinstall of the maintainer's stuck 0.4.0-rc1 watcher to v2.0.0
+</details>
 
 ## Progress
 
@@ -141,9 +117,9 @@ Carried forward from v1.0 / v1.0.1 / v1.0.2 (candidates for a future Sheet-ortho
 - **999.11** Decide v2.x verification doctrine — adopt `/gsd-verify-work` per phase, or formalize a live-smoke pattern.
 - **999.12 / WANT-01..08** v2: Wantlist + Discord pinger — prerequisites WANT-06/07 still open (Raid Alliance Discord bot invites). v2.0 pre-pays the per-user Discord-identity prerequisite via AUTH-09; v2.1's Discord-tied ownership (LINK-02) further dovetails with it.
 - **999.19** Google OAuth brand verification re-approval — **SUPERSEDED by v2.0** (Google removed from the system entirely; see STATE.md). Retained for incident-trail linkage only.
-- **999.20** `console_windows.go` not `gofmt -l` clean — recorded RESOLVED in v2.0 Plan 13-04 (`c930fc2`). **→ v2.1 Phase 18 / WATCH-12 (verify-or-close).**
-- **999.21** `freeConsole()` doc-vs-impl contract mismatch (log noise) — recorded RESOLVED in v2.0 Plan 13-04 (`c930fc2`). **→ v2.1 Phase 18 / WATCH-13 (verify-or-close).**
-- **999.22** SemVer-aware auto-update comparison (`internal/update/check.go`) — recorded RESOLVED in v2.0 Plan 13-04 (`e758fb0`/`3e8e53b`). **→ v2.1 Phase 18 / WATCH-14 (verify-or-close + maintainer stuck-watcher reinstall).**
+- **999.20** `console_windows.go` not `gofmt -l` clean — RESOLVED in v2.0 Plan 13-04 (`c930fc2`); ✅ **CLOSED in v2.1 Phase 18 / WATCH-12** (confirmed gofmt-clean live).
+- **999.21** `freeConsole()` doc-vs-impl contract mismatch (log noise) — RESOLVED in v2.0 Plan 13-04 (`c930fc2`); ✅ **CLOSED in v2.1 Phase 18 / WATCH-13** (confirmed `slog.Debug` not Warn; doc/impl reconciled).
+- **999.22** SemVer-aware auto-update comparison — RESOLVED in v2.0 Plan 13-04 (`e758fb0`/`3e8e53b`); ✅ **CLOSED in v2.1 Phase 18 / WATCH-14** (confirmed `IsNewer` pre-release test green). Stuck-watcher reinstall was a stale premise — the `0.4.0-rc1` box is the disposable Azure test VM, not a production watcher; no reinstall needed.
 - **999.23** Graceful tray messaging for Google policy/verification block — largely mooted by P13 (the Google OAuth path is deleted); the tray-classifier UX pattern may inform the bearer-token-rejected path.
 - **999.24** `COL_RACE`/`COL_COUNT` collision (Sheet `showCharInfoSidebar.ts`) — mooted by the frontend rebuild.
 - **999.25** Orphaned `squirebot:search:recent` CacheService key (Sheet) — mooted by decommission.
@@ -152,7 +128,7 @@ Carried forward from v1.0 / v1.0.1 / v1.0.2 (candidates for a future Sheet-ortho
 - **999.28** `searchIndex.ts` `didYouMean('')` contract bug — **port-relevant**: the search logic ports to the frontend in P14 (WEB-03); fix the empty-query contract during the port.
 - **999.29** `test-helpers.ts` CacheService mock TTL nit (Sheet) — mooted by decommission.
 - **999.30** `searchIndex.test.ts` Test 4 `didYouMean` Levenshtein contract mismatch — **port-relevant**: resolve when porting `didYouMean` to the frontend in P14 (WEB-03).
-- **999.31** Self-service **"Link your watcher via Discord"** onboarding — ⭐ **NOW IN PLAN: v2.1 Phase 17 (LINK-01..06).** Guildie logs into squirebot.quest with the P15 Discord login → a "Link my watcher" action mints a guild code tied to their Discord identity → paste once into the watcher. Replaces the maintainer manually minting + DMing ~12 codes (no plaintext through the maintainer's hands; unifies web + watcher identity; self-service scales as the guild grows). **HARD CONSTRAINT:** the watcher credential stays a static bearer token — do NOT put Discord OAuth *in the watcher* (that reintroduces the exact v2.0 "Off Google" fragility: ~7-day token expiry/refresh on an unattended uploader, a public desktop client secret, a browser/loopback flow; P13 made the watcher browser-free on purpose). Discord is the identity at **link-time only**.
+- **999.31** Self-service **"Link your watcher via Discord"** onboarding — ✅ **SHIPPED in v2.1 Phase 17 (LINK-01..06), 2026-06-02.** Guildie logs into squirebot.quest with the P15 Discord login → a "Link my watcher" action mints a guild code tied to their Discord identity → paste once into the watcher. Replaces the maintainer manually minting + DMing ~12 codes (no plaintext through the maintainer's hands; unifies web + watcher identity; self-service scales as the guild grows). **HARD CONSTRAINT:** the watcher credential stays a static bearer token — do NOT put Discord OAuth *in the watcher* (that reintroduces the exact v2.0 "Off Google" fragility: ~7-day token expiry/refresh on an unattended uploader, a public desktop client secret, a browser/loopback flow; P13 made the watcher browser-free on purpose). Discord is the identity at **link-time only**.
 - **999.32** Single-bank-toon invariant for the char-meta form (Phase 16 code-review **MD-01**) — ✅ **RESOLVED.** `SetCharMetaTx` (`internal/backendsrv/store/charmeta.go`) enforced no uniqueness on `is_bank_toon`, but `compute.Bank` assumes exactly one bank toon; flagging 2+ silently merged bank-view rows. **Fixed in commit `0e31023`:** setting `is_bank_toon=true` now clears it on all other characters in the same tx (matches v1's single-value `_meta.bank_toon_name`) + store regression tests. The same code review's route-gate test gap (**LR-01**) was fixed in `9b608a4`. The originally-bundled **LO-01** (level JSON-null contract — Go `int64` can't emit `null` vs TS `number | null`) and **LO-02** (empty-name success copy on read-back failure) were reclassified as Info/parity in the independent re-review and intentionally left as-is. Full findings in `16-REVIEW.md` / `16-REVIEW-FIX.md`.
 
 ---

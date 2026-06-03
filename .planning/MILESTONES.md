@@ -113,4 +113,34 @@ Known deferred items at close: deferred HUMAN-UAT smokes for P12/P14/P15 (see ST
 
 ---
 
-*This file accumulates one entry per shipped milestone. Next entry will be the post-v2.0 milestone (top candidate: self-service Discord watcher-linking 999.31, or the v2 Wantlist + Discord pinger 999.12) — start via `/gsd-new-milestone`.*
+## v2.1 — Self-Service Watcher Linking
+
+**Shipped:** 2026-06-02
+**Tag:** `v2.1`
+**Archive:** [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md) · [`milestones/v2.1-REQUIREMENTS.md`](milestones/v2.1-REQUIREMENTS.md)
+
+**Stats:** 2 phases · 4 plans · 20 commits since `v2.0` · 35 files changed (+3,991 / −333) · 2-day kickoff to ship (2026-06-01 → 2026-06-02)
+
+| Phase | Name | Outcome | Date |
+|-------|------|---------|------|
+| 17 | Self-Service Watcher Linking (web feature) | Deployed live; 15/15 verified; browser-smoke approved | 2026-06-02 |
+| 18 | Watcher Cleanups — Verify-or-Close | All 3 fixes confirmed live (zero new code); stuck-watcher residual debunked | 2026-06-02 |
+
+**Key accomplishments:**
+
+1. **Self-service watcher linking live** — guildies mint/list/revoke their own codes at `squirebot.quest/account` via Discord login; owner derived server-side from the session (no maintainer hand-minting).
+2. **Identity unification (LINK-02)** — minted codes tie to the Discord `web_user`; eviction owner-floor now resolves via `owner.discord_user_id` FK instead of the loose label/username string match.
+3. **Additive multi-PC tokens + per-token revoke** — run watchers on multiple PCs; revoke one without affecting the others.
+4. **Show-once credential UX** — plaintext revealed exactly once with copy-to-clipboard; never persisted/re-fetched/logged (verified live).
+5. **`mint-code` CLI retired** — self-service is the only mint path; no more plaintext through the maintainer's hands.
+6. **Watcher cleanups verified-closed** — gofmt / freeConsole / SemVer-`IsNewer` confirmed live; the long-carried "stuck maintainer watcher" residual found to be a disposable Azure test VM, not a production watcher.
+
+**Effective requirements coverage:** 9 / 9 (LINK-01..06 + WATCH-12/13/14) — all Done.
+
+**Status:** SHIPPED. Code review 0-critical; 4 advisory warnings fixed + redeployed same milestone. Phase 18 confirmed verify-or-close work needs *verification against live data*, not trust in carried-forward notes (the stuck-watcher premise was stale).
+
+**Deferred / carried forward:** Officer mint-on-behalf; per-code device-naming UX; 999.5 self-service eviction; 999.12 / WANT-01..08 (Wantlist + Discord pinger); 999.9 SignPath OSS (in flight). Ops follow-up: decommission the Azure PAYG `0.4.0-rc1` test VM to stop billing.
+
+---
+
+*This file accumulates one entry per shipped milestone. Next entry: the post-v2.1 milestone (top candidate: the v2 Wantlist + Discord pinger 999.12 / WANT-01..08, whose per-user Discord-identity prerequisite is now fully pre-paid) — start via `/gsd-new-milestone`.*

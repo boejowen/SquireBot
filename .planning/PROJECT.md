@@ -21,11 +21,25 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Prior state (v1.x lineage):** v1.0 shipped 2026-05-11 (5 phases, 31 plans — installer + OAuth watcher + Apps Script Sheet); v1.0.1 patch 2026-05-12 (installer shim + officer-only eviction + test/doc debt); v1.0.2 binary 2026-05-13 (robustness polish — milestone close superseded by the v2.0 pivot). Archives in `.planning/milestones/`. The v1 Google-Sheet system is now decommissioned.
 
-## Current Milestone: v2.0 "Off Google" — Website Frontend (SHIPPED 2026-05-31)
+## Shipped: v2.1 — Self-Service Watcher Linking (2026-06-02)
 
-**Status:** ✅ SHIPPED 2026-05-31 (tag `v2.0.0`). All 26 v2.0 requirements delivered; Google fully decommissioned; backend + website live; guild migrating. Full archive: `.planning/milestones/v2.0-ROADMAP.md` + `v2.0-REQUIREMENTS.md`.
+**Goal (MET):** Let any guildie link their own watcher from squirebot.quest via Discord login — no maintainer hand-minting codes — while keeping the watcher credential a static bearer token.
 
-**Next milestone: TBD** — top candidate is **self-service Discord watcher-linking** (backlog 999.31): a guildie logs into squirebot.quest with the P15 Discord login → a "Link my watcher" action mints a guild code tied to their Discord identity → paste once into the watcher (replacing the maintainer manually minting + DMing codes). HARD CONSTRAINT: the watcher credential stays a static bearer token — Discord is the identity at link-time only, never OAuth *in the watcher*.
+**What shipped (Phases 17–18, 4 plans, 2 days):**
+- **Self-service `/account` page** behind the P15 Discord login — Generate mints a guild code whose owner is derived server-side from the Discord session, shown once with copy-to-clipboard + paste instructions; list your active codes (#N / created / last-seen) and revoke any one. Minting is additive (multiple PCs). Deployed live; 15/15 verified; browser-smoke approved.
+- **Identity unification (LINK-02)** — minted codes tie to the Discord `web_user` via a new `owner.discord_user_id` FK; the eviction owner-floor now resolves through it instead of the loose `owner.label == web_user.username` match.
+- **`mint-code` CLI retired** — self-service is the only mint path (`revoke-code` retained as ops backstop).
+- **Watcher cleanups verified-closed (Phase 18, verify-or-close, zero new code):** 999.20 (gofmt), 999.21 (`freeConsole()` doc/impl + Debug-not-Warn), 999.22 (SemVer-aware `IsNewer`) all confirmed live. The "stuck 0.4.0-rc1 watcher" residual was a stale premise — it was the disposable Azure test VM, not a production watcher.
+
+**Next milestone:** undefined — top candidate is the v2 Wantlist + Discord pinger (999.12 / WANT-01..08), whose per-user Discord-identity prerequisite is now fully pre-paid by AUTH-09 + LINK-02. Start via `/gsd-new-milestone`. Archive: `.planning/milestones/v2.1-{ROADMAP,REQUIREMENTS}.md`.
+
+**Locked decisions (2026-06-01 discussion):**
+- **Re-link = additive** — each link issues an *additional* valid token; multiple PCs per guildie work simultaneously; revocation is per-token.
+- **Link code = the bearer token itself (v2.0 model, reusable)** — `auth.MintCode` shows the plaintext exactly once at mint time (hash-only at rest); the watcher pastes it and reuses it as its `Bearer` forever. No expiry. **NO watcher change** — onboarding is identical to v2.0; "self-service" is entirely a website + backend-endpoint change.
+- **Manual `mint-code` CLI removed** — self-service fully replaces it; the ~11 existing guildies are already linked from the v2.0 cutover, so nobody is stranded.
+- **HARD CONSTRAINT:** Discord identity is captured at link-time only; never put Discord OAuth *in the watcher* (re-introduces the ~7-day-expiry / public-secret / loopback fragility v2.0 deliberately escaped — P13 made the watcher browser-free on purpose). AUTH-09 already captures per-user Discord identity, so this dovetails with future v2 Wantlist/pinger work (999.12).
+
+**Previous milestone:** v2.0 "Off Google" — ✅ SHIPPED 2026-05-31 (tag `v2.0.0`); all 26 requirements delivered, Google fully decommissioned, backend + website live. Archive: `.planning/milestones/v2.0-{ROADMAP,REQUIREMENTS}.md`.
 
 <details>
 <summary>Historical v2.0 scope (as planned at milestone open 2026-05-28)</summary>
@@ -104,11 +118,20 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 - ✓ Admin-Mgmt sidebar inline-JS test coverage (TEST-03) — shipped (dev-workbook smoke passed; the Sheet sidebars are now decommissioned)
 - ✓ Phase 8 advisory test-quality fixes (TEST-04) — shipped (apps-script suite now decommissioned)
 
+**v2.1 — Self-Service Watcher Linking (shipped 2026-06-02 as `v2.1`)** — full 9-REQ-ID reconciliation in `milestones/v2.1-REQUIREMENTS.md`.
+
+- ✓ Self-service mint: signed-in guildie mints their own code, owner derived server-side from the Discord session (LINK-01) — v2.1
+- ✓ Discord-identity↔owner FK linkage; eviction owner-floor resolves via `owner.discord_user_id` (LINK-02) — v2.1
+- ✓ Additive minting — multiple PCs per guildie, per-token revoke (LINK-03, LINK-05) — v2.1
+- ✓ "Link your watcher" `/account` page — show-once plaintext, copy-to-clipboard, paste instructions, never re-revealed (LINK-04) — v2.1
+- ✓ `mint-code` CLI removed; self-service is the only mint path (LINK-06) — v2.1
+- ✓ Watcher cleanups verify-or-closed — gofmt (WATCH-12), `freeConsole()` doc/impl + Debug-not-Warn (WATCH-13), SemVer-aware `IsNewer` (WATCH-14) — v2.1
+
 ### Active
 
-<!-- No active milestone. v2.0 shipped 2026-05-31; next milestone TBD (top candidate: 999.31 self-service Discord watcher-linking). -->
+<!-- Next milestone not yet opened. Run /gsd-new-milestone to define it. -->
 
-_None — between milestones. v2.0 "Off Google" shipped 2026-05-31._
+**None — v2.1 shipped; next milestone undefined.** Top candidate: v2 Wantlist + Discord pinger (999.12 / WANT-01..08), Discord-identity prerequisite now fully pre-paid (AUTH-09 + LINK-02).
 
 ### v1.0 Partials / Waivers (user-authorized; still tracked post-v1.0.1)
 
@@ -199,6 +222,8 @@ _Still deferred after v2.0. v2.0 pre-paid prerequisite #3 (per-user Discord iden
 | **v2.0: website login = Discord OAuth2, never "Sign in with Google"** | Discord OAuth2 has no brand-verification/app-review gate; "Sign in with Google" would re-introduce the exact gate v2.0 exists to escape. Gated on guild Discord membership (no allowlist upkeep); pre-pays AUTH-09. | ✓ Good (live gate returns 401 for non-members; per-user Discord identity captured) |
 | **v2.0 cutover REFRAMED — fresh-start char-meta form (not Sheet backfill) + abandon the Sheet in place** (16-CONTEXT) | The guild had been dark on the Sheet since 2026-05-15 and P13–P15 were already live, voiding the classic shadow-soak/backfill/parity dance; inventory + enrichment self-heal, so a clean start (one login-only char-meta form for class/level/race/is_bank_toon) is simpler than a one-time read-only Sheet import. The Sheet was left untouched — no export/delete/freeze. | ✓ Good (Google decommissioned at 3/11 reporting in, climbing; live system verified unaffected) |
 | **v2.0: single-bank-toon invariant enforced at the store seam** (P16 MD-01) | `compute.Bank` assumes exactly one bank toon; `SetCharMetaTx` enforced no uniqueness, so flagging 2+ would silently merge bank-view rows. Setting `is_bank_toon=true` now clears it on all other chars in the same tx (matches v1's single-value `_meta.bank_toon_name`). | ✓ Good (fixed post-close in `0e31023` + store regression tests) |
+| **v2.1: self-mint owner derived server-side from the Discord session, never client-supplied** (P17 D-02) | The v1 `mint-code --owner <free-text>` path is an identity-spoofing hazard; the self-service endpoint instead resolves the owner from `caller(ctx)` (the session `discord_user_id`) via resolve-or-create-owner (adopt-by-label / create-fresh / refuse-on-ambiguity). Link code stays the reusable bearer token (no watcher change). | ✓ Good (live; owner-scoped list/revoke close IDOR; `mint-code` CLI removed) |
+| **v2.1: verify-or-close phases verify against LIVE state, not carried-forward notes** (P18) | The "maintainer's watcher stuck on 0.4.0-rc1" residual was carried from the v2.0 close into v2.1's requirements/roadmap/plan before anyone checked it. A live `watcher_version` query + registry check debunked it (the box was a disposable Azure test VM). | ✓ Good (zero rework shipped; cheap checks beat trusting stale notes — now a documented retro pattern) |
 
 ## Evolution
 
@@ -212,7 +237,7 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections (done for v1.0 → 2026-05-11, v1.0.1 → 2026-05-12, v2.0 → 2026-05-31)
+1. Full review of all sections (done for v1.0 → 2026-05-11, v1.0.1 → 2026-05-12, v2.0 → 2026-05-31, v2.1 → 2026-06-02)
 2. Core Value check — still the right priority? (✓ unchanged at v2.0; "what's missing, where is it in the guild" is still the load-bearing question — now answered via the website, not the Sheet)
 3. Audit Out of Scope — reasons still valid? (✓ at v2.0; the Sheet-phrased reasons were refreshed to the website, and Postgres + "Sign in with Google" added; Wantlist/pinger still validly deferred)
 4. Update Context with current state (✓ at v2.0 — now a Go backend + SvelteKit frontend + Google-free watcher; Sheet/Apps Script decommissioned)
@@ -220,4 +245,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-05-31 after v2.0 "Off Google" milestone — backend + website live, Google fully decommissioned.*
+*Last updated: 2026-06-02 — after v2.1 "Self-Service Watcher Linking" milestone (Phases 17–18) shipped + archived. Next milestone undefined.*

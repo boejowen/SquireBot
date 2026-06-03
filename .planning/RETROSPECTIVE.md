@@ -182,9 +182,49 @@ Phase-by-phase output:
 
 ---
 
+## Milestone: v2.1 — Self-Service Watcher Linking
+
+**Shipped:** 2026-06-02
+**Phases:** 2 | **Plans:** 4 | **Commits:** 20 | **Timeline:** 2 days
+
+### What Was Built
+
+Self-service watcher linking on top of the v2.0 "Off Google" backend. A signed-in guildie visits `squirebot.quest/account`, clicks Generate, and gets a watcher code minted server-side against their Discord session — shown once, copy-to-clipboard, paste into the watcher. They can list their active codes (#N / created / last-seen) and revoke any one. Minting is additive (multiple PCs). The `mint-code` CLI is gone. Plus Phase 18 verified-closed three carried-forward watcher cleanups (gofmt, freeConsole, SemVer `IsNewer`).
+
+### What Worked
+
+- **Composing existing infrastructure.** v2.1 added almost no new primitives — it wired together P15 Discord login + sessions, `auth.MintCode`, and the `web_user`/`owner`/`guild_code` tables. The whole milestone was 2 days because the hard parts (auth, hashing, ingest) already existed.
+- **Deploy-then-smoke for the DOM-blind frontend.** Honoring the standing "web vitest is DOM-blind" lesson, Phase 17 was deployed to the live VPS and browser-smoked by the user before being called done — catching exactly the class of bug (clipboard / show-once / reload-reveal) that unit tests can't see. No crashing-BLOCKER-behind-green-tests repeat of P15.
+- **Same-milestone code-review-fix + redeploy.** The 4 advisory warnings from Phase 17's review were fixed and redeployed within the milestone rather than deferred, keeping `master` and prod in sync at close.
+- **Verifying a verify-or-close phase against live data.** Phase 18 didn't trust the carried-forward "maintainer's watcher is stuck on 0.4.0-rc1" note — it queried the live backend (`watcher_version` telemetry) and the local registry, and found the premise was stale (the box was a disposable Azure test VM). Cheap checks debunked a phantom task.
+- **Delegating gray areas with a single rule.** Phase 18's discussion locked all four gray areas in one pass under the user's "simplest guildie experience" criterion instead of a multi-turn interview — fast and faithful.
+
+### What Was Inefficient
+
+- **A stale residual survived from the v2.0 close into the v2.1 roadmap.** The "stuck maintainer watcher" was written into REQUIREMENTS/ROADMAP/CONTEXT and even a full PLAN before anyone checked whether it was real. It wasn't. The verify-or-close framing caught it, but the phantom still cost a discuss + plan + verification cycle. Lesson: spot-check carried-forward residuals against live state *before* they become requirements.
+- **`commit_docs: false` vs. canonical artifacts friction.** Throughout the milestone I committed planning artifacts (CONTEXT/SUMMARY/VERIFICATION/plans) despite `commit_docs: false`, because leaving them uncommitted risks the known planner-clobber. Worth reconciling the config with actual practice.
+
+### Patterns Established
+
+- **Deploy → human-smoke → finalize** for any frontend phase (the non-autonomous browser checkpoint is now the norm, not the exception).
+- **Verify-or-close phases query live state** (backend DB, registry, telemetry) rather than re-implementing or trusting notes.
+
+### Key Lessons
+
+- A carried-forward "residual" is a *hypothesis*, not a fact — verify it cheaply before it becomes scoped work.
+- When the user hands you a deciding rule ("simplest X"), lock all open decisions in one pass and record the rule; don't keep asking.
+
+### Cost Observations
+
+- Model mix: ~100% opus (single-session, Opus 4.8 1M).
+- Sessions: 1 continuous session (discuss → plan → execute → deploy → review-fix → milestone close across both phases).
+- Notable: composing existing infra made this the cheapest milestone yet per requirement (9 reqs, 4 plans, 2 days, near-zero new watcher code).
+
+---
+
 ## Cross-Milestone Trends
 
-*This section accumulates as more milestones close. After v2.0 it has three data points — v1.0 (5 phases, 11 days, 31 plans, foundation), v1.0.1 (3 phases, 2 days, 12 plans, patch), and v2.0 (6 phases, 4 days, 29 plans, replatform).*
+*This section accumulates as more milestones close. After v2.1 it has four data points — v1.0 (5 phases, 11 days, 31 plans, foundation), v1.0.1 (3 phases, 2 days, 12 plans, patch), v2.0 (6 phases, 4 days, 29 plans, replatform), and v2.1 (2 phases, 2 days, 4 plans, compose-existing-infra feature). Trend: once the platform exists, feature milestones get dramatically cheaper — v2.1 shipped a full self-service feature in 2 days by wiring together v2.0 primitives.*
 
 ### Decision Quality
 

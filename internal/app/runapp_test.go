@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -231,12 +232,8 @@ func (ir *ingestRecorder) handler() http.HandlerFunc {
 func (ir *ingestRecorder) requests() int { return int(atomic.LoadInt32(&ir.count)) }
 
 func readAll(r *http.Request) (string, error) {
-	buf := make([]byte, r.ContentLength)
-	if r.ContentLength <= 0 {
-		return "", nil
-	}
-	_, err := r.Body.Read(buf)
-	return string(buf), err
+	b, err := io.ReadAll(r.Body)
+	return string(b), err
 }
 
 // fastBackend returns a *backend.Client whose retry backoff is near-zero so the

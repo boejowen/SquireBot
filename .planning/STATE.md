@@ -4,13 +4,13 @@ milestone: v2.1
 milestone_name: — Self-Service Watcher Linking
 status: executing
 last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 -- Phase 18 planned (--skip-research): 1 plan, verification PASSED; ready to execute
+last_activity: 2026-06-02 -- Phase 18 COMPLETE — v2.1 all phases shipped (17–18); milestone ready to close
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
-  percent: 50
+  completed_plans: 4
+  percent: 100
 ---
 
 # State: SquireBot
@@ -29,11 +29,11 @@ See: `.planning/PROJECT.md` (updated 2026-06-01 with v2.1 milestone scope)
 
 ## Current Position
 
-Phase: 18 — Watcher Cleanups (Verify-or-Close) — PLANNED (1 plan); ready to execute
-Plan: 18-01 (not started)
-Status: Ready to execute
-Last activity: 2026-06-02 -- Phase 18 planned (--skip-research): 1 plan (18-01), plan-checker PASSED (no blockers/warnings). Verify-or-close confirmed near-zero-code — planner resolved BOTH research flags: D-05 pre-release→final IsNewer test ALREADY exists (manifest_test.go TestIsNewer_SemVerPreRelease), and watcher_version IS queryable (character.watcher_version, 00001), so the D-02 stale-version survey runs without new code. Plan 18-01 = confirm WATCH-12/13/14 live (gofmt/Debug/IsNewer) + read-only stale-version survey + HUMAN-UAT reinstall of the stuck 0.4.0-rc1 watcher to v2.0.0 (autonomous: false). HARD CONSTRAINT upheld (no watcher OAuth).
-Progress: [#####.....] 50% — Phase 17 done; Phase 18 planned, ready to execute
+Phase: 18 — Watcher Cleanups (Verify-or-Close) — COMPLETE. v2.1 milestone (Phases 17–18) all shipped; ready to close.
+Plan: 18-01 complete (verify-or-close; zero new code)
+Status: v2.1 complete — ready for /gsd-complete-milestone
+Last activity: 2026-06-02 -- Phase 18 COMPLETE (verify-or-close). SC1–SC3 confirmed live (gofmt clean; slog.Debug not Warn; IsNewer pre-release test green; go test ./internal/update/... ok) — zero new code. SC4 (WATCH-14 ops) resolved via evidence not reinstall: the "stuck 0.4.0-rc1 watcher" premise was STALE — this PC is on 2.0.0 and the live backend shows all 7 reporting toons (3 owners) on 2.0.0, zero stale; the only 0.4.0-rc1 install is the disposable Azure test VM (not a production watcher). User closed as resolved. 18-01-SUMMARY.md + 18-VERIFICATION.md (passed) written.
+Progress: [##########] 100% — 2/2 phases complete (Phase 17 + Phase 18); v2.1 done
 
 ## v2.1 Phase Plan (created 2026-06-01)
 

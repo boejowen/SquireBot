@@ -31,9 +31,9 @@
 
 > ⚠ **Verify-or-close:** the v2.0 archive records 999.20/21/22 as RESOLVED in Plan 13-04 (commits `c930fc2`/`e758fb0`/`3e8e53b`). These requirements are framed to **confirm the live state and close any residual**, not to re-do completed work. If confirmed done, the only real residual is WATCH-14's stuck-watcher reinstall (an ops action, not code).
 
-- [ ] **WATCH-12**: `cmd/squirebot/console_windows.go` is `gofmt`-clean (999.20) — confirm or fix.
-- [ ] **WATCH-13**: `freeConsole()`'s doc matches its implementation and a no-console launch logs at Debug (not a spurious Warn on every GUI/Explorer launch) (999.21) — confirm or fix.
-- [ ] **WATCH-14**: The auto-updater compares versions SemVer-aware, so a watcher parked on a pre-release (e.g. `0.4.0-rc1`) correctly updates to a final release (999.22). Includes resolving the maintainer's own currently-stuck `0.4.0-rc1` watcher (one-time manual reinstall if the in-place updater can't self-heal it).
+- [x] **WATCH-12**: `cmd/squirebot/console_windows.go` is `gofmt`-clean (999.20) — confirmed live (`gofmt -l` clean). ✅ Phase 18
+- [x] **WATCH-13**: `freeConsole()`'s doc matches its implementation and a no-console launch logs at Debug (not a spurious Warn on every GUI/Explorer launch) (999.21) — confirmed live (`slog.Debug`=1, `slog.Warn`=0; doc/impl reconciled). ✅ Phase 18
+- [x] **WATCH-14**: The auto-updater compares versions SemVer-aware, so a watcher parked on a pre-release (e.g. `0.4.0-rc1`) correctly updates to a final release (999.22) — confirmed live (`TestIsNewer_SemVerPreRelease` green). Ops residual resolved: no production watcher was stuck (the `0.4.0-rc1` install is the disposable Azure test VM; this PC + all 7 reporting toons on 2.0.0). ✅ Phase 18
 
 ---
 
@@ -68,9 +68,9 @@ _Maps each REQ-ID to exactly one phase. Phases continue at 17. 9/9 mapped — no
 | LINK-04 | Phase 17 | ✅ Done (17-03 frontend; browser-smoke verified) |
 | LINK-05 | Phase 17 | ✅ Done (17-03 UI; browser-smoke verified) |
 | LINK-06 | Phase 17 | ✅ Done (17-02) |
-| WATCH-12 | Phase 18 | Pending |
-| WATCH-13 | Phase 18 | Pending |
-| WATCH-14 | Phase 18 | Pending |
+| WATCH-12 | Phase 18 | Done |
+| WATCH-13 | Phase 18 | Done |
+| WATCH-14 | Phase 18 | Done |
 
 **Coverage:** 9/9 v2.1 requirements mapped ✓ · Phase 17: 6 (LINK-01..06) · Phase 18: 3 (WATCH-12/13/14).
 

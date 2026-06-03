@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: — Self-Service Watcher Linking
-status: shipped
+milestone: v2.2
+milestone_name: — Wantlist + Discord Pinger
+status: planning
 last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 -- v2.1 milestone SHIPPED + archived (tag v2.1); next milestone undefined
+last_activity: 2026-06-02 -- v2.2 milestone opened; research-first; defining requirements
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State: SquireBot
@@ -23,17 +23,17 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** None — v2.1 shipped + archived. Next milestone undefined (top candidate: v2 Wantlist + Discord pinger, 999.12 / WANT-01..08). Start via `/gsd-new-milestone`.
+- **Current focus:** v2.2 — Wantlist + Discord Pinger (WANT-01..08): per-user wantlist + EC auction monitor + cross-server WTS/raid monitors, all DMing the guildie via Discord. Research-first; defining requirements.
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: — (between milestones)
+Phase: Not started (defining requirements)
 Plan: —
-Status: v2.1 SHIPPED + archived (tag `v2.1`, commit pending). Awaiting next milestone definition.
-Last activity: 2026-06-02 -- v2.1 "Self-Service Watcher Linking" (Phases 17–18, 4 plans, 9 reqs) shipped + archived. Phase 17 deployed live (self-service /account linking; mint-code CLI removed; 15/15 verified; browser-smoke approved; code-review 0-critical, 4 advisory fixed+redeployed). Phase 18 verify-or-close (zero new code; stuck-watcher residual debunked as the Azure test VM). Archives: milestones/v2.1-{ROADMAP,REQUIREMENTS}.md; MILESTONES.md + RETROSPECTIVE.md + PROJECT.md updated; REQUIREMENTS.md to be removed (fresh for next milestone).
-Progress: [##########] 100% — v2.1 complete (2/2 phases)
+Status: Defining requirements (research-first)
+Last activity: 2026-06-02 -- v2.2 "Wantlist + Discord Pinger" milestone opened (continues phase numbering from 18). v2.2 (additive feature on the v2.x platform) chosen over v3.0; research-first chosen. PROJECT.md updated with the milestone goal + 4 feature areas (WANT-01..08); STATE reset. Next: domain research (Discord-bot lib + always-on gateway; PigParse auction-data shape; Discord DM mechanics/rate-limits; WTS parsing) → requirements → roadmap (phases continue at 19).
+Progress: [..........] 0% — v2.2 requirements not yet defined
 
 ## Deferred Items
 
@@ -41,7 +41,7 @@ Carried forward at v2.1 close (non-blocking):
 
 | Category | Item | Status |
 |----------|------|--------|
-| ops | Decommission the Azure PAYG test VM (the `0.4.0-rc1` box) to stop billing | open — needs user `az login` |
+| ops | Decommission the Azure PAYG test VM (the `0.4.0-rc1` box) to stop billing | ✅ done 2026-06-02 (user decommissioned the VM) |
 | feature | 999.12 / WANT-01..08 — v2 Wantlist + Discord pinger | deferred (identity prereq pre-paid by AUTH-09 + LINK-02) |
 | signing | 999.9 — SignPath Foundation OSS approval | in flight (lands as a hotfix when approved) |
 | uat | P12/P14/P15 HUMAN-UAT live-smoke checklists (from v2.0) | exercised live during deploys; never formally ticked |

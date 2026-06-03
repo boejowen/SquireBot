@@ -21,6 +21,22 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Prior state (v1.x lineage):** v1.0 shipped 2026-05-11 (5 phases, 31 plans — installer + OAuth watcher + Apps Script Sheet); v1.0.1 patch 2026-05-12 (installer shim + officer-only eviction + test/doc debt); v1.0.2 binary 2026-05-13 (robustness polish — milestone close superseded by the v2.0 pivot). Archives in `.planning/milestones/`. The v1 Google-Sheet system is now decommissioned.
 
+## Current Milestone: v2.2 — Wantlist + Discord Pinger
+
+**Goal:** Guildies maintain a personal wantlist on squirebot.quest and get DMed on Discord when a wanted item appears — at EC-tunnel auction, in cross-server WTS channels, or as a raid-target tied to a wanted item's quest. (Backlog 999.12 / WANT-01..08 — the long-deferred "v2 feature," unblocked now that per-user Discord identity is paid by AUTH-09 + LINK-02.)
+
+**Target features (4 areas → WANT-01..08):**
+- **Per-user wantlist** — website CRUD to mark items you want (buy or quest), tied to your Discord identity. *(unblocked)*
+- **EC-tunnel auction monitor** — DM when a wanted item is auctioned, fed by PigParse. *(unblocked; research must confirm PigParse exposes auction events vs only daily prices)*
+- **WTS monitor** — a Discord bot reads trade channels across the 3 Raid Alliance servers, regex-matches your wantlist, DMs you. *(blocked on bot invites)*
+- **Quest-target raid monitor** — DM when a raid target tied to a wanted item's quest is announced in those servers. *(blocked on bot invites + needs the curated quest→NPC lookup)*
+
+**Sequencing:** front-load the new Discord-bot/DM infrastructure + the unblocked areas (wantlist + EC monitor); gate the cross-server monitors (WTS + raid-target) on the 3 Raid Alliance bot invites.
+
+**Open prerequisites:** the 3 Raid Alliance Discord bot invites (admin permission, not yet negotiated); a curated `quest → raid-target NPC(s)` lookup.
+
+**HARD CONSTRAINT (carried from v2.1):** never put Discord OAuth in the watcher — the bot/DM work is all backend + the guild's own Discord, not the watcher.
+
 ## Shipped: v2.1 — Self-Service Watcher Linking (2026-06-02)
 
 **Goal (MET):** Let any guildie link their own watcher from squirebot.quest via Discord login — no maintainer hand-minting codes — while keeping the watcher credential a static bearer token.
@@ -129,9 +145,14 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 
 ### Active
 
-<!-- Next milestone not yet opened. Run /gsd-new-milestone to define it. -->
+<!-- v2.2 Wantlist + Discord Pinger — requirements being defined (see REQUIREMENTS.md). -->
 
-**None — v2.1 shipped; next milestone undefined.** Top candidate: v2 Wantlist + Discord pinger (999.12 / WANT-01..08), Discord-identity prerequisite now fully pre-paid (AUTH-09 + LINK-02).
+**v2.2 — Wantlist + Discord Pinger (in progress, started 2026-06-02)** — full REQ-ID list in `REQUIREMENTS.md` (WANT-01..08).
+
+- Per-user wantlist (website CRUD, Discord-identity-tied)
+- EC-tunnel auction monitor → Discord DM (PigParse-fed)
+- WTS monitor across 3 Raid Alliance Discord servers → Discord DM (bot; invite-gated)
+- Quest-target raid monitor across the same servers → Discord DM (bot; invite-gated + quest→NPC lookup)
 
 ### v1.0 Partials / Waivers (user-authorized; still tracked post-v1.0.1)
 
@@ -245,4 +266,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-02 — after v2.1 "Self-Service Watcher Linking" milestone (Phases 17–18) shipped + archived. Next milestone undefined.*
+*Last updated: 2026-06-02 — v2.2 "Wantlist + Discord Pinger" milestone opened (continues phase numbering from 18; research-first).*

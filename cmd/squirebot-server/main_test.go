@@ -257,6 +257,7 @@ func TestWriteRoutes_Gates(t *testing.T) {
 	db := store.NewTestDB(t)
 	ctx := context.Background()
 
+	st := store.NewStore(db) // read-side store for the item-search route
 	// Mirror the serve mux's write-surface wiring (same wraps, same handlers).
 	mux := http.NewServeMux()
 	mux.Handle("POST /api/v1/admin/evict", webauth.RequireOfficer(db, webadmin.EvictHandler(db)))
@@ -269,6 +270,10 @@ func TestWriteRoutes_Gates(t *testing.T) {
 	mux.Handle("POST /api/v1/account/codes", webauth.RequireSession(db, webadmin.MintOwnCodeHandler(db)))
 	mux.Handle("GET /api/v1/account/codes", webauth.RequireSession(db, webadmin.ListOwnCodesHandler(db)))
 	mux.Handle("POST /api/v1/account/codes/revoke", webauth.RequireSession(db, webadmin.RevokeOwnCodeHandler(db)))
+	mux.Handle("GET /api/v1/wantlist", webauth.RequireSession(db, webadmin.ListOwnWantsHandler(db)))
+	mux.Handle("POST /api/v1/wantlist", webauth.RequireSession(db, webadmin.AddWantHandler(db)))
+	mux.Handle("POST /api/v1/wantlist/remove", webauth.RequireSession(db, webadmin.RemoveOwnWantHandler(db)))
+	mux.Handle("GET /api/v1/items/search", webauth.RequireSession(db, readapi.NewItemSearch(st)))
 
 	// A plain member session (NOT an officer).
 	member := "555555555555555555"
@@ -380,6 +385,51 @@ func TestWriteRoutes_Gates(t *testing.T) {
 		mux.ServeHTTP(rec, req)
 		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
 			t.Errorf("GET /api/v1/account/codes (member) = %d, want admitted (D-09 login-only)", rec.Code)
+		}
+	})
+
+	// 9) Wantlist route, NO session → 401 (RequireSession — Phase 19 / D-02).
+	t.Run("wantlist anon→401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/wantlist", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET /api/v1/wantlist (anon) = %d, want 401", rec.Code)
+		}
+	})
+
+	// 10) Wantlist route, MEMBER session → ADMITTED past the gate (D-02: every
+	// signed-in member, NOT officer-gated). A never-added member's list returns 200
+	// ([]), proving RequireSession admits a non-officer (a RequireOfficer swap would
+	// 403 this member — the bypass this route-level test exists to catch).
+	t.Run("wantlist member→admitted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/wantlist", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+			t.Errorf("GET /api/v1/wantlist (member) = %d, want admitted (D-02 login-only)", rec.Code)
+		}
+	})
+
+	// 11) Item-search route, NO session → 401 (RequireSession — D-10 session-gated).
+	t.Run("items/search anon→401", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/items/search?q=xx", nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("GET /api/v1/items/search (anon) = %d, want 401", rec.Code)
+		}
+	})
+
+	// 12) Item-search route, MEMBER session → ADMITTED past the gate (D-10 login-
+	// only). With an empty corpus the search returns 200 ([]), proving RequireSession
+	// admits a non-officer (a RequireOfficer swap would 403 this member).
+	t.Run("items/search member→admitted", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/items/search?q=xx", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
+			t.Errorf("GET /api/v1/items/search (member) = %d, want admitted (D-10 login-only)", rec.Code)
 		}
 	})
 }

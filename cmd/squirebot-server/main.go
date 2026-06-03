@@ -50,7 +50,7 @@ import (
 )
 
 const (
-	defaultAddr = "127.0.0.1:8090"                 // loopback only — Caddy fronts 443 (11-06)
+	defaultAddr = "127.0.0.1:8090"                  // loopback only — Caddy fronts 443 (11-06)
 	defaultDB   = "/var/lib/squirebot/squirebot.db" // matches the RESEARCH systemd unit
 	// defaultCORSOrigin is the apex origin the static SvelteKit site is served from
 	// — Caddy on the same VPS at https://squirebot.quest (deploy decision 2026-05-30:
@@ -312,6 +312,16 @@ func runServe(args []string) int {
 	mux.Handle("POST /api/v1/account/codes", webauth.RequireSession(db, webadmin.MintOwnCodeHandler(db)))
 	mux.Handle("GET /api/v1/account/codes", webauth.RequireSession(db, webadmin.ListOwnCodesHandler(db)))
 	mux.Handle("POST /api/v1/account/codes/revoke", webauth.RequireSession(db, webadmin.RevokeOwnCodeHandler(db)))
+
+	// Wantlist (Phase 19 / WANT-01/02 / D-02) — LOGIN-ONLY (RequireSession, NEVER
+	// RequireOfficer): every signed-in member manages their OWN wantlist; the owner
+	// is derived server-side from the Discord session, never the request body.
+	mux.Handle("GET /api/v1/wantlist", webauth.RequireSession(db, webadmin.ListOwnWantsHandler(db)))
+	mux.Handle("POST /api/v1/wantlist", webauth.RequireSession(db, webadmin.AddWantHandler(db)))
+	mux.Handle("POST /api/v1/wantlist/remove", webauth.RequireSession(db, webadmin.RemoveOwnWantHandler(db)))
+	// D-10 full-catalog item search — session-gated like the view endpoints
+	// (readapi, takes the read-side st):
+	mux.Handle("GET /api/v1/items/search", webauth.RequireSession(db, readapi.NewItemSearch(st)))
 
 	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
 	// route (D-04). P15 made CORS credential-aware (Access-Control-Allow-Credentials:

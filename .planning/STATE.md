@@ -102,6 +102,12 @@ Carried forward at v2.1 close (non-blocking):
 - `.planning/milestones/v2.1-{ROADMAP,REQUIREMENTS}.md` — the v2.1 archive.
 - `.planning/config.json` — granularity (coarse), mode (yolo), workflow toggles.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260602-u7m | Church of Clean Code audit follow-up — save report + low-risk fixes (.gitignore, CLAUDE.md dep doctrine, enrich naming) | 2026-06-03 | 922b441 | [260602-u7m-church-audit-follow-up-save-report-low-r](./quick/260602-u7m-church-audit-follow-up-save-report-low-r/) |
+
 ---
 
 *State updated: 2026-06-02 for v2.2 "Wantlist + Discord Pinger". Roadmap created 2026-06-02 (Phases 19–23; continues numbering from 18). Prior: v1.0 (2026-05-11), v1.0.1 (2026-05-12), v1.0.2 binary (2026-05-13, superseded), v2.0 (2026-05-31), v2.1 (2026-06-02).*

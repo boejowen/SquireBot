@@ -69,21 +69,21 @@
 
 ## Traceability
 
-_Maps each REQ-ID to exactly one phase. Phases continue at 19. Filled by the roadmapper._
+_Maps each REQ-ID to exactly one phase. Phases continue at 19. All 8 v2.2 requirements mapped; no orphans, no duplicates._
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| WANT-01 | TBD | Pending |
-| WANT-02 | TBD | Pending |
-| WANT-03 | TBD | Pending |
-| WANT-04 | TBD | Pending |
-| WANT-05 | TBD | Pending |
-| WANT-06 | TBD | Pending |
-| WANT-07 | TBD | Pending |
-| WANT-08 | TBD | Pending |
+| WANT-01 | Phase 19 — Wantlist CRUD | Pending |
+| WANT-02 | Phase 19 — Wantlist CRUD | Pending |
+| WANT-03 | Phase 20 — Bot + DM + Notification Infrastructure | Pending |
+| WANT-04 | Phase 20 — Bot + DM + Notification Infrastructure | Pending |
+| WANT-08 | Phase 20 — Bot + DM + Notification Infrastructure | Pending |
+| WANT-05 | Phase 21 — EC-Tunnel Auction Monitor | Pending |
+| WANT-06 | Phase 22 — WTS Cross-Server Monitor *(invite-gated)* | Pending |
+| WANT-07 | Phase 23 — Quest-Target Raid Monitor *(invite-gated)* | Pending |
 
-**Coverage:** 8 requirements to map across the roadmap (Track 1 unblocked: WANT-01/02/03/04/05/08 · Track 2 invite-gated: WANT-06/07).
+**Coverage:** 8/8 requirements mapped across Phases 19–23. Track 1 unblocked: WANT-01/02 (P19) · WANT-03/04/08 (P20) · WANT-05 (P21). Track 2 invite-gated: WANT-06 (P22) · WANT-07 (P23).
 
 ---
 
-*Requirements defined: 2026-06-02 for v2.2 "Wantlist + Discord Pinger". Prior milestones: v1.0, v1.0.1, v2.0, v2.1 (see `milestones/`).*
+*Requirements defined: 2026-06-02 for v2.2 "Wantlist + Discord Pinger". Traceability filled by the roadmapper 2026-06-02 (8/8 mapped to Phases 19–23). Prior milestones: v1.0, v1.0.1, v2.0, v2.1 (see `milestones/`).*

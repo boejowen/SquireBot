@@ -9,6 +9,7 @@
 - ✅ **v1.0.2** — Robustness Polish — binary shipped 2026-05-13 (tag `v1.0.2`); milestone close superseded by v2.0
 - ✅ **v2.0** — "Off Google" — Website Frontend — Phases 11–16 (shipped 2026-05-31 as tag `v2.0.0`) — archive: [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md)
 - ✅ **v2.1** — Self-Service Watcher Linking — Phases 17–18 (shipped 2026-06-02 as tag `v2.1`) — archive: [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md)
+- 🔄 **v2.2** — Wantlist + Discord Pinger — Phases 19–23 (in progress, opened 2026-06-02)
 
 ## Phases
 
@@ -82,9 +83,92 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 
 </details>
 
+### 🔄 v2.2 — Wantlist + Discord Pinger (Phases 19–23)
+
+**Milestone Goal:** Guildies maintain a personal wantlist on squirebot.quest and get DMed on Discord when a wanted item appears — at EC-tunnel auction (PigParse), in cross-server WTS channels, or as a raid-target tied to a wanted item's quest. (Backlog 999.12 / WANT-01..08 — the long-deferred "v2 feature," unblocked now that per-user Discord identity is paid by AUTH-09 + LINK-02.)
+
+**Delivery/reading split (the load-bearing insight):** DM *delivery* is UNBLOCKED — the bot lives in the guild's OWN Discord, where every guildie already is via the v2.0 membership-gated login, so it can DM all of them. Only WTS/raid-channel *reading* is invite-gated on the 3 un-negotiated Raid Alliance server invites. **Track 1** (Phases 19–21: wantlist → DM/notification infra → EC monitor) ships complete, valuable value with zero dependency on the external invites. **Track 2** (Phases 22–23: WTS monitor → quest-target raid monitor) is hard-gated on the invites; a bot feature-flag + `guild_channel` rows let Track 1 ship with WTS/raid dark and flip on per-server as invites arrive — no rebuild.
+
+**Locked decisions (v2.2 research, 2026-06-02 — see `research/SUMMARY-v2.2.md`):** in-process bot goroutine (NOT a separate process — avoids two SQLite writers), `recover()`-isolated + non-fatal start; `bwmarrin/discordgo` v0.29.0 (CGO-free, the only new dependency); one match seam (`wantmatch` + `notify` + `alert_log` dedup/cooldown) three sources fan in; EC = PigParse poll-and-diff (~10-min cadence, live spike first); error 50007 (can't-DM) first-class with an in-site notification inbox; `MESSAGE_CONTENT` a self-serve dev-portal toggle (no Discord audit under 100 servers); HARD CONSTRAINT — never put a Discord bot/OAuth in the watcher (untouched this milestone).
+
+**Track 1 — UNBLOCKED:**
+
+- [ ] **Phase 19: Wantlist CRUD** — per-user wantlist (website CRUD, item-ID-keyed, buy/quest reason, Discord-identity-tied, already-in-bank flag); the product surface, no Discord yet
+- [ ] **Phase 20: Bot + DM + Notification Infrastructure** — in-process discordgo gateway goroutine + `notify` DM sender + `wantmatch` + `alert_log` dedup/cooldown + opt-in/prefs + in-site notification inbox (50007 fallback) + per-monitor enable/disable + `guild_channel` config; the keystone spine all monitors ride
+- [ ] **Phase 21: EC-Tunnel Auction Monitor** — first real alert; PigParse poll-and-diff → wantmatch → DM, gated behind an upfront PigParse feasibility spike (confirm timestamps advance + coverage)
+
+**Track 2 — INVITE-GATED (entry-precondition: the 3 Raid Alliance bot invites confirmed in writing + `MESSAGE_CONTENT` enabled):**
+
+- [ ] **Phase 22: WTS Cross-Server Monitor** — bot reads the 3 Raid Alliance WTS channels → name/alias matcher → DM; matcher built/tested against fixtures so it's testable without live servers *(invite-gated)*
+- [ ] **Phase 23: Quest-Target Raid Monitor** — bot detects a raid-target NPC tied to a wanted item's quest → curated `quest → NPC` lookup → existing `quest_items` → DM *(invite-gated + needs the curated quest→NPC table)*
+
+## Phase Details
+
+### Phase 19: Wantlist CRUD
+**Goal**: A signed-in guildie can maintain a personal, Discord-identity-tied wantlist on squirebot.quest — add items from the existing catalog with a buy/quest reason, view and remove them, and see whether each is already in the guild bank.
+**Track**: 1 (UNBLOCKED)
+**Depends on**: Nothing in v2.2 (builds on the live v2.0/v2.1 platform — `webadmin/account.go` pattern, Discord-OAuth session identity, item catalog)
+**Requirements**: WANT-01, WANT-02
+**Success Criteria** (what must be TRUE):
+  1. A signed-in guildie can add an item to their wantlist by searching the existing item catalog, tagging it buy vs quest, and optionally setting a priority and note — the entry is item-ID-keyed and tied to their Discord identity (`web_user`).
+  2. A guildie can view their full wantlist on squirebot.quest and remove any entry; another guildie cannot see or mutate it (IDOR-safe, owner-scoped, audited — the `account.go` security shape).
+  3. Each wantlist row shows an "already in the guild bank?" indicator joined from the existing consolidated bank/view data.
+  4. The `00006_wantlist.sql` goose migration applies idempotently on the live DB, creating at least `wantlist_item` and `alert_log` without disturbing the existing schema.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 20: Bot + DM + Notification Infrastructure
+**Goal**: The keystone alerting spine exists — an in-process Discord bot can DM any guildie from the guild's own server; alerts are opt-in, deduplicated/cooled-down, and recorded in an in-site inbox that serves as the can't-DM fallback; officers can enable/disable each monitor and register source channels per server.
+**Track**: 1 (UNBLOCKED — DM send is pure REST on the guild's own server; needs NO privileged intent and NO external invites)
+**Depends on**: Phase 19 (wantlist must exist before there is anything to match; reuses `wantlist_item` + `alert_log`)
+**Requirements**: WANT-03, WANT-04, WANT-08
+**Success Criteria** (what must be TRUE):
+  1. The `squirebot-server` binary starts an in-process discordgo gateway goroutine behind an `Enabled` feature flag — `recover()`-isolated, non-fatal on start (the HTTP API + scheduler serve even if the bot can't connect), with reconnect managed by discordgo; a bot panic can never take down the live website/ingest.
+  2. The bot can DM a guildie from the guild's own Discord; when a DM is undeliverable (error 50007), the alert is marked `dm_blocked` and surfaced in the in-site notification inbox rather than silently dropped.
+  3. A guildie can opt in/out of alerts and set notification preferences; repeat matches for the same `(wantlist_item, source, item)` are suppressed within a tunable per-source cooldown window; every alert attempt is recorded in `alert_log`.
+  4. An officer can enable/disable each monitor and register source channels per server (feature flags + `guild_channel` rows), so Track-1 features ship with the invite-gated monitors dark and flip on as invites arrive — no rebuild.
+  5. `wantmatch` (the single shared matcher, `ForItem` + `ForName`) is exercised end-to-end via a manual/test trigger that DMs a real guildie, proving the spine all three monitors will ride.
+**Plans**: TBD
+
+### Phase 21: EC-Tunnel Auction Monitor
+**Goal**: The first real end-to-end alert ships — when a wanted item is auctioned in the EC tunnel, the wantlister gets a DM (price + WTS/WTB; seller best-effort), all on the guild's own Discord.
+**Track**: 1 (UNBLOCKED)
+**Depends on**: Phase 20 (rides the `wantmatch` + `notify` + `alert_log` spine), Phase 19 (wantlist data)
+**Requirements**: WANT-05
+**Success Criteria** (what must be TRUE):
+  1. An upfront PigParse feasibility spike (the phase's first task/gate) confirms auction timestamps advance during a live tunnel and measures coverage — defining whether the trigger is per-auction (`getdetails`) or coarser new-sighting (`lastWTSSeen`) before the plan commits.
+  2. A new `scheduler.ec_auction_match` job polls PigParse per wanted item on a ~10-min cadence, diffing on the auction-timestamp cursor (`ec_auction_cursor`), and matches on exact item ID.
+  3. When a wanted item is newly auctioned, the wantlister receives a DM carrying the item, price, and WTS/WTB tag (seller resolved only when resolvable); the alert is deduped/cooled per Phase 20's policy.
+  4. The cursor advances only after a successful poll and the job does not replay backlog on restart — a standing auction is not re-DMed every poll.
+**Plans**: TBD
+
+### Phase 22: WTS Cross-Server Monitor
+**Goal**: When a wanted item is posted for sale in a Raid Alliance WTS channel, the wantlister gets a DM — a new event source wired into the Phase 20 spine.
+**Track**: 2 (INVITE-GATED)
+**Entry-precondition (HARD GATE)**: the 3 Raid Alliance bot invites confirmed **in writing** (admin/read permission on the WTS channels) + `MESSAGE_CONTENT` privileged intent toggled on in the Discord dev portal. The live monitor does NOT start without the invites; the matcher is built/tested against fixtures meanwhile.
+**Depends on**: Phase 20 (reuses `notify`/`alert_log`/`wantmatch`) + the external invite prerequisite
+**Requirements**: WANT-06
+**Success Criteria** (what must be TRUE):
+  1. The name/alias matcher (`wantmatch.ForName`: exact item-ID + a curated alias table for FBSS/Fungi-class abbreviations + bounded substring, WTS-filtered) is built and unit-tested against a recorded fixture corpus of real WTS lines — testable with zero live servers.
+  2. With the bot invited and `MESSAGE_CONTENT` on, a `bot/wts.go` MESSAGE_CREATE handler reads the registered WTS channels (`guild_channel` rows) and a content-non-empty smoke test confirms message text arrives (not silently empty).
+  3. A WTS line for a wanted item DMs the matching guildie via the existing `notify`/`alert_log` path, deduped/cooled per Phase 20's WTS-window policy; until the invites land, the monitor stays dark behind its feature flag with Track 1 unaffected.
+**Plans**: TBD
+
+### Phase 23: Quest-Target Raid Monitor
+**Goal**: When a raid-target NPC tied to a wanted item's quest is announced in a Raid Alliance channel, the wantlister gets a DM — the last event source on the spine, chaining NPC → quest → item → wantlister.
+**Track**: 2 (INVITE-GATED)
+**Entry-precondition (HARD GATE)**: the 3 Raid Alliance bot invites confirmed **in writing** + `MESSAGE_CONTENT` enabled (as Phase 22) AND the curated `quest → raid-target NPC(s)` lookup populated (seeded from the wiki; curation can start in parallel during Track 1).
+**Depends on**: Phase 20 (reuses `notify`/`alert_log`/`wantmatch`) + the existing `quest_items` table + the external invite + curated-table prerequisites
+**Requirements**: WANT-07
+**Success Criteria** (what must be TRUE):
+  1. A curated `quest_target` table (`quest → raid-target NPC(s)`, seeded from the wiki, scoped to items guildies actually quest-want) is populated and queryable, reusing the existing `quest_items` (item ↔ quest) table for the inverse hop.
+  2. A `bot/raidtarget.go` MESSAGE_CREATE handler detects a raid-target NPC name in a registered raid-announce channel and resolves NPC → quest → wanted item(s) via `quest_target` + `quest_items`.
+  3. When the resolved item is on a guildie's wantlist (reason = quest), that guildie receives a DM via the existing `notify`/`alert_log` path, deduped/cooled per Phase 20's policy; until the invites + curated table land, the monitor stays dark behind its feature flag.
+**Plans**: TBD
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18.
+**Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently).
 
 | Milestone | Phases | Plans Complete | Status | Completed |
 |-----------|--------|----------------|--------|-----------|
@@ -93,6 +177,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
 | v2.1 | 2 | 4/4 | ✅ Complete (Phases 17–18 shipped) | 2026-06-02 |
+| v2.2 | 5 | 0/TBD | 🔄 In progress (Phase 19 ready to plan) | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -104,6 +189,11 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 16. Cutover + Decommission | v2.0 | 4/4 | ✅ Complete (Google decommissioned; guild migrating) | 2026-05-31 |
 | 17. Self-Service Watcher Linking | v2.1 | 3/3 | ✅ Complete (deployed live; browser-smoke approved; 15/15 verified) | 2026-06-02 |
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 1/1 | ✅ Complete (verify-or-close; zero new code; 0.4.0-rc1 = Azure test VM, not production) | 2026-06-02 |
+| 19. Wantlist CRUD | v2.2 | 0/TBD | Not started (ready to plan) | — |
+| 20. Bot + DM + Notification Infrastructure | v2.2 | 0/TBD | Not started | — |
+| 21. EC-Tunnel Auction Monitor | v2.2 | 0/TBD | Not started | — |
+| 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
+| 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 
 ## Backlog
 
@@ -133,4 +223,4 @@ Carried forward from v1.0 / v1.0.1 / v1.0.2 (candidates for a future Sheet-ortho
 
 ---
 
-*Roadmap created: 2026-04-30. v1.0 shipped: 2026-05-11. v1.0.1 shipped: 2026-05-12. v1.0.2 binary shipped: 2026-05-13. v2.0 "Off Google" shipped 2026-05-31, Phases 11–16; milestone archived (`milestones/v2.0-ROADMAP.md`). v2.1 "Self-Service Watcher Linking" opened 2026-06-01 (Phases 17–18). Last reorganized: 2026-06-01 — appended v2.1 milestone (Phases 17–18); 9/9 v2.1 requirements mapped; Phase 17 planned (3 plans).*
+*Roadmap created: 2026-04-30. v1.0 shipped: 2026-05-11. v1.0.1 shipped: 2026-05-12. v1.0.2 binary shipped: 2026-05-13. v2.0 "Off Google" shipped 2026-05-31, Phases 11–16; milestone archived (`milestones/v2.0-ROADMAP.md`). v2.1 "Self-Service Watcher Linking" shipped 2026-06-02 (Phases 17–18). Last reorganized: 2026-06-02 — appended v2.2 "Wantlist + Discord Pinger" milestone (Phases 19–23); 8/8 v2.2 requirements mapped (Track 1 unblocked: WANT-01/02/03/04/05/08 across Phases 19–21; Track 2 invite-gated: WANT-06/07 across Phases 22–23); Phase 19 ready to plan.*

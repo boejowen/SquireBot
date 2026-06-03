@@ -562,3 +562,60 @@ export function mintOwnCode(f: typeof fetch = fetch): Promise<{ code: string }> 
 export function revokeOwnCode(id: number, f: typeof fetch = fetch): Promise<{ revoked: boolean }> {
 	return postJSON<{ revoked: boolean }>('/api/v1/account/codes/revoke', { id }, f);
 }
+
+// --- Wantlist + catalog search (19-03 / WANT-01/WANT-02) ------------------
+// The four login-only wantlist endpoints (GET list / POST add / POST remove /
+// GET catalog search), all cookie-credentialed via the shared getJSON/postJSON
+// cores (D-02: the owner is session-derived server-side — the add/remove bodies
+// carry NO owner). The in-guild "who holds it" display joins the wantlist rows'
+// stable item_id against the consolidated all-character inventory (fetchView()),
+// client-side, in holdersFor (see $lib/wantlist/holders).
+
+/** One of the caller's own wantlist entries (GET /api/v1/wantlist). */
+export interface WantlistRow {
+	id: number;
+	/** null for a custom text want (excluded from the in-guild join + future alerts, D-04/D-07). */
+	item_id: number | null;
+	item_name: string;
+	reason: 'buy' | 'quest';
+	priority: 'low' | 'med' | 'high';
+	note: string | null;
+	created_at: number;
+}
+
+/** A catalog match from the PigParse-getall corpus (GET /api/v1/items/search). */
+export interface CatalogItem {
+	item_id: number;
+	name: string;
+	/** The recent average price in pp, when known. */
+	current_avg?: number;
+}
+
+/** GET /api/v1/wantlist → WantlistRow[] ([] when the list is empty). */
+export function fetchOwnWants(f: typeof fetch = fetch): Promise<WantlistRow[]> {
+	return getJSON<WantlistRow[]>('/api/v1/wantlist', f);
+}
+
+/** GET /api/v1/items/search?q=… → CatalogItem[] (server returns [] for q<2). */
+export function searchCatalog(q: string, f: typeof fetch = fetch): Promise<CatalogItem[]> {
+	return getJSON<CatalogItem[]>('/api/v1/items/search?q=' + encodeURIComponent(q), f);
+}
+
+/** POST /api/v1/wantlist → the created WantlistRow. Body carries NO owner (session-derived, D-02). */
+export function addWant(
+	body: {
+		item_id: number | null;
+		item_name: string;
+		reason: 'buy' | 'quest';
+		priority: 'low' | 'med' | 'high';
+		note?: string;
+	},
+	f: typeof fetch = fetch
+): Promise<WantlistRow> {
+	return postJSON<WantlistRow>('/api/v1/wantlist', body, f);
+}
+
+/** POST /api/v1/wantlist/remove → { removed } (false = not the caller's / already removed — a no-op, not an error). */
+export function removeWant(id: number, f: typeof fetch = fetch): Promise<{ removed: boolean }> {
+	return postJSON<{ removed: boolean }>('/api/v1/wantlist/remove', { id }, f);
+}

@@ -22,7 +22,11 @@
 		// 17-03: the /account page empty state — the caller has zero active watcher
 		// codes (brand-new guildie, or after revoking their last). Copy is verbatim
 		// from the 17-UI-SPEC Copywriting Contract.
-		| 'no-codes';
+		| 'no-codes'
+		// 19-03: the /wantlist page empty state — the caller has zero wants (a fresh
+		// account, or after removing the last). Copy is verbatim from the 19-UI-SPEC
+		// Copywriting Contract.
+		| 'no-wants';
 </script>
 
 <script lang="ts">
@@ -100,6 +104,18 @@
 		<p class="state-body">
 			You haven't linked any PCs yet. Generate a code above, then paste it into the SquireBot
 			watcher on the PC you want to link.
+		</p>
+	</div>
+{:else if kind === 'no-wants'}
+	<!-- WantlistPanel: the caller has no wantlist entries yet (19-UI-SPEC
+	     Copywriting). Reuses the circle-alert glyph + the shared empty layout. The
+	     add-item block stays visible above this block (one search to the next step). -->
+	<div class="state state-empty">
+		<CircleAlert size={28} aria-hidden="true" class="state-icon" />
+		<h2 class="state-heading">Your wantlist is empty</h2>
+		<p class="state-body">
+			Search the catalog above to add what you're after — you'll see right away whether the guild
+			already has it.
 		</p>
 	</div>
 {:else if kind === 'error'}

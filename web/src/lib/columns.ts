@@ -25,13 +25,20 @@
 import type { ColumnDef, Row } from '@tanstack/table-core';
 import { renderComponent } from '$lib/table';
 import { wikiUrlFor } from '$lib/tooltip/composeNotes';
-import type { ViewRow, GearCheckRow, SpellCheckRow } from '$lib/api';
+import type { ViewRow, GearCheckRow, SpellCheckRow, WantlistRow } from '$lib/api';
+import { priorityRank } from '$lib/wantlist/priority';
+import { holdersFor } from '$lib/wantlist/holders';
 import StatusCell from '$lib/components/StatusCell.svelte';
 import ItemCell from '$lib/components/cells/ItemCell.svelte';
 import WikiCell from '$lib/components/cells/WikiCell.svelte';
 import PriceCell from '$lib/components/cells/PriceCell.svelte';
 import LastSyncedCell from '$lib/components/cells/LastSyncedCell.svelte';
 import RecommendedCell from '$lib/components/cells/RecommendedCell.svelte';
+import PriorityCell from '$lib/components/cells/PriorityCell.svelte';
+import ReasonCell from '$lib/components/cells/ReasonCell.svelte';
+import WantItemCell from '$lib/components/cells/WantItemCell.svelte';
+import InGuildCell from '$lib/components/cells/InGuildCell.svelte';
+import WantRemoveCell from '$lib/components/cells/WantRemoveCell.svelte';
 
 /** Per-column metadata the DataGrid reads to choose a filter control. */
 export interface ColumnFilterMeta {
@@ -160,3 +167,94 @@ export const spellCheckColumns: ColumnDef<SpellCheckRow, unknown>[] = [
 		cell: (ctx) => renderComponent(StatusCell, { status: ctx.row.original.status })
 	}
 ];
+
+// --- wantlist (19-UI-SPEC Grid Contract) ---------------------------------
+// Priority · Item · Reason · In guild? · Note · Remove. The 5th DataGrid
+// instantiation — owner-scoped, consolidated, single grid (NEVER per-character).
+// Default sort: priority (high→low) then in_guild status (D-08) — seeded by the
+// panel's defaultSorting `[{ id: 'priority', desc: true }, { id: 'in_guild', desc: false }]`.
+
+/** Custom TanStack sortingFn: order Priority by rank (high=3/med=2/low=1), not alpha. */
+function prioritySort(a: Row<WantlistRow>, b: Row<WantlistRow>): number {
+	return priorityRank(a.original.priority) - priorityRank(b.original.priority);
+}
+
+/**
+ * Build the wantlist ColumnDef[] for the DataGrid. A factory (not a const) so the
+ * computed In-guild cell can close over the current `viewRows` (the fetchView()
+ * join, D-06) and the Remove cell over the panel's `onRemove` + `removeBusy` —
+ * the interactive cells need runtime data the static view columns don't.
+ *
+ * The In-guild column's accessor returns the COARSE status ('in'/'not'/'na') so
+ * the secondary sort (D-08) and the facet filter work; the rich `↳ Char: count`
+ * lines render in the cell. `enableGlobalFilter: false` on the computed In-guild
+ * column and on `item_id` — their raw accessor value diverges from the rendered
+ * cell (the columns.ts global-filter caveat), so the global box would otherwise
+ * produce phantom matches.
+ */
+export function wantlistColumns(
+	viewRows: ViewRow[],
+	onRemove: (row: WantlistRow) => void,
+	removeBusy = false
+): ColumnDef<WantlistRow, unknown>[] {
+	return [
+		{
+			id: 'priority',
+			accessorKey: 'priority',
+			header: 'Priority',
+			sortingFn: prioritySort,
+			meta: { filter: 'facet' },
+			cell: (ctx) => renderComponent(PriorityCell, { priority: ctx.row.original.priority })
+		},
+		{
+			id: 'item',
+			accessorKey: 'item_name',
+			header: 'Item',
+			cell: (ctx) => renderComponent(WantItemCell, { row: ctx.row.original })
+		},
+		{
+			id: 'item_id',
+			accessorKey: 'item_id',
+			header: 'ID',
+			enableGlobalFilter: false,
+			enableColumnFilter: false,
+			enableSorting: false
+		},
+		{
+			id: 'reason',
+			accessorKey: 'reason',
+			header: 'Reason',
+			meta: { filter: 'facet' },
+			cell: (ctx) => renderComponent(ReasonCell, { reason: ctx.row.original.reason })
+		},
+		{
+			id: 'in_guild',
+			// Coarse status backs the secondary sort + facet filter; the rich lines
+			// render in InGuildCell. 'in' < 'na' < 'not' alpha — desc:false floats
+			// "not in guild" up only relative to the other states; the priority key
+			// dominates (D-08).
+			accessorFn: (row) =>
+				row.item_id === null ? 'na' : holdersFor(row.item_id, viewRows).length > 0 ? 'in' : 'not',
+			header: 'In guild?',
+			enableGlobalFilter: false,
+			meta: { filter: 'facet' },
+			cell: (ctx) => renderComponent(InGuildCell, { row: ctx.row.original, viewRows })
+		},
+		{
+			id: 'note',
+			accessorKey: 'note',
+			header: 'Note',
+			enableSorting: false,
+			cell: (ctx) => ctx.row.original.note ?? ''
+		},
+		{
+			id: 'remove',
+			header: '',
+			enableSorting: false,
+			enableColumnFilter: false,
+			enableGlobalFilter: false,
+			cell: (ctx) =>
+				renderComponent(WantRemoveCell, { row: ctx.row.original, onRemove, busy: removeBusy })
+		}
+	];
+}

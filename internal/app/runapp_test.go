@@ -116,23 +116,18 @@ func TestRescanCatchUp_FiresOnNewerFiles(t *testing.T) {
 		LastKnownSpellbookMtime: map[string]string{},
 	}
 
+	// rescanCatchUp invokes callbacks synchronously on the calling goroutine
+	// (no goroutines spawned), so plain slices/counters are correct here.
 	var invPaths, spbPaths []string
-	var invCount, spbCount int64
-	onInv := func(p string) {
-		atomic.AddInt64(&invCount, 1)
-		invPaths = append(invPaths, p)
-	}
-	onSpb := func(p string) {
-		atomic.AddInt64(&spbCount, 1)
-		spbPaths = append(spbPaths, p)
-	}
+	onInv := func(p string) { invPaths = append(invPaths, p) }
+	onSpb := func(p string) { spbPaths = append(spbPaths, p) }
 
 	rescanCatchUp(context.Background(), cfg, cfg.EQFolders, onInv, onSpb)
 
-	if got := atomic.LoadInt64(&invCount); got != 1 {
+	if got := len(invPaths); got != 1 {
 		t.Errorf("inventory callback fired %d times; want 1 (Fresh only)", got)
 	}
-	if got := atomic.LoadInt64(&spbCount); got != 1 {
+	if got := len(spbPaths); got != 1 {
 		t.Errorf("spellbook callback fired %d times; want 1 (Fresh only)", got)
 	}
 	sort.Strings(invPaths)
@@ -196,14 +191,14 @@ func TestRescanCatchUp_MissingFolderIsSkipped(t *testing.T) {
 		LastKnownSpellbookMtime: map[string]string{},
 	}
 
-	var fired int64
-	onInv := func(string) { atomic.AddInt64(&fired, 1) }
+	fired := 0
+	onInv := func(string) { fired++ }
 	onSpb := func(string) {}
 
 	rescanCatchUp(context.Background(), cfg, cfg.EQFolders, onInv, onSpb)
 
-	if got := atomic.LoadInt64(&fired); got != 1 {
-		t.Errorf("expected 1 callback (Good only), got %d", got)
+	if fired != 1 {
+		t.Errorf("expected 1 callback (Good only), got %d", fired)
 	}
 }
 

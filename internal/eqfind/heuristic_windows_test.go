@@ -44,6 +44,19 @@ func TestWalkRoot_FindsSentinelPairAtDepth(t *testing.T) {
 	}
 }
 
+// TestWalkRoot_AtDepthCapFound: a pair planted at EXACTLY maxHeuristicDepth=5 MUST
+// be found. Together with TestWalkRoot_BeyondDepthCapNotFound (depth 6 pruned) this
+// pins the `curDepth > maxHeuristicDepth` boundary — an off-by-one (e.g. switching
+// the check to `>=`) would silently stop discovering depth-5 installs and this test
+// would catch it.
+func TestWalkRoot_AtDepthCapFound(t *testing.T) {
+	root := t.TempDir()
+	want := plantEQAt(t, root, "a", "b", "c", "d", "e") // depth 5
+	if got := walkRoot(context.Background(), root); got != want {
+		t.Errorf("walkRoot at exactly maxHeuristicDepth = %q, want %q", got, want)
+	}
+}
+
 // TestWalkRoot_BeyondDepthCapNotFound: a pair buried deeper than maxHeuristicDepth
 // is pruned by the depth cap → walkRoot returns "".
 func TestWalkRoot_BeyondDepthCapNotFound(t *testing.T) {

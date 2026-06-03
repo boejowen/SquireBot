@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: — Wantlist + Discord Pinger
 status: planning
-last_updated: "2026-06-02T00:00:00.000Z"
-last_activity: 2026-06-02 -- v2.2 roadmap created (Phases 19–23); 8/8 requirements mapped; Phase 19 ready to plan
+last_updated: "2026-06-03T00:00:00.000Z"
+last_activity: 2026-06-03 -- Phase 24 (watcher test hardening, C1/C2/REFACTOR) executed + verified 10/10; Phase 19 still ready to plan
 progress:
   total_phases: 5
   completed_phases: 0
@@ -31,8 +31,10 @@ See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 Phase: 19 — Wantlist CRUD (ready to plan)
 Plan: —
-Status: Roadmap created; Phase 19 ready to plan
-Last activity: 2026-06-02 -- v2.2 roadmap created (continues phase numbering from 18; Phases 19–23). 8/8 WANT requirements mapped, no orphans (Track 1 unblocked: WANT-01/02 → P19, WANT-03/04/08 → P20, WANT-05 → P21; Track 2 invite-gated: WANT-06 → P22, WANT-07 → P23). ROADMAP.md appended (all prior-milestone history preserved); REQUIREMENTS.md Traceability filled. Next: `/gsd-plan-phase 19`.
+Status: Phase 24 (out-of-band quality/tech-debt) complete; Phase 19 ready to plan
+Last activity: 2026-06-03 -- Phase 24 "Watcher test hardening (C1/C2 coverage)" executed (2/2 plans, parallel worktrees) + verified 10/10 must-haves. C1 closed (5 spellbook behavior tests), C2 closed (5 walkRoot t.TempDir() tests on the Windows TU), REFACTOR closed (twin handlers → makeOnFileChange + handleIngestErr, no inventory behavior change). Code review: 0 BLOCKER / 3 WARNING (test-quality nits) / 4 INFO — advisory, not fixed. Full repo suite green. Phase 24 is orthogonal to the v2.2 wantlist track; Phase 19 remains the next feature work. Next: `/gsd-plan-phase 19`.
+
+Phase 24 prior activity: 2026-06-02 -- v2.2 roadmap created (continues phase numbering from 18; Phases 19–23). 8/8 WANT requirements mapped, no orphans (Track 1 unblocked: WANT-01/02 → P19, WANT-03/04/08 → P20, WANT-05 → P21; Track 2 invite-gated: WANT-06 → P22, WANT-07 → P23). ROADMAP.md appended (all prior-milestone history preserved); REQUIREMENTS.md Traceability filled. Next: `/gsd-plan-phase 19`.
 Progress: [..........] 0% — 0/5 phases planned
 
 ## v2.2 Phase Plan (created 2026-06-02)

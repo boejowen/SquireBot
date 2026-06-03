@@ -101,7 +101,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 
 - [ ] **Phase 22: WTS Cross-Server Monitor** — bot reads the 3 Raid Alliance WTS channels → name/alias matcher → DM; matcher built/tested against fixtures so it's testable without live servers *(invite-gated)*
 - [ ] **Phase 23: Quest-Target Raid Monitor** — bot detects a raid-target NPC tied to a wanted item's quest → curated `quest → NPC` lookup → existing `quest_items` → DM *(invite-gated + needs the curated quest→NPC table)*
-- [ ] **Phase 24: Watcher test hardening (C1/C2 coverage)** — quality/tech-debt; close the Church audit's two CRITICAL coverage gaps (spellbook-upload path tests + `eqfind` walk tests) via a twin-handler refactor. Independent of the wantlist track — can run anytime.
+- [x] **Phase 24: Watcher test hardening (C1/C2 coverage)** — quality/tech-debt; close the Church audit's two CRITICAL coverage gaps (spellbook-upload path tests + `eqfind` walk tests) via a twin-handler refactor. Independent of the wantlist track — can run anytime. ✅ 2026-06-03
 
 ## Phase Details
 
@@ -177,8 +177,8 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   2. The spellbook upload path has behavior tests mirroring the four existing inventory tests — 401-no-loop-sets-red, 426-update-needed, cross-owner reject, empty-file-skips-no-request, and 204-persists-mtime — so a future change to one path can no longer silently rot the other.
   3. `internal/eqfind`'s real filesystem-walk discovery is tested: `walkRoot` + sentinel-matching exercised against a `t.TempDir()` tree with planted `eqgame.exe`/`eqclient.ini` at varying depths plus decoy dirs, lifting the package off its ~15% floor (orchestration-only) onto the actual discovery logic.
 **Plans**: 2 plans
-  - [ ] 24-01-PLAN.md — refactor twin upload handlers (makeOnFileChange + handleIngestErr) + spellbook behavior tests (C1, REFACTOR)
-  - [ ] 24-02-PLAN.md — eqfind walkRoot/sentinel-walk tests against a t.TempDir() tree (C2)
+  - [x] 24-01-PLAN.md — refactor twin upload handlers (makeOnFileChange + handleIngestErr) + spellbook behavior tests (C1, REFACTOR)
+  - [x] 24-02-PLAN.md — eqfind walkRoot/sentinel-walk tests against a t.TempDir() tree (C2)
 
 ## Progress
 
@@ -191,7 +191,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
 | v2.1 | 2 | 4/4 | ✅ Complete (Phases 17–18 shipped) | 2026-06-02 |
-| v2.2 | 6 | 0/TBD | 🔄 In progress (Phase 19 ready to plan; Phase 24 quality phase appended) | — |
+| v2.2 | 6 | 2/TBD | 🔄 In progress (Phase 24 quality phase complete; Phase 19 ready to plan) | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -208,7 +208,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 21. EC-Tunnel Auction Monitor | v2.2 | 0/TBD | Not started | — |
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
-| 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 0/2 | Not started (quality/tech-debt; planned — 2 plans) | — |
+| 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |
 
 ## Backlog
 

@@ -305,6 +305,117 @@ func TestRemoveOwnWant_BadID_400(t *testing.T) {
 	}
 }
 
+func TestMuteWant_Toggle_CrossOwnerNoOp_Audits(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	caller := "disc-mute"
+	seedWebUser(t, ctx, db, caller, "Muter")
+
+	// Another member's want (the IDOR fixture).
+	seedWebUser(t, ctx, db, "disc-other", "Other")
+	otherID := seedWant(t, ctx, db, "disc-other", i64p(42), "Theirs", "buy", "med")
+
+	muteH := withCaller(caller, MuteWantHandler(db))
+
+	// Cross-owner mute → muted echoed as requested, but the other member's row is
+	// UNCHANGED (still unmuted) and nothing is audited (silent no-op).
+	recX := postJSON(t, muteH, `{"id":`+itoa(otherID)+`,"muted":true}`)
+	if recX.Code != http.StatusOK {
+		t.Fatalf("cross-owner mute status = %d, want 200", recX.Code)
+	}
+	if !decodeMuted(t, recX) {
+		t.Fatalf("cross-owner mute echo = false, want requested true")
+	}
+	if mutedOf(t, ctx, db, otherID) {
+		t.Fatalf("other member's want was muted — IDOR")
+	}
+	if c := auditCount(t, ctx, db, "wantlist_mute"); c != 0 {
+		t.Fatalf("wantlist_mute audit rows = %d, want 0 (no-op not audited)", c)
+	}
+
+	// Caller mutes its OWN want → muted:true, row flipped, audited (want_id only).
+	addH := withCaller(caller, AddWantHandler(db))
+	addRec := postJSON(t, addH, `{"item_id":11,"item_name":"Mine","reason":"buy"}`)
+	if addRec.Code != http.StatusOK {
+		t.Fatalf("add own status = %d", addRec.Code)
+	}
+	var added store.WantlistRow
+	if err := json.Unmarshal(addRec.Body.Bytes(), &added); err != nil {
+		t.Fatalf("decode added: %v", err)
+	}
+	recMute := postJSON(t, muteH, `{"id":`+itoa(added.ID)+`,"muted":true}`)
+	if recMute.Code != http.StatusOK {
+		t.Fatalf("own mute status = %d, want 200", recMute.Code)
+	}
+	if !decodeMuted(t, recMute) {
+		t.Fatalf("own mute echo = false, want true")
+	}
+	if !mutedOf(t, ctx, db, added.ID) {
+		t.Fatalf("own want not muted")
+	}
+	if c := auditCount(t, ctx, db, "wantlist_mute"); c != 1 {
+		t.Fatalf("wantlist_mute audit rows = %d, want 1", c)
+	}
+	// V7: the audit detail must carry want_id only, never a note/text leak.
+	var detail string
+	if err := db.QueryRowContext(ctx,
+		`SELECT detail FROM audit_log WHERE event = 'wantlist_mute'`).Scan(&detail); err != nil {
+		t.Fatalf("read mute audit detail: %v", err)
+	}
+	if !strings.Contains(detail, "want_id") {
+		t.Fatalf("mute audit detail %q missing want_id", detail)
+	}
+
+	// Unmute round-trip → muted:false, row cleared.
+	recUn := postJSON(t, muteH, `{"id":`+itoa(added.ID)+`,"muted":false}`)
+	if recUn.Code != http.StatusOK {
+		t.Fatalf("unmute status = %d, want 200", recUn.Code)
+	}
+	if decodeMuted(t, recUn) {
+		t.Fatalf("unmute echo = true, want false")
+	}
+	if mutedOf(t, ctx, db, added.ID) {
+		t.Fatalf("own want still muted after unmute")
+	}
+}
+
+func TestMuteWant_BadID_400(t *testing.T) {
+	db := store.NewTestDB(t)
+	caller := "disc-mute-bad"
+	seedWebUser(t, context.Background(), db, caller, "BadMute")
+	muteH := withCaller(caller, MuteWantHandler(db))
+	rec := postJSON(t, muteH, `{"id":0,"muted":true}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+	if got := decodeErr(t, rec); got != "invalid_input" {
+		t.Fatalf("error = %q, want invalid_input", got)
+	}
+}
+
+// mutedOf reads a want's muted flag by id (the mute round-trip assertion).
+func mutedOf(t *testing.T, ctx context.Context, db *sql.DB, wantID int64) bool {
+	t.Helper()
+	var m int
+	if err := db.QueryRowContext(ctx,
+		`SELECT muted FROM wantlist_item WHERE id = ?`, wantID).Scan(&m); err != nil {
+		t.Fatalf("read muted (id=%d): %v", wantID, err)
+	}
+	return m != 0
+}
+
+// decodeMuted extracts the {"muted":bool} field.
+func decodeMuted(t *testing.T, rec *httptest.ResponseRecorder) bool {
+	t.Helper()
+	var body struct {
+		Muted bool `json:"muted"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode muted body %q: %v", rec.Body.String(), err)
+	}
+	return body.Muted
+}
+
 // decodeRemoved extracts the {"removed":bool} field.
 func decodeRemoved(t *testing.T, rec *httptest.ResponseRecorder) bool {
 	t.Helper()

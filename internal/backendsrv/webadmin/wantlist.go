@@ -168,6 +168,60 @@ func AddWantHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// muteReq is the {id, muted} body for the per-want mute toggle (D-09): the want id
+// + the new mute state. The owner is NEVER from the body (D-02); it is the session
+// caller.
+type muteReq struct {
+	ID    int64 `json:"id"`
+	Muted bool  `json:"muted"`
+}
+
+// MuteWantHandler (POST) toggles a single one of the caller's OWN wants' mute flag
+// (D-09 "stop pinging me about THIS item") — the RemoveOwnWantHandler twin. The body
+// carries the want id + the desired state only; the owner is the session caller. The
+// toggle is owner-scoped (store.SetMutedTx — Pitfall 3): a want belonging to a
+// different member is a silent no-op that never leaks its existence and changes
+// nothing. The response echoes the REQUESTED muted state (mirroring removed:false —
+// a cross-owner id returns muted as requested but the store flipped no row). Audits
+// "wantlist_mute" with want_id ONLY (V7) when a row actually flipped.
+func MuteWantHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ctx := r.Context()
+		var req muteReq
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid_input")
+			return
+		}
+		callerID := caller(r.Context())
+		now := nowUnix()
+
+		var ok bool
+		err := withTx(ctx, db, func(tx *sql.Tx) error {
+			var e error
+			ok, e = store.SetMutedTx(ctx, tx, req.ID, callerID, req.Muted)
+			if e != nil {
+				return e
+			}
+			if ok {
+				// V7: detail carries want_id ONLY.
+				return AppendAuditTx(ctx, tx, "wantlist_mute", callerID, map[string]any{"want_id": req.ID}, now)
+			}
+			return nil
+		})
+		if err != nil {
+			mapWantErr(w, err)
+			return
+		}
+		// Echo the requested state (the silent-no-op contract: a cross-owner id
+		// returns muted as requested but flipped nothing — mirrors removed:false).
+		writeJSON(w, map[string]any{"muted": req.Muted})
+	}
+}
+
 // ListOwnWantsHandler (GET) returns the caller's OWN active wants (WANT-01),
 // owner-scoped to caller(ctx). The store returns a non-nil slice, so the JSON is
 // always [] (never null) for the empty state.

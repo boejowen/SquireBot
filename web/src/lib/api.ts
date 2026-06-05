@@ -619,3 +619,81 @@ export function addWant(
 export function removeWant(id: number, f: typeof fetch = fetch): Promise<{ removed: boolean }> {
 	return postJSON<{ removed: boolean }>('/api/v1/wantlist/remove', { id }, f);
 }
+
+// --- Notifications (20-04 / WANT-04) ---------------------------------------
+// The six login-only /api/v1/notifications endpoints (prefs get/set, inbox,
+// unread-count, mark-read, mark-all-read) backing the /notifications page +
+// the unread nav badge — all cookie-credentialed via the shared
+// getJSON/postJSON cores (D-02: the owner is session-derived server-side; NO
+// body carries an owner). This block is OWNED by Plan 04; Plan 05 APPENDS its
+// officer-monitor wrappers in a SEPARATE `// --- Monitors (20-05 / WANT-08) ---`
+// block BELOW this one (a different wave — do NOT remove or reorder these). The
+// muteWant wrapper lives here too because /wantlist already lives in this file;
+// Plan 05's WantMuteCell consumes it.
+//
+// IMPORTANT (P15 epoch-seconds crasher): `sent_at` and `read_at` on AlertLogRow
+// are unix EPOCH SECONDS (NOT milliseconds) — every consumer that builds a Date
+// MUST multiply by 1000 first (see NotificationRow's relativeTime).
+
+/** The caller's notify prefs — master + three per-monitor booleans (default-ON, D-01). */
+export interface NotifyPrefs {
+	master: boolean;
+	ec: boolean;
+	wts: boolean;
+	raid: boolean;
+}
+
+/**
+ * One alert-attempt row from the caller's inbox (GET /api/v1/notifications/inbox,
+ * newest-first). `send_status` is the delivery outcome (the load-bearing CAN'T-DM
+ * safety net); `read_at` null ⇒ unread. `sent_at` / `read_at` are unix EPOCH
+ * SECONDS (multiply by 1000 for a JS Date — the P15 crasher).
+ */
+export interface AlertLogRow {
+	id: number;
+	source: string;
+	item_id: number | null;
+	detail: string | null;
+	sent_at: number;
+	send_status: 'sent' | 'dm_blocked' | 'error';
+	read_at: number | null;
+}
+
+/** GET /api/v1/notifications/prefs → NotifyPrefs (default-ON for a new caller). */
+export function fetchPrefs(f: typeof fetch = fetch): Promise<NotifyPrefs> {
+	return getJSON<NotifyPrefs>('/api/v1/notifications/prefs', f);
+}
+
+/** POST /api/v1/notifications/prefs → the stored NotifyPrefs. Body carries NO owner (session-derived, D-02). */
+export function savePrefs(body: NotifyPrefs, f: typeof fetch = fetch): Promise<NotifyPrefs> {
+	return postJSON<NotifyPrefs>('/api/v1/notifications/prefs', body, f);
+}
+
+/** GET /api/v1/notifications/inbox → AlertLogRow[] (newest-first; [] when empty). */
+export function fetchInbox(f: typeof fetch = fetch): Promise<AlertLogRow[]> {
+	return getJSON<AlertLogRow[]>('/api/v1/notifications/inbox', f);
+}
+
+/** GET /api/v1/notifications/unread-count → { count } (the nav-badge number, D-05). */
+export function fetchUnreadCount(f: typeof fetch = fetch): Promise<{ count: number }> {
+	return getJSON<{ count: number }>('/api/v1/notifications/unread-count', f);
+}
+
+/** POST /api/v1/notifications/read → { read } (false = not the caller's / already read — a no-op). Body is {id} only (D-02). */
+export function markRead(id: number, f: typeof fetch = fetch): Promise<{ read: boolean }> {
+	return postJSON<{ read: boolean }>('/api/v1/notifications/read', { id }, f);
+}
+
+/** POST /api/v1/notifications/read-all → { count } (rows flipped). Body is {} — owner is session-derived (D-02). */
+export function markAllRead(f: typeof fetch = fetch): Promise<{ count: number }> {
+	return postJSON<{ count: number }>('/api/v1/notifications/read-all', {}, f);
+}
+
+/** POST /api/v1/wantlist/mute → { muted }. Body is {id, muted} only — owner session-derived (D-02). Consumed by Plan 05's WantMuteCell. */
+export function muteWant(
+	id: number,
+	muted: boolean,
+	f: typeof fetch = fetch
+): Promise<{ muted: boolean }> {
+	return postJSON<{ muted: boolean }>('/api/v1/wantlist/mute', { id, muted }, f);
+}

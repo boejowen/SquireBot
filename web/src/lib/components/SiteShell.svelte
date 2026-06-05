@@ -8,10 +8,12 @@
 	// CC-BY-SA attribution (UI-SPEC Copywriting). prefers-reduced-motion makes
 	// theme transitions instant (handled globally in app.css).
 
-	import { getContext } from 'svelte';
+	import { getContext, onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import ThemePicker from './ThemePicker.svelte';
 	import SessionIndicator from './SessionIndicator.svelte';
 	import { SESSION_KEY, type SessionGetter } from './AuthGate.svelte';
+	import { unreadCount, refreshUnread } from '$lib/stores/unread';
 	import type { ThemeKey } from '$lib/theme/themes';
 
 	// The active theme is owned by +layout.svelte (which seeds it via loadTheme
@@ -38,6 +40,31 @@
 		// the gate.
 		window.location.href = '/admin';
 	}
+
+	// Unread-alert badge (20-04 / D-05). The count is owner-scoped + server-truth
+	// (the store's refreshUnread re-fetches; the NotificationInbox also refreshes it
+	// after a mark-read). We re-fetch on mount and on every route change (no
+	// websocket this phase — a load/route refresh is sufficient per the UI-SPEC).
+	// Only for authenticated members (the endpoint is RequireSession).
+	let count = $derived($unreadCount);
+	// Abbreviate past 9 (guild scale — the UI-SPEC `9+` cap, NOT a "99+").
+	let badgeText = $derived(count > 9 ? '9+' : String(count));
+	// The accessible name MUST include the count (the non-color SR signal, UI-SPEC).
+	let notifyLabel = $derived(count > 0 ? `Notifications, ${count} unread` : 'Notifications');
+
+	onMount(() => {
+		if (session?.authenticated) void refreshUnread();
+	});
+
+	// Re-fetch on navigation so the badge reflects reads done elsewhere.
+	let lastPath = $state('');
+	$effect(() => {
+		const path = $page.url?.pathname ?? '';
+		if (session?.authenticated && path !== lastPath) {
+			lastPath = path;
+			void refreshUnread();
+		}
+	});
 </script>
 
 <div class="site-shell">
@@ -61,6 +88,16 @@
 				     hidden-from-anon nav is UX; the server RequireSession gate is the real
 				     boundary (D-02/D-08). -->
 				<a href="/wantlist" class="char-meta-nav">Wantlist</a>
+				<!-- Notifications nav + unread-count badge (20-04 / D-05). The badge is
+				     the load-bearing "you missed something" signal (a CAN'T-DM alert
+				     otherwise rots silently). The accessible name carries the count
+				     (the non-color SR signal); no badge when zero (a "0" is noise). -->
+				<a href="/notifications" class="char-meta-nav notify-nav" aria-label={notifyLabel}>
+					Notifications
+					{#if count > 0}
+						<span class="unread-badge" aria-hidden="true">{badgeText}</span>
+					{/if}
+				</a>
 				<a href="/account" class="char-meta-nav">Account</a>
 				<a href="/char-meta" class="char-meta-nav">Character details</a>
 				<SessionIndicator {session} />
@@ -165,6 +202,30 @@
 	.char-meta-nav:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
+	}
+	/* The Notifications link hosts the unread badge at its top-right. */
+	.notify-nav {
+		position: relative;
+	}
+	/* Unread badge — a small accent-fill pill (accent bg, --bg text), tabular-nums,
+	   ~9px radius, xs inset (UI-SPEC § Nav Badge). The link, not the badge, carries
+	   the 44px hit target. The count is ALSO in the link's aria-label (the non-color
+	   signal), so the pill itself is aria-hidden. */
+	.unread-badge {
+		position: absolute;
+		top: 2px;
+		right: 0;
+		min-width: 18px;
+		padding: 0 4px; /* xs inset */
+		font-family: var(--font-display);
+		font-size: 13px;
+		font-weight: 600;
+		line-height: 18px;
+		font-variant-numeric: tabular-nums;
+		text-align: center;
+		color: var(--bg);
+		background: var(--accent);
+		border-radius: 9px;
 	}
 	.shell-main {
 		flex: 1;

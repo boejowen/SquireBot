@@ -17,7 +17,16 @@ import {
 	fetchOwnCodes,
 	mintOwnCode,
 	revokeOwnCode,
-	type OwnCode
+	fetchPrefs,
+	savePrefs,
+	fetchInbox,
+	fetchUnreadCount,
+	markRead,
+	markAllRead,
+	muteWant,
+	type OwnCode,
+	type NotifyPrefs,
+	type AlertLogRow
 } from '../api';
 
 /** Build a minimal Response-like stub for the injected fetchFn. */
@@ -189,5 +198,102 @@ describe('17-03 account-code wrappers', () => {
 	it('revokeOwnCode surfaces { revoked: false } as a resolved no-op (not a throw)', async () => {
 		const rec = recordingFetch({ revoked: false });
 		await expect(revokeOwnCode(99, rec.fetchFn)).resolves.toEqual({ revoked: false });
+	});
+});
+
+// --- 20-04 notifications wrappers ------------------------------------------
+// Pin the request shape of the six notification endpoints + muteWant: the right
+// URL/method/credentials and — load-bearing — that NO body carries an owner field
+// (D-02; the owner is session-derived server-side). This block is OWNED by Plan
+// 04; Plan 05 APPENDS its monitor-wrapper assertions in a later wave — do NOT
+// remove these.
+describe('20-04 notification wrappers', () => {
+	it('fetchPrefs GETs /api/v1/notifications/prefs credentialed and resolves the prefs', async () => {
+		const prefs: NotifyPrefs = { master: true, ec: true, wts: false, raid: true };
+		const rec = recordingFetch(prefs);
+		await expect(fetchPrefs(rec.fetchFn)).resolves.toEqual(prefs);
+		expect(rec.url()).toMatch(/\/api\/v1\/notifications\/prefs$/);
+		expect(rec.init()?.method).toBe('GET');
+		expect(rec.init()?.credentials).toBe('include');
+	});
+
+	it('savePrefs POSTs /api/v1/notifications/prefs with the four flags and NO owner (D-02)', async () => {
+		const body: NotifyPrefs = { master: true, ec: false, wts: true, raid: false };
+		const rec = recordingFetch(body);
+		await expect(savePrefs(body, rec.fetchFn)).resolves.toEqual(body);
+		expect(rec.url()).toMatch(/\/api\/v1\/notifications\/prefs$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		const sent = JSON.parse(rec.init()?.body as string);
+		expect(sent).toEqual({ master: true, ec: false, wts: true, raid: false });
+		// No owner/discord field ever rides the request (D-02).
+		expect(sent.owner).toBeUndefined();
+		expect(sent.discord).toBeUndefined();
+	});
+
+	it('fetchInbox GETs /api/v1/notifications/inbox and resolves the array', async () => {
+		const rows: AlertLogRow[] = [
+			{
+				id: 5,
+				source: 'ec',
+				item_id: 1234,
+				detail: 'Fungi Tunic — seen at EC-tunnel auction',
+				sent_at: 1_717_000_000,
+				send_status: 'dm_blocked',
+				read_at: null
+			}
+		];
+		const rec = recordingFetch(rows);
+		await expect(fetchInbox(rec.fetchFn)).resolves.toEqual(rows);
+		expect(rec.url()).toMatch(/\/api\/v1\/notifications\/inbox$/);
+		expect(rec.init()?.method).toBe('GET');
+		expect(rec.init()?.credentials).toBe('include');
+	});
+
+	it('fetchInbox returns [] for the empty inbox', async () => {
+		const rec = recordingFetch([]);
+		await expect(fetchInbox(rec.fetchFn)).resolves.toEqual([]);
+	});
+
+	it('fetchUnreadCount GETs /api/v1/notifications/unread-count → { count }', async () => {
+		const rec = recordingFetch({ count: 3 });
+		await expect(fetchUnreadCount(rec.fetchFn)).resolves.toEqual({ count: 3 });
+		expect(rec.url()).toMatch(/\/api\/v1\/notifications\/unread-count$/);
+		expect(rec.init()?.method).toBe('GET');
+		expect(rec.init()?.credentials).toBe('include');
+	});
+
+	it('markRead POSTs /api/v1/notifications/read with the {id} body only (D-02)', async () => {
+		const rec = recordingFetch({ read: true });
+		await expect(markRead(42, rec.fetchFn)).resolves.toEqual({ read: true });
+		expect(rec.url()).toMatch(/\/api\/v1\/notifications\/read$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		expect(JSON.parse(rec.init()?.body as string)).toEqual({ id: 42 });
+	});
+
+	it('markRead surfaces { read: false } as a resolved no-op (not a throw)', async () => {
+		const rec = recordingFetch({ read: false });
+		await expect(markRead(99, rec.fetchFn)).resolves.toEqual({ read: false });
+	});
+
+	it('markAllRead POSTs /api/v1/notifications/read-all with an EMPTY body (owner session-derived, D-02)', async () => {
+		const rec = recordingFetch({ count: 7 });
+		await expect(markAllRead(rec.fetchFn)).resolves.toEqual({ count: 7 });
+		expect(rec.url()).toMatch(/\/api\/v1\/notifications\/read-all$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		expect(JSON.parse(rec.init()?.body as string)).toEqual({});
+	});
+
+	it('muteWant POSTs /api/v1/wantlist/mute with {id, muted} and NO owner (D-02)', async () => {
+		const rec = recordingFetch({ muted: true });
+		await expect(muteWant(8, true, rec.fetchFn)).resolves.toEqual({ muted: true });
+		expect(rec.url()).toMatch(/\/api\/v1\/wantlist\/mute$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		const sent = JSON.parse(rec.init()?.body as string);
+		expect(sent).toEqual({ id: 8, muted: true });
+		expect(sent.owner).toBeUndefined();
 	});
 });

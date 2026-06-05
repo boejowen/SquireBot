@@ -26,7 +26,12 @@
 		// 19-03: the /wantlist page empty state — the caller has zero wants (a fresh
 		// account, or after removing the last). Copy is verbatim from the 19-UI-SPEC
 		// Copywriting Contract.
-		| 'no-wants';
+		| 'no-wants'
+		// 20-04: the /notifications inbox empty state — the caller has zero alert_log
+		// rows yet (a fresh account, or no monitor has matched a want). Copy is
+		// verbatim from the 20-UI-SPEC Copywriting Contract. The Preferences region
+		// stays visible above this block.
+		| 'no-notifications';
 </script>
 
 <script lang="ts">
@@ -116,6 +121,18 @@
 		<p class="state-body">
 			Search the catalog above to add what you're after — you'll see right away whether the guild
 			already has it.
+		</p>
+	</div>
+{:else if kind === 'no-notifications'}
+	<!-- NotificationInbox: the caller has zero alert rows yet (20-UI-SPEC
+	     Copywriting). Reuses the circle-alert glyph + the shared empty layout. The
+	     Preferences region stays visible above this block. -->
+	<div class="state state-empty">
+		<CircleAlert size={28} aria-hidden="true" class="state-icon" />
+		<h2 class="state-heading">No alerts yet</h2>
+		<p class="state-body">
+			You'll see your SquireBot alerts here once a monitor matches one of your wants. Make sure your
+			wantlist has the items you're after.
 		</p>
 	</div>
 {:else if kind === 'error'}

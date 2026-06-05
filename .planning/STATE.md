@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: — Wantlist + Discord Pinger
-status: planning
-last_updated: "2026-06-03T00:00:00.000Z"
-last_activity: 2026-06-03 -- Phase 24 (watcher test hardening, C1/C2/REFACTOR) executed + verified 10/10; Phase 19 still ready to plan
+status: executing
+last_updated: "2026-06-05T14:39:46.972Z"
+last_activity: 2026-06-05
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 6
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
+  percent: 100
 ---
 
 # State: SquireBot
@@ -23,16 +23,16 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** v2.2 — Wantlist + Discord Pinger (WANT-01..08): per-user wantlist + EC auction monitor + cross-server WTS/raid monitors, all DMing the guildie via Discord. Roadmap created; Phase 19 ready to plan.
+- **Current focus:** Phase 19 — wantlist-crud
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: 19 — Wantlist CRUD (ready to plan)
-Plan: —
-Status: Phase 24 (out-of-band quality/tech-debt) complete; Phase 19 ready to plan
-Last activity: 2026-06-03 -- Phase 24 "Watcher test hardening (C1/C2 coverage)" executed (2/2 plans, parallel worktrees) + verified 10/10 must-haves. C1 closed (5 spellbook behavior tests), C2 closed (5 walkRoot t.TempDir() tests on the Windows TU), REFACTOR closed (twin handlers → makeOnFileChange + handleIngestErr, no inventory behavior change). Code review: 0 BLOCKER / 3 WARNING (test-quality nits) / 4 INFO — advisory, not fixed. Full repo suite green. Phase 24 is orthogonal to the v2.2 wantlist track; Phase 19 remains the next feature work. Next: `/gsd-plan-phase 19`.
+Phase: 24
+Plan: Not started
+Status: Executing Phase 19
+Last activity: 2026-06-05
 
 Phase 24 prior activity: 2026-06-02 -- v2.2 roadmap created (continues phase numbering from 18; Phases 19–23). 8/8 WANT requirements mapped, no orphans (Track 1 unblocked: WANT-01/02 → P19, WANT-03/04/08 → P20, WANT-05 → P21; Track 2 invite-gated: WANT-06 → P22, WANT-07 → P23). ROADMAP.md appended (all prior-milestone history preserved); REQUIREMENTS.md Traceability filled. Next: `/gsd-plan-phase 19`.
 Progress: [..........] 0% — 0/5 phases planned
@@ -66,6 +66,7 @@ Phases continue from v2.1 (which ended at Phase 18). Phase dirs 11–18 exist on
 **Goal:** Guildies maintain a personal wantlist on squirebot.quest and get DMed on Discord when a wanted item appears — at EC-tunnel auction, in cross-server WTS channels, or as a raid-target tied to a wanted item's quest.
 
 **Locked decisions (v2.2 research):**
+
 - **Delivery/reading split** — DM delivery is UNBLOCKED (bot in the guild's own Discord reaches every guildie); only WTS/raid *reading* is invite-gated. Drives Track 1 (P19–21) vs Track 2 (P22–23).
 - **In-process bot goroutine, not a separate process** — avoids two SQLite writers; `recover()`-isolated + non-fatal start + `Restart=always`. Lib: `bwmarrin/discordgo` v0.29.0 (CGO-free, the only new dependency).
 - **EC = PigParse poll-and-diff** (~10-min cadence; no push feed) — live spike first (Phase 21's first task).

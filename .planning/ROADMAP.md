@@ -93,7 +93,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 
 **Track 1 — UNBLOCKED:**
 
-- [ ] **Phase 19: Wantlist CRUD** — per-user wantlist (website CRUD, item-ID-keyed, buy/quest reason, Discord-identity-tied, already-in-bank flag); the product surface, no Discord yet
+- [x] **Phase 19: Wantlist CRUD** — per-user wantlist (website CRUD, item-ID-keyed, buy/quest reason, Discord-identity-tied, already-in-bank flag); the product surface, no Discord yet (completed 2026-06-05)
 - [ ] **Phase 20: Bot + DM + Notification Infrastructure** — in-process discordgo gateway goroutine + `notify` DM sender + `wantmatch` + `alert_log` dedup/cooldown + opt-in/prefs + in-site notification inbox (50007 fallback) + per-monitor enable/disable + `guild_channel` config; the keystone spine all monitors ride
 - [ ] **Phase 21: EC-Tunnel Auction Monitor** — first real alert; PigParse poll-and-diff → wantmatch → DM, gated behind an upfront PigParse feasibility spike (confirm timestamps advance + coverage)
 
@@ -115,7 +115,10 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   2. A guildie can view their full wantlist on squirebot.quest and remove any entry; another guildie cannot see or mutate it (IDOR-safe, owner-scoped, audited — the `account.go` security shape).
   3. Each wantlist row shows an "already in the guild bank?" indicator joined from the existing consolidated bank/view data.
   4. The `00006_wantlist.sql` goose migration applies idempotently on the live DB, creating at least `wantlist_item` and `alert_log` without disturbing the existing schema.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [x] 19-01-PLAN.md — migration 00006 (wantlist_item + alert_log + dedupe indexes) + owner-scoped store CRUD + D-10 catalog search store
+  - [x] 19-02-PLAN.md — webadmin add/list/remove handlers (IDOR-safe, audited, validated) + readapi item-search handler + 4 RequireSession routes
+  - [x] 19-03-PLAN.md — SvelteKit /wantlist page (catalog-search add form, deep in-bank holder display, remove) + api/columns/StateBlock/nav + browser-smoke
 **UI hint**: yes
 
 ### Phase 20: Bot + DM + Notification Infrastructure
@@ -203,7 +206,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 16. Cutover + Decommission | v2.0 | 4/4 | ✅ Complete (Google decommissioned; guild migrating) | 2026-05-31 |
 | 17. Self-Service Watcher Linking | v2.1 | 3/3 | ✅ Complete (deployed live; browser-smoke approved; 15/15 verified) | 2026-06-02 |
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 1/1 | ✅ Complete (verify-or-close; zero new code; 0.4.0-rc1 = Azure test VM, not production) | 2026-06-02 |
-| 19. Wantlist CRUD | v2.2 | 0/TBD | Not started (ready to plan) | — |
+| 19. Wantlist CRUD | v2.2 | 3/3 | Complete    | 2026-06-05 |
 | 20. Bot + DM + Notification Infrastructure | v2.2 | 0/TBD | Not started | — |
 | 21. EC-Tunnel Auction Monitor | v2.2 | 0/TBD | Not started | — |
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |

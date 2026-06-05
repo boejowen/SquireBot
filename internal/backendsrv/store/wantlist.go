@@ -57,6 +57,7 @@ type WantlistRow struct {
 	Priority  string  `json:"priority"`
 	Note      *string `json:"note"`
 	CreatedAt int64   `json:"created_at"`
+	Muted     bool    `json:"muted"` // D-09 per-want mute; the mute-bell rendered state reads this
 }
 
 // AddWantTx inserts a new wantlist_item for the caller (discordID, resolved from the
@@ -95,7 +96,7 @@ func AddWantTx(ctx context.Context, tx *sql.Tx, discordID string, itemID *int64,
 // sql.Null* and converted to pointers (NULL ⇒ JSON null).
 func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]WantlistRow, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, item_id, item_name, reason, priority, note, created_at
+		`SELECT id, item_id, item_name, reason, priority, note, created_at, muted
 		   FROM wantlist_item
 		  WHERE discord_user_id = ? AND active = 1
 		  ORDER BY created_at DESC`, discordID)
@@ -110,8 +111,9 @@ func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]Wantlist
 			r      WantlistRow
 			itemID sql.NullInt64
 			note   sql.NullString
+			muted  int
 		)
-		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Reason, &r.Priority, &note, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Reason, &r.Priority, &note, &r.CreatedAt, &muted); err != nil {
 			return nil, fmt.Errorf("scan own-want row (user=%s): %w", discordID, err)
 		}
 		if itemID.Valid {
@@ -122,6 +124,7 @@ func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]Wantlist
 			v := note.String
 			r.Note = &v
 		}
+		r.Muted = muted != 0 // INTEGER 0/1 → bool (the mute-bell read path, D-09)
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -152,4 +155,36 @@ func RemoveOwnWantTx(ctx context.Context, tx *sql.Tx, wantID int64, discordID st
 		return false, fmt.Errorf("remove own want rows-affected (id=%d): %w", wantID, err)
 	}
 	return n > 0, nil
+}
+
+// SetMutedTx toggles a single want's mute flag (D-09 "stop pinging me about THIS
+// item"), OWNER-SCOPED to the caller — line-for-line the RemoveOwnWantTx IDOR
+// guard. The UPDATE matches id AND discord_user_id AND active = 1, so:
+//   - muting/unmuting the caller's own active want → RowsAffected=1 → (true, nil);
+//   - a want owned by a DIFFERENT member → RowsAffected=0 → (false, nil): a silent
+//     no-op that never leaks the want's existence;
+//   - an already-removed (active=0) own want → RowsAffected=0 → (false, nil).
+//
+// muted is stored as INTEGER 0/1. discordID MUST be resolved from the session
+// upstream, never the body (D-02 / Pitfall 3).
+func SetMutedTx(ctx context.Context, tx *sql.Tx, wantID int64, discordID string, muted bool) (bool, error) {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE wantlist_item SET muted = ? WHERE id = ? AND discord_user_id = ? AND active = 1`,
+		boolToInt(muted), wantID, discordID)
+	if err != nil {
+		return false, fmt.Errorf("set muted (id=%d): %w", wantID, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("set muted rows-affected (id=%d): %w", wantID, err)
+	}
+	return n > 0, nil
+}
+
+// boolToInt converts a bool to the INTEGER 0/1 the muted column uses.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

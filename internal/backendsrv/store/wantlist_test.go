@@ -199,6 +199,88 @@ func TestAddWantTx_DuplicateReturnsTypedSentinel(t *testing.T) {
 	}
 }
 
+func TestListOwnWants_ReturnsMutedDefaultFalse(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	insertWebUser(t, ctx, db, "disc-1", "Alice")
+
+	itemID := int64(99)
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, 1)
+		return e
+	}); err != nil {
+		t.Fatalf("seed want: %v", err)
+	}
+
+	// A fresh want defaults muted=false (the migration DEFAULT 0; mute-bell off).
+	got := listWants(t, ctx, db, "disc-1")
+	if len(got) != 1 {
+		t.Fatalf("ListOwnWants len = %d, want 1", len(got))
+	}
+	if got[0].Muted {
+		t.Errorf("fresh want Muted = true, want false (DEFAULT 0)")
+	}
+}
+
+func TestSetMutedTx_OwnerScopedAndReflectedInList(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	insertWebUser(t, ctx, db, "disc-1", "Alice")
+	insertWebUser(t, ctx, db, "disc-2", "Bob")
+
+	itemID := int64(99)
+	var wantID int64
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, 1)
+		return e
+	}); err != nil {
+		t.Fatalf("seed want: %v", err)
+	}
+
+	// Bob tries to mute Alice's want → IDOR-safe silent no-op (false, nil).
+	var ok bool
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		ok, e = SetMutedTx(ctx, tx, wantID, "disc-2", true)
+		return e
+	}); err != nil {
+		t.Fatalf("cross-owner SetMutedTx errored: %v (want silent no-op)", err)
+	}
+	if ok {
+		t.Fatalf("cross-owner SetMutedTx = true, want false (IDOR no-op)")
+	}
+	if listWants(t, ctx, db, "disc-1")[0].Muted {
+		t.Fatalf("after cross-owner no-op, Alice's want Muted = true, want false (untouched)")
+	}
+
+	// Alice mutes her own want → (true, nil), and ListOwnWants reflects it.
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		ok, e = SetMutedTx(ctx, tx, wantID, "disc-1", true)
+		return e
+	}); err != nil {
+		t.Fatalf("SetMutedTx own: %v", err)
+	}
+	if !ok {
+		t.Fatalf("SetMutedTx own want = false, want true")
+	}
+	if !listWants(t, ctx, db, "disc-1")[0].Muted {
+		t.Fatalf("after own mute, ListOwnWants Muted = false, want true (BLOCKER-3 read path)")
+	}
+
+	// Un-mute round-trips back to false.
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, e := SetMutedTx(ctx, tx, wantID, "disc-1", false)
+		return e
+	}); err != nil {
+		t.Fatalf("SetMutedTx unmute: %v", err)
+	}
+	if listWants(t, ctx, db, "disc-1")[0].Muted {
+		t.Errorf("after unmute, ListOwnWants Muted = true, want false")
+	}
+}
+
 func TestAddWantTx_CustomDuplicateReturnsTypedSentinel(t *testing.T) {
 	db := NewTestDB(t)
 	ctx := context.Background()

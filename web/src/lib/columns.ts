@@ -39,6 +39,7 @@ import ReasonCell from '$lib/components/cells/ReasonCell.svelte';
 import WantItemCell from '$lib/components/cells/WantItemCell.svelte';
 import InGuildCell from '$lib/components/cells/InGuildCell.svelte';
 import WantRemoveCell from '$lib/components/cells/WantRemoveCell.svelte';
+import WantMuteCell from '$lib/components/cells/WantMuteCell.svelte';
 
 /** Per-column metadata the DataGrid reads to choose a filter control. */
 export interface ColumnFilterMeta {
@@ -197,7 +198,9 @@ function prioritySort(a: Row<WantlistRow>, b: Row<WantlistRow>): number {
 export function wantlistColumns(
 	holdersOf: (row: WantlistRow) => Holder[],
 	onRemove: (row: WantlistRow) => void,
-	removeBusy = false
+	removeBusy = false,
+	onMute: (row: WantlistRow) => void = () => {},
+	muteBusy = false
 ): ColumnDef<WantlistRow, unknown>[] {
 	return [
 		{
@@ -248,6 +251,18 @@ export function wantlistColumns(
 			header: 'Note',
 			enableSorting: false,
 			cell: (ctx) => ctx.row.original.note ?? ''
+		},
+		{
+			// The per-row mute bell (D-09). A trailing "Alerts" column just before
+			// Remove so it reads as a per-row setting, not a primary action. No sort,
+			// no filter — it's a control, not data.
+			id: 'mute',
+			header: 'Alerts',
+			enableSorting: false,
+			enableColumnFilter: false,
+			enableGlobalFilter: false,
+			cell: (ctx) =>
+				renderComponent(WantMuteCell, { row: ctx.row.original, onMute, busy: muteBusy })
 		},
 		{
 			id: 'remove',

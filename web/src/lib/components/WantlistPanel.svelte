@@ -27,6 +27,7 @@
 		fetchOwnWants,
 		fetchView,
 		removeWant,
+		muteWant,
 		classifyAdminError,
 		Unauthenticated,
 		type WantlistRow,
@@ -50,6 +51,11 @@
 	let removeSuccessMsg = $state('');
 	let removeErrorMsg = $state('');
 
+	// Mute (per-want bell) state — mirrors onRemove/removeBusy but NON-destructive
+	// (D-09 → no ConfirmDialog; a mute is reversible in one click).
+	let muteBusy = $state(false);
+	let muteAnnounce = $state('');
+
 	// Run the reduce-by-char-and-SUM join ONCE per distinct item_id (review MUST-FIX
 	// 1) into a memo keyed on item_id, rebuilt when the inventory payload changes.
 	// The grid's in-guild cell reads its summed holders from here (one holdersFor
@@ -69,7 +75,9 @@
 
 	// The grid columns close over the in-guild holder lookup + the remove opener;
 	// rebuilt reactively when viewRows / removing changes (server-truth).
-	let columns = $derived(wantlistColumns(holdersByItem, openRemoveConfirm, removing));
+	let columns = $derived(
+		wantlistColumns(holdersByItem, openRemoveConfirm, removing, onMute, muteBusy)
+	);
 	const defaultSorting = [
 		{ id: 'priority', desc: true },
 		{ id: 'in_guild', desc: false }
@@ -136,6 +144,38 @@
 	}
 
 	/**
+	 * Toggle a single want's mute flag (D-09). Mirrors doRemove's load→mutate→
+	 * server-truth-reload (NEVER optimistic — the grid stays authoritative): flip
+	 * via muteWant(id, !muted), then re-fetch the wants so the bell reads the server.
+	 * A custom want never reaches here (its cell is disabled). Non-destructive, so no
+	 * ConfirmDialog.
+	 */
+	async function onMute(want: WantlistRow) {
+		if (muteBusy) return;
+		muteBusy = true;
+		muteAnnounce = '';
+		const next = !want.muted;
+		try {
+			await muteWant(want.id, next);
+			// Server-truth reload so the bell reflects the persisted state, not the flip.
+			wants = await fetchOwnWants();
+			muteAnnounce = next
+				? `Muted alerts for ${want.item_name}.`
+				: `Unmuted alerts for ${want.item_name}.`;
+		} catch (err) {
+			if (route(err)) return;
+			// A reload/write failure is non-fatal — re-read to reconcile the bell.
+			try {
+				wants = await fetchOwnWants();
+			} catch {
+				/* leave the prior rows; the next load() reconciles */
+			}
+		} finally {
+			muteBusy = false;
+		}
+	}
+
+	/**
 	 * Route a caught error by its server-truth verdict (the WatcherCodesPanel
 	 * pattern). Returns true when handled as a re-route (a bubbled 401 → AuthGate →
 	 * LoginScreen) so the caller stops; false for a generic error rendered inline.
@@ -177,6 +217,9 @@
 		{/if}
 		{#if removeErrorMsg}
 			<p class="result error" aria-live="polite">{removeErrorMsg}</p>
+		{/if}
+		{#if muteAnnounce}
+			<p class="result success" aria-live="polite">{muteAnnounce}</p>
 		{/if}
 
 		{#if wants.length === 0}

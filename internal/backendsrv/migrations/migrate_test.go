@@ -390,3 +390,110 @@ func TestMigrate_00006_AddsWantlist(t *testing.T) {
 		t.Fatalf("second RunMigrations after 00006 should be a no-op, got error: %v", err)
 	}
 }
+
+// notifyTables are the three NEW tables 00007 creates (Phase 20 plan 20-01,
+// WANT-03/04/08): the per-user opt-in prefs (default-ON D-01), the officer-
+// registered source channels (D-07/D-08), and the three guild-wide kill-switch
+// flags (D-07, EC ships ON / WTS+raid ship dark).
+var notifyTables = []string{"notify_prefs", "guild_channel", "monitor_flag"}
+
+// TestMigrate_00007_AddsNotify proves the Phase 20 forward-only migration 00007
+// applied on a fresh DB (NewTestDB runs goose.Up over ALL seven migrations):
+//   - notify_prefs + guild_channel + monitor_flag exist;
+//   - alert_log gained read_at and wantlist_item gained muted (columnSet);
+//   - alert_log was rebuilt with a NULLABLE wantlist_item_id — a NULL-FK insert
+//     succeeds (the D-10 test-alert identity, BLOCKER-1);
+//   - a notify_prefs row inserted with only discord_user_id reads master/ec/wts/
+//     raid all = 1 (DEFAULT 1, D-01);
+//   - monitor_flag is seeded with exactly three rows: ec_auction=1, wts=0,
+//     raid_target=0 (D-07 ships-dark);
+//   - the guild_channel/monitor CHECK rejects a bogus monitor and accepts a valid
+//     one; and a second Up is a clean no-op.
+func TestMigrate_00007_AddsNotify(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00007) + t.Cleanup
+
+	for _, tbl := range notifyTables {
+		if !tableExists(t, db, tbl) {
+			t.Errorf("expected table %q to exist after 00007, but it does not", tbl)
+		}
+	}
+
+	alertCols := columnSet(t, db, "alert_log")
+	if !alertCols["read_at"] {
+		t.Errorf("expected alert_log to have column %q after 00007 (have: %v)", "read_at", alertCols)
+	}
+	wantCols := columnSet(t, db, "wantlist_item")
+	if !wantCols["muted"] {
+		t.Errorf("expected wantlist_item to have column %q after 00007 (have: %v)", "muted", wantCols)
+	}
+
+	// Seed a web_user so any discord_user_id-bearing inserts have an FK target.
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-np", "NotifyProbe"); err != nil {
+		t.Fatalf("seed web_user: %v", err)
+	}
+
+	// BLOCKER-1: alert_log.wantlist_item_id is NULLABLE after the rebuild — a row
+	// with wantlist_item_id=NULL inserts cleanly (the D-10 test-alert path, which
+	// has no wantlist_item). Under 00006's NOT NULL this would have FK/NOT-NULL
+	// failed; the rebuild is the fix.
+	if _, err := db.Exec(
+		`INSERT INTO alert_log (wantlist_item_id, discord_user_id, source, sent_at, send_status)
+		 VALUES (NULL, ?, 'test', 0, 'sent')`, "disc-np"); err != nil {
+		t.Errorf("expected a NULL wantlist_item_id alert_log insert (test-alert) to succeed, got: %v", err)
+	}
+
+	// notify_prefs DEFAULT 1 (D-01): a row inserted with only discord_user_id reads
+	// master/ec/wts/raid all = 1 (absent-row default-ON semantics in the DDL).
+	if _, err := db.Exec(`INSERT INTO notify_prefs (discord_user_id) VALUES (?)`, "disc-np"); err != nil {
+		t.Fatalf("insert notify_prefs default row: %v", err)
+	}
+	var master, ec, wts, raid int
+	if err := db.QueryRow(
+		`SELECT master, ec, wts, raid FROM notify_prefs WHERE discord_user_id = ?`, "disc-np",
+	).Scan(&master, &ec, &wts, &raid); err != nil {
+		t.Fatalf("read notify_prefs defaults: %v", err)
+	}
+	if master != 1 || ec != 1 || wts != 1 || raid != 1 {
+		t.Errorf("notify_prefs defaults = master=%d ec=%d wts=%d raid=%d, want all 1 (D-01)", master, ec, wts, raid)
+	}
+
+	// monitor_flag is seeded with exactly three rows: EC=1, wts=0, raid=0 (D-07).
+	var flagCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM monitor_flag`).Scan(&flagCount); err != nil {
+		t.Fatalf("counting monitor_flag rows failed: %v", err)
+	}
+	if flagCount != 3 {
+		t.Errorf("expected exactly 3 seeded monitor_flag rows, got %d", flagCount)
+	}
+	wantFlags := map[string]int{"ec_auction": 1, "wts": 0, "raid_target": 0}
+	for monitor, want := range wantFlags {
+		var got int
+		if err := db.QueryRow(`SELECT enabled FROM monitor_flag WHERE monitor = ?`, monitor).Scan(&got); err != nil {
+			t.Fatalf("read monitor_flag %q: %v", monitor, err)
+		}
+		if got != want {
+			t.Errorf("monitor_flag[%q].enabled = %d, want %d (D-07 ships-dark seed)", monitor, got, want)
+		}
+	}
+
+	// The guild_channel monitor CHECK bites: a bogus monitor must be rejected.
+	if _, err := db.Exec(
+		`INSERT INTO guild_channel (channel_id, label, monitor, created_at)
+		 VALUES ('111', 'Server A', 'bogus', 0)`); err == nil {
+		t.Errorf("expected monitor='bogus' guild_channel insert to fail the CHECK constraint, but it succeeded")
+	}
+	// A valid monitor inserts fine.
+	if _, err := db.Exec(
+		`INSERT INTO guild_channel (channel_id, label, monitor, created_at)
+		 VALUES ('111', 'Server A', 'ec_auction', 0)`); err != nil {
+		t.Errorf("expected a valid monitor='ec_auction' guild_channel insert to succeed, got: %v", err)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00007 DB
+	// returns nil (goose records applied versions).
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00007 should be a no-op, got error: %v", err)
+	}
+}

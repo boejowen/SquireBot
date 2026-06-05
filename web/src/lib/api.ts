@@ -581,6 +581,12 @@ export interface WantlistRow {
 	priority: 'low' | 'med' | 'high';
 	note: string | null;
 	created_at: number;
+	/**
+	 * D-09 per-want mute state. The backend ListOwnWants (Plan 01 — BLOCKER-3 closed)
+	 * returns `muted` on every row, so this is a DETERMINISTIC interface field (not a
+	 * conditional "add if missing"); WantMuteCell reads it to choose the bell glyph.
+	 */
+	muted: boolean;
 }
 
 /** A catalog match from the PigParse-getall corpus (GET /api/v1/items/search). */
@@ -696,4 +702,107 @@ export function muteWant(
 	f: typeof fetch = fetch
 ): Promise<{ muted: boolean }> {
 	return postJSON<{ muted: boolean }>('/api/v1/wantlist/mute', { id, muted }, f);
+}
+
+// --- Monitors (20-05 / WANT-08) --------------------------------------------
+// The officer-only monitor-control wrappers backing the /admin Monitors section
+// (the three guild-wide kill-switches + the registered source-channel CRUD + the
+// D-10 "send me a test alert" bot-pulse). ALL cookie-credentialed via the shared
+// getJSON/postJSON cores; errors are routed by the CALLER through classifyAdminError
+// (a 403 not_authorized collapses the admin UI to the officers-only refusal — the
+// same server-truth contract the eviction/officer forms use). This block is
+// APPENDED below Plan 04's Notifications block — it does NOT modify or reorder it.
+//
+// JSON contracts (Plan 03 / webadmin/monitors.go, confirmed against the Go source):
+//   GET  /api/v1/admin/monitors                → { flags: {ec,wts,raid}, channels: GuildChannel[] }
+//   POST /api/v1/admin/monitors/flag           ← { monitor, enabled } → { monitor, enabled }
+//   POST /api/v1/admin/monitors/channel        ← { label, channel_id, monitor } → { added, channel_id, monitor }
+//                                                 (409 {"error":"duplicate"} on a dup channel+monitor)
+//   POST /api/v1/admin/monitors/channel/remove ← { channel_id, monitor } → { removed }
+//   POST /api/v1/admin/monitors/test           ← {} → { status:"sent" } | { error:"dm_blocked" } | (5xx)
+// where monitor ∈ 'ec_auction' | 'wts' | 'raid_target'.
+
+/** A guild-wide monitor name (the kill-switch + guild_channel.monitor enum). */
+export type MonitorName = 'ec_auction' | 'wts' | 'raid_target';
+
+/** One officer-registered source channel (the channels[] element of the monitors GET). */
+export interface GuildChannel {
+	id: number;
+	channel_id: string;
+	label: string;
+	monitor: MonitorName;
+	enabled: boolean;
+	created_at: number;
+}
+
+/** The three guild-wide kill-switch flags (EC ships ON; WTS/raid ship dark). */
+export interface MonitorFlags {
+	ec: boolean;
+	wts: boolean;
+	raid: boolean;
+}
+
+/** The `GET /api/v1/admin/monitors` reply: the flags + the registered channels. */
+export interface MonitorState {
+	flags: MonitorFlags;
+	channels: GuildChannel[];
+}
+
+/** GET /api/v1/admin/monitors → { flags, channels }. Officer-only. */
+export function fetchMonitors(f: typeof fetch = fetch): Promise<MonitorState> {
+	return getJSON<MonitorState>('/api/v1/admin/monitors', f);
+}
+
+/** POST /api/v1/admin/monitors/flag → { monitor, enabled }. Officer-only; toggles one guild-wide kill-switch. */
+export function setMonitorFlag(
+	monitor: string,
+	enabled: boolean,
+	f: typeof fetch = fetch
+): Promise<{ monitor: string; enabled: boolean }> {
+	return postJSON<{ monitor: string; enabled: boolean }>(
+		'/api/v1/admin/monitors/flag',
+		{ monitor, enabled },
+		f
+	);
+}
+
+/**
+ * POST /api/v1/admin/monitors/channel → { added, channel_id, monitor }. Officer-only;
+ * registers a guild_channel row. The body carries NO owner (guild-wide). A duplicate
+ * (channel_id, monitor) surfaces as a 409 Forbidden/ApiError with .code='duplicate'.
+ */
+export function addGuildChannel(
+	body: { label: string; channel_id: string; monitor: string },
+	f: typeof fetch = fetch
+): Promise<{ added: boolean; channel_id: string; monitor: string }> {
+	return postJSON<{ added: boolean; channel_id: string; monitor: string }>(
+		'/api/v1/admin/monitors/channel',
+		body,
+		f
+	);
+}
+
+/** POST /api/v1/admin/monitors/channel/remove → { removed }. Officer-only; body {channel_id, monitor}. */
+export function removeGuildChannel(
+	channel_id: string,
+	monitor: string,
+	f: typeof fetch = fetch
+): Promise<{ removed: boolean }> {
+	return postJSON<{ removed: boolean }>(
+		'/api/v1/admin/monitors/channel/remove',
+		{ channel_id, monitor },
+		f
+	);
+}
+
+/**
+ * POST /api/v1/admin/monitors/test → { status:"sent" } | { error:"dm_blocked" } | (5xx). Officer-only.
+ * The D-10 bot-pulse: DMs the CALLING officer + logs to their inbox. Body is {} — the
+ * target is always the caller, never another user (T-20-22). A bot-down surfaces as a
+ * 5xx ApiError the caller maps to the bot_unavailable feedback line.
+ */
+export function sendTestAlert(
+	f: typeof fetch = fetch
+): Promise<{ status?: string; error?: string }> {
+	return postJSON<{ status?: string; error?: string }>('/api/v1/admin/monitors/test', {}, f);
 }

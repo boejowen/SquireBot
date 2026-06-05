@@ -24,9 +24,15 @@ import {
 	markRead,
 	markAllRead,
 	muteWant,
+	fetchMonitors,
+	setMonitorFlag,
+	addGuildChannel,
+	removeGuildChannel,
+	sendTestAlert,
 	type OwnCode,
 	type NotifyPrefs,
-	type AlertLogRow
+	type AlertLogRow,
+	type MonitorState
 } from '../api';
 
 /** Build a minimal Response-like stub for the injected fetchFn. */
@@ -295,5 +301,85 @@ describe('20-04 notification wrappers', () => {
 		const sent = JSON.parse(rec.init()?.body as string);
 		expect(sent).toEqual({ id: 8, muted: true });
 		expect(sent.owner).toBeUndefined();
+	});
+});
+
+// --- 20-05 officer monitor wrappers ----------------------------------------
+// Pin the request shape of the five officer monitor endpoints: the right
+// URL/method/credentials and — load-bearing — that NO body carries an owner
+// (D-02; the registration is guild-wide, officer-gated). Appended below the
+// Plan-04 notify block (which must survive untouched — see api.ts BLOCKER-2).
+describe('20-05 officer monitor wrappers', () => {
+	it('fetchMonitors GETs /api/v1/admin/monitors credentialed and resolves { flags, channels }', async () => {
+		const state: MonitorState = {
+			flags: { ec: true, wts: false, raid: false },
+			channels: [
+				{
+					id: 1,
+					channel_id: '123456789012345678',
+					label: 'Raid Alliance — Red',
+					monitor: 'wts',
+					enabled: true,
+					created_at: 1_717_000_000
+				}
+			]
+		};
+		const rec = recordingFetch(state);
+		await expect(fetchMonitors(rec.fetchFn)).resolves.toEqual(state);
+		expect(rec.url()).toMatch(/\/api\/v1\/admin\/monitors$/);
+		expect(rec.init()?.method).toBe('GET');
+		expect(rec.init()?.credentials).toBe('include');
+	});
+
+	it('setMonitorFlag POSTs /api/v1/admin/monitors/flag with {monitor, enabled} and NO owner', async () => {
+		const rec = recordingFetch({ monitor: 'wts', enabled: true });
+		await expect(setMonitorFlag('wts', true, rec.fetchFn)).resolves.toEqual({
+			monitor: 'wts',
+			enabled: true
+		});
+		expect(rec.url()).toMatch(/\/api\/v1\/admin\/monitors\/flag$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		const sent = JSON.parse(rec.init()?.body as string);
+		expect(sent).toEqual({ monitor: 'wts', enabled: true });
+		expect(sent.owner).toBeUndefined();
+	});
+
+	it('addGuildChannel POSTs /api/v1/admin/monitors/channel with {label, channel_id, monitor}', async () => {
+		const rec = recordingFetch({ added: true, channel_id: '999', monitor: 'wts' });
+		await expect(
+			addGuildChannel({ label: 'Red', channel_id: '999', monitor: 'wts' }, rec.fetchFn)
+		).resolves.toEqual({ added: true, channel_id: '999', monitor: 'wts' });
+		expect(rec.url()).toMatch(/\/api\/v1\/admin\/monitors\/channel$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		const sent = JSON.parse(rec.init()?.body as string);
+		expect(sent).toEqual({ label: 'Red', channel_id: '999', monitor: 'wts' });
+		expect(sent.owner).toBeUndefined();
+	});
+
+	it('removeGuildChannel POSTs /api/v1/admin/monitors/channel/remove with {channel_id, monitor}', async () => {
+		const rec = recordingFetch({ removed: true });
+		await expect(removeGuildChannel('999', 'wts', rec.fetchFn)).resolves.toEqual({
+			removed: true
+		});
+		expect(rec.url()).toMatch(/\/api\/v1\/admin\/monitors\/channel\/remove$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		expect(JSON.parse(rec.init()?.body as string)).toEqual({ channel_id: '999', monitor: 'wts' });
+	});
+
+	it('sendTestAlert POSTs /api/v1/admin/monitors/test with an EMPTY body (self-targets the caller, T-20-22)', async () => {
+		const rec = recordingFetch({ status: 'sent' });
+		await expect(sendTestAlert(rec.fetchFn)).resolves.toEqual({ status: 'sent' });
+		expect(rec.url()).toMatch(/\/api\/v1\/admin\/monitors\/test$/);
+		expect(rec.init()?.method).toBe('POST');
+		expect(rec.init()?.credentials).toBe('include');
+		expect(JSON.parse(rec.init()?.body as string)).toEqual({});
+	});
+
+	it('sendTestAlert surfaces { error: "dm_blocked" } as a resolved value (the 50007 path is a 200)', async () => {
+		const rec = recordingFetch({ error: 'dm_blocked' });
+		await expect(sendTestAlert(rec.fetchFn)).resolves.toEqual({ error: 'dm_blocked' });
 	});
 });

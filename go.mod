@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	fyne.io/systray v1.10.0
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/danieljoos/wincred v1.2.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/minio/selfupdate v0.6.0
@@ -22,6 +23,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

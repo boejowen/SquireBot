@@ -94,7 +94,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 **Track 1 — UNBLOCKED:**
 
 - [x] **Phase 19: Wantlist CRUD** — per-user wantlist (website CRUD, item-ID-keyed, buy/quest reason, Discord-identity-tied, already-in-bank flag); the product surface, no Discord yet (completed 2026-06-05)
-- [ ] **Phase 20: Bot + DM + Notification Infrastructure** — in-process discordgo gateway goroutine + `notify` DM sender + `wantmatch` + `alert_log` dedup/cooldown + opt-in/prefs + in-site notification inbox (50007 fallback) + per-monitor enable/disable + `guild_channel` config; the keystone spine all monitors ride
+- [x] **Phase 20: Bot + DM + Notification Infrastructure** — in-process discordgo gateway goroutine + `notify` DM sender + `wantmatch` + `alert_log` dedup/cooldown + opt-in/prefs + in-site notification inbox (50007 fallback) + per-monitor enable/disable + `guild_channel` config; the keystone spine all monitors ride (completed 2026-06-05)
 - [ ] **Phase 21: EC-Tunnel Auction Monitor** — first real alert; PigParse poll-and-diff → wantmatch → DM, gated behind an upfront PigParse feasibility spike (confirm timestamps advance + coverage)
 
 **Track 2 — INVITE-GATED (entry-precondition: the 3 Raid Alliance bot invites confirmed in writing + `MESSAGE_CONTENT` enabled):**
@@ -133,11 +133,11 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   4. An officer can enable/disable each monitor and register source channels per server (feature flags + `guild_channel` rows), so Track-1 features ship with the invite-gated monitors dark and flip on as invites arrive — no rebuild.
   5. `wantmatch` (the single shared matcher, `ForItem` + `ForName`) is exercised end-to-end via a manual/test trigger that DMs a real guildie, proving the spine all three monitors will ride.
 **Plans**: 5 plans
-  - [ ] 20-01-PLAN.md — migration 00007 (notify_prefs + monitor_flag + guild_channel + alert_log.read_at + wantlist_item.muted) + owner/officer-scoped store layer (WANT-03/04/08)
-  - [ ] 20-02-PLAN.md — discordgo bot package (recover-isolated, non-fatal, env config) + notify (DM + 50007→dm_blocked + dedup/cooldown + two-gate) + wantmatch seam (WANT-03/04)
-  - [ ] 20-03-PLAN.md — notifications + monitors handlers + per-want mute + runServe bot wiring + 12 routes + deploy-doc token + Discord-setup checkpoint (WANT-03/04/08)
-  - [ ] 20-04-PLAN.md — /notifications page (prefs + inbox), Toggle primitive, unread nav badge, api.ts wrappers + browser-smoke (WANT-04)
-  - [ ] 20-05-PLAN.md — /admin Monitors section (kill-switches + add-channel + test-alert) + /wantlist mute bell + browser-smoke (WANT-08/03)
+  - [x] 20-01-PLAN.md — migration 00007 (notify_prefs + monitor_flag + guild_channel + alert_log.read_at + wantlist_item.muted) + owner/officer-scoped store layer (WANT-03/04/08)
+  - [x] 20-02-PLAN.md — discordgo bot package (recover-isolated, non-fatal, env config) + notify (DM + 50007→dm_blocked + dedup/cooldown + two-gate) + wantmatch seam (WANT-03/04)
+  - [x] 20-03-PLAN.md — notifications + monitors handlers + per-want mute + runServe bot wiring + 12 routes + deploy-doc token + Discord-setup checkpoint (WANT-03/04/08)
+  - [x] 20-04-PLAN.md — /notifications page (prefs + inbox), Toggle primitive, unread nav badge, api.ts wrappers + browser-smoke (WANT-04)
+  - [x] 20-05-PLAN.md — /admin Monitors section (kill-switches + add-channel + test-alert) + /wantlist mute bell + browser-smoke (WANT-08/03)
 
 ### Phase 21: EC-Tunnel Auction Monitor
 **Goal**: The first real end-to-end alert ships — when a wanted item is auctioned in the EC tunnel, the wantlister gets a DM (price + WTS/WTB; seller best-effort), all on the guild's own Discord.
@@ -212,7 +212,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 17. Self-Service Watcher Linking | v2.1 | 3/3 | ✅ Complete (deployed live; browser-smoke approved; 15/15 verified) | 2026-06-02 |
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 1/1 | ✅ Complete (verify-or-close; zero new code; 0.4.0-rc1 = Azure test VM, not production) | 2026-06-02 |
 | 19. Wantlist CRUD | v2.2 | 3/3 | Complete    | 2026-06-05 |
-| 20. Bot + DM + Notification Infrastructure | v2.2 | 0/TBD | Not started | — |
+| 20. Bot + DM + Notification Infrastructure | v2.2 | 5/5 | Complete    | 2026-06-05 |
 | 21. EC-Tunnel Auction Monitor | v2.2 | 0/TBD | Not started | — |
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |

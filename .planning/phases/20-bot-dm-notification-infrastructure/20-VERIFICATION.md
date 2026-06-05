@@ -1,8 +1,9 @@
 ---
 phase: 20-bot-dm-notification-infrastructure
 verified: 2026-06-05T16:40:00Z
-status: human_needed
-score: 5/5 must-haves verified (code); 2 deploy-time UATs pending
+status: passed
+score: 5/5 must-haves verified (code); 2/2 deploy-time UATs PASSED live 2026-06-05
+deploy_uat_result: "PASSED 2026-06-05 — Phase-20 backend deployed (schema v7, bot connected guild=1483502186351562925); 'Send me a test alert' delivered a real Discord DM + a DELIVERED /notifications inbox row (WANT-03 SC#5 keystone proof); the frontend UI smoke (/notifications prefs+inbox, /admin Monitors, /wantlist mute bell + 1 active want surviving the migration) confirmed working. The two earlier-flagged smoke concerns (missing test-alert feedback, 'lost' wants) were both working-as-designed — friendly bot-offline copy + correctly soft-deleted wants from the P19 smoke."
 overrides_applied: 0
 re_verification:
   previous_status: none

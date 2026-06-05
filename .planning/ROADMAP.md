@@ -132,7 +132,12 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   3. A guildie can opt in/out of alerts and set notification preferences; repeat matches for the same `(wantlist_item, source, item)` are suppressed within a tunable per-source cooldown window; every alert attempt is recorded in `alert_log`.
   4. An officer can enable/disable each monitor and register source channels per server (feature flags + `guild_channel` rows), so Track-1 features ship with the invite-gated monitors dark and flip on as invites arrive — no rebuild.
   5. `wantmatch` (the single shared matcher, `ForItem` + `ForName`) is exercised end-to-end via a manual/test trigger that DMs a real guildie, proving the spine all three monitors will ride.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 20-01-PLAN.md — migration 00007 (notify_prefs + monitor_flag + guild_channel + alert_log.read_at + wantlist_item.muted) + owner/officer-scoped store layer (WANT-03/04/08)
+  - [ ] 20-02-PLAN.md — discordgo bot package (recover-isolated, non-fatal, env config) + notify (DM + 50007→dm_blocked + dedup/cooldown + two-gate) + wantmatch seam (WANT-03/04)
+  - [ ] 20-03-PLAN.md — notifications + monitors handlers + per-want mute + runServe bot wiring + 12 routes + deploy-doc token + Discord-setup checkpoint (WANT-03/04/08)
+  - [ ] 20-04-PLAN.md — /notifications page (prefs + inbox), Toggle primitive, unread nav badge, api.ts wrappers + browser-smoke (WANT-04)
+  - [ ] 20-05-PLAN.md — /admin Monitors section (kill-switches + add-channel + test-alert) + /wantlist mute bell + browser-smoke (WANT-08/03)
 
 ### Phase 21: EC-Tunnel Auction Monitor
 **Goal**: The first real end-to-end alert ships — when a wanted item is auctioned in the EC tunnel, the wantlister gets a DM (price + WTS/WTB; seller best-effort), all on the guild's own Discord.

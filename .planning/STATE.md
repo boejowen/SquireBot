@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: — Wantlist + Discord Pinger
 status: executing
-last_updated: "2026-06-05T14:39:46.972Z"
-last_activity: 2026-06-05
+last_updated: "2026-06-05T16:09:28.428Z"
+last_activity: 2026-06-05 -- Phase 20 planning complete
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 5
+  total_plans: 10
   completed_plans: 5
-  percent: 100
+  percent: 50
 ---
 
 # State: SquireBot
@@ -31,8 +31,8 @@ See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 Phase: 24
 Plan: Not started
-Status: Executing Phase 19
-Last activity: 2026-06-05
+Status: Ready to execute
+Last activity: 2026-06-05 -- Phase 20 planning complete
 
 Phase 24 prior activity: 2026-06-02 -- v2.2 roadmap created (continues phase numbering from 18; Phases 19–23). 8/8 WANT requirements mapped, no orphans (Track 1 unblocked: WANT-01/02 → P19, WANT-03/04/08 → P20, WANT-05 → P21; Track 2 invite-gated: WANT-06 → P22, WANT-07 → P23). ROADMAP.md appended (all prior-milestone history preserved); REQUIREMENTS.md Traceability filled. Next: `/gsd-plan-phase 19`.
 Progress: [..........] 0% — 0/5 phases planned

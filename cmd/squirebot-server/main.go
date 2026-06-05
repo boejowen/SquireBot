@@ -36,7 +36,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
+
 	"github.com/boejowen/SquireBot/internal/backendsrv/auth"
+	"github.com/boejowen/SquireBot/internal/backendsrv/bot"
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/jobs"
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/politefetch"
 	"github.com/boejowen/SquireBot/internal/backendsrv/ingest"
@@ -233,6 +236,20 @@ func runServe(args []string) int {
 	// it on SIGINT/SIGTERM.
 	scheduler.Start(ctx, db)
 
+	// In-process Discord bot (Phase 20 / WANT-03) — non-fatal: the HTTP API +
+	// scheduler MUST serve even if the bot can't connect (or no token is set).
+	// recover()-isolated inside bot.Start; ctx cancel on SIGINT/SIGTERM closes it.
+	// Wired AFTER scheduler.Start and BEFORE the mux/ListenAndServe.
+	botCfg := bot.ConfigFromEnv()
+	b, err := bot.Start(ctx, botCfg)
+	if err != nil {
+		slog.Error("bot start failed; continuing without it", "err", err) // NON-FATAL
+	}
+	var botSession *discordgo.Session
+	if b != nil {
+		botSession = b.Session() // nil when the bot is disabled (no token)
+	}
+
 	// Route the network surfaces. Go 1.22+ method+pattern routing. The ingest
 	// handler composes the bearer guard + bind + atomic replace (11-02/03/04); the
 	// whoami handler (13-01 / D-4) is the authed, side-effect-free validation
@@ -322,6 +339,33 @@ func runServe(args []string) int {
 	// D-10 full-catalog item search — session-gated like the view endpoints
 	// (readapi, takes the read-side st):
 	mux.Handle("GET /api/v1/items/search", webauth.RequireSession(db, readapi.NewItemSearch(st)))
+
+	// Notifications (Phase 20 / WANT-04 / D-02) — LOGIN-ONLY (RequireSession, NEVER
+	// RequireOfficer): every signed-in member manages their OWN prefs + reads their
+	// OWN inbox; the owner is derived server-side from the Discord session, never the
+	// request body. 6 notification routes + 1 per-want mute (RequireSession too, D-09).
+	mux.Handle("GET /api/v1/notifications/prefs", webauth.RequireSession(db, webadmin.GetPrefsHandler(db)))
+	mux.Handle("POST /api/v1/notifications/prefs", webauth.RequireSession(db, webadmin.SetPrefsHandler(db)))
+	mux.Handle("GET /api/v1/notifications/inbox", webauth.RequireSession(db, webadmin.ListInboxHandler(db)))
+	mux.Handle("GET /api/v1/notifications/unread-count", webauth.RequireSession(db, webadmin.UnreadCountHandler(db)))
+	mux.Handle("POST /api/v1/notifications/read", webauth.RequireSession(db, webadmin.MarkReadHandler(db)))
+	mux.Handle("POST /api/v1/notifications/read-all", webauth.RequireSession(db, webadmin.MarkAllReadHandler(db)))
+	mux.Handle("POST /api/v1/wantlist/mute", webauth.RequireSession(db, webadmin.MuteWantHandler(db)))
+
+	// Monitors (Phase 20 / WANT-08 + the D-10 test-alert) — OFFICER-ONLY
+	// (RequireOfficer): the guild-wide kill-switches + the guild_channel CRUD + the
+	// bot-pulse test-alert. The mutators additionally re-check store.IsOfficerTx INSIDE
+	// their write tx (WR-04). The test-alert receives the shared *discordgo.Session
+	// (nil when the bot is disabled ⇒ a clean bot_unavailable, never a panic).
+	// The MonitorFlags GET returns BOTH the flags AND the registered channel list
+	// ({flags, channels}), so the channel list is read via this one route — there is
+	// no standalone channel/list route (ListGuildChannelsHandler stays exported for a
+	// future facet need). 5 officer monitor routes total.
+	mux.Handle("GET /api/v1/admin/monitors", webauth.RequireOfficer(db, webadmin.MonitorFlagsHandler(db)))
+	mux.Handle("POST /api/v1/admin/monitors/flag", webauth.RequireOfficer(db, webadmin.SetMonitorFlagHandler(db)))
+	mux.Handle("POST /api/v1/admin/monitors/channel", webauth.RequireOfficer(db, webadmin.AddGuildChannelHandler(db)))
+	mux.Handle("POST /api/v1/admin/monitors/channel/remove", webauth.RequireOfficer(db, webadmin.RemoveGuildChannelHandler(db)))
+	mux.Handle("POST /api/v1/admin/monitors/test", webauth.RequireOfficer(db, webadmin.SendTestAlertHandler(db, botSession)))
 
 	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
 	// route (D-04). P15 made CORS credential-aware (Access-Control-Allow-Credentials:

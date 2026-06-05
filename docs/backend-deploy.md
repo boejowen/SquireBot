@@ -227,6 +227,7 @@ DISCORD_CLIENT_ID=<your-discord-app-client-id>
 DISCORD_CLIENT_SECRET=<your-discord-app-client-secret>
 DISCORD_GUILD_ID=<your-guild-snowflake>
 DISCORD_REDIRECT_URI=https://api.squirebot.quest/api/v1/auth/callback
+DISCORD_BOT_TOKEN=<bot-token>
 SQUIREBOT_WEB_ORIGIN=https://squirebot.quest
 SQUIREBOT_COOKIE_DOMAIN=squirebot.quest
 EOF
@@ -234,6 +235,17 @@ sudo chown root:root /etc/squirebot/squirebot.env
 sudo chmod 600 /etc/squirebot/squirebot.env      # backend-only; secret never leaves the box
 ```
 - `DISCORD_*` come from the Discord application (the redirect URI MUST be registered on the app's OAuth2 page **exactly** as above).
+- `DISCORD_BOT_TOKEN` (Phase 20 / WANT-03) is the **Bot user's** token under the SAME Discord
+  application as the OAuth login (Developer Portal → Applications → SquireBot → Bot → Reset Token).
+  The `EnvironmentFile=` line already loads it — **no unit change**. The bot is the in-process
+  Discord gateway that DMs guildies when a wanted item shows up. An **empty/absent token leaves
+  the bot disconnected and the server still boots** (`bot.Enabled=false`); the live "Send me a
+  test alert" then returns `bot_unavailable` until the token lands. Like `DISCORD_CLIENT_SECRET`,
+  the token is **never** committed, bundled, or logged. **MESSAGE_CONTENT is NOT needed in Phase 20**
+  (DM-send is pure REST — only the Guilds + DirectMessages intents are requested); the privileged
+  MESSAGE_CONTENT intent is a Phase-22 dev-portal toggle. For the bot to DM a guildie it must share
+  a server with them — invite it to the guild's own Discord server (Developer Portal → OAuth2 → URL
+  Generator → scope `bot`) so the 50007 mutual-server precondition is satisfied.
 - `SQUIREBOT_WEB_ORIGIN` is the static-site origin (CORS allow-origin + credentialed-fetch target, D-04/D-05).
 - `SQUIREBOT_COOKIE_DOMAIN=squirebot.quest` lets the session cookie ride cross-subdomain from `squirebot.quest` → `api.squirebot.quest` (D-05).
 

@@ -49,6 +49,11 @@ import (
 type Sender interface {
 	UserChannelCreate(userID string, options ...discordgo.RequestOption) (*discordgo.Channel, error)
 	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
+	// ChannelMessageSendEmbed is the rich-embed seam (D-04, P21). The real
+	// *discordgo.Session already satisfies it (restapi.go:1812), so the
+	// compile-time assertion below still holds and the bot's shared session
+	// injects with no adapter. An Embed-bearing Alert rides the SAME Send core.
+	ChannelMessageSendEmbed(channelID string, embed *discordgo.MessageEmbed, options ...discordgo.RequestOption) (*discordgo.Message, error)
 }
 
 // Compile-time proof the real *discordgo.Session satisfies Sender, so the bot's
@@ -66,6 +71,12 @@ type Alert struct {
 	ItemID        *int64
 	Body          string
 	Detail        *string
+	// Embed is the optional rich-embed payload (D-04, P21). When non-nil the
+	// SEND step delivers it via ChannelMessageSendEmbed INSTEAD of the plain
+	// Body string — through the EXACT same gates/dedup/alert_log core (no
+	// duplicate send path). Nil ⇒ the P20 plain-string path is unchanged.
+	// NEVER logged (V7 — the embed carries user/wiki text).
+	Embed *discordgo.MessageEmbed
 }
 
 // Send-result sentinels — typed so callers (and tests) can branch precisely.
@@ -160,7 +171,19 @@ func Send(ctx context.Context, s Sender, db *sql.DB, a Alert, now int64) error {
 		return fmt.Errorf("notify: open dm: %w", err)
 	}
 
-	if _, err := s.ChannelMessageSend(ch.ID, a.Body); err != nil {
+	// SEND step branch (D-04): a non-nil Embed delivers a rich embed; otherwise
+	// the plain Body string (P20 path). ALL surrounding handling — the 50007
+	// dm_blocked check, the recordAttempt, and the V7 slog — is identical for
+	// both branches; there is exactly ONE send/record block (no duplicate path).
+	sendErr := func() error {
+		if a.Embed != nil {
+			_, e := s.ChannelMessageSendEmbed(ch.ID, a.Embed)
+			return e
+		}
+		_, e := s.ChannelMessageSend(ch.ID, a.Body)
+		return e
+	}()
+	if err := sendErr; err != nil {
 		if isDMBlocked(err) {
 			_ = recordAttempt(ctx, db, a, "dm_blocked", now)
 			slog.Warn("notify dm blocked", "source", a.Source, "want", wantIDLog(a), "status", "dm_blocked")

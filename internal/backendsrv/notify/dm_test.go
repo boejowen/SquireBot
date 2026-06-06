@@ -23,6 +23,7 @@ type fakeSender struct {
 	sendErr   error
 	creates   int
 	sends     int
+	embeds    int // count of ChannelMessageSendEmbed calls (the rich-embed path)
 }
 
 func (f *fakeSender) UserChannelCreate(userID string, _ ...discordgo.RequestOption) (*discordgo.Channel, error) {
@@ -39,6 +40,17 @@ func (f *fakeSender) ChannelMessageSend(channelID, content string, _ ...discordg
 		return nil, f.sendErr
 	}
 	return &discordgo.Message{ID: "msg-1"}, nil
+}
+
+// ChannelMessageSendEmbed is the rich-embed seam (D-04). It shares sendErr so a
+// test can force a 50007/generic failure on the embed path too; it counts embeds
+// separately from sends so a test can assert WHICH branch fired.
+func (f *fakeSender) ChannelMessageSendEmbed(channelID string, _ *discordgo.MessageEmbed, _ ...discordgo.RequestOption) (*discordgo.Message, error) {
+	f.embeds++
+	if f.sendErr != nil {
+		return nil, f.sendErr
+	}
+	return &discordgo.Message{ID: "embed-1"}, nil
 }
 
 // rest50007 is the *discordgo.RESTError discord returns when the recipient can't
@@ -328,6 +340,141 @@ func TestSend_TestSource_BypassesGatesAndCooldown_NullWantID(t *testing.T) {
 	}
 	if fs.sends != 2 {
 		t.Errorf("second test alert did not send; sends=%d want 2 (no cooldown on test)", fs.sends)
+	}
+}
+
+// ecEmbedAlert builds a real (non-test) EC alert carrying a rich Embed (D-04).
+// Body stays set so a regression can prove the embed branch is chosen OVER the
+// string branch when both are present.
+func ecEmbedAlert(wantID int64, discordID string, itemID int64) Alert {
+	a := ecAlert(wantID, discordID, itemID)
+	a.Embed = &discordgo.MessageEmbed{Title: "WTS Fungi Tunic"}
+	return a
+}
+
+func TestSendEmbed_Success_UsesEmbedPath_RecordsSent(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	want := seedWant(t, ctx, db, "alice", 5000)
+	fs := &fakeSender{}
+
+	if err := Send(ctx, fs, db, ecEmbedAlert(want, "alice", 5000), 1000); err != nil {
+		t.Fatalf("Send(embed success): %v", err)
+	}
+	if fs.embeds != 1 {
+		t.Errorf("embeds=%d; want 1 (the embed branch must fire)", fs.embeds)
+	}
+	if fs.sends != 0 {
+		t.Errorf("sends=%d; want 0 (a non-nil Embed must NOT take the string branch)", fs.sends)
+	}
+	if got := lastStatus(t, db, "alice"); got != "sent" {
+		t.Errorf("send_status = %q; want sent", got)
+	}
+}
+
+func TestSendEmbed_NilEmbed_FallsBackToString(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	want := seedWant(t, ctx, db, "alice", 5000)
+	fs := &fakeSender{}
+
+	// ecAlert leaves Embed nil — the P20 plain-string path must be unchanged.
+	if err := Send(ctx, fs, db, ecAlert(want, "alice", 5000), 1000); err != nil {
+		t.Fatalf("Send(nil embed): %v", err)
+	}
+	if fs.sends != 1 {
+		t.Errorf("sends=%d; want 1 (nil Embed → plain string)", fs.sends)
+	}
+	if fs.embeds != 0 {
+		t.Errorf("embeds=%d; want 0 (no embed call when Embed is nil)", fs.embeds)
+	}
+}
+
+func TestSendEmbed_50007_RecordsDMBlocked(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	want := seedWant(t, ctx, db, "alice", 5000)
+	fs := &fakeSender{sendErr: rest50007()}
+
+	err := Send(ctx, fs, db, ecEmbedAlert(want, "alice", 5000), 1000)
+	if !errors.Is(err, ErrDMBlocked) {
+		t.Fatalf("Send(embed 50007) err = %v; want ErrDMBlocked", err)
+	}
+	if fs.embeds != 1 {
+		t.Errorf("embeds=%d; want 1 (the embed branch was attempted)", fs.embeds)
+	}
+	if got := lastStatus(t, db, "alice"); got != "dm_blocked" {
+		t.Errorf("send_status = %q; want dm_blocked (never silently dropped)", got)
+	}
+}
+
+func TestSendEmbed_OfficerFlagOff_Gated(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	want := seedWant(t, ctx, db, "alice", 5000)
+
+	commitFlag(t, ctx, db, "ec_auction", false)
+	fs := &fakeSender{}
+
+	err := Send(ctx, fs, db, ecEmbedAlert(want, "alice", 5000), 1000)
+	if !errors.Is(err, ErrGatedOff) {
+		t.Fatalf("Send(embed, officer flag off) err = %v; want ErrGatedOff", err)
+	}
+	if fs.creates != 0 || fs.embeds != 0 {
+		t.Errorf("sender called when officer-gated; creates=%d embeds=%d want 0/0", fs.creates, fs.embeds)
+	}
+	if n := countAlerts(t, db, "alice"); n != 0 {
+		t.Errorf("alert_log row written when officer-gated (%d); want 0", n)
+	}
+}
+
+func TestSendEmbed_UserPrefOff_Gated(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	want := seedWant(t, ctx, db, "alice", 5000)
+
+	commitPrefs(t, ctx, db, "alice", store.NotifyPrefs{Master: false, EC: true, WTS: true, Raid: true})
+	fs := &fakeSender{}
+
+	err := Send(ctx, fs, db, ecEmbedAlert(want, "alice", 5000), 1000)
+	if !errors.Is(err, ErrGatedOff) {
+		t.Fatalf("Send(embed, pref off) err = %v; want ErrGatedOff", err)
+	}
+	if fs.creates != 0 || fs.embeds != 0 {
+		t.Errorf("sender called when pref-gated; creates=%d embeds=%d want 0/0", fs.creates, fs.embeds)
+	}
+}
+
+func TestSendEmbed_Cooldown_RecentSent_Skips(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	want := seedWant(t, ctx, db, "alice", 5000)
+
+	// Pre-seed a recent 'sent' row inside the EC window — the embed path must
+	// inherit the SAME dedup/cooldown (no second code path).
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO alert_log (wantlist_item_id, discord_user_id, source, item_id, sent_at, send_status)
+		 VALUES (?, 'alice', 'ec_auction', 5000, ?, 'sent')`, want, 1000); err != nil {
+		t.Fatalf("seed recent sent: %v", err)
+	}
+	before := countAlerts(t, db, "alice")
+	fs := &fakeSender{}
+
+	err := Send(ctx, fs, db, ecEmbedAlert(want, "alice", 5000), 1001)
+	if !errors.Is(err, ErrCooledDown) {
+		t.Fatalf("Send(embed cooldown) err = %v; want ErrCooledDown", err)
+	}
+	if fs.creates != 0 || fs.embeds != 0 {
+		t.Errorf("sender called during cooldown; creates=%d embeds=%d want 0/0", fs.creates, fs.embeds)
+	}
+	if after := countAlerts(t, db, "alice"); after != before {
+		t.Errorf("alert_log grew during cooldown (%d→%d); want no new row", before, after)
 	}
 }
 

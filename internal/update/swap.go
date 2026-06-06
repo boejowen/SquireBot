@@ -75,6 +75,35 @@ func Apply() (swapped bool, err error) {
 	return applyAt(exe)
 }
 
+// RemoveStaged deletes the staged-update artifacts (<exe>.new and the
+// <exe>.expected-sha256 sidecar) adjacent to the running binary. It is the
+// self-heal escape hatch for WR-06: when Apply() reports that a SHA-256-VERIFIED
+// stage nonetheless failed to swap (swap.go State 5 preserves the pair for
+// retry), a headless Linux launch would otherwise hit the SAME corrupt stage on
+// every restart under Restart=always. Clearing the pair lets the next process
+// run the current binary, and the next daily update check re-downloads +
+// re-verifies + re-stages — so the SHA-256 gate is preserved end-to-end (a bad
+// stage is never applied; it is discarded and re-fetched). Best-effort: a
+// not-found removal is not an error.
+func RemoveStaged() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("os.Executable: %w", err)
+	}
+	return removeStagedAt(exe)
+}
+
+// removeStagedAt is the testable form of RemoveStaged.
+func removeStagedAt(exe string) error {
+	var firstErr error
+	for _, p := range []string{exe + ".new", exe + ".expected-sha256"} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 // applyAt is the testable form of Apply. Tests construct an exe path
 // inside t.TempDir() so they can stage .new + sidecar files without
 // touching the real running binary.

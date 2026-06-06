@@ -83,8 +83,23 @@ func main() {
 	// verification is mandatory. All logic lives in internal/update/swap.go.
 	//
 	// Logging is not yet set up here, so any error goes to stderr.
+	//
+	// WR-06 self-heal: a SHA-256-VERIFIED stage that nonetheless fails to swap
+	// (swap.go State 5 preserves <exe>.new + sidecar for retry) would otherwise
+	// be retried on EVERY headless launch under Restart=always — a corrupt stage
+	// bricks startup forever with only a journal line. So on an Apply error we
+	// DISCARD the staged pair here; the next launch runs the current binary and
+	// the next daily update check re-downloads + re-verifies + re-stages (the
+	// SHA-256 gate is preserved end-to-end — a bad stage is never applied). We
+	// also remember the error to re-log via slog once logging.Setup has run
+	// (Apply runs BEFORE logging, so only stderr is available at this point).
+	var updateApplyErr error
 	if swapped, err := update.Apply(); err != nil {
-		fmt.Fprintf(os.Stderr, "auto-update apply failed: %v\n", err)
+		updateApplyErr = err
+		fmt.Fprintf(os.Stderr, "auto-update apply failed (discarding staged update): %v\n", err)
+		if rmErr := update.RemoveStaged(); rmErr != nil {
+			fmt.Fprintf(os.Stderr, "auto-update: failed to remove bad staged update: %v\n", rmErr)
+		}
 	} else if swapped {
 		// Successful swap. Exit cleanly so the next process launch
 		// runs the new binary. (The user-observable effect: tray icon
@@ -105,6 +120,15 @@ func main() {
 
 	log, logDir := logging.Setup()
 	slog.SetDefault(log)
+
+	// WR-06: now that structured logging is up, durably record any staged-update
+	// failure from the pre-logging Apply step (it could only reach stderr/journal
+	// before). The bad stage was already discarded above so this launch proceeds
+	// on the current binary; a future daily check re-stages a fresh, verified one.
+	if updateApplyErr != nil {
+		slog.Warn("auto-update apply failed; discarded staged update and continuing on current binary",
+			"err", updateApplyErr)
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

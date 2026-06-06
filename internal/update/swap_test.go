@@ -194,3 +194,33 @@ func TestApply_SelfApplyErrorPreservesStaged(t *testing.T) {
 		t.Errorf("sidecar was deleted after selfApplyFn error; should be preserved for retry")
 	}
 }
+
+// WR-06: removeStagedAt is the self-heal escape hatch the headless launcher
+// calls after Apply() reports a swap failure, so a persistently-bad staged
+// update doesn't brick every restart. It must delete BOTH artifacts and treat a
+// missing file as success (idempotent).
+func TestRemoveStagedAt_DeletesBothArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "squirebot.exe")
+	stageStaged(t, exe, []byte("new-binary-bytes"))
+
+	if err := removeStagedAt(exe); err != nil {
+		t.Fatalf("removeStagedAt: %v", err)
+	}
+	if _, statErr := os.Stat(exe + ".new"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf(".new still exists after removeStagedAt")
+	}
+	if _, statErr := os.Stat(exe + ".expected-sha256"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("sidecar still exists after removeStagedAt")
+	}
+}
+
+// TestRemoveStagedAt_NoStageIsNoError: removing when nothing is staged is a
+// no-op (a not-found removal is not an error).
+func TestRemoveStagedAt_NoStageIsNoError(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "squirebot.exe")
+	if err := removeStagedAt(exe); err != nil {
+		t.Fatalf("removeStagedAt with no stage = %v, want nil", err)
+	}
+}

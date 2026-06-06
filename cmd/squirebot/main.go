@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/boejowen/SquireBot/internal/app"
 	"github.com/boejowen/SquireBot/internal/config"
@@ -146,7 +148,13 @@ func main() {
 		os.Exit(1)
 	}
 	if len(os.Args) >= 2 && os.Args[1] == "--setup" {
-		setupCtx, setupCancel := context.WithCancel(context.Background())
+		// WR-05: install a SIGINT/SIGTERM → cancel handler for the setup path too
+		// (mirrors run_other.go's runMainLoop). The stdin prompts themselves are
+		// inherently blocking reads, but cancelling setupCtx unwinds any hung
+		// backend Validate call (threaded through app.RunSetup → bc.Validate) so
+		// Ctrl-C during a slow network validation aborts cleanly instead of
+		// hanging until SIGKILL.
+		setupCtx, setupCancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer setupCancel()
 		setupTray := tray.NewController(tray.Config{LogDir: logDir})
 		// Best-effort EQ-folder auto-discovery (WINE scan on Linux) to pre-fill

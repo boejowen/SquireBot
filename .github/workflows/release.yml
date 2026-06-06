@@ -128,6 +128,46 @@ jobs:
           go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
           Get-Item dist/squirebot.exe | Select-Object Name, Length
 
+      - name: Build bare squirebot (linux/amd64, CGO-free)
+        shell: pwsh
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          # Phase 25 (LNX-05 / D-06/D-07): additive CGO-free linux build. The
+          # Windows runner cross-compiles linux/amd64 fine (the backend already
+          # does). NO -H=windowsgui (Windows-only linker flag). Same Version +
+          # BackendBaseURL ldflags as the Windows step. This bare binary is what
+          # the in-app auto-updater swaps (binary_url_linux); it is ALSO packed
+          # into the tarball for install.sh.
+          $ldflags = "-s -w " +
+                     "-X main.Version=${{ steps.ver.outputs.version }} " +
+                     "-X main.BackendBaseURL=https://api.squirebot.quest"
+          go build -trimpath -ldflags="$ldflags" -o dist/squirebot ./cmd/squirebot
+          Get-Item dist/squirebot | Select-Object Name, Length
+
+      - name: Assemble Linux tarball
+        shell: pwsh
+        run: |
+          # Phase 25 (LNX-05 / D-06): bundle the static binary + README +
+          # systemd user unit + install.sh into squirebot-linux-amd64.tar.gz.
+          # `tar` is on PATH on windows-latest (bsdtar). Stage under a
+          # versionless top-level dir so `tar -xzf` yields squirebot-linux-amd64/.
+          $stage = "dist/squirebot-linux-amd64"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item dist/squirebot                      $stage/squirebot       -Force
+          Copy-Item packaging/linux/README.md           $stage/README.md       -Force
+          Copy-Item packaging/linux/squirebot.service   $stage/squirebot.service -Force
+          Copy-Item packaging/linux/install.sh          $stage/install.sh      -Force
+          # tar preserves the 0755 bit on the binary + install.sh via --mode.
+          tar -czf dist/squirebot-linux-amd64.tar.gz -C dist `
+            --mode='a+rX,u+w' `
+            --owner=0 --group=0 `
+            squirebot-linux-amd64
+          if ($LASTEXITCODE -ne 0) { Write-Error "tar failed ($LASTEXITCODE)"; exit $LASTEXITCODE }
+          Get-Item dist/squirebot-linux-amd64.tar.gz | Select-Object Name, Length
+
       - name: Build NSIS installer (pre-manifest)
         shell: pwsh
         run: |
@@ -194,12 +234,19 @@ jobs:
         run: |
           $installerPath = "dist/SquireBot-Setup-${{ steps.ver.outputs.version }}.exe"
           $binaryPath    = "dist/squirebot.exe"
+          $linuxBinPath  = "dist/squirebot"
           $installerHash = (Get-FileHash $installerPath -Algorithm SHA256).Hash.ToLower()
           $binaryHash    = (Get-FileHash $binaryPath    -Algorithm SHA256).Hash.ToLower()
-          Write-Host "Installer SHA-256: $installerHash"
-          Write-Host "Binary    SHA-256: $binaryHash"
-          "installer_sha256=$installerHash" | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
-          "binary_sha256=$binaryHash"       | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          # Phase 25 (LNX-05): hash the BARE linux binary — that is what the
+          # auto-updater swaps (binary_url_linux), NOT the tarball. selfupdate
+          # cannot unpack a .tar.gz; it replaces the raw executable in place.
+          $linuxBinHash  = (Get-FileHash $linuxBinPath  -Algorithm SHA256).Hash.ToLower()
+          Write-Host "Installer    SHA-256: $installerHash"
+          Write-Host "Binary (win) SHA-256: $binaryHash"
+          Write-Host "Binary (lnx) SHA-256: $linuxBinHash"
+          "installer_sha256=$installerHash"    | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "binary_sha256=$binaryHash"          | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
+          "binary_sha256_linux=$linuxBinHash"  | Out-File -Append -Encoding utf8 -FilePath $env:GITHUB_OUTPUT
 
       - name: Write latest.json (auto-updater manifest with both URLs)
         shell: pwsh
@@ -215,15 +262,21 @@ jobs:
           $version = "${{ steps.ver.outputs.version }}"
           $owner   = "${{ github.repository_owner }}"
           $repo    = "${{ github.event.repository.name }}"
+          # Phase 25 (LNX-05): binary_url_linux/binary_sha256_linux point at the
+          # BARE linux `squirebot` asset (NOT the .tar.gz) — the Linux watcher's
+          # auto-updater selects them by runtime.GOOS (internal/update binaryAsset).
+          # The Windows installer_*/binary_* fields are UNCHANGED.
           $manifest = @{
-            version          = $version
-            installer_url    = "https://github.com/$owner/$repo/releases/download/v$version/SquireBot-Setup-$version.exe"
-            installer_sha256 = "${{ steps.hashes.outputs.installer_sha256 }}"
-            binary_url       = "https://github.com/$owner/$repo/releases/download/v$version/squirebot.exe"
-            binary_sha256    = "${{ steps.hashes.outputs.binary_sha256 }}"
-            released_at      = (Get-Date).ToUniversalTime().ToString("o")
-            phase            = 2
-            signed           = $false
+            version             = $version
+            installer_url       = "https://github.com/$owner/$repo/releases/download/v$version/SquireBot-Setup-$version.exe"
+            installer_sha256    = "${{ steps.hashes.outputs.installer_sha256 }}"
+            binary_url          = "https://github.com/$owner/$repo/releases/download/v$version/squirebot.exe"
+            binary_sha256       = "${{ steps.hashes.outputs.binary_sha256 }}"
+            binary_url_linux    = "https://github.com/$owner/$repo/releases/download/v$version/squirebot"
+            binary_sha256_linux = "${{ steps.hashes.outputs.binary_sha256_linux }}"
+            released_at         = (Get-Date).ToUniversalTime().ToString("o")
+            phase               = 2
+            signed              = $false
           }
           $manifest | ConvertTo-Json -Depth 4 | Out-File -Encoding utf8 -NoNewline dist/latest.json
           Get-Content dist/latest.json
@@ -235,6 +288,8 @@ jobs:
           path: |
             dist/SquireBot-Setup*.exe
             dist/squirebot.exe
+            dist/squirebot
+            dist/squirebot-linux-amd64.tar.gz
             dist/latest.json
           if-no-files-found: error
 
@@ -256,6 +311,8 @@ jobs:
           files: |
             dist/SquireBot-Setup*.exe
             dist/squirebot.exe
+            dist/squirebot
+            dist/squirebot-linux-amd64.tar.gz
             dist/latest.json
           body: |
             SquireBot ${{ steps.ver.outputs.version }} -- v2.0 backend watcher (unsigned).
@@ -272,6 +329,12 @@ jobs:
             **Auto-updater asset:** `squirebot.exe` (bare binary) is consumed by
             the in-app auto-updater (OPS-04) via `binary_url` in `latest.json`.
             End users do NOT download this file directly.
+
+            **Linux (WINE) install:** download `squirebot-linux-amd64.tar.gz`,
+            extract it, and run `./install.sh` (headless systemd user service;
+            see the bundled README). The bare `squirebot` (linux) asset is the
+            Linux auto-updater's target via `binary_url_linux` — Linux users do
+            NOT download it directly.
 
             See [docs/build-and-install.md](https://github.com/${{ github.repository }}/blob/main/docs/build-and-install.md)
             for the full local-build + smoke instructions.

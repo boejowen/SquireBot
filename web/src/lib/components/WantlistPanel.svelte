@@ -60,13 +60,19 @@
 	// 1) into a memo keyed on item_id, rebuilt when the inventory payload changes.
 	// The grid's in-guild cell reads its summed holders from here (one holdersFor
 	// pass per item, not per render). A custom want (item_id null) → [].
+	//
+	// BUGFIX (wantlist-in-guild-id-mismatch): holdersFor now bridges by NORMALIZED
+	// NAME (catalog ids ≠ inventory ids — different namespaces), so we pass the
+	// want's item_name through. The memo key stays item_id (a stable per-row key;
+	// each row carries its own item_name, so two rows that share a name still pass
+	// the same name to holdersFor and get the same holder set).
 	let holdersByItem = $derived.by(() => {
 		const memo = new Map<number, Holder[]>();
 		return (row: WantlistRow): Holder[] => {
 			if (row.item_id === null) return [];
 			let h = memo.get(row.item_id);
 			if (h === undefined) {
-				h = holdersFor(row.item_id, viewRows);
+				h = holdersFor(row.item_id, row.item_name, viewRows);
 				memo.set(row.item_id, h);
 			}
 			return h;

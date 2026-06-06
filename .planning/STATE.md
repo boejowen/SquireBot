@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: — Wantlist + Discord Pinger
 status: executing
-last_updated: "2026-06-06T02:20:00.000Z"
+last_updated: "2026-06-06T03:10:00.000Z"
 last_activity: 2026-06-06
 progress:
   total_phases: 6
@@ -23,19 +23,20 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** Phase 21 — EC-Tunnel Auction Monitor (21-01 data foundation + spike complete; spike verdict = per-auction getdetails, server=0, NAME key)
+- **Current focus:** Phase 21 — EC-Tunnel Auction Monitor (21-02 notify embed send-path + wantmatch Hit.Note complete; next = 21-03 ec.RunMatch + scheduler job + main.go reorder)
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
 Phase: 21 — EC-Tunnel Auction Monitor
-Plan: 21-01 COMPLETE (1/3 plans); next = 21-02
+Plan: 21-02 COMPLETE (2/3 plans); next = 21-03
 Status: Executing Phase 21 (Track 1 finale)
 Last activity: 2026-06-06
 
-Phase 21 activity: 2026-06-06 -- 21-01 executed (the GATING plan). Mandatory PigParse feasibility spike ran live (no checkpoint, D-08): **path chosen = per-auction `getdetails`** (presence + freshness threshold met). Two research corrections surfaced and recorded in 21-SPIKE.md: (1) the LIVE Blue getdetails feed is **server=0**, NOT server=1 (server=1 is ~11h stale); (2) the only working query key is the item **NAME** (the id form 400s). Delivered: `enrich.ParseItemDetail` (t/u-collision-aware, import-pure), migration `00008_ec_cursor.sql` (`ec_auction_cursor`), and `store.GetECCursor`/`SetECCursor`/`ECPollSet`. All package tests + `go build ./...` + `go vet` green. 3 task commits (0f29fcc, ff01c77, 486cff2). Next: `/gsd-execute-phase 21` plan 21-02 (notify embed send-path + Hit.note).
-Progress: Phase 21 — 1/3 plans complete
+Phase 21 activity: 2026-06-06 -- 21-02 executed. Extended the P20 notify spine with a discordgo rich-embed send-path (D-04): added `ChannelMessageSendEmbed` to the `Sender` interface (the real `*discordgo.Session` already satisfies it — assertion holds) + an `Embed` field on `Alert`; the single SEND step branches on `a.Embed != nil` so the embed rides the EXACT same two-gate + dedup/cooldown + alert_log core (verified: `grep -c GetMonitorFlags` = 1, no duplicate gate path). Also added `wantmatch.Hit.Note *string` (D-05 "why you wanted it"), carried by the shared `scanHits` for BOTH `ForItem` and `ForName` (one scanner change). Backend-only, no web/. notify + wantmatch package tests + `go build ./...` + `go vet ./internal/backendsrv/...` green. 2 task commits (72edf87, 92b8fa8). Next: `/gsd-execute-phase 21` plan 21-03 (ec package RunMatch poll→diff→match→embed→send + scheduler ec_auction_match job + main.go bot/scheduler reorder).
+Earlier: 21-01 executed (the GATING plan). Mandatory PigParse feasibility spike ran live (no checkpoint, D-08): **path chosen = per-auction `getdetails`** (presence + freshness threshold met). Two research corrections recorded in 21-SPIKE.md: (1) the LIVE Blue getdetails feed is **server=0**, NOT server=1; (2) the only working query key is the item **NAME** (the id form 400s). Delivered: `enrich.ParseItemDetail`, migration `00008_ec_cursor.sql`, and `store.GetECCursor`/`SetECCursor`/`ECPollSet`. 3 task commits (0f29fcc, ff01c77, 486cff2).
+Progress: Phase 21 — 2/3 plans complete
 
 ## v2.2 Phase Plan (created 2026-06-02)
 

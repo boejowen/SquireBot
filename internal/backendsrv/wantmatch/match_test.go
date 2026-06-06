@@ -25,8 +25,15 @@ func seedUser(t *testing.T, ctx context.Context, db *sql.DB, discordID string) {
 
 // seedWant inserts a wantlist_item with explicit item_id (nullable), name,
 // active, muted and returns its id. itemID < 0 means a custom (NULL item_id)
-// want.
+// want. The note is NULL (use seedWantNote to set one).
 func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, itemID int64, name string, active, muted int) int64 {
+	t.Helper()
+	return seedWantNote(t, ctx, db, discordID, itemID, name, active, muted, nil)
+}
+
+// seedWantNote is seedWant plus an optional note (nil ⇒ NULL note column) so a
+// test can assert Hit.Note carries the "why you wanted it" text (D-05).
+func seedWantNote(t *testing.T, ctx context.Context, db *sql.DB, discordID string, itemID int64, name string, active, muted int, note *string) int64 {
 	t.Helper()
 	var idArg interface{}
 	if itemID >= 0 {
@@ -34,10 +41,16 @@ func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, i
 	} else {
 		idArg = nil
 	}
+	var noteArg interface{}
+	if note != nil {
+		noteArg = *note
+	} else {
+		noteArg = nil
+	}
 	res, err := db.ExecContext(ctx,
-		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, active, muted, created_at)
-		 VALUES (?, ?, ?, 'buy', 'med', ?, ?, 1)`,
-		discordID, idArg, name, active, muted)
+		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, active, muted, created_at)
+		 VALUES (?, ?, ?, 'buy', 'med', ?, ?, ?, 1)`,
+		discordID, idArg, name, noteArg, active, muted)
 	if err != nil {
 		t.Fatalf("seed want (%q, item=%d, name=%q): %v", discordID, itemID, name, err)
 	}
@@ -103,6 +116,57 @@ func TestForItem_ReturnsActiveNonMutedAcrossUsers(t *testing.T) {
 	}
 	if h := got[aliceWant]; h.ItemID == nil || *h.ItemID != fungiID {
 		t.Errorf("Hit.ItemID = %v; want %d", h.ItemID, fungiID)
+	}
+	// A want with no note ⇒ Hit.Note is nil (the note column is nullable).
+	if h := got[aliceWant]; h.Note != nil {
+		t.Errorf("Hit.Note = %q for a noteless want; want nil", *h.Note)
+	}
+}
+
+func TestForItem_CarriesNote(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	seedUser(t, ctx, db, "bob")
+
+	const fungiID int64 = 5000
+	note := "Need it for my Velious tier-2 checklist"
+	withNote := seedWantNote(t, ctx, db, "alice", fungiID, "Fungi Tunic", 1, 0, &note) // note populated
+	noNote := seedWant(t, ctx, db, "bob", fungiID, "Fungi Tunic", 1, 0)                 // NULL note
+
+	hits, err := ForItem(ctx, db, fungiID)
+	if err != nil {
+		t.Fatalf("ForItem: %v", err)
+	}
+	got := wantIDs(hits)
+	if h := got[withNote]; h.Note == nil || *h.Note != note {
+		t.Errorf("Hit.Note = %v; want %q (D-05 'why you wanted it')", h.Note, note)
+	}
+	if h := got[noNote]; h.Note != nil {
+		t.Errorf("Hit.Note = %q for a NULL-note want; want nil", *h.Note)
+	}
+}
+
+func TestForName_CarriesNote(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	seedUser(t, ctx, db, "bob")
+
+	note := "saving for the epic"
+	withNote := seedWantNote(t, ctx, db, "alice", -1, "Fungi Tunic", 1, 0, &note) // custom want, note set
+	noNote := seedWant(t, ctx, db, "bob", -1, "Fungi Tunic", 1, 0)                // NULL note
+
+	hits, err := ForName(ctx, db, "Fungi Tunic")
+	if err != nil {
+		t.Fatalf("ForName: %v", err)
+	}
+	got := wantIDs(hits)
+	if h := got[withNote]; h.Note == nil || *h.Note != note {
+		t.Errorf("Hit.Note = %v; want %q (the shared scanHits path serves ForName too)", h.Note, note)
+	}
+	if h := got[noNote]; h.Note != nil {
+		t.Errorf("Hit.Note = %q for a NULL-note want; want nil", *h.Note)
 	}
 }
 

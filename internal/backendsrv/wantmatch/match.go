@@ -41,6 +41,10 @@ type Hit struct {
 	ItemID        *int64
 	ItemName      string
 	Reason        string
+	// Note is the want's optional free-text "why you wanted it" (D-05). It is a
+	// pointer because wantlist_item.note is nullable — a want may have no note.
+	// The EC producer (P21 Plan 03) echoes it into the alert embed.
+	Note *string
 }
 
 // ForItem returns one Hit per ACTIVE, NON-muted wantlist_item whose item_id
@@ -50,7 +54,7 @@ type Hit struct {
 // matcher. Returns a non-nil (possibly empty) slice.
 func ForItem(ctx context.Context, db *sql.DB, itemID int64) ([]Hit, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, discord_user_id, item_id, item_name, reason
+		`SELECT id, discord_user_id, item_id, item_name, reason, note
 		   FROM wantlist_item
 		  WHERE item_id = ? AND active = 1 AND muted = 0`, itemID)
 	if err != nil {
@@ -67,7 +71,7 @@ func ForItem(ctx context.Context, db *sql.DB, itemID int64) ([]Hit, error) {
 // soft-removed want is excluded at the matcher. Returns a non-nil slice.
 func ForName(ctx context.Context, db *sql.DB, name string) ([]Hit, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, discord_user_id, item_id, item_name, reason
+		`SELECT id, discord_user_id, item_id, item_name, reason, note
 		   FROM wantlist_item
 		  WHERE item_name = ? COLLATE NOCASE AND active = 1 AND muted = 0`, name)
 	if err != nil {
@@ -85,13 +89,18 @@ func scanHits(rows *sql.Rows, ctxLabel string) ([]Hit, error) {
 		var (
 			h      Hit
 			itemID sql.NullInt64
+			note   sql.NullString
 		)
-		if err := rows.Scan(&h.WantID, &h.DiscordUserID, &itemID, &h.ItemName, &h.Reason); err != nil {
+		if err := rows.Scan(&h.WantID, &h.DiscordUserID, &itemID, &h.ItemName, &h.Reason, &note); err != nil {
 			return nil, fmt.Errorf("wantmatch scan hit (%s): %w", ctxLabel, err)
 		}
 		if itemID.Valid {
 			v := itemID.Int64
 			h.ItemID = &v
+		}
+		if note.Valid {
+			v := note.String
+			h.Note = &v
 		}
 		out = append(out, h)
 	}

@@ -34,7 +34,7 @@
 
 ### Alert Monitors (WANT)
 
-- [ ] **WANT-05**: The EC-tunnel auction monitor polls PigParse per wanted item (~10-min cadence, diffing on the auction timestamp cursor) and DMs the guildie when a wanted item is auctioned (price + WTS/WTB; seller best-effort). *(Includes an upfront feasibility spike confirming PigParse timestamps advance + coverage.)*
+- [x] **WANT-05**: The EC-tunnel auction monitor polls PigParse per wanted item (~10-min cadence, diffing on the auction timestamp cursor) and DMs the guildie when a wanted item is auctioned (price + WTS/WTB; seller best-effort). *(Includes an upfront feasibility spike confirming PigParse timestamps advance + coverage.)* — delivered Phase 21 (2026-06-06)
 - [ ] **WANT-06**: The WTS cross-server monitor reads the WTS trade channels of the 3 Raid Alliance Discord servers (via `MESSAGE_CONTENT`), matches messages against wantlists (exact item-ID + a curated alias table), and DMs the matching guildie. *(Invite-gated.)*
 - [ ] **WANT-07**: The quest-target raid monitor DMs a guildie when a raid-target NPC tied to a wanted item's quest is announced in those servers, resolved via a curated `quest → raid-target NPC(s)` lookup that reuses the existing `quest_items` table. *(Invite-gated + needs the curated table.)*
 
@@ -78,7 +78,7 @@ _Maps each REQ-ID to exactly one phase. Phases continue at 19. All 8 v2.2 requir
 | WANT-03 | Phase 20 — Bot + DM + Notification Infrastructure | Pending |
 | WANT-04 | Phase 20 — Bot + DM + Notification Infrastructure | Pending |
 | WANT-08 | Phase 20 — Bot + DM + Notification Infrastructure | Pending |
-| WANT-05 | Phase 21 — EC-Tunnel Auction Monitor | Pending |
+| WANT-05 | Phase 21 — EC-Tunnel Auction Monitor | Complete (2026-06-06) |
 | WANT-06 | Phase 22 — WTS Cross-Server Monitor *(invite-gated)* | Pending |
 | WANT-07 | Phase 23 — Quest-Target Raid Monitor *(invite-gated)* | Pending |
 

@@ -95,7 +95,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 
 - [x] **Phase 19: Wantlist CRUD** — per-user wantlist (website CRUD, item-ID-keyed, buy/quest reason, Discord-identity-tied, already-in-bank flag); the product surface, no Discord yet (completed 2026-06-05)
 - [x] **Phase 20: Bot + DM + Notification Infrastructure** — in-process discordgo gateway goroutine + `notify` DM sender + `wantmatch` + `alert_log` dedup/cooldown + opt-in/prefs + in-site notification inbox (50007 fallback) + per-monitor enable/disable + `guild_channel` config; the keystone spine all monitors ride (completed 2026-06-05)
-- [ ] **Phase 21: EC-Tunnel Auction Monitor** — first real alert; PigParse poll-and-diff → wantmatch → DM, gated behind an upfront PigParse feasibility spike (confirm timestamps advance + coverage)
+- [x] **Phase 21: EC-Tunnel Auction Monitor** — first real alert; PigParse poll-and-diff → wantmatch → DM, gated behind an upfront PigParse feasibility spike (confirm timestamps advance + coverage) (completed 2026-06-06; WANT-05)
 
 **Track 2 — INVITE-GATED (entry-precondition: the 3 Raid Alliance bot invites confirmed in writing + `MESSAGE_CONTENT` enabled):**
 
@@ -152,7 +152,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 **Plans**: 3 plans
   - [x] 21-01-PLAN.md — feasibility spike (GATE; path=getdetails, server=0, NAME key) + getdetails parser + 00008 ec_auction_cursor migration + cursor/poll-set store (completed 2026-06-06)
   - [x] 21-02-PLAN.md — notify embed send-path (D-04, same gates/dedup/alert_log) + wantmatch Hit.note (D-05) (completed 2026-06-06)
-  - [ ] 21-03-PLAN.md — ec package RunMatch (poll→diff→match→embed→send) + scheduler ec_auction_match job + main.go bot/scheduler reorder
+  - [x] 21-03-PLAN.md — ec package RunMatch (poll→diff→match→embed→send) + scheduler ec_auction_match job + main.go bot/scheduler reorder (completed 2026-06-06)
 
 ### Phase 22: WTS Cross-Server Monitor
 **Goal**: When a wanted item is posted for sale in a Raid Alliance WTS channel, the wantlister gets a DM — a new event source wired into the Phase 20 spine.
@@ -216,7 +216,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 1/1 | ✅ Complete (verify-or-close; zero new code; 0.4.0-rc1 = Azure test VM, not production) | 2026-06-02 |
 | 19. Wantlist CRUD | v2.2 | 3/3 | Complete    | 2026-06-05 |
 | 20. Bot + DM + Notification Infrastructure | v2.2 | 5/5 | Complete    | 2026-06-05 |
-| 21. EC-Tunnel Auction Monitor | v2.2 | 2/3 | In progress (21-02 notify embed send-path + wantmatch Hit.Note complete; next=21-03 ec.RunMatch) | 2026-06-06 |
+| 21. EC-Tunnel Auction Monitor | v2.2 | 3/3 | Complete (ec.RunMatch + ec_auction_match job + main.go reorder shipped; WANT-05) | 2026-06-06 |
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |

@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: — Wantlist + Discord Pinger
 status: executing
-last_updated: "2026-06-06T03:10:00.000Z"
+last_updated: "2026-06-06T02:44:00.000Z"
 last_activity: 2026-06-06
 progress:
   total_phases: 6
@@ -23,20 +23,21 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** Phase 21 — EC-Tunnel Auction Monitor (21-02 notify embed send-path + wantmatch Hit.Note complete; next = 21-03 ec.RunMatch + scheduler job + main.go reorder)
+- **Current focus:** Phase 21 — EC-Tunnel Auction Monitor COMPLETE (21-03 ec.RunMatch + ec_auction_match scheduler job + main.go reorder shipped; WANT-05 delivered, Track-1 finale done; next = `/gsd-discuss-phase 22` (invite-gated) or close the milestone)
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
 Phase: 21 — EC-Tunnel Auction Monitor
-Plan: 21-02 COMPLETE (2/3 plans); next = 21-03
-Status: Executing Phase 21 (Track 1 finale)
+Plan: 21-03 COMPLETE (3/3 plans) — Phase 21 done
+Status: Phase 21 COMPLETE (Track 1 finale; WANT-05 delivered)
 Last activity: 2026-06-06
 
-Phase 21 activity: 2026-06-06 -- 21-02 executed. Extended the P20 notify spine with a discordgo rich-embed send-path (D-04): added `ChannelMessageSendEmbed` to the `Sender` interface (the real `*discordgo.Session` already satisfies it — assertion holds) + an `Embed` field on `Alert`; the single SEND step branches on `a.Embed != nil` so the embed rides the EXACT same two-gate + dedup/cooldown + alert_log core (verified: `grep -c GetMonitorFlags` = 1, no duplicate gate path). Also added `wantmatch.Hit.Note *string` (D-05 "why you wanted it"), carried by the shared `scanHits` for BOTH `ForItem` and `ForName` (one scanner change). Backend-only, no web/. notify + wantmatch package tests + `go build ./...` + `go vet ./internal/backendsrv/...` green. 2 task commits (72edf87, 92b8fa8). Next: `/gsd-execute-phase 21` plan 21-03 (ec package RunMatch poll→diff→match→embed→send + scheduler ec_auction_match job + main.go bot/scheduler reorder).
+Phase 21 activity: 2026-06-06 -- 21-03 executed (the integration finale, WANT-05). NEW `internal/backendsrv/ec` package: `RunMatch` composes poll→diff→match→embed→send — polls PigParse `getdetails/0/{itemname}` per wanted item (SPIKE: server=0 live feed, NAME key form), diffs new WTS auctions (`u∈{0,2}`; WTB never alerts) against the per-item `ec_auction_cursor` with first-sight baseline (no replay) + advance-only-on-success, matches via `wantmatch.ForItem`, and DMs a discordgo rich embed through `notify.Send` (Source `ec_auction` + WantID + Embed) — re-implementing NONE of the P20 spine (both gates + dedup + cooldownEC=22h + alert_log inherited). Registered as the `scheduler.ec_auction_match` job (~10-min `dueEC` cadence); `scheduler.Start` gained a `botSession *discordgo.Session` param and `main.go` was reordered to start the bot BEFORE the scheduler so the live session is threaded `main.go → scheduler → ec`. nil-session no-op (typed-nil-interface guard). `go test ./...` + `go vet ./internal/backendsrv/...` + `go build ./...` all green. 3 task commits (bec919c, 38412ec, 5dcd384). Next: `/gsd-discuss-phase 22` (WTS Cross-Server, invite-gated) or close v2.2 if Track 2 stays gated.
+Earlier: 21-02 executed. Extended the P20 notify spine with a discordgo rich-embed send-path (D-04): added `ChannelMessageSendEmbed` to the `Sender` interface (the real `*discordgo.Session` already satisfies it — assertion holds) + an `Embed` field on `Alert`; the single SEND step branches on `a.Embed != nil` so the embed rides the EXACT same two-gate + dedup/cooldown + alert_log core (verified: `grep -c GetMonitorFlags` = 1, no duplicate gate path). Also added `wantmatch.Hit.Note *string` (D-05 "why you wanted it"), carried by the shared `scanHits` for BOTH `ForItem` and `ForName` (one scanner change). Backend-only, no web/. notify + wantmatch package tests + `go build ./...` + `go vet ./internal/backendsrv/...` green. 2 task commits (72edf87, 92b8fa8). Next: `/gsd-execute-phase 21` plan 21-03 (ec package RunMatch poll→diff→match→embed→send + scheduler ec_auction_match job + main.go bot/scheduler reorder).
 Earlier: 21-01 executed (the GATING plan). Mandatory PigParse feasibility spike ran live (no checkpoint, D-08): **path chosen = per-auction `getdetails`** (presence + freshness threshold met). Two research corrections recorded in 21-SPIKE.md: (1) the LIVE Blue getdetails feed is **server=0**, NOT server=1; (2) the only working query key is the item **NAME** (the id form 400s). Delivered: `enrich.ParseItemDetail`, migration `00008_ec_cursor.sql`, and `store.GetECCursor`/`SetECCursor`/`ECPollSet`. 3 task commits (0f29fcc, ff01c77, 486cff2).
-Progress: Phase 21 — 2/3 plans complete
+Progress: Phase 21 — 3/3 plans complete (COMPLETE)
 
 ## v2.2 Phase Plan (created 2026-06-02)
 

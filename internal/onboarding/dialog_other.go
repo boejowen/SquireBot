@@ -28,11 +28,31 @@ import (
 // inject a strings.Reader to drive the prompts deterministically.
 var stdin io.Reader = os.Stdin
 
-// readLine reads a single line from stdin and reports whether the stream ended
-// before any byte was read (EOF on a closed/non-tty stdin → cancel).
+// reader is ONE persistent bufio.Reader over stdin for the lifetime of the
+// onboarding session (CR-02). bufio reads the underlying stream in CHUNKS, so a
+// fresh bufio.Reader per prompt would let the FIRST ReadString buffer bytes past
+// its newline (the EQ-folder line on piped/scripted stdin) and then DISCARD that
+// tail when the next prompt allocated a new reader. Holding a single reader keeps
+// those buffered bytes available to the following prompt. Interactive TTY input
+// (one line delivered at a time) happened to survive the old per-call wrapping,
+// but `printf 'CODE\n/path\n' | squirebot --setup` did not. Tests that swap
+// `stdin` MUST reset this via resetReaderForTest so the new source is wrapped.
+var reader *bufio.Reader
+
+// stdinReader returns the lazily-initialised persistent reader over the current
+// stdin seam.
+func stdinReader() *bufio.Reader {
+	if reader == nil {
+		reader = bufio.NewReader(stdin)
+	}
+	return reader
+}
+
+// readLine reads a single line from the persistent stdin reader and reports
+// whether the stream ended before any byte was read (EOF on a closed/non-tty
+// stdin → cancel).
 func readLine() (line string, eofEmpty bool) {
-	r := bufio.NewReader(stdin)
-	s, err := r.ReadString('\n')
+	s, err := stdinReader().ReadString('\n')
 	if err != nil && s == "" {
 		return "", true // EOF/closed stream with nothing typed
 	}
@@ -73,16 +93,26 @@ func PickEQFolder(title string) (string, error) {
 	return expandPath(p), nil
 }
 
-// expandPath expands a leading "~" to $HOME and any $VAR references in the path.
+// expandPath resolves $VAR / ${VAR} references and a leading "~" in a typed
+// path. WR-01: env expansion runs FIRST (one pass), THEN a leading tilde is
+// resolved EXACTLY ONCE — never re-expanding the joined result. $HOME is
+// resolved via os.UserHomeDir() (which honors $HOME on Unix); if it is
+// unavailable, a bare "~" or "~/..." is left verbatim rather than silently
+// leaking a literal "~" through a second ExpandEnv pass — the caller's
+// ValidateFolder then rejects it with a clear "no such directory" error. No
+// command execution (no backticks/$( ) handling — os.ExpandEnv does not run a
+// shell).
 func expandPath(p string) string {
-	if p == "~" {
-		if home := os.Getenv("HOME"); home != "" {
-			return home
-		}
-	} else if strings.HasPrefix(p, "~/") {
-		if home := os.Getenv("HOME"); home != "" {
-			p = filepath.Join(home, p[2:])
-		}
+	p = os.ExpandEnv(p)
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p // can't resolve ~; leave the path untouched (no literal-~ leak surprise)
 	}
-	return os.ExpandEnv(p)
+	switch {
+	case p == "~":
+		return home
+	case strings.HasPrefix(p, "~/"):
+		return filepath.Join(home, p[2:])
+	}
+	return p
 }

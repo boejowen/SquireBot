@@ -67,31 +67,9 @@ func ValidateFolder(dir string) error {
 }
 
 // defaultKnownPaths probes a curated list of common EQ install locations.
-// First-match wins. ValidateFolder is the gate.
-func defaultKnownPaths() string {
-	userProfile := os.Getenv("USERPROFILE")
-	candidates := []string{
-		`C:\P99`,
-		`C:\Project1999`,
-		`C:\Games\Project1999`,
-		`C:\EverQuest`,
-		`C:\Games\EverQuest`,
-		`C:\Program Files (x86)\Sony\EverQuest`,
-	}
-	if userProfile != "" {
-		candidates = append(candidates,
-			filepath.Join(userProfile, "EverQuest"),
-			filepath.Join(userProfile, "P99"),
-			filepath.Join(userProfile, "Project1999"),
-		)
-	}
-	for _, p := range candidates {
-		if ValidateFolder(p) == nil {
-			return p
-		}
-	}
-	return ""
-}
+// First-match wins. ValidateFolder is the gate. The candidate list is
+// platform-specific (Windows C:\ literals vs Linux WINE-prefix direct-hits), so
+// it lives in build-tagged files: knownpaths_windows.go / knownpaths_other.go.
 
 // defaultRegistryProbe is a no-op on non-Windows; Windows implementation lives
 // in registry_windows.go.
@@ -102,14 +80,16 @@ func defaultRegistryProbe() string {
 	return scanUninstallKeys()
 }
 
-// defaultHeuristicScan is a no-op on non-Windows; Windows implementation lives
-// in heuristic_windows.go.
+// defaultHeuristicScan runs the platform heuristic scan. On Windows it walks the
+// local drive roots (heuristic_windows.go); on Linux it walks the WINE-prefix
+// roots for the eqgame.exe/eqclient.ini sentinel pair (heuristic_other.go,
+// Phase 25 / LNX-03). Other platforms (e.g. darwin) remain a no-op this phase.
 //
-// NOTE: the Windows heuristic scan is not unit-tested in CI because it requires
-// a real Windows filesystem with realistic structure. It is exercised in Plan 08's
-// smoke checkpoint.
+// NOTE: the heuristic scan is exercised by per-platform unit tests with planted
+// fake trees (heuristic_other_test.go); the Windows drive-walk is additionally
+// smoke-checked on a real install.
 func defaultHeuristicScan() string {
-	if runtime.GOOS != "windows" {
+	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		return ""
 	}
 	return heuristicScan()

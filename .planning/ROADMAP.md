@@ -150,7 +150,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   3. When a wanted item is newly auctioned, the wantlister receives a DM carrying the item, price, and WTS/WTB tag (seller resolved only when resolvable); the alert is deduped/cooled per Phase 20's policy.
   4. The cursor advances only after a successful poll and the job does not replay backlog on restart — a standing auction is not re-DMed every poll.
 **Plans**: 3 plans
-  - [ ] 21-01-PLAN.md — feasibility spike (GATE) + getdetails parser + 00008 ec_auction_cursor migration + cursor/poll-set store
+  - [x] 21-01-PLAN.md — feasibility spike (GATE; path=getdetails, server=0, NAME key) + getdetails parser + 00008 ec_auction_cursor migration + cursor/poll-set store (completed 2026-06-06)
   - [ ] 21-02-PLAN.md — notify embed send-path (D-04, same gates/dedup/alert_log) + wantmatch Hit.note (D-05)
   - [ ] 21-03-PLAN.md — ec package RunMatch (poll→diff→match→embed→send) + scheduler ec_auction_match job + main.go bot/scheduler reorder
 
@@ -216,7 +216,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 1/1 | ✅ Complete (verify-or-close; zero new code; 0.4.0-rc1 = Azure test VM, not production) | 2026-06-02 |
 | 19. Wantlist CRUD | v2.2 | 3/3 | Complete    | 2026-06-05 |
 | 20. Bot + DM + Notification Infrastructure | v2.2 | 5/5 | Complete    | 2026-06-05 |
-| 21. EC-Tunnel Auction Monitor | v2.2 | 0/TBD | Not started | — |
+| 21. EC-Tunnel Auction Monitor | v2.2 | 1/3 | In progress (21-01 data foundation + spike complete; spike verdict=getdetails) | 2026-06-06 |
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |

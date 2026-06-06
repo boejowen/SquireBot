@@ -13,17 +13,29 @@
 Description=SquireBot watcher (P99 inventory/spellbook uploader)
 After=network-online.target
 Wants=network-online.target
+# WR-03: DISABLE systemd's start-rate limiter for this unit. The self-update
+# path (main.go OPS-04) intentionally does `os.Exit(0)` after swapping the
+# binary, relying on Restart=always to relaunch the NEW binary. systemd counts a
+# clean exit-and-restart against the default 5-starts/10s limit, so a normal
+# update swap (or a brief transient crash loop) could trip 'start-limit-hit' and
+# leave the watcher permanently `failed` until a manual `systemctl --user
+# reset-failed`. A self-updating user daemon should keep trying; we set the
+# interval to 0 (limiter off) and lean on RestartSec for backoff instead.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/squirebot
 Restart=always
 RestartSec=5
+# A clean exit 0 (the post-self-update swap path) is a SUCCESS, not a failure —
+# Restart=always relaunches it regardless, and this makes the intent explicit.
+SuccessExitStatus=0
 # Minimal hardening for a headless user daemon. NoNewPrivileges is safe and
 # cheap. We deliberately do NOT sandbox $HOME — the watcher must READ the EQ
 # folder under the home directory (often inside a WINE prefix), so any
 # home-protection directive would break ingestion. The self-update swap
-# relaunches via Restart=always.
+# relaunches via Restart=always (start-limiter disabled in [Unit] above).
 NoNewPrivileges=true
 
 [Install]

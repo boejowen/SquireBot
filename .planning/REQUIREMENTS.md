@@ -40,12 +40,12 @@
 
 ### Linux Watcher (LNX) — cross-cutting platform (Phase 25)
 
-- [ ] **LNX-01**: The watcher cross-compiles `GOOS=linux GOARCH=amd64 CGO_ENABLED=0` to a single static binary and runs **headless** (no systray); the tray controller is a no-op on Linux, `RunApp` is unchanged, and the Windows build + `go test ./...` are unaffected (additive behind build tags / `runtime.GOOS`).
-- [ ] **LNX-02**: The bearer guild code persists in a `0600` file under `$XDG_CONFIG_HOME/squirebot/` (no OS keyring / secret-service dependency); config + logs follow XDG base dirs; Windows `wincred`/`%LOCALAPPDATA%` paths are untouched.
-- [ ] **LNX-03**: EQ-folder discovery finds the install inside a WINE prefix (`$WINEPREFIX` → `~/.wine/drive_c` → common Lutris/Proton/Bottles paths via the bounded `eqfind` walk for `eqgame.exe`/`eqclient.ini`), falling back to a CLI prompt that persists the chosen path.
-- [ ] **LNX-04**: First-run onboarding + control are CLI — `--setup` prompts for the guild code + EQ folder over stdin, `--status` prints health/config — with no Win32 dialog and no localhost/browser surface (watcher stays browser-free).
+- [x] **LNX-01**: The watcher cross-compiles `GOOS=linux GOARCH=amd64 CGO_ENABLED=0` to a single static binary and runs **headless** (no systray); the tray controller is a no-op on Linux, `RunApp` is unchanged, and the Windows build + `go test ./...` are unaffected (additive behind build tags / `runtime.GOOS`).
+- [x] **LNX-02**: The bearer guild code persists in a `0600` file under `$XDG_CONFIG_HOME/squirebot/` (no OS keyring / secret-service dependency); config + logs follow XDG base dirs; Windows `wincred`/`%LOCALAPPDATA%` paths are untouched.
+- [x] **LNX-03**: EQ-folder discovery finds the install inside a WINE prefix (`$WINEPREFIX` → `~/.wine/drive_c` → common Lutris/Proton/Bottles paths via the bounded `eqfind` walk for `eqgame.exe`/`eqclient.ini`), falling back to a CLI prompt that persists the chosen path.
+- [x] **LNX-04**: First-run onboarding + control are CLI — `--setup` prompts for the guild code + EQ folder over stdin, `--status` prints health/config — with no Win32 dialog and no localhost/browser surface (watcher stays browser-free).
 - [x] **LNX-05**: A `.tar.gz` ships the static binary + README + a systemd **user** unit + `install.sh` (installs to `~/.local/bin`, enables the unit for autostart, runs first-time `--setup`); `minio/selfupdate` auto-update works on Linux with the linux asset in the update manifest.
-- [ ] **LNX-06**: The fsnotify watch + 500 ms debounce + full-snapshot-replace upload + `WatcherMaxSchemaVersion` gate + log rotation all function on Linux, covered by the existing suite plus new Linux-path unit tests for credstore / eqfind / config.
+- [x] **LNX-06**: The fsnotify watch + 500 ms debounce + full-snapshot-replace upload + `WatcherMaxSchemaVersion` gate + log rotation all function on Linux, covered by the existing suite plus new Linux-path unit tests for credstore / eqfind / config.
 
 ---
 
@@ -90,12 +90,12 @@ _Maps each REQ-ID to exactly one phase. Phases continue at 19. All 8 v2.2 requir
 | WANT-05 | Phase 21 — EC-Tunnel Auction Monitor | Complete (2026-06-06) |
 | WANT-06 | Phase 22 — WTS Cross-Server Monitor *(invite-gated)* | Pending |
 | WANT-07 | Phase 23 — Quest-Target Raid Monitor *(invite-gated)* | Pending |
-| LNX-01 | Phase 25 — Linux Watcher | Pending |
-| LNX-02 | Phase 25 — Linux Watcher | Pending |
-| LNX-03 | Phase 25 — Linux Watcher | Pending |
-| LNX-04 | Phase 25 — Linux Watcher | Pending |
+| LNX-01 | Phase 25 — Linux Watcher | Complete (code, 2026-06-06; live UAT pending) |
+| LNX-02 | Phase 25 — Linux Watcher | Complete (code, 2026-06-06; live UAT pending) |
+| LNX-03 | Phase 25 — Linux Watcher | Complete (code, 2026-06-06; live UAT pending) |
+| LNX-04 | Phase 25 — Linux Watcher | Complete (code, 2026-06-06; live UAT pending) |
 | LNX-05 | Phase 25 — Linux Watcher | Complete (25-03 ✅ 2026-06-06) |
-| LNX-06 | Phase 25 — Linux Watcher | Pending |
+| LNX-06 | Phase 25 — Linux Watcher | Complete (code, 2026-06-06; live UAT pending) |
 
 **Coverage:** 8/8 v2.2 wantlist requirements mapped across Phases 19–23 (Track 1 unblocked: WANT-01/02 P19 · WANT-03/04/08 P20 · WANT-05 P21; Track 2 invite-gated: WANT-06 P22 · WANT-07 P23). Plus 6 cross-cutting platform requirements (LNX-01..06 → Phase 25, Linux Watcher).
 

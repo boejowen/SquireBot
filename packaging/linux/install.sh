@@ -98,3 +98,23 @@ if [ "$ENABLE_LINGER" -ne 1 ]; then
 	echo "  note:    starts on your next desktop login. For a headless/SSH-only"
 	echo "           box that must run without logging in, re-run: ./install.sh --linger"
 fi
+
+# --- PATH advisory (WR-04) -------------------------------------------------
+# The systemd unit invokes squirebot by ABSOLUTE path (ExecStart=%h/.local/bin),
+# so the service runs regardless. But the guidance above tells the user to run
+# `squirebot --status` BARE — that only works if ~/.local/bin is on $PATH, which
+# is frequently NOT the case on minimal / SSH-only boxes. Warn (don't fail) with
+# a concrete remediation so "command not found" isn't a surprise.
+case ":$PATH:" in
+	*":$HOME/.local/bin:"*)
+		: # already on PATH — nothing to do
+		;;
+	*)
+		echo ""
+		echo "  warning: $HOME/.local/bin is not on your PATH." >&2
+		echo "           Run squirebot via its full path ($BIN_DST --status)," >&2
+		echo "           or add the dir to PATH, e.g. append to ~/.profile:" >&2
+		echo "             export PATH=\"\$HOME/.local/bin:\$PATH\"" >&2
+		echo "           then re-login (or 'source ~/.profile')." >&2
+		;;
+esac

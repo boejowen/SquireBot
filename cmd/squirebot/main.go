@@ -133,8 +133,17 @@ func main() {
 	// dialog — out of scope/untested here). The tray controller used for --setup
 	// is the build-tagged no-op on Linux (tray_other.go).
 	if len(os.Args) >= 2 && os.Args[1] == "--status" {
-		runStatus(cfg, logDir)
-		os.Exit(0)
+		// Phase 25 / CR-01 (LNX-05, D-06): the exit code is the machine-readable
+		// half of --status. install.sh keys its first-run onboarding branch on
+		// `--status` exiting non-zero ("not configured" → run --setup). So
+		// runStatus returns true IFF fully configured (guild code AND an EQ
+		// folder) and we exit 0; otherwise exit 1 so a fresh box runs --setup.
+		// The human-readable summary still prints either way. The guild code is
+		// NEVER printed (V7).
+		if runStatus(cfg, logDir) {
+			os.Exit(0)
+		}
+		os.Exit(1)
 	}
 	if len(os.Args) >= 2 && os.Args[1] == "--setup" {
 		setupCtx, setupCancel := context.WithCancel(context.Background())
@@ -232,11 +241,19 @@ func hasAnyEQFolder(cfg *config.Config) bool {
 }
 
 // runStatus prints a headless health/config summary to STDOUT for `--status`
-// (Phase 25 / LNX-04). It NEVER prints the guild code itself (V7 / T-25-06):
-// credstore.Read is consulted ONLY to report "configured" vs "not configured".
-func runStatus(cfg *config.Config, logDir string) {
-	codeStatus := "not configured"
+// (Phase 25 / LNX-04) and REPORTS CONFIGURED-NESS VIA ITS RETURN VALUE: it
+// returns true IFF BOTH a guild code AND an EQ folder are configured. The
+// caller maps that bool to the process exit code (CR-01) so install.sh's
+// "run --setup when --status fails" contract works on a fresh box. It NEVER
+// prints the guild code itself (V7 / T-25-06): credstore.Read is consulted
+// ONLY to report "configured" vs "not configured".
+func runStatus(cfg *config.Config, logDir string) (configured bool) {
+	codeConfigured := false
 	if code, err := credstore.Read(); err == nil && code != "" {
+		codeConfigured = true
+	}
+	codeStatus := "not configured"
+	if codeConfigured {
 		codeStatus = "configured"
 	}
 
@@ -260,4 +277,16 @@ func runStatus(cfg *config.Config, logDir string) {
 		}
 		return BackendBaseURL
 	}())
+
+	// Fully configured == an authenticated bearer code AND at least one EQ
+	// folder to watch. Either missing → exit non-zero → install.sh runs --setup.
+	return statusConfigured(codeConfigured, len(folders))
+}
+
+// statusConfigured is the pure exit-code predicate behind runStatus (CR-01):
+// the watcher is "configured" (→ exit 0) only when a guild code is present AND
+// at least one EQ folder is set. Extracted as a pure function so the exit-code
+// contract is unit-testable without touching the on-disk credstore/config.
+func statusConfigured(codeConfigured bool, eqFolderCount int) bool {
+	return codeConfigured && eqFolderCount > 0
 }

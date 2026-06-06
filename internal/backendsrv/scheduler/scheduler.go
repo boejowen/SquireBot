@@ -44,6 +44,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
+
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/jobs"
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/politefetch"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
@@ -112,7 +114,13 @@ func startOfSundayUTC(now time.Time) time.Time {
 // and to pass to the jobs' Tx composition). No Google/OAuth/Sheets dependency is
 // introduced — the jobs talk only to the community PigParse/wiki HTTP APIs and
 // the local DB.
-func Start(ctx context.Context, db *sql.DB) {
+//
+// botSession is the live Discord session threaded in from main.go (P21, WANT-05):
+// the EC auction job (registered below) hands it to notify.Send so a match DMs the
+// wantlister. It is nil when the bot is disabled (no token) — the EC job no-ops
+// cleanly on a nil session (bot.go:104-107 precedent; non-fatal). main.go starts
+// the bot BEFORE Start so this session is live by the time the EC job first fires.
+func Start(ctx context.Context, db *sql.DB, botSession *discordgo.Session) {
 	registry := []*Job{
 		{
 			Name: "pigparse_daily",

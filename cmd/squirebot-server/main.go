@@ -230,16 +230,13 @@ func runServe(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// In-process scheduler — registers the real PigParse + wiki jobs (P12). It
-	// reads each job's job_run cursor for the due-check, runs an immediate check
-	// pass on startup, and advances the cursor after each run; ctx cancel unwinds
-	// it on SIGINT/SIGTERM.
-	scheduler.Start(ctx, db)
-
 	// In-process Discord bot (Phase 20 / WANT-03) — non-fatal: the HTTP API +
 	// scheduler MUST serve even if the bot can't connect (or no token is set).
 	// recover()-isolated inside bot.Start; ctx cancel on SIGINT/SIGTERM closes it.
-	// Wired AFTER scheduler.Start and BEFORE the mux/ListenAndServe.
+	// Started BEFORE scheduler.Start (P21, WANT-05) so the live *discordgo.Session
+	// is threaded into the scheduler's EC auction job — both goroutines are
+	// non-blocking, ctx-tied, and independent, so the reorder is safe (a bot/job
+	// panic is recover-isolated and never takes down the HTTP/ingest surface).
 	botCfg := bot.ConfigFromEnv()
 	b, err := bot.Start(ctx, botCfg)
 	if err != nil {
@@ -249,6 +246,13 @@ func runServe(args []string) int {
 	if b != nil {
 		botSession = b.Session() // nil when the bot is disabled (no token)
 	}
+
+	// In-process scheduler — registers the real PigParse + wiki jobs (P12) plus the
+	// EC auction monitor (P21, WANT-05). It reads each job's job_run cursor for the
+	// due-check, runs an immediate check pass on startup, and advances the cursor
+	// after each run; ctx cancel unwinds it on SIGINT/SIGTERM. botSession (possibly
+	// nil — bot disabled) is threaded to the EC job, which no-ops cleanly on nil.
+	scheduler.Start(ctx, db, botSession)
 
 	// Route the network surfaces. Go 1.22+ method+pattern routing. The ingest
 	// handler composes the bearer guard + bind + atomic replace (11-02/03/04); the

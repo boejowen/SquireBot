@@ -53,9 +53,11 @@ func TestStart_NonBlockingAndStopsOnCancel(t *testing.T) {
 	cancel()
 
 	// Start must return immediately (it spawns a goroutine and does not block).
+	// A nil botSession is threaded (P21): the bot is disabled in the test, and the
+	// EC auction job no-ops cleanly on a nil session.
 	returned := make(chan struct{})
 	go func() {
-		Start(ctx, db)
+		Start(ctx, db, nil)
 		close(returned)
 	}()
 	select {

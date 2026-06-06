@@ -25,7 +25,7 @@ func TestBank_OnlyBankToonAndNilCoin(t *testing.T) {
 
 	// Enrich the bank item so the inline enrichment path is exercised on bank too.
 	seedItemMaster(t, db, 1038, "Bag of Holding", "Holds a lot.", "http://wiki/Bag", false)
-	seedPigparse(t, db, 1038, "0", 9000, 40)
+	seedPigparse(t, db, 1038, "Bag of Holding", "0", 9000, 40)
 
 	bv, err := compute.Bank(ctx, s)
 	if err != nil {

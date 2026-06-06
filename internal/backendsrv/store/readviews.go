@@ -31,10 +31,18 @@ import (
 
 // InventoryJoinRow is one row of the view/bank join: an inventory_item row joined
 // to its character (Char name + last_seen) and LEFT JOINed to item_master (wiki
-// enrichment) and pigparse_price (price). pigparse_price.item_id is the PRIMARY
-// KEY so the join yields AT MOST ONE price row per item (no fan-out). Direction is
-// TEXT in SQLite ("0"=WTS / "1"=WTB by the P12 job's strconv.Itoa) — scanned as a
-// string. Fields that LEFT-JOIN to nothing resolve to zero-values.
+// enrichment) and pigparse_price (price). The price join bridges by NORMALIZED
+// NAME (lower(trim(name)) — the gear_check/spell_check convention) NOT by item_id:
+// the PigParse catalog (pigparse_price) and the EQ /outputfile inventory
+// (inventory_item) are DIFFERENT item_id namespaces (only ~58/713 inventory ids
+// exist in the catalog by id, vs ~559 names matching by name), so the old
+// pp.item_id = ii.item_id join silently left ~91% of held rows unpriced. The CTE
+// (see InventoryJoin) collapses pigparse_price to ONE representative row per
+// normalized name BEFORE the LEFT JOIN, so the join still yields AT MOST ONE price
+// row per inventory row (no fan-out, no inflated bank counts) even when two catalog
+// ids share a normalized name. Direction is TEXT in SQLite ("0"=WTS / "1"=WTB by
+// the P12 job's strconv.Itoa) — scanned as a string. Fields that LEFT-JOIN to
+// nothing resolve to zero-values.
 type InventoryJoinRow struct {
 	Char        string
 	Location    string
@@ -125,14 +133,29 @@ type CharFreshness struct {
 // Rows are ordered Char asc → item asc → location asc (the v1 sort); compute
 // preserves this order without re-sorting.
 func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJoinRow, error) {
-	const base = `SELECT c.name, ii.location, ii.name, ii.item_id, ii.count,
+	// pp_by_name collapses pigparse_price to ONE representative row per normalized
+	// name (lower(trim(name))). Cross-namespace bridge fix: the price join keys on
+	// NAME, not item_id (catalog ids != EQ inventory ids). The fan-out guard lives
+	// in this CTE — two catalog ids sharing a normalized name yield a single
+	// representative (the MIN(item_id) row), so the LEFT JOIN below adds at most one
+	// price row per inventory row (no duplicate view rows / inflated bank counts).
+	// item_master stays id-keyed (im.item_id = ii.item_id) — it is the watcher's own
+	// EQ-namespace enrichment, correctly id-matched.
+	const base = `WITH pp_rep AS (
+	       SELECT lower(trim(name)) AS norm_name, MIN(item_id) AS rep_item_id
+	       FROM pigparse_price
+	       WHERE name IS NOT NULL AND trim(name) <> ''
+	       GROUP BY lower(trim(name))
+	)
+	SELECT c.name, ii.location, ii.name, ii.item_id, ii.count,
 	       im.wiki_url, im.wiki_summary, im.is_quest_item,
 	       pp.direction, pp.a30, pp.t30,
 	       c.last_seen, ii.row_ordinal
 	FROM inventory_item ii
 	JOIN character c            ON c.id = ii.character_id
 	LEFT JOIN item_master im     ON im.item_id = ii.item_id
-	LEFT JOIN pigparse_price pp  ON pp.item_id = ii.item_id
+	LEFT JOIN pp_rep             ON pp_rep.norm_name = lower(trim(ii.name))
+	LEFT JOIN pigparse_price pp  ON pp.item_id = pp_rep.rep_item_id
 	WHERE c.is_removed = 0 AND ii.item_id IS NOT NULL AND ii.item_id > 0`
 	const orderBy = `
 	ORDER BY c.name, ii.name, ii.location`

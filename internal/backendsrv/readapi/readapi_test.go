@@ -85,14 +85,17 @@ func seedItemMaster(t *testing.T, db *sql.DB, itemID int64, name, summary, url s
 	}
 }
 
-func seedPigparse(t *testing.T, db *sql.DB, itemID int64, direction string, a30 float64, t30 int64) {
+// seedPigparse inserts one pigparse_price row. The view/bank price join bridges by
+// NORMALIZED NAME (lower(trim(name))) NOT item_id (catalog ids != EQ inventory
+// ids), so `name` MUST match the inventory item's name for the price to attach.
+func seedPigparse(t *testing.T, db *sql.DB, itemID int64, name, direction string, a30 float64, t30 int64) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO pigparse_price (item_id, name, current_avg, blue_volume, last_seen, direction, t30, a30, last_refreshed)
 		 VALUES (?,?,?,?,?,?,?,?,datetime('now'))`,
-		itemID, "x", a30, t30, "2026-05-09", direction, t30, a30,
+		itemID, name, a30, t30, "2026-05-09", direction, t30, a30,
 	); err != nil {
-		t.Fatalf("seed pigparse_price (item_id=%d): %v", itemID, err)
+		t.Fatalf("seed pigparse_price (item_id=%d, name=%q): %v", itemID, name, err)
 	}
 }
 
@@ -141,7 +144,7 @@ func seedStore(t *testing.T) *store.Store {
 
 	// A priced + quest item so a ViewRow carries a non-null price + quest link.
 	seedItemMaster(t, db, 1001, "Jade Reaver", "A fine blade.", "https://wiki.project1999.com/Jade_Reaver", false)
-	seedPigparse(t, db, 1001, "0", 1500.0, 7) // WTS, a30>0 → non-null price
+	seedPigparse(t, db, 1001, "Jade Reaver", "0", 1500.0, 7) // WTS, a30>0 → non-null price (name-bridged)
 	seedQuest(t, db, 1001, "Sword Quest", "in_game_flag")
 
 	seedInv(t, db, enchID, "General1", "Jade Reaver", 1001, 0)

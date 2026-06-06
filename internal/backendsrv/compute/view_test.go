@@ -30,7 +30,7 @@ func TestView_EnrichmentInlineAndOrdering(t *testing.T) {
 	seedInv(t, db, apple, "GENERAL1", "(empty)", 0, 3)
 
 	seedItemMaster(t, db, 1234, "Circlet of Vallon", "A fine circlet of Vallon.", "http://wiki/Circlet", true)
-	seedPigparse(t, db, 1234, "0", 4500, 75) // WTS, a30=4500, t30=75
+	seedPigparse(t, db, 1234, "Circlet of Vallon", "0", 4500, 75) // WTS, a30=4500, t30=75
 	seedQuest(t, db, 1234, "Coldain Ring 1", "notes_link")
 
 	rows, err := compute.View(ctx, s)
@@ -81,5 +81,59 @@ func TestView_EnrichmentInlineAndOrdering(t *testing.T) {
 	}
 	if r.WikiURL != "" || r.WikiSummary != "" || r.IsQuestItem || len(r.Prices) != 0 || len(r.QuestLinks) != 0 {
 		t.Errorf("Robe row = %+v, want bare (no enrichment)", r)
+	}
+}
+
+// TestView_PriceBridgesByNameAcrossNamespaces is the compute-level regression for
+// the PRICE-COVERAGE bug: a held item whose PigParse catalog id differs from its
+// EQ inventory id (same name) must still get its picked price + inline Prices, and
+// a name shared by two catalog ids must NOT fan out the view into duplicate rows.
+func TestView_PriceBridgesByNameAcrossNamespaces(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewStore(db)
+	ctx := context.Background()
+
+	findom := seedChar(t, db, "owner-a", "Findom", "SHM", 60, "TRO", false)
+
+	// Held under EQ id 14536; catalog row for the same NAME is id 19450.
+	seedInv(t, db, findom, "GENERAL1", "10 Dose Ant's Potion", 14536, 1)
+	seedPigparse(t, db, 19450, "10 Dose Ant's Potion", "0", 320, 12)
+
+	// Same normalized name under TWO catalog ids — the representative-row CTE must
+	// collapse to one, so this item yields exactly ONE view row with one price.
+	seedInv(t, db, findom, "GENERAL2", "Words of the Spoken", 7001, 2)
+	seedPigparse(t, db, 7777, "Words of the Spoken", "0", 100, 4)
+	seedPigparse(t, db, 9999, "WORDS OF THE SPOKEN", "0", 200, 9)
+
+	rows, err := compute.View(ctx, s)
+	if err != nil {
+		t.Fatalf("View: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d view rows, want 2 (no fan-out on the shared-name item): %+v", len(rows), rows)
+	}
+
+	byItem := map[string]compute.ViewRow{}
+	for _, r := range rows {
+		byItem[r.Item] = r
+	}
+
+	pot := byItem["10 Dose Ant's Potion"]
+	if pot.Price == nil || *pot.Price != 320 {
+		t.Errorf("Ant's Potion Price = %v, want *320 (name-bridged 14536↔19450)", pot.Price)
+	}
+	if len(pot.Prices) != 1 || pot.Prices[0].A30 != 320 || pot.Prices[0].T30 != 12 {
+		t.Errorf("Ant's Potion Prices = %+v, want one {a30:320 t30:12}", pot.Prices)
+	}
+	if pot.ID != 14536 {
+		t.Errorf("Ant's Potion ID = %d, want 14536 (EQ inventory id preserved)", pot.ID)
+	}
+
+	words := byItem["Words of the Spoken"]
+	if words.Price == nil {
+		t.Errorf("Words of the Spoken Price = nil, want a single representative price (no fan-out)")
+	}
+	if len(words.Prices) != 1 {
+		t.Errorf("Words of the Spoken Prices = %+v, want exactly one (fan-out guard)", words.Prices)
 	}
 }

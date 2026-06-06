@@ -80,15 +80,18 @@ func seedItemMaster(t *testing.T, db *sql.DB, itemID int64, name, summary, url s
 
 // seedPigparse inserts one pigparse_price row. direction is the TEXT flag
 // ("0"=WTS / "1"=WTB / "2"=BOTH). It sets both a30/t30 and the current_avg/
-// blue_volume aliases (the P12 job writes current_avg=a30, blue_volume=t30).
-func seedPigparse(t *testing.T, db *sql.DB, itemID int64, direction string, a30 float64, t30 int64) {
+// blue_volume aliases (the P12 job writes current_avg=a30, blue_volume=t30). The
+// view/bank price join bridges by NORMALIZED NAME (lower(trim(name))) NOT item_id
+// (catalog ids != EQ inventory ids), so `name` MUST match the inventory item's
+// name for the price to attach.
+func seedPigparse(t *testing.T, db *sql.DB, itemID int64, name, direction string, a30 float64, t30 int64) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO pigparse_price (item_id, name, current_avg, blue_volume, last_seen, direction, t30, a30, last_refreshed)
 		 VALUES (?,?,?,?,?,?,?,?,datetime('now'))`,
-		itemID, "x", a30, t30, "2026-05-09", direction, t30, a30,
+		itemID, name, a30, t30, "2026-05-09", direction, t30, a30,
 	); err != nil {
-		t.Fatalf("seed pigparse_price (item_id=%d): %v", itemID, err)
+		t.Fatalf("seed pigparse_price (item_id=%d, name=%q): %v", itemID, name, err)
 	}
 }
 

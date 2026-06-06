@@ -42,14 +42,17 @@ func seedItemMaster(t *testing.T, db *sql.DB, itemID int64, name, summary, url s
 	}
 }
 
-func seedPigparse(t *testing.T, db *sql.DB, itemID int64, direction string, a30 float64, t30 int64) {
+// seedPigparse inserts one pigparse_price row. The view/bank price join bridges by
+// NORMALIZED NAME (lower(trim(name))), NOT item_id (catalog ids != EQ inventory
+// ids), so `name` MUST match the inventory item's name for a price to attach.
+func seedPigparse(t *testing.T, db *sql.DB, itemID int64, name, direction string, a30 float64, t30 int64) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO pigparse_price (item_id, name, current_avg, blue_volume, last_seen, direction, t30, a30, last_refreshed)
 		 VALUES (?,?,?,?,?,?,?,?,datetime('now'))`,
-		itemID, "x", a30, t30, "2026-05-09", direction, t30, a30,
+		itemID, name, a30, t30, "2026-05-09", direction, t30, a30,
 	); err != nil {
-		t.Fatalf("seed pigparse_price (item_id=%d): %v", itemID, err)
+		t.Fatalf("seed pigparse_price (item_id=%d, name=%q): %v", itemID, name, err)
 	}
 }
 
@@ -119,7 +122,7 @@ func TestReadViews_InventoryJoinAndGrouping(t *testing.T) {
 
 	// Enrichment for item 1234 only.
 	seedItemMaster(t, db, 1234, "Circlet of Vallon", "A fine circlet.", "http://wiki/Circlet", true)
-	seedPigparse(t, db, 1234, "0", 4500, 75)
+	seedPigparse(t, db, 1234, "Circlet of Vallon", "0", 4500, 75)
 	seedQuestItem(t, db, 1234, "Coldain Ring 1", "notes_link")
 	seedQuestItem(t, db, 1234, "Coldain Ring 2", "notes_link")
 	seedQuestItem(t, db, 9999, "Unrelated Quest", "in_game_flag") // different item_id
@@ -232,6 +235,102 @@ func TestReadViews_InventoryJoinAndGrouping(t *testing.T) {
 			t.Errorf("CharFreshness = %+v, want Apple with last_seen", got)
 		}
 	})
+}
+
+// TestReadViews_PriceBridgesByNameAcrossNamespaces is the regression for the
+// view/bank PRICE-COVERAGE bug: the inventory item_id (EQ /outputfile namespace)
+// and the pigparse_price item_id (PigParse catalog namespace) are DIFFERENT, so a
+// price must be matched by NORMALIZED NAME (lower(trim(name))), not item_id.
+func TestReadViews_PriceBridgesByNameAcrossNamespaces(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	_, charID := seedOwnerChar(t, db, "owner-a", "Findom")
+	setCharMeta(t, db, charID, "SHM", 60, "TRO", false)
+
+	// Inventory holds the item under the EQ in-game id 14536 …
+	seedRaw(t, db, charID, "GENERAL1", "10 Dose Ant's Potion", i64ptr(14536), 1)
+	// … but the PigParse catalog row for the SAME NAME has a DIFFERENT id 19450.
+	// Under the old pp.item_id = ii.item_id join this would NOT price (14536 ∉
+	// catalog); the name bridge must attach it.
+	seedPigparse(t, db, 19450, "10 Dose Ant's Potion", "0", 320, 12)
+
+	// A second item whose name differs only by case/whitespace — proves the
+	// lower(trim()) normalization on BOTH sides.
+	seedRaw(t, db, charID, "GENERAL2", "Bone Chips", i64ptr(13073), 2)
+	seedPigparse(t, db, 88888, "  bone chips  ", "0", 5, 3)
+
+	got, err := s.InventoryJoin(ctx, false)
+	if err != nil {
+		t.Fatalf("InventoryJoin: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2: %+v", len(got), got)
+	}
+
+	byName := map[string]InventoryJoinRow{}
+	for _, r := range got {
+		byName[r.ItemName] = r
+	}
+
+	pot := byName["10 Dose Ant's Potion"]
+	if !pot.HasPrice || pot.A30 != 320 || pot.T30 != 12 || pot.Direction != "0" {
+		t.Errorf("Ant's Potion price = {has:%t a30:%v t30:%d dir:%q}, want has/320/12/0 (name-bridged across 14536↔19450)",
+			pot.HasPrice, pot.A30, pot.T30, pot.Direction)
+	}
+	// The inventory item_id is preserved (the EQ id), not the catalog id.
+	if pot.ItemID != 14536 {
+		t.Errorf("Ant's Potion ItemID = %d, want 14536 (the EQ inventory id, not the catalog 19450)", pot.ItemID)
+	}
+
+	bc := byName["Bone Chips"]
+	if !bc.HasPrice || bc.A30 != 5 {
+		t.Errorf("Bone Chips price = {has:%t a30:%v}, want has/5 (case+whitespace-normalized name match)", bc.HasPrice, bc.A30)
+	}
+}
+
+// TestReadViews_PriceNoFanOutOnSharedName guards the CRITICAL fan-out invariant:
+// when two DIFFERENT catalog ids share a normalized name, a held inventory row of
+// that name must still yield EXACTLY ONE join row (one price), never two — a naive
+// ON lower(trim(pp.name)) = lower(trim(ii.name)) would duplicate the row and
+// inflate bank counts.
+func TestReadViews_PriceNoFanOutOnSharedName(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	_, charID := seedOwnerChar(t, db, "owner-a", "Banktoon")
+	setCharMeta(t, db, charID, "WAR", 60, "HUM", true) // bank toon
+
+	seedRaw(t, db, charID, "GENERAL1", "Words of the Spoken", i64ptr(7001), 1)
+
+	// TWO catalog rows, different ids, SAME normalized name (a real PigParse
+	// hazard: dupe entries / WTS+WTB rows). The representative-row CTE must collapse
+	// these to one before the join.
+	seedPigparse(t, db, 7777, "Words of the Spoken", "0", 100, 4)
+	seedPigparse(t, db, 9999, "WORDS OF THE SPOKEN", "0", 200, 9)
+
+	// View path (all chars).
+	all, err := s.InventoryJoin(ctx, false)
+	if err != nil {
+		t.Fatalf("InventoryJoin(false): %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("view: got %d rows for one held item with a name shared by 2 catalog ids, want exactly 1 (no fan-out): %+v", len(all), all)
+	}
+	if !all[0].HasPrice {
+		t.Errorf("view: row HasPrice = false, want true (one representative price)")
+	}
+
+	// Bank path (the count-inflation risk) — must ALSO be exactly one row.
+	bank, err := s.InventoryJoin(ctx, true)
+	if err != nil {
+		t.Fatalf("InventoryJoin(true): %v", err)
+	}
+	if len(bank) != 1 {
+		t.Fatalf("bank: got %d rows, want exactly 1 (fan-out would inflate bank totals): %+v", len(bank), bank)
+	}
 }
 
 // TestReadViews_GearAndSpellInputs proves the wiki_gear_tier / wiki_spells /

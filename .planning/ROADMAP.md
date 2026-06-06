@@ -205,7 +205,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   5. A `.tar.gz` ships the binary + README + a systemd **user** unit + `install.sh` (installs to `~/.local/bin`, enables the unit for autostart, runs first-time `--setup`); the existing `minio/selfupdate` auto-update works on Linux with the linux asset in the manifest.
   6. The fsnotify watch + debounce + full-snapshot-replace upload + schema-version gate + log rotation all work on Linux (they are platform-agnostic) — verified by the existing suite plus new Linux-path unit tests for credstore/eqfind/config.
 **Plans**: 3 plans
-  - [ ] 25-01-PLAN.md — CGO-free headless build seam: tray split + main.go systray split + config/logging XDG branch (LNX-01, LNX-02)
+  - [x] 25-01-PLAN.md — CGO-free headless build seam: tray split + main.go systray split + config/logging XDG branch (LNX-01, LNX-02) ✅ 2026-06-06
   - [ ] 25-02-PLAN.md — Linux runtime impls: 0600-file credstore + WINE-prefix eqfind walk + CLI --setup/--status onboarding + new unit tests (LNX-02/03/04/06)
   - [ ] 25-03-PLAN.md — packaging + auto-update: release.yml linux build/tarball/systemd-unit/install.sh + manifest OS-asset selection (LNX-05)
 
@@ -238,7 +238,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |
-| 25. Linux Watcher | v2.2 | 0/3 | Planned (3 plans, 3 waves; headless static build for WINE/Linux guildies) | — |
+| 25. Linux Watcher | v2.2 | 1/3 | 🔄 In progress (25-01 CGO-free build seam done — linux/amd64 builds, zero systray in closure, SIGTERM handler, XDG paths; Windows unchanged) | — |
 
 ## Backlog
 

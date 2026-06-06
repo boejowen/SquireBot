@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: — Wantlist + Discord Pinger
 status: executing
-last_updated: "2026-06-06T02:44:00.000Z"
+last_updated: "2026-06-06T04:30:00.000Z"
 last_activity: 2026-06-06
 progress:
   total_phases: 6
@@ -29,10 +29,12 @@ See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 ## Current Position
 
-Phase: 21 — EC-Tunnel Auction Monitor
-Plan: 21-03 COMPLETE (3/3 plans) — Phase 21 done
-Status: Phase 21 COMPLETE + **DEPLOYED LIVE 2026-06-06** — **v2.2 Track 1 CLOSED** (Phases 19–21 shipped; wantlist + EC pinger is a complete standalone feature). Track 2 (Phases 22–23) PARKED, invite-gated. Milestone held open, **no git tag** until Track 2 lands.
+Phase: 25 — Linux Watcher (cross-cutting platform; appended outside the v2.2 Track-1/2 numbering, like Phase 24)
+Plan: 25-01 COMPLETE (1/3 plans) — CGO-free headless build seam
+Status: 25-01 done — `GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...` green; **zero `fyne.io/systray` in the cmd/squirebot linux closure**; run_other.go installs the mandatory SIGINT/SIGTERM→cancel() handler (LNX-05 graceful systemd stop); config+logs branch onto XDG on Linux (Windows `%LOCALAPPDATA%` untouched). Windows build compiles + host `go test ./...` green (additive guarantee). Next: `/gsd-execute-phase 25` plan 25-02 (0600-file credstore + WINE-prefix eqfind walk + CLI --setup/--status). v2.2 Track 1 remains SHIPPED LIVE; Track 2 (22–23) parked, invite-gated.
 Last activity: 2026-06-06
+
+Phase 25 activity: 2026-06-06 — 25-01 executed (3 task commits: bb8e214, e84c6c4, 52b96c6). The highest-risk structural item of the phase: `fyne.io/systray` (CGO/GTK on Linux) was imported at TWO un-tagged sites — `internal/tray/tray.go` AND `cmd/squirebot/main.go`. Both build-tag-split: (1) `git mv tray.go→tray_windows.go` (//go:build windows, bytes unchanged) + new `tray_other.go` (//go:build !windows) reproducing the IDENTICAL exported `*tray.Controller` API as slog no-ops (RunApp signature byte-identical, D-07); test files paired the same way. (2) main.go drops the systray import; its shutdown-listener goroutine + `systray.Run` tail extracted into `run_windows.go` (//go:build windows, byte-equivalent) / `run_other.go` (//go:build !windows: `signal.NotifyContext(ctx, SIGINT, SIGTERM)` → cancel() → `<-ctx.Done()`, no systray). (3) `config.defaultPath()` + new `logging.defaultLogDir()` branch on `runtime.GOOS` — XDG config/state on Linux, `%LOCALAPPDATA%` on Windows; new XDG-branch unit tests. Gates all green: linux closure systray count = 0, dialog/sqweek count = 0, `go.mod` still lists systray (windows uses it), Windows build OK, host `go test ./...` 0 failures, `GOOS=linux go vet ./...` clean.
 
 Track-1 closeout 2026-06-06: cross-compiled linux/amd64 → scp → install (kept `.bak`) → `systemctl restart` per `docs/backend-deploy.md`; `goose.Up` auto-applied `00008_ec_cursor` (schema **v7 → v8**, `ec_auction_cursor` table created); pre-deploy R2 backup taken. Startup logs clean: `bot connected` (guild 1483502186351562925), `listening 127.0.0.1:8090`, `scheduler started interval 10m0s jobs:4` (the +1 = `ec_auction_match`). UAT #1 (live EC DM) tracked in `21-HUMAN-UAT.md`, confirms ORGANICALLY on the first real matching tunnel auction (D-07 coverage-dependent; send path already proven live in P20). UAT #2 (live scheduler poll) confirmed at the ~10-min tick. Next: pursue the 3 Raid Alliance invites (user) to unblock Track 2 → `/gsd-discuss-phase 22`; otherwise v2.2 Track 1 stands as the delivered value.
 

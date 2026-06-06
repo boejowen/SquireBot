@@ -25,6 +25,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -62,6 +63,98 @@ func TestManifest_UnmarshalsCanonicalSchema(t *testing.T) {
 	}
 	if m.ReleasedAt != "2026-05-02T10:00:00Z" {
 		t.Errorf("ReleasedAt = %q", m.ReleasedAt)
+	}
+}
+
+// Test 1b (Phase 25 / LNX-05): a manifest carrying BOTH the windows
+// (binary_url/binary_sha256) AND the new linux (binary_url_linux/
+// binary_sha256_linux) fields unmarshals all four — additive, no rename.
+func TestManifest_UnmarshalsLinuxFields(t *testing.T) {
+	const linuxJSON = `{
+  "version": "2.3.0",
+  "installer_url": "https://github.com/boejowen/SquireBot/releases/download/v2.3.0/SquireBot-Setup-2.3.0.exe",
+  "installer_sha256": "aaa",
+  "binary_url": "https://github.com/boejowen/SquireBot/releases/download/v2.3.0/squirebot.exe",
+  "binary_sha256": "winhash",
+  "binary_url_linux": "https://github.com/boejowen/SquireBot/releases/download/v2.3.0/squirebot",
+  "binary_sha256_linux": "lnxhash",
+  "released_at": "2026-06-06T10:00:00Z"
+}`
+	var m Manifest
+	if err := json.Unmarshal([]byte(linuxJSON), &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if m.BinaryURL == "" || m.BinarySHA256 != "winhash" {
+		t.Errorf("windows fields not preserved: url=%q sha=%q", m.BinaryURL, m.BinarySHA256)
+	}
+	if !strings.HasSuffix(m.BinaryURLLinux, "/squirebot") {
+		t.Errorf("BinaryURLLinux = %q, want a bare squirebot asset URL", m.BinaryURLLinux)
+	}
+	if m.BinarySHA256Linux != "lnxhash" {
+		t.Errorf("BinarySHA256Linux = %q, want lnxhash", m.BinarySHA256Linux)
+	}
+}
+
+// Test 1c (Phase 25 / LNX-05 back-compat): a LEGACY Windows-only manifest
+// (no binary_url_linux/binary_sha256_linux) still parses cleanly — the
+// linux fields decode as "" (omitempty + new-fields-only). This is the
+// guarantee that the live Windows updater is unaffected by the addition.
+func TestManifest_LegacyWindowsOnlyManifestStillParses(t *testing.T) {
+	var m Manifest
+	if err := json.Unmarshal([]byte(sampleManifestJSON), &m); err != nil {
+		t.Fatalf("unmarshal legacy: %v", err)
+	}
+	if m.BinaryURLLinux != "" || m.BinarySHA256Linux != "" {
+		t.Errorf("legacy manifest decoded non-empty linux fields: url=%q sha=%q",
+			m.BinaryURLLinux, m.BinarySHA256Linux)
+	}
+	// Windows fields unchanged.
+	if !strings.HasSuffix(m.BinaryURL, "squirebot.exe") || m.BinarySHA256 != "fed987cba654" {
+		t.Errorf("legacy windows fields altered: url=%q sha=%q", m.BinaryURL, m.BinarySHA256)
+	}
+}
+
+// Test 1d (Phase 25 / LNX-05): binaryAsset selects by runtime.GOOS.
+//   - On the windows dev box: returns the windows (BinaryURL, BinarySHA256).
+//   - A manifest with ONLY linux fields yields ("","") under GOOS==windows,
+//     proving the check.go skip path fires (a Windows box never downloads a
+//     linux asset; symmetrically a Linux box reading a windows-only manifest
+//     gets ("",""), the Pitfall-3 guard).
+//
+// We exercise the GOOS-relative behavior rather than mutating runtime.GOOS:
+// the pair the helper returns for the CURRENT GOOS must be the platform's own
+// asset, and the OTHER platform's lone-field manifest must yield empty.
+func TestManifest_BinaryAssetSelectsByGOOS(t *testing.T) {
+	winOnly := Manifest{BinaryURL: "w-url", BinarySHA256: "w-sha"}
+	lnxOnly := Manifest{BinaryURLLinux: "l-url", BinarySHA256Linux: "l-sha"}
+	both := Manifest{
+		BinaryURL: "w-url", BinarySHA256: "w-sha",
+		BinaryURLLinux: "l-url", BinarySHA256Linux: "l-sha",
+	}
+
+	if runtime.GOOS == "windows" {
+		if u, s := winOnly.binaryAsset(); u != "w-url" || s != "w-sha" {
+			t.Errorf("windows binaryAsset = (%q,%q), want (w-url,w-sha)", u, s)
+		}
+		// A linux-only manifest on a windows box -> empty -> skip path.
+		if u, s := lnxOnly.binaryAsset(); u != "" || s != "" {
+			t.Errorf("linux-only manifest on windows binaryAsset = (%q,%q), want (\"\",\"\")", u, s)
+		}
+		if u, s := both.binaryAsset(); u != "w-url" || s != "w-sha" {
+			t.Errorf("both-fields binaryAsset on windows = (%q,%q), want windows pair", u, s)
+		}
+	} else {
+		if u, s := lnxOnly.binaryAsset(); u != "l-url" || s != "l-sha" {
+			t.Errorf("linux binaryAsset = (%q,%q), want (l-url,l-sha)", u, s)
+		}
+		// A windows-only manifest on a linux box -> empty -> skip path
+		// (the Pitfall-3 guard: a Linux box never fetches the .exe).
+		if u, s := winOnly.binaryAsset(); u != "" || s != "" {
+			t.Errorf("windows-only manifest on linux binaryAsset = (%q,%q), want (\"\",\"\")", u, s)
+		}
+		if u, s := both.binaryAsset(); u != "l-url" || s != "l-sha" {
+			t.Errorf("both-fields binaryAsset on linux = (%q,%q), want linux pair", u, s)
+		}
 	}
 }
 

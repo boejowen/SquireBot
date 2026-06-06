@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -53,13 +54,42 @@ import (
 // Phase 1 latest.json shape (no binary_url) still parses cleanly under
 // the documented "absent binary_url = installer-only release; skip the
 // in-app swap and surface 'manual upgrade available' instead" fallback.
+//
+// Phase 25 (LNX-05) ADDED the OS-specific BinaryURLLinux / BinarySHA256Linux
+// fields. They are additive + `omitempty` + new-fields-only (the locked
+// schema-evolution doctrine above is honored): an old Windows-only manifest
+// with no linux fields still parses cleanly (the linux fields decode as "").
+// The auto-updater selects the OS-appropriate (url, sha) pair via binaryAsset
+// (below), keyed on runtime.GOOS — so a Linux box never downloads the Windows
+// .exe (the in-place swap of a wrong-arch binary would brick the watcher under
+// systemd Restart=always; see check.go + RESEARCH §3 Pitfall 3). The Windows
+// BinaryURL / BinarySHA256 fields and their JSON tags are UNCHANGED.
 type Manifest struct {
 	Version         string `json:"version"`
 	InstallerURL    string `json:"installer_url"`
 	InstallerSHA256 string `json:"installer_sha256"`
-	BinaryURL       string `json:"binary_url,omitempty"`
-	BinarySHA256    string `json:"binary_sha256,omitempty"`
+	BinaryURL       string `json:"binary_url,omitempty"`        // Windows bare .exe (auto-updater asset on windows)
+	BinarySHA256    string `json:"binary_sha256,omitempty"`     // Windows bare .exe SHA-256
 	ReleasedAt      string `json:"released_at"`
+	// Phase 25 (LNX-05) — additive, omitempty, selected by GOOS in binaryAsset:
+	BinaryURLLinux    string `json:"binary_url_linux,omitempty"`    // bare linux squirebot (auto-updater asset on linux)
+	BinarySHA256Linux string `json:"binary_sha256_linux,omitempty"` // bare linux squirebot SHA-256
+}
+
+// binaryAsset returns the (url, sha256) pair of the bare binary the in-app
+// auto-updater should download + swap on THIS platform, selected by
+// runtime.GOOS. On windows it is the Windows .exe (BinaryURL/BinarySHA256,
+// unchanged Phase 2 behavior); on every other GOOS (linux, the only other
+// shipped target this milestone) it is the linux pair. When the selected pair
+// is empty — e.g. a linux box reading an OLD Windows-only manifest, or a
+// Phase 1 installer-only manifest — the caller's "missing binary_url; skip
+// (manual upgrade only)" no-op path fires, so a Linux box NEVER applies the
+// Windows .exe over its ELF (RESEARCH §3 Pitfall 3 / T-25-10).
+func (m Manifest) binaryAsset() (url, sha string) {
+	if runtime.GOOS == "windows" {
+		return m.BinaryURL, m.BinarySHA256
+	}
+	return m.BinaryURLLinux, m.BinarySHA256Linux
 }
 
 // ManifestURL returns the canonical CDN URL for the latest manifest.

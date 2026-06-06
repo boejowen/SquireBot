@@ -94,11 +94,21 @@ func checkOnceWithURL(ctx context.Context, manifestURL, currentVersion, exePath 
 		return nil
 	}
 
+	// Select the bare-binary asset for THIS platform (runtime.GOOS):
+	// windows -> the .exe (binary_url/binary_sha256), linux -> the bare
+	// linux squirebot (binary_url_linux/binary_sha256_linux). This is the
+	// ONE OS-specific seam (Phase 25 LNX-05) — the download/verify/stage
+	// flow below is byte-identical regardless of platform.
+	binURL, binSHA := m.binaryAsset()
+
 	// Phase 1 manifest (or any pre-Plan-02-08 release) lacks the
 	// bare-binary asset; the in-app swap is not possible. Don't waste
 	// bytes downloading the installer (it's the wrong shape for
-	// selfupdate.Apply to swap over the running binary).
-	if m.BinaryURL == "" || m.BinarySHA256 == "" {
+	// selfupdate.Apply to swap over the running binary). On a Linux box
+	// reading an OLD Windows-only manifest, binURL/binSHA are empty here
+	// (no binary_url_linux), so this no-op fires and the Linux watcher
+	// NEVER downloads the Windows .exe (RESEARCH §3 Pitfall 3 / T-25-10).
+	if binURL == "" || binSHA == "" {
 		slog.Info("auto-update: manifest missing binary_url; skipping (manual upgrade only)",
 			"manifest_version", m.Version)
 		return nil
@@ -111,7 +121,7 @@ func checkOnceWithURL(ctx context.Context, manifestURL, currentVersion, exePath 
 	// expected hash, skip the download. (Matches the pattern from Task 2's
 	// applyAt: the sidecar is the contract.)
 	if existingHash, readErr := os.ReadFile(hashPath); readErr == nil {
-		if strings.EqualFold(strings.TrimSpace(string(existingHash)), m.BinarySHA256) {
+		if strings.EqualFold(strings.TrimSpace(string(existingHash)), binSHA) {
 			slog.Info("auto-update: already staged; skipping download", "version", m.Version)
 			if statusFn != nil {
 				statusFn(fmt.Sprintf("Update ready (%s); restart to apply", m.Version))
@@ -120,9 +130,9 @@ func checkOnceWithURL(ctx context.Context, manifestURL, currentVersion, exePath 
 		}
 	}
 
-	slog.Info("auto-update: downloading", "version", m.Version, "url", m.BinaryURL)
+	slog.Info("auto-update: downloading", "version", m.Version, "url", binURL)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.BinaryURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, binURL, nil)
 	if err != nil {
 		return fmt.Errorf("CheckOnce download req: %w", err)
 	}
@@ -155,9 +165,9 @@ func checkOnceWithURL(ctx context.Context, manifestURL, currentVersion, exePath 
 	}
 
 	actualHex := hex.EncodeToString(h.Sum(nil))
-	if !strings.EqualFold(actualHex, m.BinarySHA256) {
+	if !strings.EqualFold(actualHex, binSHA) {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("CheckOnce hash mismatch: got %s, want %s", actualHex, m.BinarySHA256)
+		return fmt.Errorf("CheckOnce hash mismatch: got %s, want %s", actualHex, binSHA)
 	}
 
 	// Atomic stage: rename .tmp -> .new, then write the sidecar. If the
@@ -167,7 +177,7 @@ func checkOnceWithURL(ctx context.Context, manifestURL, currentVersion, exePath 
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("CheckOnce stage: %w", err)
 	}
-	if err := os.WriteFile(hashPath, []byte(strings.ToLower(m.BinarySHA256)+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(hashPath, []byte(strings.ToLower(binSHA)+"\n"), 0o600); err != nil {
 		_ = os.Remove(stagedPath)
 		return fmt.Errorf("CheckOnce sidecar: %w", err)
 	}

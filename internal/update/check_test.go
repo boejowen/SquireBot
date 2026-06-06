@@ -34,6 +34,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -407,5 +408,45 @@ func TestCheckOnce_NewerManifestWithEmptyBinaryURLIsNoop(t *testing.T) {
 	}
 	if got := cap.snapshot(); len(got) != 0 {
 		t.Errorf("statusFn called %d times, want 0 on skip: %v", len(got), got)
+	}
+}
+
+// Phase 25 / LNX-05: when the manifest carries ONLY the OTHER platform's
+// bare-binary asset (here: only binary_url_linux on the windows dev box),
+// checkOnceWithURL takes the "missing binary_url; skip" no-op — it NEVER
+// downloads a wrong-arch binary. This is the runtime.GOOS asset selection
+// (binaryAsset) routed through check.go: on a Linux box the symmetric guard
+// ensures the Windows .exe is never applied over the ELF (RESEARCH §3
+// Pitfall 3 / T-25-10). The current GOOS's OWN asset path is already covered
+// by TestCheckOnce_NewerVersionStagesBinary (which sets the windows binary_url
+// on the windows host).
+func TestCheckOnce_WrongOSAssetOnlyIsNoop(t *testing.T) {
+	var manifest string
+	if runtime.GOOS == "windows" {
+		// linux-only asset; windows fields absent -> binaryAsset() empty -> skip.
+		manifest = `{"version":"1.2.0","installer_url":"http://x","installer_sha256":"abc","binary_url_linux":"http://x/squirebot","binary_sha256_linux":"deadbeef","released_at":"2026-06-06T00:00:00Z"}`
+	} else {
+		// windows-only asset; linux fields absent -> binaryAsset() empty -> skip.
+		manifest = `{"version":"1.2.0","installer_url":"http://x","installer_sha256":"abc","binary_url":"http://x/squirebot.exe","binary_sha256":"deadbeef","released_at":"2026-06-06T00:00:00Z"}`
+	}
+	mSrv := makeManifestServer(t, manifest, http.StatusOK)
+	t.Cleanup(mSrv.Close)
+
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "squirebot")
+	cap := &captureStatus{}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	err := checkOnceWithURL(ctx, mSrv.URL, "1.0.0", exe, cap.fn)
+	if err != nil {
+		t.Fatalf("err = %v, want nil (wrong-OS asset skip path)", err)
+	}
+	if _, statErr := os.Stat(exe + ".new"); !errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf(".new written for a manifest with only the other platform's asset")
+	}
+	if got := cap.snapshot(); len(got) != 0 {
+		t.Errorf("statusFn called %d times, want 0 on wrong-OS skip: %v", len(got), got)
 	}
 }

@@ -130,10 +130,21 @@ func pollItem(
 	}
 
 	// Diff: for each NEW WTS auction (t>cursor AND u∈{0,2}; WTB u==1 NEVER alerts —
-	// D-02), fan out to every wantlister via wantmatch.ForItem and DM through the
-	// spine. The cursor still advances past WTB-only records (they were SEEN, just
-	// not alertable), so they aren't re-diffed next poll.
+	// D-02), fan out to every wantlister and DM through the spine. The cursor still
+	// advances past WTB-only records (they were SEEN, just not alertable), so they
+	// aren't re-diffed next poll.
+	//
+	// The wantlister set for an item does NOT change between auctions of the same item
+	// in a single poll, so wantmatch.ForItem is resolved ONCE per item here — NOT once
+	// per auction (WR-03: per-auction querying ran the same SELECT N times). Behavior is
+	// unchanged: the notify dedup (cooldownEC=22h) already collapses every alertable
+	// auction for the same item+want to a single DM per window, so resolving the hits
+	// once and reusing them across the new auctions is equivalent — just fewer DB
+	// round-trips. The query is deferred until we know there is at least one alertable
+	// auction (an item whose only new records are WTB never queries).
 	now := time.Now()
+	var hits []wantmatch.Hit
+	hitsResolved := false
 	for _, a := range detail.Items {
 		if a.T <= cursor {
 			continue // already past the cursor — seen before
@@ -141,10 +152,15 @@ func pollItem(
 		if a.U != 0 && a.U != 2 {
 			continue // WTB-only (u==1) — never alerts (D-02)
 		}
-		hits, err := wantmatch.ForItem(ctx, db, item.ItemID)
-		if err != nil {
-			slog.Warn("ec_auction_match: wantmatch failed", "source", source, "item_id", item.ItemID, "status", "match_error")
-			continue
+		if !hitsResolved {
+			// First alertable auction this poll — resolve the wantlister set once.
+			h, err := wantmatch.ForItem(ctx, db, item.ItemID)
+			if err != nil {
+				slog.Warn("ec_auction_match: wantmatch failed", "source", source, "item_id", item.ItemID, "status", "match_error")
+				break // no hits resolvable this poll; cursor still advances (records were seen)
+			}
+			hits = h
+			hitsResolved = true
 		}
 		for _, hit := range hits {
 			sendHit(ctx, db, sender, item.ItemID, hit, a, detail.Players, now)

@@ -1,8 +1,11 @@
-// Command squirebot is the per-guildie Windows watcher described in
+// Command squirebot is the per-guildie watcher described in
 // .planning/PROJECT.md. Plan 07 wires the full Phase 1 pipeline:
-// logging → config → tray + RunApp goroutine (wizard or watcher) →
-// systray.Run as the blocking main-thread loop. systray.Quit (from the
-// tray's Quit menu) cancels the root ctx and unblocks main.
+// logging → config → tray + RunApp goroutine (wizard or watcher) → a
+// build-tag-split blocking main-thread loop (runMainLoop in run_windows.go /
+// run_other.go). On Windows that loop runs the system tray; on Linux (Phase 25,
+// D-01 headless) it blocks on ctx.Done() with a SIGINT/SIGTERM handler. The
+// tray Quit menu (Windows) or a delivered SIGTERM (Linux) cancels the root ctx
+// and unblocks main.
 package main
 
 import (
@@ -11,8 +14,6 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
-
-	"fyne.io/systray"
 
 	"github.com/boejowen/SquireBot/internal/app"
 	"github.com/boejowen/SquireBot/internal/config"
@@ -48,7 +49,7 @@ func main() {
 	// gracefully stop a running watcher before file overwrite. Opens the
 	// Local\SquireBot-Shutdown named event and signals it; the running
 	// instance's listener goroutine observes the signal and unwinds
-	// through cancel() + systray.Quit(). This invocation exits 0 always
+	// through cancel() + the tray Quit path. This invocation exits 0 always
 	// — a signal with no listener is a benign no-op per D-01, and NSIS
 	// falls back to taskkill /F on timeout regardless of any error here.
 	//
@@ -164,31 +165,6 @@ func main() {
 	// Background goroutine: onboarding (if needed) then watcher loop.
 	go app.RunApp(ctx, cfg, baseURL, Version, trayCtl)
 
-	// Plan 06 (INST-06): named-event shutdown listener. Blocks on
-	// Local\SquireBot-Shutdown; on signal, funnels through the SAME path
-	// as the tray's Quit menu (cancel() + systray.Quit()). Idempotent —
-	// double-fire (tray Quit + installer --quit racing) is harmless
-	// because systray.Quit is internally idempotent and cancel() on an
-	// already-cancelled ctx is a no-op. Goroutine exits on either signal
-	// OR ctx.Done so it cannot leak when shutdown comes from another path.
-	//
-	// No drain coordination. In-flight backend ingest POSTs observe ctx
-	// cancellation through the http.Client request context and abandon.
-	// WATCH-09 catch-up re-uploads any missed file changes on next launch.
-	go func() {
-		select {
-		case <-system.WaitForShutdown(ctx):
-			slog.Info("shutdown signal received — cancelling root context")
-			cancel()
-			systray.Quit()
-		case <-ctx.Done():
-			// Normal shutdown from another path (tray Quit, OS signal).
-			// WaitForShutdown's internal goroutine also observes ctx.Done
-			// and cleans up its event handle via defer.
-			return
-		}
-	}()
-
 	slog.Info("squirebot starting",
 		"version", Version,
 		"pid", os.Getpid(),
@@ -201,10 +177,12 @@ func main() {
 		"eq_folder_set", cfg.EQFolder != "" || len(cfg.EQFolders) > 0,
 	)
 
-	// Main goroutine: systray.Run blocks until systray.Quit fires.
-	systray.Run(trayCtl.OnReady, trayCtl.OnExit)
+	// Main-goroutine blocking tail. Build-tag-split (run_windows.go /
+	// run_other.go): on Windows it runs the live system tray + the named-event
+	// shutdown listener (unchanged behavior); on !windows (Linux, D-01 headless) it
+	// blocks on ctx.Done() with a mandatory SIGINT/SIGTERM handler driving
+	// cancel() so systemd `systemctl --user stop` unwinds gracefully (LNX-05).
+	runMainLoop(ctx, cancel, trayCtl)
 
-	// Tray quit → tear down background work.
-	cancel()
 	slog.Info("squirebot exit")
 }

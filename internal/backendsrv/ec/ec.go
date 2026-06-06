@@ -154,8 +154,18 @@ func pollItem(
 	// Advance the cursor ONLY after a successful poll (D-07; advance-only-on-success).
 	// max(t) advances even past WTB-only records (seen, not alerted) so they aren't
 	// re-processed; only WTS records ever DM.
+	//
+	// SEND-THEN-ADVANCE COUPLING (WR-04): sendHit above already DMed + recorded the
+	// 'sent' alert_log rows. If this advance FAILS, the cursor stays put and the next
+	// poll re-diffs the SAME auctions and re-enters sendHit — so the SOLE de-dup
+	// backstop against a duplicate DM is the cooldownEC=22h notify dedup
+	// (RecentAlertExists, D-10). That is a durability failure (the cursor is now
+	// divergent from the alert_log it already wrote), NOT a transient skip, so it logs
+	// at Error. If the EC cooldown is ever shortened below the poll cadence, this
+	// backstop weakens and a failed advance could re-fire — keep cooldownEC >> the poll
+	// interval so a failed advance can never re-DM before the dedup window closes.
 	if serr := s.SetECCursor(ctx, item.ItemID, maxT, time.Now().Unix()); serr != nil {
-		slog.Warn("ec_auction_match: cursor advance failed", "source", source, "item_id", item.ItemID, "status", "error")
+		slog.Error("ec_auction_match: cursor advance failed", "source", source, "item_id", item.ItemID, "status", "error")
 	}
 }
 

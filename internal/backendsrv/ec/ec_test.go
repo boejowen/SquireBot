@@ -436,6 +436,67 @@ func TestRunMatch_SendSentinelTolerated(t *testing.T) {
 	}
 }
 
+// TestRunMatch_ETag304_SkipsParseAndSend (WR-02): the per-item conditional-request
+// path is LIVE. Poll 1's 200 carries an ETag that pollItem persists to etag_cache;
+// poll 2 must send that ETag back as If-None-Match (Options.ETag), and when the
+// server answers 304 (FromCache) the poll SKIPS parse + send and leaves the cursor
+// untouched — the politeness win the design targets (D-09). Without the fix the
+// fetch went out with an empty Options and the 304 branch was dead.
+func TestRunMatch_ETag304_SkipsParseAndSend(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	seedWant(t, ctx, db, "alice", itemID)
+	if err := store.NewStore(db).SetECCursor(ctx, itemID, tBase, 1); err != nil {
+		t.Fatalf("baseline cursor: %v", err)
+	}
+
+	const wantETag = `"ec-etag-v1"`
+
+	// Poll 1: a 200 with an ETag and a new WTS auction. RunMatch must persist the ETag.
+	poll1 := fetchFunc(func(_ context.Context, _ string, opts politefetch.Options) politefetch.FetchResult {
+		if opts.ETag != "" {
+			t.Errorf("poll 1 sent If-None-Match=%q; want empty (no cached etag yet)", opts.ETag)
+		}
+		r := okBody([]map[string]any{auction(0, tNewer, intp(2000))})
+		r.ETag = wantETag
+		return r
+	}).toFetcher()
+	fs1 := &fakeSender{}
+	if err := RunMatch(ctx, db, fs1, poll1); err != nil {
+		t.Fatalf("RunMatch (poll 1): %v", err)
+	}
+	if fs1.embeds != 1 {
+		t.Fatalf("poll 1 embeds = %d; want 1 (the new auction DMs)", fs1.embeds)
+	}
+
+	// Poll 2: the fetcher must now RECEIVE the persisted ETag; it answers 304. The
+	// 304 body is deliberately NON-JSON — if pollItem ever tried to parse a FromCache
+	// response it would error, so a clean run proves the parse is skipped.
+	got304 := false
+	poll2 := fetchFunc(func(_ context.Context, _ string, opts politefetch.Options) politefetch.FetchResult {
+		if opts.ETag != wantETag {
+			t.Errorf("poll 2 If-None-Match = %q; want the persisted %q (conditional request is dead)", opts.ETag, wantETag)
+		}
+		got304 = true
+		return politefetch.FetchResult{OK: true, Status: 304, FromCache: true, ETag: opts.ETag, Body: []byte("not-json-would-fail-parse")}
+	}).toFetcher()
+	fs2 := &fakeSender{}
+	if err := RunMatch(ctx, db, fs2, poll2); err != nil {
+		t.Fatalf("RunMatch (poll 2, 304): %v", err)
+	}
+	if !got304 {
+		t.Error("poll 2 fetcher never ran; want a conditional request that 304s")
+	}
+	if fs2.embeds != 0 || fs2.creates != 0 {
+		t.Errorf("poll 2 (304) hit Discord (embeds=%d creates=%d); want 0/0 (unchanged ⇒ no send)", fs2.embeds, fs2.creates)
+	}
+	// The cursor stays where poll 1 left it (the 304 path advances nothing).
+	if got, _ := cursorOf(t, db, itemID); got != tNewer {
+		t.Errorf("cursor after 304 = %q; want %q (304 leaves the cursor untouched)", got, tNewer)
+	}
+}
+
 // --- buildEmbed tests --------------------------------------------------------
 
 // fieldByName returns the embed field with the given name, or nil.

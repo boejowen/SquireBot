@@ -4,10 +4,15 @@ package ec
 // RunMatch composes poll → diff → match → embed → send. It is the scheduler
 // ec_auction_match job's Run target. The flow, per wanted item:
 //
-//	ECPollSet → getdetails/0/{name} → ParseItemDetail → per-item cursor diff
-//	  (advance-only-on-success; first-sight baseline = record-but-don't-DM)
-//	  → for each NEW WTS auction (t>cursor AND u∈{0,2}): wantmatch.ForItem(item_id)
-//	  → buildEmbed → notify.Send(Source:"ec_auction", WantID, Embed)
+//	ECPollSet → GetETag → getdetails/0/{name} (conditional) → 304? skip : parse →
+//	  per-item cursor diff (advance-only-on-success; first-sight baseline =
+//	  record-but-don't-DM) → SetETag → resolve wantmatch.ForItem(item_id) ONCE per
+//	  item → for each NEW WTS auction (t>cursor AND u∈{0,2}): buildEmbed →
+//	  notify.Send(Source:"ec_auction", WantID, Embed)
+//
+// Politeness (D-09): the per-item getdetails URL doubles as an etag_cache key, so
+// each poll sends If-None-Match and an unchanged item 304s — skipping the body
+// fetch + JSON parse — exactly like the daily PigParse / weekly wiki jobs.
 //
 // It re-implements NONE of the spine: both gates, dedup, cooldownEC=22h, and the
 // alert_log audit are inherited by routing every send through notify.Send. It
@@ -92,14 +97,30 @@ func pollItem(
 		return
 	}
 
-	res := fetch(ctx, getDetailsURL(item.ItemName), politefetch.Options{})
+	// Conditional-request state for the 304 short-circuit (WR-02 / D-09: keep the
+	// per-item getdetails fan-out polite). The etag_cache table is keyed by URL and
+	// the getdetails URL is per-item, so it doubles as the per-item ETag store — the
+	// same GetETag/SetETag pattern the daily PigParse + weekly wiki jobs use. A
+	// cache-read failure must NOT block the poll: fall back to an unconditional fetch
+	// (etag/lastMod stay "").
+	url := getDetailsURL(item.ItemName)
+	etag, lastMod, err := s.GetETag(ctx, url)
+	if err != nil {
+		slog.Warn("ec_auction_match: etag read failed; fetching unconditionally", "source", source, "item_id", item.ItemID, "status", "etag_read_failed")
+		etag, lastMod = "", ""
+	}
+
+	res := fetch(ctx, url, politefetch.Options{ETag: etag, LastModified: lastMod})
 	if !res.OK {
 		// Advance-only-on-success: do NOT move the cursor on a fetch failure.
 		slog.Warn("ec_auction_match: fetch failed", "source", source, "item_id", item.ItemID, "http_status", res.Status, "status", "fetch_failed")
 		return
 	}
 	if res.FromCache {
-		// 304 — nothing changed; skip parse + leave the cursor where it is.
+		// 304 — nothing changed since the cached ETag; skip parse + leave the cursor
+		// where it is. This is now LIVE in production (the conditional request above
+		// makes PigParse able to answer 304), so unchanged items skip the full
+		// fetch-body + JSON parse every 10-min poll.
 		slog.Info("ec_auction_match: unchanged (304)", "source", source, "item_id", item.ItemID, "status", "skipped_unchanged")
 		return
 	}
@@ -108,6 +129,16 @@ func pollItem(
 	if err != nil {
 		slog.Warn("ec_auction_match: parse failed", "source", source, "item_id", item.ItemID, "status", "parse_failed")
 		return
+	}
+
+	// Persist the 200's ETag/Last-Modified so the NEXT poll sends If-None-Match and
+	// PigParse can 304 an unchanged item (WR-02). Done only after a successful parse
+	// (a parseable body is what the ETag validates). Non-fatal: a stale/absent ETag
+	// just means we re-fetch unconditionally next time — the diff is still correct.
+	// An empty ETag (the server sent none) is stored as "" and simply skips the
+	// conditional request next poll.
+	if serr := s.SetETag(ctx, url, res.ETag, res.LastModified); serr != nil {
+		slog.Warn("ec_auction_match: etag write failed", "source", source, "item_id", item.ItemID, "status", "etag_write_failed")
 	}
 	if len(detail.Items) == 0 {
 		// Empty poll — the API returns items:null for an item with no live auctions.

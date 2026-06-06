@@ -25,6 +25,15 @@ const heuristicScanTimeoutOther = 30 * time.Second
 
 // maxHeuristicDepthOther bounds recursion per root. EQ-under-WINE typically
 // lives within a few levels of drive_c (e.g. drive_c/Program Files/Project1999).
+//
+// WR-02 / depth-bound contract (matches heuristic_windows.go EXACTLY): drive_c
+// is relative depth 0; a dir at relative depth ≤ 5 is VALIDATED, and a dir at
+// relative depth 6 is NOT descended (the `curDepth > maxHeuristicDepthOther`
+// check returns SkipDir BEFORE ValidateFolder, so depth-6 dirs are never
+// checked — the children at depth 7+ are pruned). So "depth cap (5)" means 5 is
+// the DEEPEST level checked. The boundary is pinned by the at-cap-found /
+// beyond-cap-not-found tests; do NOT change `>` to `>=` (that would silently
+// stop discovering depth-5 installs and break Windows parity).
 const maxHeuristicDepthOther = 5
 
 // pruneNamesOther are directory base-names to skip inside a WINE drive_c. Unlike

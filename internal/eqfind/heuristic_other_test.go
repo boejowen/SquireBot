@@ -3,6 +3,7 @@
 package eqfind
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,6 +90,33 @@ func TestHeuristicScan_RespectsDepthCap(t *testing.T) {
 
 	if got := heuristicScan(); got != "" {
 		t.Fatalf("heuristicScan() = %q, want \"\" (sentinels beyond depth cap)", got)
+	}
+}
+
+// TestWalkWineRoot_AtDepthCapFound is the WR-02 boundary guard (Linux parity
+// with heuristic_windows_test.go's TestWalkRoot_AtDepthCapFound): a sentinel
+// pair planted at EXACTLY maxHeuristicDepthOther (5) below the root MUST be
+// found. Together with TestWalkWineRoot_BeyondDepthCapNotFound this pins the
+// `curDepth > maxHeuristicDepthOther` boundary — switching it to `>=` would
+// stop discovering depth-5 installs and this test would catch it.
+func TestWalkWineRoot_AtDepthCapFound(t *testing.T) {
+	root := t.TempDir()
+	want := filepath.Join(root, "a", "b", "c", "d", "e") // depth 5
+	plantSentinels(t, want, "eqgame.exe", "eqclient.ini")
+	if got := walkWineRoot(context.Background(), root); got != want {
+		t.Fatalf("walkWineRoot at exactly maxHeuristicDepthOther = %q, want %q", got, want)
+	}
+}
+
+// TestWalkWineRoot_BeyondDepthCapNotFound is the WR-02 upper boundary: a pair
+// one level deeper than the cap (depth 6) is pruned before ValidateFolder runs
+// → walkWineRoot returns "".
+func TestWalkWineRoot_BeyondDepthCapNotFound(t *testing.T) {
+	root := t.TempDir()
+	deep := filepath.Join(root, "a", "b", "c", "d", "e", "f") // depth 6
+	plantSentinels(t, deep, "eqgame.exe", "eqclient.ini")
+	if got := walkWineRoot(context.Background(), root); got != "" {
+		t.Fatalf("walkWineRoot found a pair beyond the depth cap: %q, want \"\"", got)
 	}
 }
 

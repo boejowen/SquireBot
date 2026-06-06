@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -394,5 +395,35 @@ func TestPathPointsUnderLOCALAPPDATA(t *testing.T) {
 	want := filepath.Join(`C:\Users\Test\AppData\Local`, "SquireBot", "config.json")
 	if got != want {
 		t.Errorf("Path() = %q; want %q", got, want)
+	}
+}
+
+// TestDefaultPath_XDG (Phase 25 / LNX-02 / D-05) verifies the platform branch in
+// defaultPath(): Windows stays on %LOCALAPPDATA%\SquireBot\config.json; on Unix
+// the path resolves under $XDG_CONFIG_HOME/squirebot/config.json (lowercase
+// "squirebot", NOT "SquireBot"). os.UserConfigDir honors $XDG_CONFIG_HOME on
+// Unix, so setting it pins the directory deterministically.
+func TestDefaultPath_XDG(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Setenv("LOCALAPPDATA", `C:\Users\Test\AppData\Local`)
+		got := defaultPath()
+		want := filepath.Join(`C:\Users\Test\AppData\Local`, "SquireBot", "config.json")
+		if got != want {
+			t.Fatalf("defaultPath() = %q; want %q", got, want)
+		}
+		return
+	}
+
+	// Unix branch: $XDG_CONFIG_HOME drives os.UserConfigDir().
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	got := defaultPath()
+	want := filepath.Join(xdg, "squirebot", "config.json")
+	if got != want {
+		t.Fatalf("defaultPath() = %q; want %q (XDG_CONFIG_HOME branch)", got, want)
+	}
+	// Guard the XDG convention: lowercase "squirebot", never the Windows "SquireBot".
+	if strings.Contains(got, "SquireBot") {
+		t.Errorf("defaultPath() = %q contains \"SquireBot\"; the Unix path must use lowercase \"squirebot\"", got)
 	}
 }

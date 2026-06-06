@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -23,10 +24,27 @@ import (
 // Side effect: also calls slog.SetDefault so package-level slog.Info calls
 // elsewhere route through the same handler.
 func Setup() (*slog.Logger, string) {
-	appData := os.Getenv("LOCALAPPDATA")
-	logDir := filepath.Join(appData, "SquireBot")
+	logDir := defaultLogDir()
 	logger, _, _ := setupAt(logDir)
 	return logger, logDir
+}
+
+// defaultLogDir resolves the per-platform log directory.
+//
+//   - Windows: %LOCALAPPDATA%\SquireBot (UNCHANGED — D-05/D-07).
+//   - Other (Linux, Phase 25 / D-05): $XDG_STATE_HOME/squirebot, defaulting to
+//     ~/.local/state/squirebot. Logs are STATE (persistent, not cache), so
+//     $XDG_STATE_HOME is the correct XDG base dir. The Go stdlib has no
+//     UserStateDir helper, so the fallback is hand-rolled (no new dependency).
+func defaultLogDir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), "SquireBot")
+	}
+	stateHome := os.Getenv("XDG_STATE_HOME")
+	if stateHome == "" {
+		stateHome = filepath.Join(os.Getenv("HOME"), ".local", "state")
+	}
+	return filepath.Join(stateHome, "squirebot")
 }
 
 // setupAt is the testable form of Setup: it lets the caller pin the log

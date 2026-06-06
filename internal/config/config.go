@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // Config is the on-disk shape of %LOCALAPPDATA%\SquireBot\config.json.
@@ -41,9 +42,24 @@ type Config struct {
 // Tests may swap this to redirect the file under t.TempDir().
 var pathFn = defaultPath
 
-// defaultPath returns %LOCALAPPDATA%\SquireBot\config.json.
+// defaultPath returns the per-platform config-file location.
+//
+//   - Windows: %LOCALAPPDATA%\SquireBot\config.json (UNCHANGED — D-05/D-07).
+//   - Other (Linux, Phase 25 / D-05): $XDG_CONFIG_HOME/squirebot/config.json,
+//     defaulting to ~/.config/squirebot/config.json. os.UserConfigDir() returns
+//     $XDG_CONFIG_HOME or ~/.config on Unix; we deliberately do NOT use it on
+//     Windows because there it returns %AppData% (Roaming), not %LOCALAPPDATA%.
+//     On the rare UserConfigDir error (empty $HOME), fall back to ~/.config so a
+//     headless first run resolves a path rather than panicking (T-25-03).
 func defaultPath() string {
-	return filepath.Join(os.Getenv("LOCALAPPDATA"), "SquireBot", "config.json")
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), "SquireBot", "config.json")
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		dir = filepath.Join(os.Getenv("HOME"), ".config")
+	}
+	return filepath.Join(dir, "squirebot", "config.json")
 }
 
 // Path returns the absolute path of the config file (for diagnostics).

@@ -9,7 +9,7 @@
 - ✅ **v1.0.2** — Robustness Polish — binary shipped 2026-05-13 (tag `v1.0.2`); milestone close superseded by v2.0
 - ✅ **v2.0** — "Off Google" — Website Frontend — Phases 11–16 (shipped 2026-05-31 as tag `v2.0.0`) — archive: [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md)
 - ✅ **v2.1** — Self-Service Watcher Linking — Phases 17–18 (shipped 2026-06-02 as tag `v2.1`) — archive: [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md)
-- 🔄 **v2.2** — Wantlist + Discord Pinger — Phases 19–23 (in progress, opened 2026-06-02)
+- 🔄 **v2.2** — Wantlist + Discord Pinger — Phases 19–23 (**Track 1 SHIPPED LIVE 2026-06-06** — Phases 19–21 deployed to api.squirebot.quest; Track 2 Phases 22–23 parked, invite-gated; milestone held open, **no tag** until Track 2 lands)
 
 ## Phases
 
@@ -91,11 +91,11 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 
 **Locked decisions (v2.2 research, 2026-06-02 — see `research/SUMMARY-v2.2.md`):** in-process bot goroutine (NOT a separate process — avoids two SQLite writers), `recover()`-isolated + non-fatal start; `bwmarrin/discordgo` v0.29.0 (CGO-free, the only new dependency); one match seam (`wantmatch` + `notify` + `alert_log` dedup/cooldown) three sources fan in; EC = PigParse poll-and-diff (~10-min cadence, live spike first); error 50007 (can't-DM) first-class with an in-site notification inbox; `MESSAGE_CONTENT` a self-serve dev-portal toggle (no Discord audit under 100 servers); HARD CONSTRAINT — never put a Discord bot/OAuth in the watcher (untouched this milestone).
 
-**Track 1 — UNBLOCKED:**
+**Track 1 — ✅ SHIPPED LIVE** (deployed to api.squirebot.quest 2026-06-06, schema v8; Phases 19–21 complete — wantlist + EC-tunnel Discord pinger is a complete, standalone feature):
 
 - [x] **Phase 19: Wantlist CRUD** — per-user wantlist (website CRUD, item-ID-keyed, buy/quest reason, Discord-identity-tied, already-in-bank flag); the product surface, no Discord yet (completed 2026-06-05)
 - [x] **Phase 20: Bot + DM + Notification Infrastructure** — in-process discordgo gateway goroutine + `notify` DM sender + `wantmatch` + `alert_log` dedup/cooldown + opt-in/prefs + in-site notification inbox (50007 fallback) + per-monitor enable/disable + `guild_channel` config; the keystone spine all monitors ride (completed 2026-06-05)
-- [x] **Phase 21: EC-Tunnel Auction Monitor** — first real alert; PigParse poll-and-diff → wantmatch → DM, gated behind an upfront PigParse feasibility spike (confirm timestamps advance + coverage) (completed 2026-06-06; WANT-05)
+- [x] **Phase 21: EC-Tunnel Auction Monitor** — first real alert; PigParse poll-and-diff → wantmatch → DM, gated behind an upfront PigParse feasibility spike (confirm timestamps advance + coverage) (completed 2026-06-06; **deployed live 2026-06-06**, schema v8, bot connected + `ec_auction_match` job running; WANT-05; live-DM smoke confirms organically per D-07 coverage)
 
 **Track 2 — INVITE-GATED (entry-precondition: the 3 Raid Alliance bot invites confirmed in writing + `MESSAGE_CONTENT` enabled):**
 
@@ -202,7 +202,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | v1.0.2 | 2 | 8/8 | ✅ Binary shipped (milestone close superseded by v2.0) | 2026-05-13 |
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
 | v2.1 | 2 | 4/4 | ✅ Complete (Phases 17–18 shipped) | 2026-06-02 |
-| v2.2 | 6 | 2/TBD | 🔄 In progress (Phase 24 quality phase complete; Phase 19 ready to plan) | — |
+| v2.2 | 6 | 13/TBD | 🔄 **Track 1 SHIPPED LIVE** (Phases 19–21 deployed 2026-06-06 + Phase 24 quality done); Track 2 (22–23) invite-gated, parked | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -216,7 +216,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 18. Watcher Cleanups — Verify-or-Close | v2.1 | 1/1 | ✅ Complete (verify-or-close; zero new code; 0.4.0-rc1 = Azure test VM, not production) | 2026-06-02 |
 | 19. Wantlist CRUD | v2.2 | 3/3 | Complete    | 2026-06-05 |
 | 20. Bot + DM + Notification Infrastructure | v2.2 | 5/5 | Complete    | 2026-06-05 |
-| 21. EC-Tunnel Auction Monitor | v2.2 | 3/3 | Complete (ec.RunMatch + ec_auction_match job + main.go reorder shipped; WANT-05) | 2026-06-06 |
+| 21. EC-Tunnel Auction Monitor | v2.2 | 3/3 | ✅ Complete + **DEPLOYED LIVE** (schema v8; bot connected, ec_auction_match job running; WANT-05) | 2026-06-06 |
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |

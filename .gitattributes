@@ -24,3 +24,10 @@ go.sum text eol=lf
 deploy/*.sh text eol=lf
 deploy/Caddyfile text eol=lf
 deploy/*.service text eol=lf
+
+# Linux watcher tarball payload (Phase 25 / LNX-05): the install.sh script and
+# the systemd user unit are extracted + run on a Linux box. A CRLF shebang
+# (#!/bin/sh\r) breaks with "bad interpreter"; systemd units prefer LF too.
+# Keep these LF regardless of the dev box's autocrlf.
+packaging/linux/*.sh text eol=lf
+packaging/linux/*.service text eol=lf

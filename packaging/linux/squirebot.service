@@ -1,0 +1,30 @@
+# SquireBot watcher — systemd USER unit (Phase 25 / LNX-05, D-06).
+#
+# Installed by install.sh to ~/.config/systemd/user/squirebot.service and
+# enabled with `systemctl --user enable --now squirebot.service`. This is the
+# Linux equivalent of the Windows HKCU\...\Run autostart key — it runs as the
+# guildie's own user (NO root), starting on desktop login by default.
+#
+# Survival across logout/reboot-without-login requires `loginctl enable-linger`
+# (see install.sh --linger and README.md). Default OFF: the watcher only needs
+# to run while the guildie is logged in and playing P99.
+
+[Unit]
+Description=SquireBot watcher (P99 inventory/spellbook uploader)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/squirebot
+Restart=always
+RestartSec=5
+# Minimal hardening for a headless user daemon. NoNewPrivileges is safe and
+# cheap. We deliberately do NOT sandbox $HOME — the watcher must READ the EQ
+# folder under the home directory (often inside a WINE prefix), so any
+# home-protection directive would break ingestion. The self-update swap
+# relaunches via Restart=always.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

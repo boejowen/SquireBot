@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package credstore is the watcher-side DPAPI store for the v2.0 guild code
 // (WATCH-10 / CONTEXT D-6). It is the salvaged survivor of internal/auth/store.go:
 // the wincred mechanics (NewGenericCredential / PersistLocalMachine / Write /

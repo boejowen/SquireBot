@@ -102,6 +102,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 - [ ] **Phase 22: WTS Cross-Server Monitor** — bot reads the 3 Raid Alliance WTS channels → name/alias matcher → DM; matcher built/tested against fixtures so it's testable without live servers *(invite-gated)*
 - [ ] **Phase 23: Quest-Target Raid Monitor** — bot detects a raid-target NPC tied to a wanted item's quest → curated `quest → NPC` lookup → existing `quest_items` → DM *(invite-gated + needs the curated quest→NPC table)*
 - [x] **Phase 24: Watcher test hardening (C1/C2 coverage)** — quality/tech-debt; close the Church audit's two CRITICAL coverage gaps (spellbook-upload path tests + `eqfind` walk tests) via a twin-handler refactor. Independent of the wantlist track — can run anytime. ✅ 2026-06-03
+- [ ] **Phase 25: Linux Watcher** — cross-cutting platform; a headless, fully-static (CGO-free) `linux/amd64` watcher build for guildies running P99 under WINE — Linux impls behind the existing build-tag seams (0600-file credential, WINE-prefix EQ discovery, CLI onboarding, XDG paths) + a tarball/systemd-user-unit/install.sh. Additive — Windows build unchanged. (LNX-01..06)
 
 ## Phase Details
 
@@ -191,6 +192,20 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   - [x] 24-01-PLAN.md — refactor twin upload handlers (makeOnFileChange + handleIngestErr) + spellbook behavior tests (C1, REFACTOR)
   - [x] 24-02-PLAN.md — eqfind walkRoot/sentinel-walk tests against a t.TempDir() tree (C2)
 
+### Phase 25: Linux Watcher
+**Goal**: Guildies who run Project 1999 under WINE on Linux can install and run the watcher — a headless, fully-static (`CGO_ENABLED=0`) `linux/amd64` build that watches the WINE-prefix EQ folder, uploads `/outputfile` `.txt` files over HTTPS with the static bearer guild code, and auto-updates — with the same robustness as the Windows watcher, minus the Windows GUI/installer chrome.
+**Track**: Quality / platform (cross-cutting — NOT part of the v2.2 wantlist/Discord theme; appended to the active milestone by sequential numbering).
+**Depends on**: Nothing — touches only watcher code + the build/release pipeline; orthogonal to the backend/web/bot. All Linux work is additive behind `//go:build` tags / `runtime.GOOS` so the Windows build is unchanged.
+**Requirements**: LNX-01, LNX-02, LNX-03, LNX-04, LNX-05, LNX-06
+**Success Criteria** (what must be TRUE):
+  1. The watcher cross-compiles `GOOS=linux GOARCH=amd64 CGO_ENABLED=0` to a single static binary and runs **headless** (no systray) — the tray controller is a no-op on Linux and `RunApp` is unchanged; `go test ./...` and the Windows artifact are unaffected.
+  2. The bearer guild code persists in a `0600` file under `$XDG_CONFIG_HOME/squirebot/` (no keyring/secret-service dependency); config + logs follow XDG base dirs; the Windows `wincred`/`%LOCALAPPDATA%` paths are untouched.
+  3. EQ-folder discovery finds the install inside a WINE prefix (`$WINEPREFIX` → `~/.wine/drive_c` → common Lutris/Proton/Bottles paths via the bounded `eqfind` walk for the `eqgame.exe`/`eqclient.ini` sentinels), falling back to a CLI prompt that persists the chosen path.
+  4. First-run onboarding + control are CLI (`--setup` prompts for the guild code + EQ folder over stdin; `--status` prints health/config) — no Win32 dialog, no localhost/browser surface (the watcher stays browser-free).
+  5. A `.tar.gz` ships the binary + README + a systemd **user** unit + `install.sh` (installs to `~/.local/bin`, enables the unit for autostart, runs first-time `--setup`); the existing `minio/selfupdate` auto-update works on Linux with the linux asset in the manifest.
+  6. The fsnotify watch + debounce + full-snapshot-replace upload + schema-version gate + log rotation all work on Linux (they are platform-agnostic) — verified by the existing suite plus new Linux-path unit tests for credstore/eqfind/config.
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently).
@@ -220,6 +235,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 22. WTS Cross-Server Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |
+| 25. Linux Watcher | v2.2 | 0/TBD | Ready to plan (CONTEXT captured; headless static build for WINE/Linux guildies) | — |
 
 ## Backlog
 

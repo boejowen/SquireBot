@@ -8,7 +8,7 @@ updated: 2026-06-06
 
 ## Current Test
 
-DEPLOYED LIVE 2026-06-06 (schema v8; bot connected; scheduler jobs:4). UAT #1 accepted as ORGANIC-confirm; UAT #2 confirmed at the first scheduler tick.
+DEPLOYED LIVE 2026-06-06 (schema v8; bot connected; scheduler jobs:4). UAT #2 PASSED (live EC poll observed); UAT #1 accepted as ORGANIC-confirm.
 
 ## Tests
 
@@ -18,14 +18,14 @@ result: [organic — pending] Deploy done 2026-06-06. Cannot be forced (D-07: fi
 
 ### 2. Live scheduler cadence + panic isolation
 expected: On the deployed box, journal/logs show periodic `ec_auction_match` poll lines (source=ec_auction) on the ~10-min cadence and the per-item `ec_auction_cursor` advances; the HTTP API + ingest stay up (bot/scheduler recover-isolation holds).
-result: [confirming at ~10-min tick] At startup: `scheduler started interval 10m0s jobs:4` (the +1 is `ec_auction_match`); service active, API up. First live poll confirmed at the next tick (see STATE.md / background check 2026-06-06).
+result: [PASS 2026-06-06] Live evidence on the box: `scheduler started interval 10m0s jobs:4`; the EC job ran ~40s after boot and logged `ec_auction_match: first-sight baseline item_id:15541 status:baselined`; `ec_auction_cursor` row written (`15541 | 2026-06-06T08:44:22 | …` — baselined to the latest known auction, so no backlog replay). Per-item failure isolation verified: the 2nd wanted item (`Fungus Covered Scale Tunic`) hit a PigParse `context deadline exceeded` timeout → logged WARN, no cursor written (advance-only-on-success), job continued. Service: `ActiveState=active SubState=running NRestarts=0`; external HTTP=404 (valid TLS) — API/ingest unaffected (panic isolation holds).
 
 ## Summary
 
 total: 2
-passed: 0
+passed: 1
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 

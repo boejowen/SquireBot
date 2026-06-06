@@ -1,14 +1,14 @@
 ---
-status: partial
+status: complete
 phase: 12-enrichment-job-migration
 source: [12-VERIFICATION.md]
 started: 2026-05-30
-updated: 2026-05-30
+updated: 2026-06-06
 ---
 
 ## Current Test
 
-[awaiting human testing — operational, post-deploy]
+[CLOSED 2026-06-06 as OBSOLETE — the backend-vs-Sheet parity check can no longer run: the Google Sheet was decommissioned in v2.0 Phase 16. Enrichment is independently proven live — both jobs run on the prod scheduler and populate all dimension tables, confirmed in production since 2026-05-30.]
 
 ## Tests
 
@@ -24,7 +24,7 @@ expected: |
   - `item_master.wikitext_sha1` matches `_item_master` for the same items (strongest parity signal).
   - `wiki_spells` (class,level,spell_name) and `wiki_gear_tier` (tier,class,slot,item_name,rank)
     row sets match `_wiki_spells` / `_wiki_gear_tier`; `quest_items` matches `_quest_items`.
-result: [pending]
+result: [skipped — obsolete] The comparison target (the live Google Sheet) was decommissioned in v2.0 Phase 16, so the Sheet-parity assertion is no longer runnable. The code path was already proven via `run-job` (pigparse = 4,338 WTS rows; wiki = 14 classes + 1,183 gear rows; all 4 tables populated) and the jobs have run unattended on the prod scheduler since 2026-05-30 — enrichment correctness is confirmed independently of the Sheet.
 why_human: |
   Requires the jobs to fire on the production timer (24h / Sunday) on the deployed Hetzner
   VPS AND a side-by-side read of the still-live Google Sheet — an operational comparison
@@ -38,8 +38,8 @@ why_human: |
 total: 1
 passed: 0
 issues: 0
-pending: 1
-skipped: 0
+pending: 0
+skipped: 1
 blocked: 0
 
 ## Gaps

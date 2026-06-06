@@ -1,15 +1,18 @@
 ---
-status: awaiting_google_review
+status: resolved
 slug: v1-0-2-oauth-invalid-client-incident
 opened: 2026-05-13T00:50:00Z
-updated: 2026-05-13T04:30:00Z
+updated: 2026-06-06T00:00:00Z
 root_cause: Google OAuth brand-verification gate flipped enforcement on the SquireBot Desktop Client between v1.0.1 ship (2026-05-11) and v1.0.2 ship (2026-05-13). Not a code bug. Affects ALL watcher versions (v0.4.0-rc1, v1.0.1, v1.0.2) identically.
 severity: critical
 impact: every SquireBot watcher in the guild loses auth on next refresh until Google approves brand verification
 resolution_path: brand verification submitted to Google review queue 2026-05-13 — typical SLA 3–5 business days
+resolution: SUPERSEDED by the v2.0 "Off Google" milestone (shipped 2026-05-31). Rather than wait on Google's brand-verification queue, the entire Google OAuth dependency was removed — the watcher now uploads to the self-hosted backend with a static bearer guild code, and the website uses Discord OAuth. The brand-verification gate no longer applies to any part of the system. Backlog 999.19 is marked SUPERSEDED for the same reason. Closed 2026-06-06.
 ---
 
 # v1.0.2 invalid_client OAuth incident
+
+> **RESOLVED — SUPERSEDED (2026-06-06).** This incident is moot: the v2.0 "Off Google" milestone (2026-05-31) removed Google OAuth from the system entirely (watcher → self-hosted backend with a static bearer code; website → Discord OAuth). The Google brand-verification gate that caused this no longer exists in the architecture. Retained as an incident record; see ROADMAP backlog 999.19 (SUPERSEDED) and the `project_website_milestone_scoped` / `feedback_oauth_consent_screen_first` memories.
 
 ## Symptom
 

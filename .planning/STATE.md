@@ -96,7 +96,7 @@ Carried forward at v2.1 close (non-blocking):
 |----------|------|--------|
 | ops | Decommission the Azure PAYG test VM (the `0.4.0-rc1` box) to stop billing | ✅ done 2026-06-02 (user decommissioned the VM) |
 | signing | 999.9 — SignPath Foundation OSS approval | in flight (lands as a hotfix when approved) |
-| uat | P12/P14/P15 HUMAN-UAT live-smoke checklists (from v2.0) | exercised live during deploys; never formally ticked |
+| uat | P12/P14/P15 HUMAN-UAT live-smoke checklists (from v2.0) | ✅ closed 2026-06-06 — P14 (5/5) + P15 (7/7) were already `complete`; P12's lone Sheet-parity test marked **obsolete** (the Sheet was decommissioned in P16; enrichment is proven live on the prod scheduler) |
 
 ## Files of Record
 

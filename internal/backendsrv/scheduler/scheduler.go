@@ -46,6 +46,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 
+	"github.com/boejowen/SquireBot/internal/backendsrv/ec"
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/jobs"
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/politefetch"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
@@ -80,6 +81,18 @@ type Job struct {
 // predicates").
 func duePigparse(last, now time.Time) bool {
 	return now.Sub(last) >= 24*time.Hour
+}
+
+// dueEC is the EC auction monitor's ~10-min cadence (P21, WANT-05 / RESEARCH A2):
+// due when at least 10 minutes have elapsed since the last run. A zero last (never
+// run / NULL cursor) makes now.Sub(last) enormous ⇒ due on the first check pass
+// after startup. The PigParse aggregate rebuilds ~every 10 min, so polling faster
+// would just re-see the same data — 10 min matches the upstream refresh and keeps
+// the per-item getdetails fan-out polite (D-09). This is the JOB cadence cursor
+// (job_run.last_run_at), DISTINCT from the per-item ec_auction_cursor diff state
+// inside ec.RunMatch (advance-only-on-success); do NOT conflate the two.
+func dueEC(last, now time.Time) bool {
+	return now.Sub(last) >= 10*time.Minute
 }
 
 // dueWiki is the weekly cadence (D-10): due when it is Sunday (UTC) AND the last
@@ -151,6 +164,22 @@ func Start(ctx context.Context, db *sql.DB, botSession *discordgo.Session) {
 				n, err := store.ArchiveExpiredEvictions(ctx, db, time.Now().Unix())
 				slog.Info("eviction_archive", "archived", n)
 				return err
+			},
+		},
+		{
+			// ec_auction_match (P21, WANT-05): the EC-tunnel auction monitor — the
+			// first real end-to-end alert. ~10-min cadence (dueEC). The Run closure
+			// captures db + the threaded botSession (nil ⇒ ec.RunMatch no-ops cleanly)
+			// + the production politefetch.Fetch. ec.RunMatch is the THIN producer:
+			// poll-set → getdetails/0/{name} → diff on the per-item ec_auction_cursor
+			// → wantmatch.ForItem → notify.Send(embed). The job-level job_run cursor
+			// (advance-always, for cadence/observability) is DISTINCT from the per-item
+			// ec_auction_cursor (the diff state, advance-only-on-success inside
+			// RunMatch) — do NOT conflate the two.
+			Name: "ec_auction_match",
+			Due:  dueEC,
+			Run: func(ctx context.Context) error {
+				return ec.RunMatch(ctx, db, botSession, politefetch.Fetch)
 			},
 		},
 	}

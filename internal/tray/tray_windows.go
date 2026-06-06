@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package tray hosts the SquireBot system-tray UI controller.
 //
 // Phase 13 (WATCH-09 / D-3) menu surface — the Sheets/OAuth items are gone:

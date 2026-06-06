@@ -1,3 +1,5 @@
+//go:build windows
+
 package tray
 
 // Live systray needs a Windows desktop session, so this test file only

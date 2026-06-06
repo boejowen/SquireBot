@@ -2,7 +2,6 @@ package onboarding
 
 import (
 	"errors"
-	"runtime"
 	"testing"
 )
 
@@ -21,18 +20,8 @@ func TestErrVars(t *testing.T) {
 	}
 }
 
-// TestNonWindows_Unsupported asserts the !windows stubs return ErrUnsupported. On
-// Windows, the interactive dialog paths are skipped (they require a desktop
-// session; they are validated by the Plan 03/04 onboarding smoke + the human
-// ship-gate, not by headless CI).
-func TestNonWindows_Unsupported(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("interactive dialog requires a desktop session; validated by the Plan 03/04 smoke + ship-gate")
-	}
-	if _, err := PromptGuildCode("SquireBot", "Paste your guild code:"); !errors.Is(err, ErrUnsupported) {
-		t.Errorf("PromptGuildCode off-Windows = %v, want ErrUnsupported", err)
-	}
-	if _, err := PickEQFolder("Select your EverQuest folder"); !errors.Is(err, ErrUnsupported) {
-		t.Errorf("PickEQFolder off-Windows = %v, want ErrUnsupported", err)
-	}
-}
+// NOTE (Phase 25 / LNX-04): the former TestNonWindows_Unsupported was removed.
+// The !windows stubs NO LONGER return ErrUnsupported — they are now real CLI
+// stdin prompts (dialog_other.go). Their behavior (trim / empty / EOF-cancel /
+// path expansion) is covered by dialog_other_test.go. ErrUnsupported is retained
+// as a distinct sentinel for back-compat (asserted above).

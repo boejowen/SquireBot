@@ -14,10 +14,12 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/boejowen/SquireBot/internal/app"
 	"github.com/boejowen/SquireBot/internal/config"
 	"github.com/boejowen/SquireBot/internal/credstore"
+	"github.com/boejowen/SquireBot/internal/eqfind"
 	"github.com/boejowen/SquireBot/internal/logging"
 	"github.com/boejowen/SquireBot/internal/system"
 	"github.com/boejowen/SquireBot/internal/tray"
@@ -123,6 +125,42 @@ func main() {
 		baseURL = cfg.BackendBaseURL
 	}
 
+	// Phase 25 / LNX-04 (D-02): headless Linux CLI subcommands. These are
+	// dispatched AFTER logging.Setup + config.Load (they need config) and run
+	// synchronously to completion + os.Exit — they NEVER enter the watcher loop.
+	// SCOPE: --setup/--status are LINUX-path deliverables this phase; on Windows
+	// onboarding stays wizard/tray-driven (a console --setup would pop the Win32
+	// dialog — out of scope/untested here). The tray controller used for --setup
+	// is the build-tagged no-op on Linux (tray_other.go).
+	if len(os.Args) >= 2 && os.Args[1] == "--status" {
+		runStatus(cfg, logDir)
+		os.Exit(0)
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "--setup" {
+		setupCtx, setupCancel := context.WithCancel(context.Background())
+		defer setupCancel()
+		setupTray := tray.NewController(tray.Config{LogDir: logDir})
+		// Best-effort EQ-folder auto-discovery (WINE scan on Linux) to pre-fill
+		// config so onboarding can skip the folder prompt when it succeeds.
+		if !hasAnyEQFolder(cfg) {
+			if found, derr := eqfind.Discover(); derr == nil && found != "" {
+				cfg.EQFolder = found
+				cfg.EQFolders = []string{found}
+				if serr := cfg.Save(); serr != nil {
+					slog.Warn("--setup: save auto-discovered EQ folder", "err", serr)
+				} else {
+					slog.Info("--setup: auto-discovered EQ folder", "path", found)
+				}
+			}
+		}
+		if err := app.RunSetup(setupCtx, cfg, baseURL, Version, setupTray); err != nil {
+			fmt.Fprintf(os.Stderr, "setup did not complete: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Fprintln(os.Stderr, "SquireBot setup complete.")
+		os.Exit(0)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -185,4 +223,41 @@ func main() {
 	runMainLoop(ctx, cancel, trayCtl)
 
 	slog.Info("squirebot exit")
+}
+
+// hasAnyEQFolder reports whether any EQ folder is configured (legacy single
+// EQFolder or the EQFolders slice). Mirrors app.hasEQFolder (unexported there).
+func hasAnyEQFolder(cfg *config.Config) bool {
+	return cfg.EQFolder != "" || len(cfg.EQFolders) > 0
+}
+
+// runStatus prints a headless health/config summary to STDOUT for `--status`
+// (Phase 25 / LNX-04). It NEVER prints the guild code itself (V7 / T-25-06):
+// credstore.Read is consulted ONLY to report "configured" vs "not configured".
+func runStatus(cfg *config.Config, logDir string) {
+	codeStatus := "not configured"
+	if code, err := credstore.Read(); err == nil && code != "" {
+		codeStatus = "configured"
+	}
+
+	folders := cfg.EQFolders
+	if len(folders) == 0 && cfg.EQFolder != "" {
+		folders = []string{cfg.EQFolder}
+	}
+	eqFolders := "(none)"
+	if len(folders) > 0 {
+		eqFolders = strings.Join(folders, ", ")
+	}
+
+	fmt.Printf("SquireBot %s\n", Version)
+	fmt.Printf("  config path:  %s\n", config.Path())
+	fmt.Printf("  log dir:      %s\n", logDir)
+	fmt.Printf("  guild code:   %s\n", codeStatus)
+	fmt.Printf("  EQ folder(s): %s\n", eqFolders)
+	fmt.Printf("  backend:      %s\n", func() string {
+		if cfg.BackendBaseURL != "" {
+			return cfg.BackendBaseURL
+		}
+		return BackendBaseURL
+	}())
 }

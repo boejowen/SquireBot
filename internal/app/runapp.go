@@ -121,6 +121,32 @@ func RunApp(ctx context.Context, cfg *config.Config, baseURL, version string, t 
 	}
 }
 
+// RunSetup is the ADDITIVE "setup-only" entry point for the headless Linux CLI
+// (--setup, Phase 25 / LNX-04 / D-02). It runs ONLY the onboarding branch —
+// reusing the exact same runOnboarding / pickAndSaveEQFolder helpers that RunApp
+// uses — and RETURNS when onboarding is done; it NEVER starts the watcher loop
+// (no runWatcher / watch.Run). This is a SEPARATE function, NOT a mode flag on
+// RunApp: D-07 requires RunApp's signature + body shape to stay byte-unchanged.
+//
+//   - no stored guild code (or empty) → runOnboarding (prompt → validate → store
+//     → EQ folder), returning its error.
+//   - a code is present but no EQ folder configured → just pickAndSaveEQFolder.
+//   - already fully configured → nil (nothing to do).
+//
+// On Linux the prompts are CLI stdin (onboarding.dialog_other.go); there is NO
+// browser/loopback surface anywhere in this path (carried HARD CONSTRAINT).
+func RunSetup(ctx context.Context, cfg *config.Config, baseURL, version string, t *tray.Controller) error {
+	code, err := credstore.Read()
+	if err != nil || code == "" {
+		_, oErr := runOnboarding(ctx, cfg, baseURL, version, t)
+		return oErr
+	}
+	if !hasEQFolder(cfg) {
+		return pickAndSaveEQFolder(ctx, cfg, t)
+	}
+	return nil
+}
+
 // hasEQFolder reports whether any EQ folder is configured (either the legacy
 // single EQFolder or the EQFolders slice).
 func hasEQFolder(cfg *config.Config) bool {

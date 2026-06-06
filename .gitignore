@@ -2,6 +2,8 @@ dist/
 *.exe
 /squirebot-server
 /squirebot-server-amd64
+/squirebot
+/squirebot-linux-amd64
 squirebot.log
 squirebot.log.*
 .envrc

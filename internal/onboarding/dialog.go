@@ -12,7 +12,7 @@
 //
 //	dialog.go          - this file: the shared error vars + package doc (all platforms).
 //	dialog_windows.go  - //go:build windows  : the Win32 input dialog + sqweek folder dialog.
-//	dialog_other.go    - //go:build !windows : stubs returning ErrUnsupported.
+//	dialog_other.go    - //go:build !windows : CLI stdin prompts (Phase 25, D-02 headless Linux).
 //
 // The function signatures are declared per-platform (in the _windows / _other
 // files), not here:
@@ -37,7 +37,8 @@ import "errors"
 // abort signal.
 var ErrCancelled = errors.New("onboarding: user cancelled")
 
-// ErrUnsupported is returned by the non-Windows stubs. The watcher only ever runs
-// on Windows; this exists so the package compiles + tests on a non-Windows CI
-// runner (the dialogs cannot be driven there).
+// ErrUnsupported was historically returned by the non-Windows stubs. As of
+// Phase 25 (LNX-04) the !windows path is a real CLI stdin flow and no longer
+// returns it; the sentinel is retained (distinct from ErrCancelled) for
+// back-compat and in case a future platform needs an "unsupported" branch.
 var ErrUnsupported = errors.New("onboarding: native dialog unsupported on this platform")

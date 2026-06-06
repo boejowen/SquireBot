@@ -265,6 +265,57 @@ func TestRunMatch_FirstSightBaseline_NoReplay(t *testing.T) {
 	}
 }
 
+// TestRunMatch_EmptyFirstPoll_BaselinesEmpty_ThenNewAuctionDMs (WR-01): a
+// never-cursored item whose FIRST poll has ZERO live auctions must be baselined to
+// an EMPTY cursor ("") — NOT left un-cursored — so that the FIRST REAL auction on a
+// later poll diffs as NEW and DMs, instead of being swallowed as first-sight
+// "history". This is the "want added before any auction exists" path, which is a
+// genuine new event, not the standing-backlog case the baseline rule targets.
+func TestRunMatch_EmptyFirstPoll_BaselinesEmpty_ThenNewAuctionDMs(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedUser(t, ctx, db, "alice")
+	seedWant(t, ctx, db, "alice", itemID)
+	// NO cursor seeded ⇒ first-sight.
+
+	// Poll 1: ZERO auctions (the API returns items:null for an item with none live).
+	emptyPoll := fetchFunc(func(_ context.Context, _ string, _ politefetch.Options) politefetch.FetchResult {
+		return okBody(nil)
+	}).toFetcher()
+	fs1 := &fakeSender{}
+	if err := RunMatch(ctx, db, fs1, emptyPoll); err != nil {
+		t.Fatalf("RunMatch (empty first poll): %v", err)
+	}
+	if fs1.embeds != 0 || fs1.sends != 0 {
+		t.Errorf("empty first poll sent DMs (embeds=%d sends=%d); want 0/0", fs1.embeds, fs1.sends)
+	}
+	// The cursor must now EXIST (ok=true) and be EMPTY ("") — the baseline that makes
+	// the next real auction diff as new (regression: previously left un-cursored).
+	got, ok := cursorOf(t, db, itemID)
+	if !ok {
+		t.Fatalf("after empty first poll: cursor ok=false; want true (baselined to \"\" so the next auction diffs)")
+	}
+	if got != "" {
+		t.Errorf("after empty first poll: cursor = %q; want \"\" (empty baseline)", got)
+	}
+
+	// Poll 2: a genuinely NEW WTS auction appears. It must DM (NOT be swallowed as
+	// first-sight baseline) and advance the cursor to its t.
+	realPoll := fetchFunc(func(_ context.Context, _ string, _ politefetch.Options) politefetch.FetchResult {
+		return okBody([]map[string]any{auction(0, tNewer, intp(2000))})
+	}).toFetcher()
+	fs2 := &fakeSender{}
+	if err := RunMatch(ctx, db, fs2, realPoll); err != nil {
+		t.Fatalf("RunMatch (real auction after empty baseline): %v", err)
+	}
+	if fs2.embeds != 1 {
+		t.Errorf("first real auction after empty baseline: embeds = %d; want 1 (must NOT be swallowed as baseline)", fs2.embeds)
+	}
+	if got2, _ := cursorOf(t, db, itemID); got2 != tNewer {
+		t.Errorf("after first real auction: cursor = %q; want %q (advanced to the new auction's t)", got2, tNewer)
+	}
+}
+
 // TestRunMatch_AdvanceOnlyOnSuccess: a fetch failure for the FIRST item does NOT
 // advance its cursor and does NOT abort the loop — the SECOND item still polls and
 // DMs (D-07 best-effort).

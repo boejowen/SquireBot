@@ -110,7 +110,24 @@ func pollItem(
 		return
 	}
 	if len(detail.Items) == 0 {
-		// Nothing to advance to (the API returns items:null for an unseen item).
+		// Empty poll — the API returns items:null for an item with no live auctions.
+		// WR-01: a never-cursored item with ZERO auctions on its FIRST poll must still
+		// be baselined, to an EMPTY cursor (""), so the first REAL auction that appears
+		// on a later poll diffs as NEW and DMs. Leaving it un-cursored (ok stays false)
+		// would route that first real auction through the first-sight baseline branch
+		// below and SWALLOW it as "history" — but it is a genuine new event (the want
+		// existed before the auction), not the standing-backlog case the baseline rule
+		// targets. Since maxTimestamp("") < any RFC3339 t lexically, a "" baseline makes
+		// every subsequent auction diff as new. An already-cursored item is left alone
+		// (nothing to advance to).
+		if !ok {
+			if serr := s.SetECCursor(ctx, item.ItemID, "", time.Now().Unix()); serr != nil {
+				slog.Error("ec_auction_match: empty-baseline cursor write failed", "source", source, "item_id", item.ItemID, "status", "error")
+				return
+			}
+			slog.Info("ec_auction_match: no auctions (empty baseline)", "source", source, "item_id", item.ItemID, "status", "empty_baselined")
+			return
+		}
 		slog.Info("ec_auction_match: no auctions", "source", source, "item_id", item.ItemID, "status", "empty")
 		return
 	}

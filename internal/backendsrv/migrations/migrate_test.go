@@ -497,3 +497,56 @@ func TestMigrate_00007_AddsNotify(t *testing.T) {
 		t.Fatalf("second RunMigrations after 00007 should be a no-op, got error: %v", err)
 	}
 }
+
+// ecCursorColumns are the three columns 00008 creates on ec_auction_cursor
+// (Phase 21 plan 21-01, WANT-05): the item_id PK join key, the RFC3339 last-seen
+// auction timestamp, and the epoch updated_at.
+var ecCursorColumns = []string{"item_id", "last_seen_t", "updated_at"}
+
+// TestMigrate_00008_AddsECCursor proves the Phase 21 forward-only migration 00008
+// applied on a fresh DB (NewTestDB runs goose.Up over ALL eight migrations):
+// ec_auction_cursor exists with its three columns, an upsert round-trips on the
+// item_id PK (insert-then-conflict-update keeps one row), and a second Up is a
+// clean no-op (idempotent). Backend-only table — the watcher never touches it.
+func TestMigrate_00008_AddsECCursor(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00008) + t.Cleanup
+
+	if !tableExists(t, db, "ec_auction_cursor") {
+		t.Errorf("expected table %q to exist after 00008, but it does not", "ec_auction_cursor")
+	}
+
+	cols := columnSet(t, db, "ec_auction_cursor")
+	for _, c := range ecCursorColumns {
+		if !cols[c] {
+			t.Errorf("expected ec_auction_cursor to have column %q after 00008 (have: %v)", c, cols)
+		}
+	}
+
+	// item_id is the PK: a second insert with the same item_id must conflict on the
+	// PK (ON CONFLICT(item_id) is the upsert grain the store relies on) — proven
+	// here by an INSERT OR REPLACE keeping exactly one row.
+	if _, err := db.Exec(
+		`INSERT INTO ec_auction_cursor (item_id, last_seen_t, updated_at) VALUES (?,?,?)`,
+		int64(16247), "2026-06-06T01:00:00+00:00", int64(100)); err != nil {
+		t.Fatalf("first ec_auction_cursor insert: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO ec_auction_cursor (item_id, last_seen_t, updated_at) VALUES (?,?,?)
+		 ON CONFLICT(item_id) DO UPDATE SET last_seen_t=excluded.last_seen_t, updated_at=excluded.updated_at`,
+		int64(16247), "2026-06-06T02:00:00+00:00", int64(200)); err != nil {
+		t.Fatalf("ec_auction_cursor upsert: %v", err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ec_auction_cursor`).Scan(&n); err != nil {
+		t.Fatalf("count ec_auction_cursor: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected exactly 1 ec_auction_cursor row after upsert on the PK, got %d", n)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00008 DB
+	// returns nil (goose records applied versions).
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00008 should be a no-op, got error: %v", err)
+	}
+}

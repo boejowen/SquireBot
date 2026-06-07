@@ -47,8 +47,90 @@ permissions:
   contents: write   # required for creating a GitHub Release
 
 jobs:
+  # Phase 25 fix (CI): the Linux release artifacts MUST be assembled on a Linux
+  # runner. The previous single-job pipeline cross-compiled the linux binary on
+  # windows-latest and tried to `tar` it there — but windows-latest's tar.exe is
+  # bsdtar, which rejects GNU `--mode`/`--owner`/`--group` (the v2.1.0 run failed
+  # with `Option --mode=a+rX,u+w is not supported`), AND a Windows filesystem
+  # can't carry the Unix exec bit, so `./install.sh` wouldn't be runnable after
+  # extraction. This dedicated ubuntu-latest job builds + stages + tars natively
+  # (GNU tar preserves the 0755 modes set by chmod) and hands both linux assets
+  # to the publish job as workflow artifacts.
+  linux-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Compute version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v(.+)$ ]]; then
+            version="${BASH_REMATCH[1]}"
+          else
+            version="${{ github.event.inputs.version }}"
+          fi
+          if [[ -z "${version// }" ]]; then
+            echo "Could not derive version from tag or workflow_dispatch input" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building linux version: $version"
+
+      - name: Build bare squirebot (linux/amd64, CGO-free)
+        shell: bash
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: |
+          # Phase 25 (LNX-05 / D-06/D-07): additive CGO-free linux build, now on
+          # a native linux runner. NO -H=windowsgui (Windows-only linker flag).
+          # Same Version + BackendBaseURL ldflags as the Windows step. This bare
+          # binary is what the in-app auto-updater swaps (binary_url_linux); it is
+          # ALSO packed into the tarball for install.sh.
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -X main.Version=${{ steps.ver.outputs.version }} -X main.BackendBaseURL=https://api.squirebot.quest" \
+            -o dist/squirebot ./cmd/squirebot
+          ls -l dist/squirebot
+
+      - name: Assemble Linux tarball
+        shell: bash
+        run: |
+          # Phase 25 (LNX-05 / D-06): bundle the static binary + README +
+          # systemd user unit + install.sh into squirebot-linux-amd64.tar.gz.
+          # Stage under a versionless top-level dir so `tar -xzf` yields
+          # squirebot-linux-amd64/. chmod sets the exec bits; GNU tar preserves
+          # them natively (no --mode/--owner/--group needed — those are the
+          # GNU-only flags that bsdtar on windows-latest rejected).
+          stage="dist/squirebot-linux-amd64"
+          mkdir -p "$stage"
+          cp dist/squirebot                    "$stage/squirebot"
+          cp packaging/linux/README.md         "$stage/README.md"
+          cp packaging/linux/squirebot.service "$stage/squirebot.service"
+          cp packaging/linux/install.sh        "$stage/install.sh"
+          chmod +x "$stage/squirebot" "$stage/install.sh"
+          tar -czf dist/squirebot-linux-amd64.tar.gz -C dist squirebot-linux-amd64
+          ls -l dist/squirebot-linux-amd64.tar.gz
+
+      - name: Upload linux artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: squirebot-linux
+          path: |
+            dist/squirebot
+            dist/squirebot-linux-amd64.tar.gz
+          if-no-files-found: error
+
   release:
     runs-on: windows-latest
+    needs: linux-build
     steps:
       - uses: actions/checkout@v6
 
@@ -128,45 +210,18 @@ jobs:
           go build -ldflags="$ldflags" -o dist/squirebot.exe ./cmd/squirebot
           Get-Item dist/squirebot.exe | Select-Object Name, Length
 
-      - name: Build bare squirebot (linux/amd64, CGO-free)
-        shell: pwsh
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: '0'
-        run: |
-          # Phase 25 (LNX-05 / D-06/D-07): additive CGO-free linux build. The
-          # Windows runner cross-compiles linux/amd64 fine (the backend already
-          # does). NO -H=windowsgui (Windows-only linker flag). Same Version +
-          # BackendBaseURL ldflags as the Windows step. This bare binary is what
-          # the in-app auto-updater swaps (binary_url_linux); it is ALSO packed
-          # into the tarball for install.sh.
-          $ldflags = "-s -w " +
-                     "-X main.Version=${{ steps.ver.outputs.version }} " +
-                     "-X main.BackendBaseURL=https://api.squirebot.quest"
-          go build -trimpath -ldflags="$ldflags" -o dist/squirebot ./cmd/squirebot
-          Get-Item dist/squirebot | Select-Object Name, Length
-
-      - name: Assemble Linux tarball
-        shell: pwsh
-        run: |
-          # Phase 25 (LNX-05 / D-06): bundle the static binary + README +
-          # systemd user unit + install.sh into squirebot-linux-amd64.tar.gz.
-          # `tar` is on PATH on windows-latest (bsdtar). Stage under a
-          # versionless top-level dir so `tar -xzf` yields squirebot-linux-amd64/.
-          $stage = "dist/squirebot-linux-amd64"
-          New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item dist/squirebot                      $stage/squirebot       -Force
-          Copy-Item packaging/linux/README.md           $stage/README.md       -Force
-          Copy-Item packaging/linux/squirebot.service   $stage/squirebot.service -Force
-          Copy-Item packaging/linux/install.sh          $stage/install.sh      -Force
-          # tar preserves the 0755 bit on the binary + install.sh via --mode.
-          tar -czf dist/squirebot-linux-amd64.tar.gz -C dist `
-            --mode='a+rX,u+w' `
-            --owner=0 --group=0 `
-            squirebot-linux-amd64
-          if ($LASTEXITCODE -ne 0) { Write-Error "tar failed ($LASTEXITCODE)"; exit $LASTEXITCODE }
-          Get-Item dist/squirebot-linux-amd64.tar.gz | Select-Object Name, Length
+      - name: Download Linux artifacts (built on ubuntu-latest)
+        uses: actions/download-artifact@v7
+        with:
+          # The linux-build job staged the bare `squirebot` + the tarball into
+          # dist/ on a native linux runner (GNU tar, correct exec bits). Drop
+          # them back into dist/ here so the SHA-256 / manifest / upload steps
+          # below find them at the exact paths they already reference
+          # (dist/squirebot, dist/squirebot-linux-amd64.tar.gz). The bare linux
+          # binary was cross-compiled on windows before; it is now built on
+          # linux instead — the Windows .exe / NSIS path is unaffected.
+          name: squirebot-linux
+          path: dist
 
       - name: Build NSIS installer (pre-manifest)
         shell: pwsh

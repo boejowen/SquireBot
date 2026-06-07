@@ -4,7 +4,9 @@ layout: default
 
 # Install SquireBot
 
-Four steps, about three minutes. **No Google sign-in and no browser** — just a one-time guild code your maintainer gives you.
+**No Google sign-in and no browser** — just a one-time guild code your maintainer gives you.
+
+Playing Project 1999 on **Linux** (under WINE / Lutris / Proton / Bottles)? Skip to **[Linux](#linux-project-1999-under-wine)**. On **Windows**, the install is four steps, about three minutes:
 
 ## 1. Download
 
@@ -31,6 +33,27 @@ Next, SquireBot asks for your EverQuest install folder (for example, `C:\P99\Eve
 Then, in EverQuest, type `/outputfile inventory`. EQ writes `<YourChar>-Inventory.txt` to that folder; SquireBot detects the new file (fsnotify, 500 ms debounce), parses the columns (`Location, Name, ID, Count, Slots`), and uploads the rows to the guild backend within about 30 seconds. Casters can then run `/outputfile spellbook` to upload their spellbook the same way.
 
 View everything — your inventory, gear and spell checklists, and the shared guild bank — at **[squirebot.quest](https://squirebot.quest)** (sign in with Discord).
+
+## Linux (Project 1999 under WINE)
+
+Play P99 on Linux? There's a headless build — a small background daemon (a systemd **user** service), no tray icon and no browser. It's a single static binary.
+
+1. **Download** `squirebot-linux-amd64.tar.gz` from the [latest release](https://github.com/boejowen/SquireBot/releases/latest).
+2. **Extract and install** as your normal user (**not** root):
+
+   ```sh
+   tar -xzf squirebot-linux-amd64.tar.gz
+   cd squirebot-linux-amd64
+   ./install.sh
+   ```
+
+   This installs the binary to `~/.local/bin`, registers a systemd user service (so it autostarts when you log in), and launches first-time setup.
+3. **Set up** when prompted (`squirebot --setup`): paste your **guild code**, then confirm your **EQ folder** — it auto-scans common WINE prefixes (`$WINEPREFIX`, `~/.wine`, Lutris, Bottles, Steam/Proton `compatdata`) and offers what it finds, or you can type the path.
+4. **Play.** In EverQuest, `/outputfile inventory` (and `/outputfile spellbook` for casters); the daemon detects the file and uploads within about 30 seconds. Check it any time with `squirebot --status` or `journalctl --user -u squirebot -f`.
+
+On a **headless / SSH-only** box that must keep running without a desktop login, install with `./install.sh --linger`. Full usage, file locations (XDG), and how auto-update works are in [`packaging/linux/README.md`](https://github.com/boejowen/SquireBot/blob/master/packaging/linux/README.md).
+
+Like the Windows build, the Linux watcher **auto-updates** from GitHub Releases (it picks the Linux binary, never the `.exe`) — so this is normally a one-time install.
 
 ---
 

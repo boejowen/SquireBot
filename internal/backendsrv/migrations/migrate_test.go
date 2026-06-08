@@ -550,3 +550,206 @@ func TestMigrate_00008_AddsECCursor(t *testing.T) {
 		t.Fatalf("second RunMigrations after 00008 should be a no-op, got error: %v", err)
 	}
 }
+
+// TestMigrate_00009_CharacterAssignment proves the Phase 26 forward-only migration
+// 00009 applied on a fresh DB (NewTestDB runs goose.Up over ALL nine migrations):
+//   - character gained the is_guild_bot column (columnSet);
+//   - character_assignment + assignment_request tables exist (tableExists);
+//   - the partial unique index assignment_request_pending_uidx exists (indexExists);
+//   - the assignment_request status CHECK rejects a bogus enum ('bogus');
+//   - the partial-unique pending index collides on a second pending request for the
+//     same (character_id, requester) but a resolved (denied) + a new pending do NOT;
+//   - the auto-seed assigned a linked-owner non-bank non-removed char to that user
+//     (assigned_by='migration'), and skipped a NULL-owner char, an is_bank_toon=1
+//     char, and an is_removed=1 char; and
+//   - a second Up is a clean no-op (idempotent — goose_db_version row count
+//     unchanged, mirroring TestRunMigrations_Idempotent).
+//
+// Backend-only table set — the watcher never touches it.
+func TestMigrate_00009_CharacterAssignment(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00009) + t.Cleanup
+
+	// is_guild_bot column exists on character.
+	charCols := columnSet(t, db, "character")
+	if !charCols["is_guild_bot"] {
+		t.Errorf("expected character to have column %q after 00009 (have: %v)", "is_guild_bot", charCols)
+	}
+
+	// Both new tables exist.
+	for _, tbl := range []string{"character_assignment", "assignment_request"} {
+		if !tableExists(t, db, tbl) {
+			t.Errorf("expected table %q to exist after 00009, but it does not", tbl)
+		}
+	}
+
+	// The partial-unique pending index exists.
+	if !indexExists(t, db, "assignment_request", "assignment_request_pending_uidx") {
+		t.Errorf("expected partial unique index %q on assignment_request after 00009", "assignment_request_pending_uidx")
+	}
+
+	// Seed a web_user so the assignment_request.requester FK holds for the probes.
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-req", "Requester"); err != nil {
+		t.Fatalf("seed web_user: %v", err)
+	}
+	// Seed a character to hang the request probes on.
+	probeOwner := mustInsertOwner(t, db, "ProbeOwner", nil)
+	probeChar := mustInsertChar(t, db, probeOwner, "ProbeChar", false, false, false)
+
+	// The status CHECK bites: a bogus status must be rejected at the DB.
+	if _, err := db.Exec(
+		`INSERT INTO assignment_request (character_id, requester, status, created_at)
+		 VALUES (?, ?, 'bogus', 0)`, probeChar, "disc-req"); err == nil {
+		t.Errorf("expected status='bogus' assignment_request insert to fail the CHECK constraint, but it succeeded")
+	}
+
+	// A first pending request inserts fine.
+	if _, err := db.Exec(
+		`INSERT INTO assignment_request (character_id, requester, status, created_at)
+		 VALUES (?, ?, 'pending', 0)`, probeChar, "disc-req"); err != nil {
+		t.Fatalf("first pending request insert: %v", err)
+	}
+	// A SECOND pending request for the same (char, requester) collides on the
+	// partial-unique pending index.
+	if _, err := db.Exec(
+		`INSERT INTO assignment_request (character_id, requester, status, created_at)
+		 VALUES (?, ?, 'pending', 0)`, probeChar, "disc-req"); err == nil {
+		t.Errorf("expected a second pending request for the same (char, requester) to collide on the partial-unique index, but it succeeded")
+	}
+	// Resolving the first (denied) frees the partial index: a NEW pending no longer
+	// collides (the index is scoped WHERE status='pending', so resolved rows drop out).
+	if _, err := db.Exec(
+		`UPDATE assignment_request SET status = 'denied', resolved_at = 1, resolved_by = ?
+		   WHERE character_id = ? AND requester = ? AND status = 'pending'`,
+		"disc-req", probeChar, "disc-req"); err != nil {
+		t.Fatalf("deny the first pending request: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO assignment_request (character_id, requester, status, created_at)
+		 VALUES (?, ?, 'pending', 0)`, probeChar, "disc-req"); err != nil {
+		t.Errorf("expected a new pending request after the prior one was resolved (denied) NOT to collide, got: %v", err)
+	}
+
+	// Auto-seed inclusion/exclusion. The 00009 seed ran during NewTestDB over an
+	// empty DB (no rows), so it backfilled nothing then. To exercise the SELECT
+	// inclusion/exclusion logic deterministically, seed the four character classes
+	// here and re-run the SAME seed statement (it is INSERT OR IGNORE — replay-safe).
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-seed", "SeedOwner"); err != nil {
+		t.Fatalf("seed web_user for owner: %v", err)
+	}
+	seedDisc := "disc-seed"
+	linkedOwner := mustInsertOwner(t, db, "LinkedOwner", &seedDisc) // owner.discord_user_id non-NULL
+	nullOwner := mustInsertOwner(t, db, "NullOwner", nil)           // owner.discord_user_id NULL
+
+	linkedChar := mustInsertChar(t, db, linkedOwner, "LinkedChar", false, false, false) // → assigned
+	nullChar := mustInsertChar(t, db, nullOwner, "NullChar", false, false, false)       // → excluded (NULL owner)
+	bankChar := mustInsertChar(t, db, linkedOwner, "BankChar", true, false, false)      // → excluded (is_bank_toon=1)
+	removedChar := mustInsertChar(t, db, linkedOwner, "RemovedChar", false, false, true) // → excluded (is_removed=1)
+
+	// Re-run the auto-seed SELECT (the exact 00009 statement; INSERT OR IGNORE so a
+	// replay is safe). This is the same SQL the migration ran on boot.
+	if _, err := db.Exec(
+		`INSERT OR IGNORE INTO character_assignment (character_id, discord_user_id, assigned_at, assigned_by)
+		 SELECT c.id, o.discord_user_id, strftime('%s','now'), 'migration'
+		   FROM character c
+		   JOIN owner o ON o.id = c.owner_id
+		  WHERE o.discord_user_id IS NOT NULL
+		    AND c.is_removed = 0
+		    AND c.is_bank_toon = 0
+		    AND c.is_guild_bot = 0`); err != nil {
+		t.Fatalf("re-run auto-seed: %v", err)
+	}
+
+	assignedTo := func(charID int64) (string, string, bool) {
+		t.Helper()
+		var who, by string
+		err := db.QueryRow(
+			`SELECT discord_user_id, assigned_by FROM character_assignment WHERE character_id = ?`, charID,
+		).Scan(&who, &by)
+		if err == sql.ErrNoRows {
+			return "", "", false
+		}
+		if err != nil {
+			t.Fatalf("read assignment (character_id=%d): %v", charID, err)
+		}
+		return who, by, true
+	}
+
+	// The linked-owner char is assigned to that user with assigned_by='migration'.
+	if who, by, ok := assignedTo(linkedChar); !ok || who != "disc-seed" || by != "migration" {
+		t.Errorf("linkedChar assignment = (%q, %q, %v), want (disc-seed, migration, true)", who, by, ok)
+	}
+	// The NULL-owner / bank / removed chars are NOT assigned.
+	if _, _, ok := assignedTo(nullChar); ok {
+		t.Errorf("nullChar (NULL owner) should NOT have an assignment, but it does")
+	}
+	if _, _, ok := assignedTo(bankChar); ok {
+		t.Errorf("bankChar (is_bank_toon=1) should NOT have an assignment, but it does")
+	}
+	if _, _, ok := assignedTo(removedChar); ok {
+		t.Errorf("removedChar (is_removed=1) should NOT have an assignment, but it does")
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00009 DB
+	// returns nil AND the goose_db_version row count is unchanged.
+	var beforeVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
+		t.Fatalf("count goose_db_version before re-run: %v", err)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00009 should be a no-op, got error: %v", err)
+	}
+	var afterVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
+		t.Fatalf("count goose_db_version after re-run: %v", err)
+	}
+	if beforeVersions != afterVersions {
+		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
+// mustInsertOwner inserts an owner with the given label and (nullable)
+// discord_user_id, returning its id. discordUserID is *string so a NULL-owner
+// (legacy/unlinked) is distinguishable from a linked one.
+func mustInsertOwner(t *testing.T, db *sql.DB, label string, discordUserID *string) int64 {
+	t.Helper()
+	var arg any
+	if discordUserID != nil {
+		arg = *discordUserID
+	}
+	res, err := db.Exec(`INSERT INTO owner (label, discord_user_id) VALUES (?, ?)`, label, arg)
+	if err != nil {
+		t.Fatalf("insert owner %q: %v", label, err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("owner last insert id: %v", err)
+	}
+	return id
+}
+
+// mustInsertChar inserts a character for ownerID with the bank/bot/removed flags,
+// returning its id.
+func mustInsertChar(t *testing.T, db *sql.DB, ownerID int64, name string, isBank, isBot, isRemoved bool) int64 {
+	t.Helper()
+	b := func(v bool) int {
+		if v {
+			return 1
+		}
+		return 0
+	}
+	res, err := db.Exec(
+		`INSERT INTO character (owner_id, name, is_bank_toon, is_guild_bot, is_removed) VALUES (?, ?, ?, ?, ?)`,
+		ownerID, name, b(isBank), b(isBot), b(isRemoved))
+	if err != nil {
+		t.Fatalf("insert character %q: %v", name, err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("character last insert id: %v", err)
+	}
+	return id
+}

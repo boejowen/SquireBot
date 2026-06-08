@@ -187,6 +187,15 @@ const CHARMETA_FORM_SOURCE = readFileSync(
 	fileURLToPath(new URL('../components/CharMetaForm.svelte', import.meta.url)),
 	'utf8'
 );
+// The /char-meta + /account links moved from SiteShell into the header
+// SettingsMenu gear dropdown (260607-sdh IA cleanup). The D-03 member-accessible
+// contract now lives there: the menu itself is rendered by SiteShell only under
+// {#if session?.authenticated}, and inside the menu /char-meta sits OUTSIDE the
+// {#if session?.isOfficer} gate (which wraps only /admin).
+const SETTINGS_MENU_SOURCE = readFileSync(
+	fileURLToPath(new URL('../components/SettingsMenu.svelte', import.meta.url)),
+	'utf8'
+);
 const SITE_SHELL_SOURCE = readFileSync(
 	fileURLToPath(new URL('../components/SiteShell.svelte', import.meta.url)),
 	'utf8'
@@ -209,20 +218,41 @@ describe('CharMetaForm.svelte source — the CR-01 input-type guard + the wiring
 	});
 });
 
-describe('SiteShell.svelte source — the /char-meta nav is member-accessible (D-03)', () => {
-	it('surfaces a /char-meta link', () => {
-		expect(SITE_SHELL_SOURCE).toContain('/char-meta');
+describe('SettingsMenu.svelte source — the /char-meta nav is member-accessible (D-03)', () => {
+	it('surfaces a /char-meta link (relocated into the gear menu, 260607-sdh)', () => {
+		expect(SETTINGS_MENU_SOURCE).toContain('/char-meta');
 	});
-	it('places the /char-meta link under session?.authenticated, NOT session?.isOfficer', () => {
-		// Isolate the guard immediately preceding the /char-meta link. The nearest
-		// enclosing {#if ...} must be the member-accessible authenticated guard, not
-		// the officer gate (gating it to officers would breach D-03 at the nav layer).
-		const idx = SITE_SHELL_SOURCE.indexOf('/char-meta');
-		expect(idx).toBeGreaterThan(-1);
-		const before = SITE_SHELL_SOURCE.slice(0, idx);
-		const lastIf = before.lastIndexOf('{#if');
-		const guard = before.slice(lastIf, before.indexOf('}', lastIf) + 1);
-		expect(guard).toContain('session?.authenticated');
-		expect(guard).not.toContain('isOfficer');
+	it('renders the SettingsMenu only for an authenticated member (the menu sits under session?.authenticated in SiteShell)', () => {
+		// SiteShell gates the WHOLE gear menu behind the single authenticated guard,
+		// so every item inside — /char-meta included — is member-accessible (D-03).
+		// Assert <SettingsMenu> falls between {#if session?.authenticated} and its
+		// matching {/if}, and is NOT itself wrapped in an officer gate.
+		const authGuardIdx = SITE_SHELL_SOURCE.indexOf('{#if session?.authenticated}');
+		const menuIdx = SITE_SHELL_SOURCE.indexOf('<SettingsMenu');
+		expect(authGuardIdx).toBeGreaterThan(-1);
+		expect(menuIdx).toBeGreaterThan(authGuardIdx);
+		// The SettingsMenu line itself carries no officer gate (Admin is gated INSIDE
+		// the menu component, not at the SiteShell render site).
+		const menuLine = SITE_SHELL_SOURCE.slice(menuIdx, SITE_SHELL_SOURCE.indexOf('\n', menuIdx));
+		expect(menuLine).not.toContain('isOfficer');
+		// There is exactly one officer gate in SiteShell now: none (Admin moved into
+		// the menu). Confirm SiteShell no longer gates anything on isOfficer.
+		expect(SITE_SHELL_SOURCE).not.toContain('session?.isOfficer');
+	});
+	it('does NOT officer-gate /char-meta (it sits outside the {#if session?.isOfficer} block that wraps only /admin)', () => {
+		// The Admin <a href="/admin"> is the ONLY officer-gated nav item. Verify the
+		// /char-meta LINK precedes the officer gate that immediately wraps /admin — so
+		// /char-meta is never trapped behind isOfficer (D-03). Match the hrefs (not
+		// bare paths) to skip comment mentions, and find the officer gate that
+		// directly precedes the /admin link (NOT the earlier identity-Shield gate).
+		const charMetaIdx = SETTINGS_MENU_SOURCE.indexOf('href="/char-meta"');
+		const adminIdx = SETTINGS_MENU_SOURCE.indexOf('href="/admin"');
+		expect(charMetaIdx).toBeGreaterThan(-1);
+		expect(adminIdx).toBeGreaterThan(charMetaIdx);
+		// The officer gate that wraps /admin is the last {#if session?.isOfficer}
+		// before the /admin link; it must open AFTER /char-meta (so /char-meta is
+		// outside it).
+		const adminGateIdx = SETTINGS_MENU_SOURCE.lastIndexOf('{#if session?.isOfficer}', adminIdx);
+		expect(adminGateIdx).toBeGreaterThan(charMetaIdx);
 	});
 });

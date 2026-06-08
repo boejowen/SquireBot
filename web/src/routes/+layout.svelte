@@ -31,8 +31,8 @@
 <!-- The [data-theme] root stays OUTERMOST so the themed shell (wordmark +
      ThemePicker + footer) shows on the login / not-member screens too. AuthGate
      wraps the page content inside the shell: it provides the session via
-     context (SiteShell reads it for the SessionIndicator + the officer-only
-     Admin nav) and renders the pre-auth screens or the app (D-01). -->
+     context (SiteShell reads it for the header SettingsMenu: identity + the
+     officer-only Admin item) and renders the pre-auth screens or the app (D-01). -->
 <div class="theme-root" data-theme={theme} bind:this={rootEl}>
 	<AuthGate>
 		<SiteShell bind:theme>

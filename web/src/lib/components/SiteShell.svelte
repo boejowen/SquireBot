@@ -10,8 +10,7 @@
 
 	import { getContext, onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import ThemePicker from './ThemePicker.svelte';
-	import SessionIndicator from './SessionIndicator.svelte';
+	import SettingsMenu from './SettingsMenu.svelte';
 	import { SESSION_KEY, type SessionGetter } from './AuthGate.svelte';
 	import { unreadCount, refreshUnread } from '$lib/stores/unread';
 	import type { ThemeKey } from '$lib/theme/themes';
@@ -28,18 +27,12 @@
 	// The session comes from AuthGate via context. SiteShell only renders when the
 	// gate has admitted an authenticated member (AuthGate shows the pre-auth
 	// screens otherwise), so `session` is normally an authed member here — but we
-	// guard defensively. The shell shows the SessionIndicator (AUTH-09) when
-	// authenticated, and an Admin nav entry ONLY for an officer (Layer-1 UX
-	// suppression; the server is the real gate — 15-03).
+	// guard defensively. The signed-in identity, theme picker, account/char-meta
+	// links, the officer-only Admin link, and Sign out all now live inside the
+	// header SettingsMenu (260607-sdh IA cleanup) — the shell just passes the
+	// session + bind:theme through to it.
 	const getSession = getContext<SessionGetter>(SESSION_KEY);
 	let session = $derived(getSession ? getSession() : null);
-
-	function goAdmin() {
-		// Layer-1 UX nav only; /admin is built in 15-05. The server re-checks
-		// officer status on every admin endpoint (15-03) — the hidden nav is never
-		// the gate.
-		window.location.href = '/admin';
-	}
 
 	// Unread-alert badge (20-04 / D-05). The count is owner-scoped + server-truth
 	// (the store's refreshUnread re-fetches; the NotificationInbox also refreshes it
@@ -71,22 +64,11 @@
 	<header class="shell-header">
 		<a href="/" class="wordmark">SquireBot</a>
 		<div class="shell-controls">
-			{#if session?.isOfficer}
-				<!-- Officer-only Admin nav (Layer-1 UX suppression; /admin lands in
-				     15-05). A non-officer never sees this affordance — but the server
-				     re-checks officer status on every admin endpoint (15-03). -->
-				<button type="button" class="admin-nav" onclick={goAdmin}>Admin</button>
-			{/if}
-			<ThemePicker bind:theme />
 			{#if session?.authenticated}
-				<!-- Account + Char-meta are LOGIN-ONLY / member-accessible (D-03/D-09):
-				     any signed-in member manages their watcher codes (/account, 17-03)
-				     and sets a character's class/level/race/is_bank_toon (/char-meta).
-				     Both sit under session?.authenticated (NOT the officer block above) —
-				     gating them to officers would wrongly deny members surfaces they're
-				     entitled to. Plain <a href>s suffice (no officer-style handler). The
-				     hidden-from-anon nav is UX; the server RequireSession gate is the real
-				     boundary (D-02/D-08). -->
+				<!-- The header keeps only the primary nav (Wantlist + Notifications);
+				     everything else folds into the SettingsMenu gear (260607-sdh). The
+				     hidden-from-anon nav is UX; the server RequireSession gate is the
+				     real boundary (D-02/D-08). -->
 				<a href="/wantlist" class="char-meta-nav">Wantlist</a>
 				<!-- Notifications nav + unread-count badge (20-04 / D-05). The badge is
 				     the load-bearing "you missed something" signal (a CAN'T-DM alert
@@ -98,9 +80,11 @@
 						<span class="unread-badge" aria-hidden="true">{badgeText}</span>
 					{/if}
 				</a>
-				<a href="/account" class="char-meta-nav">Account</a>
-				<a href="/char-meta" class="char-meta-nav">Character details</a>
-				<SessionIndicator {session} />
+				<!-- The gear settings dropdown: identity, theme, Watcher-codes,
+				     Character-details, officer-only Admin, Sign out. Visible to any
+				     authenticated member (Admin is gated inside). bind:theme keeps the
+				     +layout → SiteShell → SettingsMenu → ThemePicker chain intact. -->
+				<SettingsMenu bind:theme {session} />
 			{/if}
 		</div>
 	</header>
@@ -143,7 +127,7 @@
 		text-decoration: none; /* it's an <a href="/"> home link — no underline (looks identical to the old span) */
 	}
 	.wordmark:focus-visible {
-		/* Keyboard accessibility, consistent with .admin-nav. */
+		/* Keyboard accessibility, consistent with the nav links. */
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
@@ -153,32 +137,8 @@
 		gap: 16px;
 		flex-wrap: wrap;
 	}
-	/* Admin nav entry — styled like the +page view .tab (UI-SPEC). */
-	.admin-nav {
-		min-height: 44px; /* touch target (UI-SPEC) */
-		padding: 8px 16px;
-		background: none;
-		border: none;
-		border-bottom: 2px solid transparent;
-		color: var(--text);
-		font-family: var(--font-display);
-		font-weight: var(--weight-display);
-		font-size: 13px;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		cursor: pointer;
-		opacity: 0.7;
-	}
-	.admin-nav:hover {
-		opacity: 1;
-		color: var(--accent);
-	}
-	.admin-nav:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
-	}
-	/* Char-meta nav entry — a plain link styled like .admin-nav / the +page view
-	   .tab (UI-SPEC). Member-accessible (D-03), not an officer marker. */
+	/* Char-meta nav entry — a plain link styled like the +page view .tab
+	   (UI-SPEC). Member-accessible (D-03), not an officer marker. */
 	.char-meta-nav {
 		display: inline-flex;
 		align-items: center;

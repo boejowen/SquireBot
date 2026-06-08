@@ -1,7 +1,7 @@
 <script lang="ts" module>
 	// The context keys descendants use to read the session and report a
-	// server-truth auth error. SiteShell reads SESSION_KEY for the
-	// SessionIndicator + the officer-only Admin nav; +page.svelte calls
+	// server-truth auth error. SiteShell reads SESSION_KEY for the header
+	// SettingsMenu (identity + officer-only Admin item); +page.svelte calls
 	// AUTH_GUARD_KEY in its catch so a 401/403 re-routes the whole gate.
 	export const SESSION_KEY = Symbol('session');
 	export const AUTH_GUARD_KEY = Symbol('authGuard');

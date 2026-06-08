@@ -63,8 +63,9 @@
 	import Shield from '@lucide/svelte/icons/shield';
 	import LogOut from '@lucide/svelte/icons/log-out';
 	import ThemePicker from './ThemePicker.svelte';
-	import { logout, type Session } from '$lib/auth';
+	import { logout } from '$lib/auth';
 	import type { ThemeKey } from '$lib/theme/themes';
+	// `Session` is already imported in the <script module> block above (in scope here).
 
 	// The theme stays $bindable so the +layout → SiteShell → SettingsMenu →
 	// ThemePicker chain is intact (no context, no store — D-06). +layout's

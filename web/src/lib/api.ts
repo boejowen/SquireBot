@@ -806,3 +806,161 @@ export function sendTestAlert(
 ): Promise<{ status?: string; error?: string }> {
 	return postJSON<{ status?: string; error?: string }>('/api/v1/admin/monitors/test', {}, f);
 }
+
+// --- Character assignment (26-03 / ASSIGN-01..05) --------------------------
+// The twelve assignment endpoints over the 26-02 backend: six member ones under
+// RequireSession (mine/claimable/claim/release/request/request-cancel) and six
+// officer ones under RequireOfficer (list-all/assign/remove/approve/deny/designate).
+// ALL cookie-credentialed via the shared getJSON/postJSON cores. Per D-02 / Pitfall 1
+// every member body carries ONLY character_id — NO actor field; the acting identity
+// is the session cookie the server reads. Field names are snake_case to match the Go
+// JSON contract (the BankToon/CharMetaItem precedent at api.ts:274-310). Error codes
+// the panels route on: already_assigned / char_shared / duplicate_request (409),
+// not_authorized (403), invalid_input (400), internal (500).
+
+/**
+ * One of the caller's assigned characters (GET /api/v1/assignments/mine — the
+ * "My characters" read). Mirrors the Go store.Assignment JSON: the assignee is
+ * discord_user_id (always the caller for this endpoint); assigned_by is 'self' /
+ * 'migration' / an officer id.
+ */
+export interface MyCharacter {
+	character_id: number;
+	name: string;
+	discord_user_id: string;
+	assigned_at: number;
+	assigned_by: string;
+}
+
+/**
+ * One claimable character (GET /api/v1/assignments/claimable). The backend today
+ * returns ONLY unassigned, non-shared, live characters, so `assignee` is absent on
+ * every current row — but the field is modeled (optional) so partitionClaimable can
+ * split instantly-claimable (no assignee → Claim) from contested (assigned to someone
+ * else → Request) without a schema change if the backend ever widens this read.
+ */
+export interface ClaimableCharacter {
+	character_id: number;
+	name: string;
+	/** The current holder's discord_user_id when the char is assigned to someone else; absent/null = unassigned (instant-claimable). */
+	assignee?: string | null;
+}
+
+/**
+ * One assignment row (GET /api/v1/admin/assignments → assignments[]). Mirrors the Go
+ * store.Assignment: the character + its current assignee (discord_user_id) + provenance.
+ */
+export interface Assignment {
+	character_id: number;
+	name: string;
+	discord_user_id: string;
+	assigned_at: number;
+	assigned_by: string;
+}
+
+/**
+ * One pending request (GET /api/v1/admin/assignments → requests[]) — the officer
+ * approval queue. Mirrors the Go store.PendingRequest: the queue lists pending rows
+ * only, so there is no status field on the wire (every row is implicitly 'pending');
+ * `id` is the request_id approve/deny take. current_assignee is null for a now-
+ * unassigned contested char.
+ */
+export interface PendingRequest {
+	id: number;
+	character_id: number;
+	character_name: string;
+	requester: string;
+	current_assignee: string | null;
+	created_at: number;
+}
+
+/** The `GET /api/v1/admin/assignments` reply: every live-char assignment + the pending queue. */
+export interface AllAssignments {
+	assignments: Assignment[];
+	requests: PendingRequest[];
+}
+
+/** An officer designate mode (mutually-exclusive guild bank / guild bot / neither). */
+export type DesignateMode = 'bank' | 'bot' | 'none';
+
+/** GET /api/v1/assignments/mine → MyCharacter[] ([] when none). Login-only. */
+export function fetchMyCharacters(f: typeof fetch = fetch): Promise<MyCharacter[]> {
+	return getJSON<MyCharacter[]>('/api/v1/assignments/mine', f);
+}
+
+/** GET /api/v1/assignments/claimable → ClaimableCharacter[] ([] when none). Login-only. */
+export function fetchClaimable(f: typeof fetch = fetch): Promise<ClaimableCharacter[]> {
+	return getJSON<ClaimableCharacter[]>('/api/v1/assignments/claimable', f);
+}
+
+/** POST /api/v1/assignments/claim → { claimed }. Body {character_id} — actor is session-derived (D-02). */
+export function claimChar(character_id: number, f: typeof fetch = fetch): Promise<{ claimed: boolean }> {
+	return postJSON<{ claimed: boolean }>('/api/v1/assignments/claim', { character_id }, f);
+}
+
+/** POST /api/v1/assignments/release → { released } (false = not the caller's / unassigned — a silent no-op). */
+export function releaseChar(character_id: number, f: typeof fetch = fetch): Promise<{ released: boolean }> {
+	return postJSON<{ released: boolean }>('/api/v1/assignments/release', { character_id }, f);
+}
+
+/** POST /api/v1/assignments/request → { requested }. Files a pending request for a contested char (D-07). */
+export function requestChar(character_id: number, f: typeof fetch = fetch): Promise<{ requested: boolean }> {
+	return postJSON<{ requested: boolean }>('/api/v1/assignments/request', { character_id }, f);
+}
+
+/** POST /api/v1/assignments/request/cancel → { cancelled } (false = not the caller's / not pending — a no-op). */
+export function cancelRequest(character_id: number, f: typeof fetch = fetch): Promise<{ cancelled: boolean }> {
+	return postJSON<{ cancelled: boolean }>('/api/v1/assignments/request/cancel', { character_id }, f);
+}
+
+/** GET /api/v1/admin/assignments → { assignments, requests }. Officer-only (403 not_authorized for a member). */
+export function fetchAllAssignments(f: typeof fetch = fetch): Promise<AllAssignments> {
+	return getJSON<AllAssignments>('/api/v1/admin/assignments', f);
+}
+
+/** POST /api/v1/admin/assignments/assign → { assigned }. Officer-only; body {character_id, assignee}. */
+export function officerAssign(
+	character_id: number,
+	assignee: string,
+	f: typeof fetch = fetch
+): Promise<{ assigned: boolean }> {
+	return postJSON<{ assigned: boolean }>(
+		'/api/v1/admin/assignments/assign',
+		{ character_id, assignee },
+		f
+	);
+}
+
+/** POST /api/v1/admin/assignments/remove → { removed }. Officer-only; body {character_id}. */
+export function officerRemoveAssign(
+	character_id: number,
+	f: typeof fetch = fetch
+): Promise<{ removed: boolean }> {
+	return postJSON<{ removed: boolean }>('/api/v1/admin/assignments/remove', { character_id }, f);
+}
+
+/** POST /api/v1/admin/assignments/approve → { approved }. Officer-only; body {request_id}. */
+export function approveRequest(
+	request_id: number,
+	f: typeof fetch = fetch
+): Promise<{ approved: boolean }> {
+	return postJSON<{ approved: boolean }>('/api/v1/admin/assignments/approve', { request_id }, f);
+}
+
+/** POST /api/v1/admin/assignments/deny → { denied }. Officer-only; body {request_id}. */
+export function denyRequest(request_id: number, f: typeof fetch = fetch): Promise<{ denied: boolean }> {
+	return postJSON<{ denied: boolean }>('/api/v1/admin/assignments/deny', { request_id }, f);
+}
+
+/** POST /api/v1/admin/characters/designate → 200. Officer-only; body {character_id, mode∈{bank,bot,none}}. */
+export function designateChar(
+	character_id: number,
+	mode: DesignateMode,
+	f: typeof fetch = fetch
+): Promise<{ designated: boolean }> {
+	return postJSON<{ designated: boolean }>(
+		'/api/v1/admin/characters/designate',
+		{ character_id, mode },
+		f
+	);
+}

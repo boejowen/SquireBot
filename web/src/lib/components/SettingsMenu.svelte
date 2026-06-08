@@ -183,9 +183,12 @@
 				<ThemePicker bind:theme />
 			</div>
 
-			<!-- 3–5. Navigation menu items. Account is relabeled "Watcher codes". -->
+			<!-- 3–5. Navigation menu items. Account is relabeled "Watcher codes".
+			     /my-characters is member-accessible (D-06/D-08) — it sits OUTSIDE the
+			     officer gate below, beside /account + /char-meta. -->
 			<a href="/account" role="menuitem" class="menu-link">Watcher codes</a>
 			<a href="/char-meta" role="menuitem" class="menu-link">Character details</a>
+			<a href="/my-characters" role="menuitem" class="menu-link">My characters</a>
 			{#if session?.isOfficer}
 				<!-- Officer-only Admin (Layer-1 UX suppression; the server re-checks
 				     officer status on every /admin endpoint — 15-03). A non-officer

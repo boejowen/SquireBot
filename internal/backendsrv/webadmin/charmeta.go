@@ -103,7 +103,7 @@ func CharMetaSetHandler(db *sql.DB) http.HandlerFunc {
 		// ONE tx (BEGIN IMMEDIATE via withTx): SetCharMetaTx (existing-char-gated) +
 		// the audit row, committed together.
 		err := withTx(ctx, db, func(tx *sql.Tx) error {
-			if e := store.SetCharMetaTx(ctx, tx, req.CharacterID, req.Class, req.Level, req.Race, req.IsBankToon); e != nil {
+			if e := store.SetCharMetaTx(ctx, tx, req.CharacterID, req.Class, req.Level, req.Race); e != nil {
 				return e
 			}
 			return AppendAuditTx(ctx, tx, "char_meta_set", writer, map[string]any{

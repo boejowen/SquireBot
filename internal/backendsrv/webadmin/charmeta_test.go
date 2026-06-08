@@ -98,6 +98,9 @@ func TestCharMetaSet_NonOfficerCanWrite(t *testing.T) {
 	}
 
 	// The columns ACTUALLY changed (D-03 proven, not just asserted on the response).
+	// Phase 26 reconciliation: char-meta no longer writes is_bank_toon (it became the
+	// officer-only "guild bank" designation, store.DesignateCharTx), so the body's
+	// is_bank_toon is now ignored by the member path — only class/level/race land.
 	class, level, race, isBank := readCharMeta(t, ctx, db, charID)
 	if !class.Valid || class.String != "WAR" {
 		t.Errorf("class = %v, want WAR", class)
@@ -108,8 +111,9 @@ func TestCharMetaSet_NonOfficerCanWrite(t *testing.T) {
 	if !race.Valid || race.String != "IKS" {
 		t.Errorf("race = %v, want IKS", race)
 	}
-	if isBank != 1 {
-		t.Errorf("is_bank_toon = %d, want 1", isBank)
+	// is_bank_toon stays 0: the member char-meta path no longer touches it (officer-only now).
+	if isBank != 0 {
+		t.Errorf("is_bank_toon = %d, want 0 (member char-meta no longer writes it; officer-only)", isBank)
 	}
 	// Audited (the writer's discord id is recorded for accountability).
 	if c := auditCount(t, ctx, db, "char_meta_set"); c != 1 {

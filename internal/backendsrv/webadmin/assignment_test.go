@@ -385,6 +385,253 @@ func TestListMyAssignments_EmptyIsArrayNotNull(t *testing.T) {
 	}
 }
 
+// --- OFFICER (Task 2) --------------------------------------------------------
+
+// officerEndpoints enumerates every officer handler + a minimal valid body, so a
+// single table-driven test can assert a non-officer caller is rejected on ALL of them.
+func officerEndpoints(db *sql.DB, charID, requestID int64, assignee string) []struct {
+	name string
+	h    http.Handler
+	body string
+} {
+	return []struct {
+		name string
+		h    http.Handler
+		body string
+	}{
+		{"assign", OfficerAssignHandler(db), `{"character_id":` + itoa(charID) + `,"assignee":"` + assignee + `"}`},
+		{"remove", OfficerRemoveAssignHandler(db), `{"character_id":` + itoa(charID) + `}`},
+		{"approve", ApproveRequestHandler(db), `{"request_id":` + itoa(requestID) + `}`},
+		{"deny", DenyRequestHandler(db), `{"request_id":` + itoa(requestID) + `}`},
+		{"designate", DesignateCharHandler(db), `{"character_id":` + itoa(charID) + `,"mode":"bank"}`},
+	}
+}
+
+func TestOfficerEndpoints_NonOfficer_Rejected(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	stranger := "222222222222222222"
+	assignee := "333333333333333333"
+	seedFloorAndUsers(t, ctx, db, floor, map[string]string{stranger: "Stranger", assignee: "Assignee"})
+	charID := asgInsertChar(t, ctx, db, "AnyChar")
+
+	for _, ep := range officerEndpoints(db, charID, 1, assignee) {
+		t.Run(ep.name, func(t *testing.T) {
+			rec := postJSON(t, withCaller(stranger, ep.h), ep.body)
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
+			}
+			if got := decodeErr(t, rec); got != "not_authorized" {
+				t.Errorf("error = %q, want not_authorized", got)
+			}
+		})
+	}
+}
+
+func TestOfficerAssign_UnknownAssignee_BadRequest(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	seedFloorAndUsers(t, ctx, db, floor, nil)
+	charID := asgInsertChar(t, ctx, db, "AnyChar")
+
+	// "777..." is not a web_user → the existence probe yields 400 invalid_input (NOT a
+	// 500 FK violation, NOT a silent assign).
+	rec := postJSON(t, withCaller(floor, OfficerAssignHandler(db)),
+		`{"character_id":`+itoa(charID)+`,"assignee":"777777777777777777"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if got := decodeErr(t, rec); got != "invalid_input" {
+		t.Errorf("error = %q, want invalid_input", got)
+	}
+	if _, ok := asgAssigneeOf(t, ctx, db, charID); ok {
+		t.Errorf("char assigned despite an unknown assignee")
+	}
+}
+
+// TestOfficerAssign_NullUsernameAssignee_Succeeds is the false-reject regression guard
+// for the existence-probe fix: a REAL web_user whose username column is empty is still a
+// valid assignment target. usernameOf would return "" and wrongly reject it; the
+// SELECT 1 existence probe accepts it. (web_user.username is NOT NULL, so the realizable
+// false-reject is an EMPTY-string username, not a literal NULL — usernameOf returns ""
+// for both, so the probe-vs-usernameOf distinction is exactly what this guards.)
+func TestOfficerAssign_NullUsernameAssignee_Succeeds(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	seedFloorAndUsers(t, ctx, db, floor, nil)
+	charID := asgInsertChar(t, ctx, db, "AnyChar")
+
+	// A real web_user with an EMPTY username (the row exists; usernameOf would return ""
+	// and false-reject it — the existence probe must still accept the row).
+	nullUser := "444444444444444444"
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, '', NULL, 0, 0)`, nullUser); err != nil {
+		t.Fatalf("insert empty-username web_user: %v", err)
+	}
+
+	rec := postJSON(t, withCaller(floor, OfficerAssignHandler(db)),
+		`{"character_id":`+itoa(charID)+`,"assignee":"`+nullUser+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (a NULL-username real user is a valid target) (body=%s)", rec.Code, rec.Body.String())
+	}
+	if who, ok := asgAssigneeOf(t, ctx, db, charID); !ok || who != nullUser {
+		t.Errorf("assignee = %q (ok=%v), want %q", who, ok, nullUser)
+	}
+	if c := auditCount(t, ctx, db, "officer_assign"); c != 1 {
+		t.Errorf("officer_assign audit rows = %d, want 1", c)
+	}
+}
+
+func TestOfficerAssign_BankChar_CharShared(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	assignee := "333333333333333333"
+	seedFloorAndUsers(t, ctx, db, floor, map[string]string{assignee: "Assignee"})
+	bankID := asgInsertSharedChar(t, ctx, db, "GuildBank", true)
+
+	rec := postJSON(t, withCaller(floor, OfficerAssignHandler(db)),
+		`{"character_id":`+itoa(bankID)+`,"assignee":"`+assignee+`"}`)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if got := decodeErr(t, rec); got != "char_shared" {
+		t.Errorf("error = %q, want char_shared (mapAssignErr, NOT mapOfficerErr)", got)
+	}
+}
+
+func TestApprove_DeniesSiblingPendingRequest(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	holder := "222222222222222222"
+	reqA := "333333333333333333"
+	reqB := "444444444444444444"
+	seedFloorAndUsers(t, ctx, db, floor, map[string]string{holder: "Holder", reqA: "ReqA", reqB: "ReqB"})
+	charID := asgInsertChar(t, ctx, db, "Contested")
+
+	// Holder claims; reqA and reqB both file requests.
+	if rec := postJSON(t, withCaller(holder, ClaimCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("holder claim status = %d", rec.Code)
+	}
+	if rec := postJSON(t, withCaller(reqA, RequestCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("reqA request status = %d", rec.Code)
+	}
+	if rec := postJSON(t, withCaller(reqB, RequestCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("reqB request status = %d", rec.Code)
+	}
+	if n := asgPendingCount(t, ctx, db, charID); n != 2 {
+		t.Fatalf("pending count = %d, want 2 before approval", n)
+	}
+
+	// Find reqA's request id.
+	var reqAID int64
+	if err := db.QueryRowContext(ctx,
+		`SELECT id FROM assignment_request WHERE character_id = ? AND requester = ? AND status = 'pending'`,
+		charID, reqA).Scan(&reqAID); err != nil {
+		t.Fatalf("find reqA request id: %v", err)
+	}
+
+	// Officer approves reqA → char reassigned to reqA, reqB's pending request denied.
+	rec := postJSON(t, withCaller(floor, ApproveRequestHandler(db)), `{"request_id":`+itoa(reqAID)+`}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("approve status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if who, ok := asgAssigneeOf(t, ctx, db, charID); !ok || who != reqA {
+		t.Errorf("assignee = %q (ok=%v) after approval, want %q", who, ok, reqA)
+	}
+	if n := asgPendingCount(t, ctx, db, charID); n != 0 {
+		t.Errorf("pending count = %d after approval, want 0 (sibling denied — Pitfall 3)", n)
+	}
+	if c := auditCount(t, ctx, db, "request_approve"); c != 1 {
+		t.Errorf("request_approve audit rows = %d, want 1", c)
+	}
+}
+
+func TestDesignateBank_ClearsExistingAssignment(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	holder := "222222222222222222"
+	seedFloorAndUsers(t, ctx, db, floor, map[string]string{holder: "Holder"})
+	charID := asgInsertChar(t, ctx, db, "SoonBank")
+
+	if rec := postJSON(t, withCaller(holder, ClaimCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("holder claim status = %d", rec.Code)
+	}
+	if _, ok := asgAssigneeOf(t, ctx, db, charID); !ok {
+		t.Fatalf("char not assigned after claim")
+	}
+
+	// Officer designates it a guild bank → the assignment is cleared (Pitfall 6).
+	rec := postJSON(t, withCaller(floor, DesignateCharHandler(db)), `{"character_id":`+itoa(charID)+`,"mode":"bank"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("designate status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if _, ok := asgAssigneeOf(t, ctx, db, charID); ok {
+		t.Errorf("assignment NOT cleared after bank designation (Pitfall 6)")
+	}
+	var isBank int
+	if err := db.QueryRowContext(ctx, `SELECT is_bank_toon FROM character WHERE id = ?`, charID).Scan(&isBank); err != nil {
+		t.Fatalf("read is_bank_toon: %v", err)
+	}
+	if isBank != 1 {
+		t.Errorf("is_bank_toon = %d, want 1", isBank)
+	}
+	if c := auditCount(t, ctx, db, "char_designate"); c != 1 {
+		t.Errorf("char_designate audit rows = %d, want 1", c)
+	}
+}
+
+func TestDesignate_InvalidMode_BadRequest(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	seedFloorAndUsers(t, ctx, db, floor, nil)
+	charID := asgInsertChar(t, ctx, db, "AnyChar")
+
+	rec := postJSON(t, withCaller(floor, DesignateCharHandler(db)), `{"character_id":`+itoa(charID)+`,"mode":"banana"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rec.Code, rec.Body.String())
+	}
+	if got := decodeErr(t, rec); got != "invalid_input" {
+		t.Errorf("error = %q, want invalid_input", got)
+	}
+}
+
+func TestListAllAssignments_ReturnsAssignmentsAndRequests(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	holder := "222222222222222222"
+	requester := "333333333333333333"
+	seedFloorAndUsers(t, ctx, db, floor, map[string]string{holder: "Holder", requester: "Requester"})
+	charID := asgInsertChar(t, ctx, db, "Contested")
+
+	if rec := postJSON(t, withCaller(holder, ClaimCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("holder claim status = %d", rec.Code)
+	}
+	if rec := postJSON(t, withCaller(requester, RequestCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("request status = %d", rec.Code)
+	}
+
+	var resp struct {
+		Assignments []store.Assignment     `json:"assignments"`
+		Requests    []store.PendingRequest `json:"requests"`
+	}
+	getJSONInto(t, withCaller(floor, ListAllAssignmentsHandler(db)), &resp)
+	if len(resp.Assignments) != 1 || resp.Assignments[0].DiscordUserID != holder {
+		t.Errorf("assignments = %+v, want one held by %q", resp.Assignments, holder)
+	}
+	if len(resp.Requests) != 1 || resp.Requests[0].Requester != requester {
+		t.Errorf("requests = %+v, want one from %q", resp.Requests, requester)
+	}
+}
+
 // --- small test decode helpers ----------------------------------------------
 
 // decodeBoolField extracts a single named bool from a JSON response body.

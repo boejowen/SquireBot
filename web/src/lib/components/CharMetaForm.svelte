@@ -51,7 +51,7 @@
 
 	// The chosen character_id as a string (a <select> value is a string; '' = none).
 	let selectedId = $state('');
-	// The form inputs (level is a raw string; isBankToon a checkbox bool).
+	// The form inputs (level is a raw string).
 	let inputs = $state<CharMetaInputs>({ class: '', race: '', level: '' });
 
 	let saving = $state(false);

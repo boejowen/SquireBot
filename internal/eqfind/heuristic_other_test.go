@@ -46,6 +46,28 @@ func TestHeuristicScan_FindsEQUnderWinePrefix(t *testing.T) {
 	}
 }
 
+// TestHeuristicScan_FindsEQUnderSystemRoot overrides systemCandidateRoots to a
+// planted tmp tree and asserts the second (system-root) loop in heuristicScan
+// finds an out-of-WINE EQLite bundle at tmp/everquest/EQLite (relative depth 2).
+// isolateWineEnv stops real WINE/system roots from leaking so the planted root
+// is the only possible hit. T-vgb-01 system-root coverage.
+func TestHeuristicScan_FindsEQUnderSystemRoot(t *testing.T) {
+	tmp := t.TempDir()
+	isolateWineEnv(t, tmp)
+
+	orig := systemCandidateRoots
+	systemCandidateRoots = []string{tmp}
+	t.Cleanup(func() { systemCandidateRoots = orig })
+
+	eqDir := filepath.Join(tmp, "everquest", "EQLite")
+	plantSentinels(t, eqDir, "eqgame.exe", "eqclient.ini")
+
+	got := heuristicScan()
+	if got != eqDir {
+		t.Fatalf("heuristicScan() = %q, want %q", got, eqDir)
+	}
+}
+
 // TestHeuristicScan_DecoyNoMatch plants only ONE sentinel (eqgame.exe, no
 // eqclient.ini) — ValidateFolder requires BOTH, so the decoy is not matched and
 // the scan returns "".

@@ -49,6 +49,19 @@ var pruneNamesOther = map[string]struct{}{
 	"Windows":      {},
 }
 
+// systemCandidateRoots are absolute Linux system roots walked (after the WINE
+// roots) for a P99 "EQLite" portable bundle installed outside any WINE prefix
+// (real case: /opt/everquest/EQLite, caught at relative depth 2). The list is
+// short and stat-filtered to existing dirs; the walk reuses walkWineRoot's depth
+// cap (5), prune list, no-symlink, first-match bounds and shares the single
+// heuristicScan ctx deadline (T-vgb-01/T-vgb-02 — no new timeout budget).
+// Package-level so tests can override it (save+restore).
+var systemCandidateRoots = []string{
+	"/opt",
+	"/usr/local/games",
+	"/games",
+}
+
 // wineCandidateRoots returns the existing WINE/Lutris/Bottles/Proton drive_c
 // roots to walk, in priority order (RESEARCH §2). Non-existent roots are
 // skipped; glob (`*`) entries are expanded with filepath.Glob.
@@ -117,6 +130,26 @@ func heuristicScan() string {
 	defer cancel()
 
 	for _, root := range wineCandidateRoots() {
+		select {
+		case <-ctx.Done():
+			return ""
+		default:
+		}
+		if got := walkWineRoot(ctx, root); got != "" {
+			return got
+		}
+	}
+
+	// Absolute system roots (e.g. /opt) for an out-of-WINE EQLite bundle. Stat-
+	// filter to existing dirs (mirrors wineCandidateRoots' add() guard) and honor
+	// the SAME ctx deadline between roots as the WINE loop above.
+	for _, root := range systemCandidateRoots {
+		if root == "" {
+			continue
+		}
+		if fi, err := os.Stat(root); err != nil || !fi.IsDir() {
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return ""

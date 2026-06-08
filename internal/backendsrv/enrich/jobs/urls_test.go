@@ -53,3 +53,21 @@ func TestWikiParseURL_EncodeURIComponentParity(t *testing.T) {
 		})
 	}
 }
+
+// TestPigparseURL_BlueOnly pins the daily price-catalog source to PigParse's
+// getall for server=1 (P99 Blue). This is a deliberate INVARIANT: SquireBot must
+// pull prices from ONLY the Blue server, NEVER Green.
+//
+// PigParse server numbering for getall: 1 = Blue. If this constant ever changes
+// (e.g. to /getall/2 or any other segment), this test FAILS on purpose — you have
+// changed WHICH P99 server SquireBot queries. Update this test ONLY if that
+// widening/switch was intentional.
+func TestPigparseURL_BlueOnly(t *testing.T) {
+	const wantBlue = "https://pigparse.azurewebsites.net/api/item/getall/1"
+	if PigparseURL != wantBlue {
+		t.Fatalf("PigparseURL = %q, want the Blue (server=1) catalog endpoint %q.\n"+
+			"SquireBot must pull prices from ONLY P99 Blue (getall server 1=Blue). A change here "+
+			"changes which P99 server is queried — update this test ONLY if that was intended.",
+			PigparseURL, wantBlue)
+	}
+}

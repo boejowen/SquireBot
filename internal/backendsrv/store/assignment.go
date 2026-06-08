@@ -448,6 +448,48 @@ func ListMyAssignments(ctx context.Context, db *sql.DB, discordUserID string) ([
 	return scanAssignments(rows)
 }
 
+// ClaimableChar is one unassigned, non-shared, live character a member may self-claim
+// (ASSIGN-02, the "claim a character" pick-list). snake_case JSON tags — crosses the
+// API boundary in 26-02.
+type ClaimableChar struct {
+	CharacterID int64  `json:"character_id"`
+	Name        string `json:"name"`
+}
+
+// ListClaimable returns the live characters that are self-claimable (ASSIGN-02): not
+// shared (is_bank_toon=0 AND is_guild_bot=0), not removed, and with NO row in
+// character_assignment (unassigned). Ordered by name. Empty → nil (the handler
+// normalizes nil → []). This is the read behind GET /assignments/claimable; a member
+// claims one of these via ClaimCharTx (which re-checks shared/already-assigned in-tx,
+// closing the list→claim TOCTOU).
+func ListClaimable(ctx context.Context, db *sql.DB) ([]ClaimableChar, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT c.id, c.name
+		   FROM character c
+		  WHERE c.is_removed = 0
+		    AND c.is_bank_toon = 0
+		    AND c.is_guild_bot = 0
+		    AND NOT EXISTS (SELECT 1 FROM character_assignment a WHERE a.character_id = c.id)
+		  ORDER BY c.name COLLATE NOCASE`)
+	if err != nil {
+		return nil, fmt.Errorf("list claimable: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ClaimableChar
+	for rows.Next() {
+		var cc ClaimableChar
+		if err := rows.Scan(&cc.CharacterID, &cc.Name); err != nil {
+			return nil, fmt.Errorf("scan claimable row: %w", err)
+		}
+		out = append(out, cc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate claimable: %w", err)
+	}
+	return out, nil
+}
+
 // ListAllAssignments returns every live-char assignment (ASSIGN-04, the officer view).
 // Joined to character.name; live chars only. Ordered by name.
 func ListAllAssignments(ctx context.Context, db *sql.DB) ([]Assignment, error) {

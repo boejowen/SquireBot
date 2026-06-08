@@ -3,9 +3,12 @@ package webadmin
 // charmeta.go is the char-metadata write backend (CUTOVER-02 / P16, D-02/D-03).
 // CRITICAL (D-03): char-meta is gated by LOGIN ONLY — the route wraps these
 // handlers in webauth.RequireSession (a valid session), NEVER webauth.RequireOfficer.
-// Any authenticated guild member may set any existing character's class/level/race/
-// is_bank_toon; this is non-sensitive shared data in a trust-rich ~12-person guild
-// (the bank-coin precedent, D-12). This handler does NOT consult officer status
+// Any authenticated guild member may set any existing character's class/level/race;
+// this is non-sensitive shared data in a trust-rich ~12-person guild (the bank-coin
+// precedent, D-12). Phase 26 reconciliation (OPEN-3): is_bank_toon is NO LONGER set
+// here — guild-bank designation became officer-only (store.DesignateCharTx, the
+// /admin/characters/designate route); the member path writes only class/level/race and
+// ignores any is_bank_toon body field. This handler does NOT consult officer status
 // anywhere (no RequireOfficer, no IsOfficer call) — the non-officer write path is
 // explicitly proven by charmeta_test.go's TestCharMetaSet_NonOfficerCanWrite. The
 // writer's discord_user_id is recorded in the char_meta_set audit row for
@@ -37,13 +40,18 @@ import (
 // charMetaReq is the char-meta POST body. Level is *int64 so an omitted/null level
 // is distinguishable from an explicit value and maps to SQL NULL (blank = unset; a
 // NULL level → spellcheck treats the char as unleveled, the correct behavior). The
-// rest are scalars the decoder type-checks; IsBankToon is a JSON bool.
+// rest are scalars the decoder type-checks.
+//
+// Phase 26 reconciliation (OPEN-3): is_bank_toon is NO LONGER a member-settable field
+// here — guild-bank designation became officer-only (store.DesignateCharTx, via
+// POST /api/v1/admin/characters/designate). An is_bank_toon field in the incoming JSON
+// is simply ignored by the decoder; the member char-meta path writes only class/level/
+// race.
 type charMetaReq struct {
 	CharacterID int64  `json:"character_id"`
 	Class       string `json:"class"`
 	Level       *int64 `json:"level"`
 	Race        string `json:"race"`
-	IsBankToon  bool   `json:"is_bank_toon"`
 }
 
 // CharMetaListHandler (GET) returns every live (non-removed) character with its
@@ -70,12 +78,12 @@ func CharMetaListHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// CharMetaSetHandler (POST) sets class/level/race/is_bank_toon on an existing
-// character. Login-only at the route (RequireSession — D-03; this handler NEVER
-// checks officer status). Validates the value sets + level range server-side, writes
-// via store.SetCharMetaTx (existing non-removed char only), audits "char_meta_set"
-// with the writer's discord id, and returns {character, class, level, race,
-// is_bank_toon}.
+// CharMetaSetHandler (POST) sets class/level/race on an existing character. Login-only
+// at the route (RequireSession — D-03; this handler NEVER checks officer status).
+// Validates the value sets + level range server-side, writes via store.SetCharMetaTx
+// (existing non-removed char only, 5-arg — is_bank_toon is NOT written here anymore;
+// it is officer-only via store.DesignateCharTx), audits "char_meta_set" with the
+// writer's discord id, and returns {character, class, level, race}.
 func CharMetaSetHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -134,11 +142,10 @@ func CharMetaSetHandler(db *sql.DB) http.HandlerFunc {
 			}
 		}
 		writeJSON(w, map[string]any{
-			"character":    name,
-			"class":        req.Class,
-			"level":        req.Level,
-			"race":         req.Race,
-			"is_bank_toon": req.IsBankToon,
+			"character": name,
+			"class":     req.Class,
+			"level":     req.Level,
+			"race":      req.Race,
 		})
 	}
 }
@@ -146,7 +153,7 @@ func CharMetaSetHandler(db *sql.DB) http.HandlerFunc {
 // validCharMeta is the server-side V5 re-check (NEVER trust the form's <select>;
 // T-15-29 / Pitfall 5): class ∈ enrich.CLASSES, race ∈ enrich.RACES (exact uppercase
 // abbreviations — store the abbreviation, never a display name), level blank/omitted
-// (→ NULL, valid) OR 1..60. is_bank_toon is a JSON bool (decoder-validated).
+// (→ NULL, valid) OR 1..60.
 //
 // A2 decision (documented): a blank/omitted level is allowed ("unset") — a member
 // may know a char's class+race before its level, and spellcheck.go treats a NULL

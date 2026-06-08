@@ -20,12 +20,18 @@ func defaultKnownPaths() string {
 		`C:\EverQuest`,
 		`C:\Games\EverQuest`,
 		`C:\Program Files (x86)\Sony\EverQuest`,
+		`C:\EQLite`,
+		`C:\everquest\EQLite`,
+		`C:\Games\EQLite`,
 	}
 	if userProfile != "" {
 		candidates = append(candidates,
 			filepath.Join(userProfile, "EverQuest"),
 			filepath.Join(userProfile, "P99"),
 			filepath.Join(userProfile, "Project1999"),
+			filepath.Join(userProfile, "EQLite"),
+			filepath.Join(userProfile, "Desktop", "EQLite"),
+			filepath.Join(userProfile, "Downloads", "EQLite"),
 		)
 	}
 	for _, p := range candidates {

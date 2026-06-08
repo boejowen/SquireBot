@@ -852,6 +852,20 @@ export interface ClaimableCharacter {
 }
 
 /**
+ * One of the caller's OWN pending assignment requests (GET
+ * /api/v1/assignments/requests/mine — the member "my outstanding requests" read).
+ * Mirrors the Go store.MyPendingRequest. MyCharactersPanel uses it to rehydrate the
+ * Request→Cancel affordance across a reload (so a re-request after reload doesn't hit a
+ * guaranteed 409 duplicate_request). Requester-scoped server-side (the session is the
+ * actor — no actor field on the wire).
+ */
+export interface MyPendingRequest {
+	character_id: number;
+	character_name: string;
+	created_at: number;
+}
+
+/**
  * One assignment row (GET /api/v1/admin/assignments → assignments[]). Mirrors the Go
  * store.Assignment: the character + its current assignee (discord_user_id) + provenance.
  */
@@ -891,6 +905,11 @@ export type DesignateMode = 'bank' | 'bot' | 'none';
 /** GET /api/v1/assignments/mine → MyCharacter[] ([] when none). Login-only. */
 export function fetchMyCharacters(f: typeof fetch = fetch): Promise<MyCharacter[]> {
 	return getJSON<MyCharacter[]>('/api/v1/assignments/mine', f);
+}
+
+/** GET /api/v1/assignments/requests/mine → MyPendingRequest[] ([] when none). Login-only, requester-scoped. */
+export function fetchMyPendingRequests(f: typeof fetch = fetch): Promise<MyPendingRequest[]> {
+	return getJSON<MyPendingRequest[]>('/api/v1/assignments/requests/mine', f);
 }
 
 /** GET /api/v1/assignments/claimable → ClaimableCharacter[] ([] when none). Login-only. */

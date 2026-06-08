@@ -27,6 +27,7 @@
 	import {
 		fetchMyCharacters,
 		fetchClaimable,
+		fetchMyPendingRequests,
 		claimChar,
 		releaseChar,
 		requestChar,
@@ -53,9 +54,11 @@
 	let busyId = $state<number | null>(null);
 	let actionError = $state('');
 	let actionSuccess = $state('');
-	// The set of character_ids the caller has an outstanding Request for this session
-	// (the backend has no "my requests" read — track the optimistic local state so the
-	// row can offer Cancel after a successful Request).
+	// The set of character_ids the caller has an outstanding Request for. Hydrated from
+	// the backend "my pending requests" read on every (re)load so the Request→Cancel
+	// affordance survives a page reload (and a re-request after reload doesn't hit a
+	// guaranteed 409 duplicate_request); the doRequest/doCancel handlers also patch it
+	// optimistically so the affordance flips instantly without a refetch.
 	let requested = $state<Set<number>>(new Set());
 
 	// Release (confirm-before-commit) state — the one destructive action.
@@ -65,9 +68,14 @@
 	async function load() {
 		phase = 'loading';
 		try {
-			const [m, c] = await Promise.all([fetchMyCharacters(), fetchClaimable()]);
+			const [m, c, p] = await Promise.all([
+				fetchMyCharacters(),
+				fetchClaimable(),
+				fetchMyPendingRequests()
+			]);
 			mine = m;
 			claimable = c;
+			requested = new Set(p.map((r) => r.character_id));
 			phase = 'ready';
 		} catch (err) {
 			if (route(err)) return;
@@ -105,15 +113,22 @@
 				return 'That character is already assigned to someone.';
 			case 'duplicate_request':
 				return 'You already have a pending request for that character.';
+			case 'not_contested':
+				return 'That character isn’t held by anyone else — claim it instead of requesting it.';
 			default:
 				return 'The server rejected the request.';
 		}
 	}
 
 	async function reloadLists() {
-		const [m, c] = await Promise.all([fetchMyCharacters(), fetchClaimable()]);
+		const [m, c, p] = await Promise.all([
+			fetchMyCharacters(),
+			fetchClaimable(),
+			fetchMyPendingRequests()
+		]);
 		mine = m;
 		claimable = c;
+		requested = new Set(p.map((r) => r.character_id));
 	}
 
 	async function doClaim(c: ClaimableCharacter) {

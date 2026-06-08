@@ -366,6 +366,7 @@ func runServe(args []string) int {
 	// 1) — the request body carries ONLY character_id, never an actor. Release/cancel are
 	// owner-scoped silent no-ops (IDOR-safe); every mutation is audited.
 	mux.Handle("GET /api/v1/assignments/mine", webauth.RequireSession(db, webadmin.ListMyAssignmentsHandler(db)))
+	mux.Handle("GET /api/v1/assignments/requests/mine", webauth.RequireSession(db, webadmin.ListMyPendingRequestsHandler(db)))
 	mux.Handle("GET /api/v1/assignments/claimable", webauth.RequireSession(db, webadmin.ClaimableHandler(db)))
 	mux.Handle("POST /api/v1/assignments/claim", webauth.RequireSession(db, webadmin.ClaimCharHandler(db)))
 	mux.Handle("POST /api/v1/assignments/release", webauth.RequireSession(db, webadmin.ReleaseCharHandler(db)))

@@ -22,6 +22,7 @@
 	import EvictionForm from '$lib/components/EvictionForm.svelte';
 	import AdminMgmtForm from '$lib/components/AdminMgmtForm.svelte';
 	import MonitorAdminPanel from '$lib/components/MonitorAdminPanel.svelte';
+	import AssignmentAdminPanel from '$lib/components/AssignmentAdminPanel.svelte';
 	import { SESSION_KEY, type SessionGetter } from '$lib/components/AuthGate.svelte';
 
 	const getSession = getContext<SessionGetter>(SESSION_KEY);
@@ -49,6 +50,10 @@
 		<section class="form-card">
 			<h2 class="form-title">Monitors</h2>
 			<MonitorAdminPanel />
+		</section>
+		<section class="form-card">
+			<h2 class="form-title">Character assignments</h2>
+			<AssignmentAdminPanel />
 		</section>
 	</div>
 {/if}

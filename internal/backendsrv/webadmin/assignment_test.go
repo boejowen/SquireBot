@@ -307,6 +307,79 @@ func TestCancelRequest_OwnPending_ThenForeignNoOp(t *testing.T) {
 	}
 }
 
+// TestRequest_NonContested_Conflict (MD-01): a request for a char that is NOT held by
+// another member is rejected — unassigned (claim it instead) and self-held both →
+// 409 not_contested, with NO pending row written.
+func TestRequest_NonContested_Conflict(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	member := "111111111111111111"
+	seedPlainMember(t, ctx, db, member, "Member")
+
+	unassigned := asgInsertChar(t, ctx, db, "Unassigned")
+	selfHeld := asgInsertChar(t, ctx, db, "SelfHeld")
+	if rec := postJSON(t, withCaller(member, ClaimCharHandler(db)), `{"character_id":`+itoa(selfHeld)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("self claim status = %d, want 200", rec.Code)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		charID int64
+	}{
+		{"unassigned", unassigned},
+		{"self-held", selfHeld},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := postJSON(t, withCaller(member, RequestCharHandler(db)), `{"character_id":`+itoa(tc.charID)+`}`)
+			if rec.Code != http.StatusConflict {
+				t.Fatalf("status = %d, want 409 (body=%s)", rec.Code, rec.Body.String())
+			}
+			if got := decodeErr(t, rec); got != "not_contested" {
+				t.Errorf("error = %q, want not_contested", got)
+			}
+			if n := asgPendingCount(t, ctx, db, tc.charID); n != 0 {
+				t.Errorf("pending count = %d, want 0 (no row for a non-contested request)", n)
+			}
+		})
+	}
+}
+
+// TestListMyPendingRequests_RequesterScoped (MD-02): the read returns ONLY the caller's
+// own pending requests (never another member's), so the panel can rehydrate the
+// Request→Cancel affordance across a reload.
+func TestListMyPendingRequests_RequesterScoped(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	holder := "111111111111111111"
+	requester := "222222222222222222"
+	stranger := "333333333333333333"
+	seedPlainMember(t, ctx, db, holder, "Holder")
+	seedPlainMember(t, ctx, db, requester, "Requester")
+	seedPlainMember(t, ctx, db, stranger, "Stranger")
+	charID := asgInsertChar(t, ctx, db, "Contested")
+
+	if rec := postJSON(t, withCaller(holder, ClaimCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("holder claim status = %d", rec.Code)
+	}
+	if rec := postJSON(t, withCaller(requester, RequestCharHandler(db)), `{"character_id":`+itoa(charID)+`}`); rec.Code != http.StatusOK {
+		t.Fatalf("requester request status = %d", rec.Code)
+	}
+
+	// The requester sees their own pending request.
+	var mine []store.MyPendingRequest
+	getJSONInto(t, withCaller(requester, ListMyPendingRequestsHandler(db)), &mine)
+	if len(mine) != 1 || mine[0].CharacterID != charID {
+		t.Errorf("requester's pending = %+v, want exactly the contested char %d", mine, charID)
+	}
+
+	// A stranger sees none of it (requester-scoped, IDOR-safe).
+	var strangerMine []store.MyPendingRequest
+	getJSONInto(t, withCaller(stranger, ListMyPendingRequestsHandler(db)), &strangerMine)
+	if len(strangerMine) != 0 {
+		t.Errorf("stranger's pending = %+v, want empty (requester-scoped)", strangerMine)
+	}
+}
+
 func TestClaim_SpoofedDiscordIDInBody_Ignored(t *testing.T) {
 	db := store.NewTestDB(t)
 	ctx := context.Background()

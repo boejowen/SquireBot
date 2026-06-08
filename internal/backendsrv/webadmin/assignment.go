@@ -63,6 +63,8 @@ func mapAssignErr(w http.ResponseWriter, err error) {
 		writeJSONError(w, http.StatusConflict, "already_assigned")
 	case errors.Is(err, store.ErrCharShared):
 		writeJSONError(w, http.StatusConflict, "char_shared")
+	case errors.Is(err, store.ErrCharNotContested):
+		writeJSONError(w, http.StatusConflict, "not_contested")
 	case errors.Is(err, store.ErrDuplicateRequest):
 		writeJSONError(w, http.StatusConflict, "duplicate_request")
 	case errors.Is(err, store.ErrNotAuthorized):
@@ -104,6 +106,33 @@ func ListMyAssignmentsHandler(db *sql.DB) http.HandlerFunc {
 		}
 		if out == nil {
 			out = []store.Assignment{}
+		}
+		writeJSON(w, out)
+	}
+}
+
+// ListMyPendingRequestsHandler (GET) returns the caller's OWN pending assignment
+// requests (the member "my outstanding requests" read), scoped to caller(ctx) — never
+// the body. It lets MyCharactersPanel rehydrate the Request→Cancel affordance across a
+// reload (so a re-request after reload doesn't hit a guaranteed 409 duplicate_request).
+// The store returns nil for the empty state, which the handler normalizes to [] (never
+// null). Requester-scoped (IDOR-safe): the owner is the session identity, never a body
+// field.
+func ListMyPendingRequestsHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ctx := r.Context()
+		out, err := store.ListMyPendingRequests(ctx, db, caller(ctx))
+		if err != nil {
+			slog.Error("list my pending requests failed", "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		if out == nil {
+			out = []store.MyPendingRequest{}
 		}
 		writeJSON(w, out)
 	}

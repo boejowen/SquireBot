@@ -225,6 +225,122 @@ func TestRequestTx_DuplicatePending(t *testing.T) {
 	}
 }
 
+// TestRequestTx_RejectsNonContested (MD-01 / D-07): a request is ONLY for a char already
+// assigned to ANOTHER member. A request on an UNASSIGNED char → ErrCharNotContested (the
+// caller should /claim it); a request on a char the CALLER already holds →
+// ErrCharNotContested (they already have it); a request on a char held by SOMEONE ELSE
+// still succeeds. No pending row is written for the rejected cases.
+func TestRequestTx_RejectsNonContested(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	ownerID := insertOwner(t, ctx, db, "Guildie-A")
+	unassigned := insertChar(t, ctx, db, ownerID, "Aaa", false)
+	selfHeld := insertChar(t, ctx, db, ownerID, "Bbb", false)
+	otherHeld := insertChar(t, ctx, db, ownerID, "Ccc", false)
+	insertWebUser(t, ctx, db, "caller", "Caller")
+	insertWebUser(t, ctx, db, "holder", "Holder")
+
+	// caller holds selfHeld; holder holds otherHeld.
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		if e := ClaimCharTx(ctx, tx, selfHeld, "caller", 100); e != nil {
+			return e
+		}
+		return ClaimCharTx(ctx, tx, otherHeld, "holder", 100)
+	}); err != nil {
+		t.Fatalf("seed claims: %v", err)
+	}
+
+	// Request on an UNASSIGNED char → ErrCharNotContested, no pending row.
+	err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		return RequestTx(ctx, tx, unassigned, "caller", 200)
+	})
+	if !errors.Is(err, ErrCharNotContested) {
+		t.Errorf("request on unassigned char: err = %v, want ErrCharNotContested", err)
+	}
+	if n := pendingCount(t, ctx, db, unassigned); n != 0 {
+		t.Errorf("request on unassigned char wrote %d pending rows, want 0", n)
+	}
+
+	// Request on a char the CALLER already holds → ErrCharNotContested, no pending row.
+	err = commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		return RequestTx(ctx, tx, selfHeld, "caller", 300)
+	})
+	if !errors.Is(err, ErrCharNotContested) {
+		t.Errorf("request on self-held char: err = %v, want ErrCharNotContested", err)
+	}
+	if n := pendingCount(t, ctx, db, selfHeld); n != 0 {
+		t.Errorf("request on self-held char wrote %d pending rows, want 0", n)
+	}
+
+	// Request on a char held by SOMEONE ELSE still succeeds (a real contested claim).
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		return RequestTx(ctx, tx, otherHeld, "caller", 400)
+	}); err != nil {
+		t.Fatalf("request on other-held char: %v", err)
+	}
+	if n := pendingCount(t, ctx, db, otherHeld); n != 1 {
+		t.Errorf("request on other-held char wrote %d pending rows, want 1", n)
+	}
+}
+
+// pendingCount returns the number of pending assignment_request rows for charID.
+func pendingCount(t *testing.T, ctx context.Context, db *sql.DB, charID int64) int {
+	t.Helper()
+	var n int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM assignment_request WHERE character_id = ? AND status = 'pending'`, charID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count pending requests (char=%d): %v", charID, err)
+	}
+	return n
+}
+
+// TestListMyPendingRequests (MD-02): the read returns ONLY the caller's own pending
+// requests (requester-scoped), joined to the char name, ordered by name; it excludes
+// another member's request and a non-pending (cancelled) one.
+func TestListMyPendingRequests(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	ownerID := insertOwner(t, ctx, db, "Guildie-A")
+	c1 := insertChar(t, ctx, db, ownerID, "Aaa", false)
+	c2 := insertChar(t, ctx, db, ownerID, "Bbb", false)
+	c3 := insertChar(t, ctx, db, ownerID, "Ccc", false)
+	insertWebUser(t, ctx, db, "caller", "Caller")
+	insertWebUser(t, ctx, db, "stranger", "Stranger")
+
+	// caller has a pending request for c1 + c2; stranger has one for c3.
+	pendingRequestID(t, ctx, db, c1, "caller")
+	caller2Req := pendingRequestID(t, ctx, db, c2, "caller")
+	pendingRequestID(t, ctx, db, c3, "stranger")
+
+	got, err := ListMyPendingRequests(ctx, db, "caller")
+	if err != nil {
+		t.Fatalf("ListMyPendingRequests: %v", err)
+	}
+	if len(got) != 2 || got[0].CharacterName != "Aaa" || got[1].CharacterName != "Bbb" {
+		t.Fatalf("ListMyPendingRequests(caller) = %+v, want [Aaa, Bbb]", got)
+	}
+	if got[0].CharacterID != c1 || got[1].CharacterID != c2 {
+		t.Errorf("character_ids = (%d, %d), want (%d, %d)", got[0].CharacterID, got[1].CharacterID, c1, c2)
+	}
+
+	// A cancelled request drops out of the caller's pending list.
+	if _, err := db.ExecContext(ctx,
+		`UPDATE assignment_request SET status = 'cancelled' WHERE id = ?`, caller2Req,
+	); err != nil {
+		t.Fatalf("cancel c2 request: %v", err)
+	}
+	got, err = ListMyPendingRequests(ctx, db, "caller")
+	if err != nil {
+		t.Fatalf("ListMyPendingRequests (after cancel): %v", err)
+	}
+	if len(got) != 1 || got[0].CharacterName != "Aaa" {
+		t.Errorf("after cancel: ListMyPendingRequests = %+v, want [Aaa] only", got)
+	}
+}
+
 // TestCancelRequestTx_RequesterScoped: a requester cancels their own pending request
 // (cancelled=true, status='cancelled'); a foreign/non-pending cancel → (false, nil).
 func TestCancelRequestTx_RequesterScoped(t *testing.T) {

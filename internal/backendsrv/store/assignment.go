@@ -54,10 +54,11 @@ var (
 	ErrCharAlreadyAssigned = errors.New("char_already_assigned")
 	// ErrCharShared: claim/assign of a guild bank/bot char (D-02 exemption).
 	ErrCharShared = errors.New("char_shared")
-	// ErrNotAssignee: reserved for a release/cancel that targeted a foreign row when
-	// the caller expects ownership (the handlers use the silent-no-op bool return
-	// instead, but the sentinel is exported for completeness).
-	ErrNotAssignee = errors.New("not_assignee")
+	// ErrCharNotContested: RequestTx on a char that is NOT contested — i.e. UNASSIGNED
+	// (the caller should /claim it, not /request it) or assigned to the CALLER themselves
+	// (they already hold it). D-07 scopes a request to a char already assigned to ANOTHER
+	// member; the non-contested cases are pure queue noise and are rejected here.
+	ErrCharNotContested = errors.New("char_not_contested")
 	// ErrDuplicateRequest: a second pending request for the same (char, requester)
 	// collides on the partial-unique pending index.
 	ErrDuplicateRequest = errors.New("duplicate_request")
@@ -177,6 +178,16 @@ func RequestTx(ctx context.Context, tx *sql.Tx, characterID int64, callerID stri
 	).Scan(&current)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("snapshot current assignee (character_id=%d): %w", characterID, err)
+	}
+	// D-07: a request is ONLY for a char already assigned to ANOTHER member. Reject the
+	// two non-contested cases so the officer queue never accrues claim-able / self-held
+	// noise (the frontend only offers Request for assignedToOthers, but the endpoint is
+	// directly POST-able by any session).
+	if !current.Valid {
+		return ErrCharNotContested // unassigned — the caller should /claim, not /request.
+	}
+	if current.String == callerID {
+		return ErrCharNotContested // the caller already holds it.
 	}
 	var currentArg any
 	if current.Valid {
@@ -446,6 +457,50 @@ func ListMyAssignments(ctx context.Context, db *sql.DB, discordUserID string) ([
 	}
 	defer rows.Close()
 	return scanAssignments(rows)
+}
+
+// MyPendingRequest is one of the CALLER's own pending assignment_request rows joined to
+// the contested character's name (ListMyPendingRequests — the member "my outstanding
+// requests" read). It lets MyCharactersPanel rehydrate the Request→Cancel affordance
+// across a reload instead of relying on session-only optimistic state. snake_case JSON
+// tags — crosses the API boundary in 26-02.
+type MyPendingRequest struct {
+	CharacterID   int64  `json:"character_id"`
+	CharacterName string `json:"character_name"`
+	CreatedAt     int64  `json:"created_at"`
+}
+
+// ListMyPendingRequests returns the caller's OWN pending assignment_request rows
+// (requester-scoped — never another member's), joined to the contested character's name.
+// Live chars only (is_removed=0). Ordered by name. Empty → nil (the handler normalizes
+// nil → []). This is the read behind GET /api/v1/assignments/requests/mine; the caller
+// is always derived server-side from the session (the requester arg, IDOR-safe).
+func ListMyPendingRequests(ctx context.Context, db *sql.DB, requester string) ([]MyPendingRequest, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT r.character_id, c.name, r.created_at
+		   FROM assignment_request r
+		   JOIN character c ON c.id = r.character_id
+		  WHERE r.requester = ? AND r.status = 'pending' AND c.is_removed = 0
+		  ORDER BY c.name COLLATE NOCASE`,
+		requester,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list my pending requests (requester=%s): %w", requester, err)
+	}
+	defer rows.Close()
+
+	var out []MyPendingRequest
+	for rows.Next() {
+		var pr MyPendingRequest
+		if err := rows.Scan(&pr.CharacterID, &pr.CharacterName, &pr.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan my pending request row: %w", err)
+		}
+		out = append(out, pr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate my pending requests: %w", err)
+	}
+	return out, nil
 }
 
 // ClaimableChar is one unassigned, non-shared, live character a member may self-claim

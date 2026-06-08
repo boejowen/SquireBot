@@ -280,21 +280,68 @@ This is idempotent — re-running it re-asserts the same floor.
 
 ### 7.5 Deploy the frontend bundle
 The web app is a static SvelteKit build (`@sveltejs/adapter-static`) served by Caddy's
-`file_server` at the apex `squirebot.quest`. Build on the dev box, ship `web/build/`:
+`file_server` at the apex `squirebot.quest`. Build on the dev box, then ship `web/build/`
+to `/var/www/squirebot/` via a **tarball + atomic swap** (the method used for the 2026-06-08
+deploy).
+
+> ⚠️ **Do NOT use `scp -r web/build/* …:/var/www/squirebot/`.** On a *re-deploy* `scp -r`
+> copies the source `_app/` dir *into* the existing destination `_app/` → a nested
+> `/var/www/squirebot/_app/_app` (the SFTP-mode scp footgun), and it is purely additive, so
+> stale hashed assets from prior builds pile up forever. The tarball+swap below is
+> deterministic, removes stale files, and leaves a one-command rollback dir.
+
+**1. Build + package (dev box, PowerShell):**
 ```powershell
-cd web; npm run build           # emits web/build/ (index.html + 200.html + assets)
-scp -r web/build/* root@<vps-ip>:/var/www/squirebot/
+cd web; npm run build           # emits web/build/ (index.html + 200.html + _app/ + assets)
+# tar the CONTENTS of build/ (relative paths, no leading build/). bsdtar's permissive
+# Windows modes don't matter — the swap script chmods on the box.
+tar -czf "$env:TEMP\squirebot-web.tgz" -C .\build .
+scp "$env:TEMP\squirebot-web.tgz" root@<vps-ip>:/tmp/squirebot-web.tgz
 ```
-⚠️ **Permissions (load-bearing — caused a blank-screen incident on the P16 deploy):** copying as
-root can leave the `_app/` directories `drwx------` (root's umask), so the `caddy` user can't
-traverse them and Caddy serves the `200.html` fallback for every nested asset — the HTML loads
-but the JS arrives as `text/html` and the app never boots (**blank white screen**). Always
-normalize perms after the copy:
+
+**2. Extract + atomic-swap (on the box).** This `mv`-swaps the new tree into place (near-atomic;
+the only gap is between the two `mv`s) and keeps the previous tree as `…/squirebot.old` for
+rollback. The `chmod -R a+rX` is **load-bearing** — see the permissions note below.
 ```bash
-sudo chmod -R a+rX /var/www/squirebot   # world-readable files + traversable dirs (public static assets)
+set -eu
+NEW=/var/www/squirebot.new
+rm -rf "$NEW"; mkdir -p "$NEW"
+tar -xzf /tmp/squirebot-web.tgz -C "$NEW"
+test -f "$NEW/index.html" && test -d "$NEW/_app" || { echo "EXTRACT_FAILED"; exit 1; }
+chmod -R u=rwX,go=rX "$NEW"            # dirs 755, files 644; world-readable + traversable
+rm -rf /var/www/squirebot.old
+mv /var/www/squirebot /var/www/squirebot.old   # keep the previous build for rollback
+mv "$NEW" /var/www/squirebot
+rm -f /tmp/squirebot-web.tgz            # tidy the transient artifact
 ```
-Symptom if skipped: `curl -sI https://squirebot.quest/_app/immutable/entry/start.*.js` returns
-`Content-Type: text/html` instead of `text/javascript`.
+Caddy's `file_server` serves the swapped dir live — **no `reload` needed** (reload only when
+the Caddyfile itself changes).
+
+> ⚠️ **Permissions (load-bearing — caused a blank-screen incident on the P16 deploy):** if the
+> `_app/` tree isn't world-readable + traversable, the `caddy` user can't reach the nested
+> assets and Caddy serves the `200.html` SPA fallback for every one — the HTML loads but the JS
+> arrives as `text/html` and the app never boots (**blank white screen**). The `chmod -R a+rX`
+> (or `u=rwX,go=rX`) step above is what prevents this; never skip it. *(A Windows-built tarball
+> can also land files world-writable `666`/`777`; `u=rwX,go=rX` tightens them to `644`/`755`.)*
+
+**3. Verify from OUTSIDE the box (the blank-screen canary).** A JS entry asset MUST come back
+as `text/javascript`, not `text/html` — `text/html` means the perms/fallback bug above:
+```bash
+# grab the hashed entry name from the served index, then check its content-type:
+curl -sI https://squirebot.quest/_app/immutable/entry/start.*.js | grep -i content-type
+# expect: content-type: text/javascript    (text/html ⇒ blank-screen bug — re-do the chmod)
+curl -s -o /dev/null -w '%{http_code}\n' https://squirebot.quest/   # expect 200
+```
+> ⚠️ When extracting the asset path from the served HTML to curl it, keep the **`/_app/`**
+> prefix — the index refs it as `./_app/immutable/…`. Curling `…/immutable/…` (prefix dropped)
+> just hits the `200.html` SPA fallback and returns a misleading `text/html` 200.
+
+**Rollback** (if the new build is broken — instant, swaps the kept `.old` tree back):
+```bash
+rm -rf /var/www/squirebot.bad
+mv /var/www/squirebot /var/www/squirebot.bad
+mv /var/www/squirebot.old /var/www/squirebot
+```
 
 `deploy/Caddyfile` currently holds only the `api.squirebot.quest` reverse-proxy block;
 add an apex `file_server` block to serve the bundle (with the SPA fallback to `200.html`):

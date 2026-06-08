@@ -1,19 +1,19 @@
 <script lang="ts">
-	// CharMetaForm — set class/level/race/is_bank_toon on an EXISTING character
-	// (CUTOVER-02, P16; the fresh-start replacement for the Sheet backfill, D-01/
-	// D-02). ANY authenticated member may use it (D-03) — it is NOT officer-gated
-	// (RequireSession on the backend; this form never consults officer status).
-	// Non-destructive ⇒ NO ConfirmDialog (D-12 precedent — no confirm even on
-	// un-setting is_bank_toon). The form edits characters that already exist (created
-	// by their first watcher upload); it never creates a character (D-03).
+	// CharMetaForm — set class/level/race on an EXISTING character (CUTOVER-02, P16;
+	// the fresh-start replacement for the Sheet backfill, D-01/D-02). ANY authenticated
+	// member may use it (D-03) — it is NOT officer-gated (RequireSession on the backend;
+	// this form never consults officer status). Non-destructive ⇒ NO ConfirmDialog. The
+	// form edits characters that already exist (created by their first watcher upload);
+	// it never creates a character (D-03). The bank-toon designation was REMOVED from
+	// this member form (Phase 26 / OPEN-3) — guild bank/bot is now officer-only via the
+	// /admin designate radio (designateChar); the form edits class/level/race only.
 	//
 	// Flow: fetchCharsForMeta() on mount → pick a character (a native <select>) →
 	// the fields pre-fill from that char's current metadata (level null/0 → blank,
 	// never a fabricated 0) → validated (class+race required, level blank-or-1..60,
 	// via the pure charmeta.ts helpers) → Save (disabled until valid AND ≥1 value
 	// changed) → success keeps the select so a second edit is easy. Once class (+
-	// level) are set, gear_check/spell_check stop showing blank for that char; an
-	// is_bank_toon-flagged char appears in the bank view + the BankCoinForm picker.
+	// level) are set, gear_check/spell_check stop showing blank for that char.
 	//
 	// SECURITY: the character name is user-controlled (interpolated into the success
 	// copy + the <option> labels) — it renders ONLY via plain {} (Svelte
@@ -52,7 +52,7 @@
 	// The chosen character_id as a string (a <select> value is a string; '' = none).
 	let selectedId = $state('');
 	// The form inputs (level is a raw string; isBankToon a checkbox bool).
-	let inputs = $state<CharMetaInputs>({ class: '', race: '', level: '', isBankToon: false });
+	let inputs = $state<CharMetaInputs>({ class: '', race: '', level: '' });
 
 	let saving = $state(false);
 	let successMsg = $state('');
@@ -89,9 +89,7 @@
 		// blank); clear any prior result.
 		successMsg = '';
 		errorMsg = '';
-		inputs = selectedChar
-			? inputsFromChar(selectedChar)
-			: { class: '', race: '', level: '', isBankToon: false };
+		inputs = selectedChar ? inputsFromChar(selectedChar) : { class: '', race: '', level: '' };
 	}
 
 	async function onSave(e: SubmitEvent) {
@@ -108,7 +106,7 @@
 			// are fresh.
 			chars = chars.map((c) =>
 				c.character_id === selectedChar!.character_id
-					? { ...c, class: payload.class, level: payload.level, race: payload.race, is_bank_toon: payload.is_bank_toon }
+					? { ...c, class: payload.class, level: payload.level, race: payload.race }
 					: c
 			);
 			successMsg = `Saved details for ${res.character}.`;
@@ -195,13 +193,6 @@
 				/>
 			</FormField>
 
-			<FormField label="Bank character" id="meta-bank">
-				<label class="checkbox-row">
-					<input id="meta-bank" type="checkbox" bind:checked={inputs.isBankToon} />
-					<span>This character is the guild bank (its coin + inventory show in the bank view).</span>
-				</label>
-			</FormField>
-
 			<div class="actions">
 				{#if successMsg}
 					<p class="result success" aria-live="polite">{successMsg}</p>
@@ -253,22 +244,6 @@
 		width: 120px;
 		font-variant-numeric: tabular-nums;
 		cursor: text;
-	}
-	.checkbox-row {
-		display: flex;
-		align-items: flex-start;
-		gap: 8px;
-		font-family: var(--font-body);
-		font-size: 16px;
-		line-height: 1.4;
-		cursor: pointer;
-	}
-	.checkbox-row input {
-		margin-top: 4px;
-		width: 18px;
-		height: 18px;
-		accent-color: var(--accent);
-		cursor: pointer;
 	}
 	.actions {
 		display: flex;

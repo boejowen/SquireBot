@@ -60,12 +60,16 @@ function rawToTrimmed(raw: CharMetaRaw): string {
 	return raw.trim();
 }
 
-/** The four char-meta form fields. level is a raw string; isBankToon a checkbox bool. */
+/**
+ * The three char-meta form fields. level is a raw string. The bank-toon designation is
+ * NO LONGER a member-settable form field (Phase 26 / OPEN-3) — it is officer-only via
+ * the /admin designate radio (designateChar), so isBankToon is gone from the form
+ * inputs/payload/change-detection.
+ */
 export interface CharMetaInputs {
 	class: string;
 	race: string;
 	level: string;
-	isBankToon: boolean;
 }
 
 /**
@@ -121,19 +125,19 @@ export function levelPayload(raw: CharMetaRaw): number | null {
 
 /**
  * The snake_case payload the save POST carries — matches the Go charMetaReq JSON
- * tags (class / level / race / is_bank_toon). level is number|null (blank → null).
+ * tags (class / level / race). level is number|null (blank → null). is_bank_toon is NO
+ * LONGER sent — the 26-02 backend dropped it from the member char-meta path (officer-
+ * only designation, OPEN-3).
  */
 export function charMetaPayload(inputs: CharMetaInputs): {
 	class: string;
 	level: number | null;
 	race: string;
-	is_bank_toon: boolean;
 } {
 	return {
 		class: inputs.class,
 		level: levelPayload(inputs.level),
-		race: inputs.race,
-		is_bank_toon: inputs.isBankToon
+		race: inputs.race
 	};
 }
 
@@ -142,13 +146,12 @@ export function levelToInput(v: number | null | undefined): string {
 	return v === null || v === undefined || v === 0 ? '' : String(v);
 }
 
-/** The four inputs pre-filled from an existing character (null/0 level → blank). */
+/** The three inputs pre-filled from an existing character (null/0 level → blank). */
 export function inputsFromChar(c: CharMetaItem): CharMetaInputs {
 	return {
 		class: c.class ?? '',
 		race: c.race ?? '',
-		level: levelToInput(c.level),
-		isBankToon: c.is_bank_toon
+		level: levelToInput(c.level)
 	};
 }
 
@@ -163,7 +166,6 @@ export function charMetaChanged(inputs: CharMetaInputs, c: CharMetaItem): boolea
 	return (
 		inputs.class !== (c.class ?? '') ||
 		inputs.race !== (c.race ?? '') ||
-		levelPayload(inputs.level) !== storedLevel ||
-		inputs.isBankToon !== c.is_bank_toon
+		levelPayload(inputs.level) !== storedLevel
 	);
 }

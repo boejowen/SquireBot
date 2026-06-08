@@ -42,7 +42,7 @@ function char(over: Partial<CharMetaItem> = {}): CharMetaItem {
 }
 
 function inputs(over: Partial<CharMetaInputs> = {}): CharMetaInputs {
-	return { class: '', race: '', level: '', isBankToon: false, ...over };
+	return { class: '', race: '', level: '', ...over };
 }
 
 describe('CLASSES / RACES — mirror the Go enrich value sets (14 each)', () => {
@@ -108,19 +108,24 @@ describe('levelPayload / charMetaPayload — snake_case wire shape', () => {
 		expect(levelPayload('')).toBeNull();
 		expect(levelPayload('50')).toBe(50);
 	});
-	it('charMetaPayload mirrors the Go charMetaReq JSON tags', () => {
-		expect(charMetaPayload(inputs({ class: 'WAR', race: 'IKS', level: '50', isBankToon: true }))).toEqual({
+	it('charMetaPayload mirrors the Go charMetaReq JSON tags (class/level/race only)', () => {
+		expect(charMetaPayload(inputs({ class: 'WAR', race: 'IKS', level: '50' }))).toEqual({
 			class: 'WAR',
 			level: 50,
-			race: 'IKS',
-			is_bank_toon: true
+			race: 'IKS'
 		});
-		expect(charMetaPayload(inputs({ class: 'CLR', race: 'HUM', level: '', isBankToon: false }))).toEqual({
+		expect(charMetaPayload(inputs({ class: 'CLR', race: 'HUM', level: '' }))).toEqual({
 			class: 'CLR',
 			level: null,
-			race: 'HUM',
-			is_bank_toon: false
+			race: 'HUM'
 		});
+	});
+	it('charMetaPayload OMITS is_bank_toon (officer-only now — Phase 26 / OPEN-3)', () => {
+		// The member path no longer sends the bank-toon flag; the key must be absent
+		// (not present-and-false) so the server-side member handler never receives it.
+		expect(charMetaPayload(inputs({ class: 'WAR', race: 'IKS', level: '50' }))).not.toHaveProperty(
+			'is_bank_toon'
+		);
 	});
 });
 
@@ -129,8 +134,7 @@ describe('inputsFromChar / charMetaChanged — pre-fill + the Save gate', () => 
 		expect(inputsFromChar(char({ class: 'WAR', level: 50, race: 'IKS', is_bank_toon: true }))).toEqual({
 			class: 'WAR',
 			race: 'IKS',
-			level: '50',
-			isBankToon: true
+			level: '50'
 		});
 		// An unset (null) or 0 level shows blank, never a fabricated "0".
 		expect(levelToInput(null)).toBe('');
@@ -145,8 +149,6 @@ describe('inputsFromChar / charMetaChanged — pre-fill + the Save gate', () => 
 		expect(charMetaChanged(inputs({ class: 'CLR', race: 'IKS', level: '50' }), c)).toBe(true);
 		// Level change → changed.
 		expect(charMetaChanged(inputs({ class: 'WAR', race: 'IKS', level: '51' }), c)).toBe(true);
-		// is_bank_toon flip → changed.
-		expect(charMetaChanged(inputs({ class: 'WAR', race: 'IKS', level: '50', isBankToon: true }), c)).toBe(true);
 	});
 });
 
@@ -175,7 +177,7 @@ describe('CR-01 input-contract: helpers tolerate the value types the DOM binding
 		const coerced = inputs({ class: 'WAR', race: 'IKS', level: 50 as unknown as string });
 		expect(() => charMetaIsValid(coerced)).not.toThrow();
 		expect(charMetaIsValid(coerced)).toBe(true);
-		expect(charMetaPayload(coerced)).toEqual({ class: 'WAR', level: 50, race: 'IKS', is_bank_toon: false });
+		expect(charMetaPayload(coerced)).toEqual({ class: 'WAR', level: 50, race: 'IKS' });
 	});
 });
 

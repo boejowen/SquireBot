@@ -423,9 +423,14 @@ export function fetchCharsForMeta(fetchFn: typeof fetch = fetch): Promise<CharMe
 	return getJSON<CharMetaItem[]>('/api/v1/char/meta-list', fetchFn);
 }
 
-/** POST /api/v1/char/meta → { character, class, level, race, is_bank_toon }. Login-only (D-03). */
+/**
+ * POST /api/v1/char/meta → { character, class, level, race, is_bank_toon }. Login-only
+ * (D-03). The member path no longer sends is_bank_toon — it is officer-only now (Phase
+ * 26 / OPEN-3, via designateChar) — so the body carries class/level/race only. The
+ * reply still echoes is_bank_toon (read-only) for the views that display it.
+ */
 export function saveCharMeta(
-	body: { character_id: number; class: string; level: number | null; race: string; is_bank_toon: boolean },
+	body: { character_id: number; class: string; level: number | null; race: string },
 	fetchFn: typeof fetch = fetch
 ): Promise<SaveCharMetaResult> {
 	return postJSON<SaveCharMetaResult>('/api/v1/char/meta', body, fetchFn);

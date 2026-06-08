@@ -319,9 +319,11 @@ func runServe(args []string) int {
 	mux.Handle("POST /api/v1/coin", webauth.RequireSession(db, webadmin.CoinSetHandler(db)))
 
 	// Char-meta — LOGIN-ONLY (D-03): RequireSession. Any signed-in member sets any
-	// existing character's class/level/race/is_bank_toon (non-sensitive shared data,
-	// the bank-coin precedent). NEVER RequireOfficer — the officer-only block is
-	// above (lines 319-326); char-meta belongs with the login-only coin block.
+	// existing character's class/level/race (non-sensitive shared data, the bank-coin
+	// precedent). NEVER RequireOfficer — the officer-only block is above; char-meta
+	// belongs with the login-only coin block. Phase 26 (OPEN-3): is_bank_toon is NO
+	// LONGER set here — guild-bank designation moved to the officer-only designate route
+	// below; the member char-meta handler ignores any is_bank_toon body field.
 	mux.Handle("GET /api/v1/char/meta-list", webauth.RequireSession(db, webadmin.CharMetaListHandler(db)))
 	mux.Handle("POST /api/v1/char/meta", webauth.RequireSession(db, webadmin.CharMetaSetHandler(db)))
 
@@ -356,6 +358,20 @@ func runServe(args []string) int {
 	mux.Handle("POST /api/v1/notifications/read-all", webauth.RequireSession(db, webadmin.MarkAllReadHandler(db)))
 	mux.Handle("POST /api/v1/wantlist/mute", webauth.RequireSession(db, webadmin.MuteWantHandler(db)))
 
+	// Character assignment — MEMBER (Phase 26 / ASSIGN-01/02/03/06) — LOGIN-ONLY
+	// (RequireSession, NEVER RequireOfficer): every signed-in member lists their own
+	// assigned + the claimable characters, self-claims an unassigned char, releases a
+	// char they hold, requests a contested char, and cancels a pending request. The
+	// actor is derived server-side from the Discord session (caller(ctx), D-02 / Pitfall
+	// 1) — the request body carries ONLY character_id, never an actor. Release/cancel are
+	// owner-scoped silent no-ops (IDOR-safe); every mutation is audited.
+	mux.Handle("GET /api/v1/assignments/mine", webauth.RequireSession(db, webadmin.ListMyAssignmentsHandler(db)))
+	mux.Handle("GET /api/v1/assignments/claimable", webauth.RequireSession(db, webadmin.ClaimableHandler(db)))
+	mux.Handle("POST /api/v1/assignments/claim", webauth.RequireSession(db, webadmin.ClaimCharHandler(db)))
+	mux.Handle("POST /api/v1/assignments/release", webauth.RequireSession(db, webadmin.ReleaseCharHandler(db)))
+	mux.Handle("POST /api/v1/assignments/request", webauth.RequireSession(db, webadmin.RequestCharHandler(db)))
+	mux.Handle("POST /api/v1/assignments/request/cancel", webauth.RequireSession(db, webadmin.CancelRequestHandler(db)))
+
 	// Monitors (Phase 20 / WANT-08 + the D-10 test-alert) — OFFICER-ONLY
 	// (RequireOfficer): the guild-wide kill-switches + the guild_channel CRUD + the
 	// bot-pulse test-alert. The mutators additionally re-check store.IsOfficerTx INSIDE
@@ -370,6 +386,20 @@ func runServe(args []string) int {
 	mux.Handle("POST /api/v1/admin/monitors/channel", webauth.RequireOfficer(db, webadmin.AddGuildChannelHandler(db)))
 	mux.Handle("POST /api/v1/admin/monitors/channel/remove", webauth.RequireOfficer(db, webadmin.RemoveGuildChannelHandler(db)))
 	mux.Handle("POST /api/v1/admin/monitors/test", webauth.RequireOfficer(db, webadmin.SendTestAlertHandler(db, botSession)))
+
+	// Character assignment — OFFICER (Phase 26 / ASSIGN-04/05/06) — OFFICER-ONLY
+	// (RequireOfficer): an officer lists every assignment + the pending-request queue,
+	// directly assigns/reassigns/removes any char's assignment, approves/denies member
+	// requests, and designates a char as a guild bank/bot (or clears it). The route gate
+	// is the cheap outer check; the store mutators ADDITIONALLY re-check store.IsOfficerTx
+	// INSIDE their write tx (WR-04 TOCTOU). The actor is the session caller — the body
+	// carries a TARGET (the assignee / mode), never the actor. Every mutation is audited.
+	mux.Handle("GET /api/v1/admin/assignments", webauth.RequireOfficer(db, webadmin.ListAllAssignmentsHandler(db)))
+	mux.Handle("POST /api/v1/admin/assignments/assign", webauth.RequireOfficer(db, webadmin.OfficerAssignHandler(db)))
+	mux.Handle("POST /api/v1/admin/assignments/remove", webauth.RequireOfficer(db, webadmin.OfficerRemoveAssignHandler(db)))
+	mux.Handle("POST /api/v1/admin/assignments/approve", webauth.RequireOfficer(db, webadmin.ApproveRequestHandler(db)))
+	mux.Handle("POST /api/v1/admin/assignments/deny", webauth.RequireOfficer(db, webadmin.DenyRequestHandler(db)))
+	mux.Handle("POST /api/v1/admin/characters/designate", webauth.RequireOfficer(db, webadmin.DesignateCharHandler(db)))
 
 	// Wrap the WHOLE mux in CORS so the allow-origin header travels with every
 	// route (D-04). P15 made CORS credential-aware (Access-Control-Allow-Credentials:

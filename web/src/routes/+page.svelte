@@ -123,6 +123,13 @@
 			meta = m;
 			bankToons = bt;
 			myCharacters = mc;
+			// IN-01 (27-REVIEW LOW): a Retry/refetch can drop the character the drill-down
+			// is pinned to — clear a now-stale selection so the grids don't stick on the
+			// empty state with an out-of-list <select> value.
+			const sel = selectedChar;
+			if (sel && !mc.some((c) => c.name.toLowerCase() === sel.toLowerCase())) {
+				selectedChar = null;
+			}
 			status = 'ready';
 		} catch (err) {
 			// Server-truth (B-2): a 401/403 from ANY of the read endpoints means the
@@ -161,6 +168,9 @@
 
 	// 15-05 (D-11): the bank-coin toons that actually have a recorded value drive
 	// the coin summary; when none do, the P14 "not yet recorded" affordance stays.
+	// 27-01 (IN-02, deliberate): this is the SHARED guild-bank coin ledger — it stays
+	// guild-wide and is intentionally NOT narrowed by the "My characters" filter (the
+	// filter narrows the per-character grids, not the shared bank coin summary).
 	let coinToons = $derived(bankToons.filter(hasRecordedCoin));
 
 	/** Render a toon's coin as a compact "Np Ng Ns Nc" line (null → 0; tabular). */

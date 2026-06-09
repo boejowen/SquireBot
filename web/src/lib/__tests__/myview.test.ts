@@ -37,6 +37,10 @@ describe('myCharNameSet — the caller-assigned-name join key set', () => {
 	it('an empty mine list yields an empty set', () => {
 		expect(myCharNameSet([]).size).toBe(0);
 	});
+
+	it('collapses names differing only by case to a single entry (IN-03)', () => {
+		expect(myCharNameSet([mine({ name: 'Slampeach' }), mine({ name: 'SLAMPEACH' })]).size).toBe(1);
+	});
 });
 
 describe('applyMyFilter — narrow char-bearing rows to the caller', () => {
@@ -65,6 +69,12 @@ describe('applyMyFilter — narrow char-bearing rows to the caller', () => {
 
 	it('empty mine: mineOnly=true with an empty names set → returns []', () => {
 		expect(applyMyFilter(rows, new Set<string>(), true, null)).toEqual([]);
+	});
+
+	it('empty-string selectedChar is falsy → falls through, no accidental drill-down (IN-03)', () => {
+		// '' must NOT be treated as a drill-down target — it falls through to the mineOnly branch.
+		expect(applyMyFilter(rows, names, true, '').map((r) => r.char)).toEqual(['Slampeach', 'Findom']); // mine-only
+		expect(applyMyFilter(rows, names, false, '')).toBe(rows); // passthrough (same ref)
 	});
 
 	it('name-join exactness: an in-set char is included, an out-of-set char is excluded', () => {

@@ -711,6 +711,136 @@ func TestMigrate_00009_CharacterAssignment(t *testing.T) {
 	}
 }
 
+// TestMigrate_00010_CharacterTaggedWantlist proves the Phase 28 forward-only
+// migration 00010 applied on a fresh DB (NewTestDB runs goose.Up over ALL ten
+// migrations):
+//   - wantlist_item gained the nullable character_id column (columnSet);
+//   - the COALESCE(character_id,-1)-keyed dedup rewrite PRESERVES the 00006
+//     account-level (NULL character_id) dedup: a second account-level want for the
+//     same (user, item_id, reason) collides on wantlist_catalog_uidx;
+//   - the SAME (user, item_id, reason) tagged to two DIFFERENT character_id values
+//     does NOT collide (the COALESCE sentinel keeps real char ids distinct ⇒ the
+//     same item can be wanted for two characters);
+//   - the SAME assertions hold on the custom path (item_id NULL, dedup on item_name
+//     via wantlist_custom_uidx);
+//   - existing rows backfill to NULL character_id (the ADD COLUMN default — no data
+//     loss, CWANT-02); and
+//   - a second Up is a clean no-op (idempotent — goose_db_version row count
+//     unchanged).
+//
+// Backend-only: the watcher never reads/writes wantlist_item, so there is NO
+// WatcherMaxSchemaVersion change. "Schema v10" == goose 00010 applied.
+func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00010) + t.Cleanup
+
+	// character_id column exists on wantlist_item.
+	wlCols := columnSet(t, db, "wantlist_item")
+	if !wlCols["character_id"] {
+		t.Errorf("expected wantlist_item to have column %q after 00010 (have: %v)", "character_id", wlCols)
+	}
+
+	// Seed a web_user (the wantlist_item.discord_user_id FK) and two characters so the
+	// character_id FK holds for the tagged inserts.
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-cw", "CWUser"); err != nil {
+		t.Fatalf("seed web_user: %v", err)
+	}
+	cwOwner := mustInsertOwner(t, db, "CWOwner", nil)
+	charA := mustInsertChar(t, db, cwOwner, "CharA", false, false, false)
+	charB := mustInsertChar(t, db, cwOwner, "CharB", false, false, false)
+
+	// addWant is a small raw INSERT helper returning the error (so a collision is
+	// observable). characterID is *int64 so a NULL (account-level) want is expressible.
+	addWant := func(itemID *int64, itemName, reason string, characterID *int64) error {
+		var itemArg, charArg any
+		if itemID != nil {
+			itemArg = *itemID
+		}
+		if characterID != nil {
+			charArg = *characterID
+		}
+		_, err := db.Exec(
+			`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, character_id, created_at)
+			 VALUES (?, ?, ?, ?, 'med', ?, 0)`,
+			"disc-cw", itemArg, itemName, reason, charArg)
+		return err
+	}
+
+	// --- Catalog path (item_id NOT NULL, dedup on item_id) ---
+	catItem := int64(5001)
+
+	// 1) An existing-row backfill check: a first account-level (character_id NULL) want.
+	if err := addWant(&catItem, "Catalog Item", "buy", nil); err != nil {
+		t.Fatalf("first account-level catalog want: %v", err)
+	}
+	// Its character_id reads NULL (the ADD COLUMN backfill — CWANT-02).
+	var charIDNull sql.NullInt64
+	if err := db.QueryRow(
+		`SELECT character_id FROM wantlist_item WHERE discord_user_id = ? AND item_id = ? AND reason = 'buy' AND active = 1`,
+		"disc-cw", catItem,
+	).Scan(&charIDNull); err != nil {
+		t.Fatalf("read backfilled character_id: %v", err)
+	}
+	if charIDNull.Valid {
+		t.Errorf("first account-level want character_id = %d, want NULL (backfill)", charIDNull.Int64)
+	}
+
+	// 2) A SECOND account-level (NULL) want for the same (user,item_id,reason) COLLIDES
+	//    (the COALESCE sentinel preserves 00006 account-level dedup — T-28-04).
+	if err := addWant(&catItem, "Catalog Item", "buy", nil); err == nil {
+		t.Errorf("expected a second account-level (NULL) catalog want for the same (user,item,reason) to collide on wantlist_catalog_uidx, but it succeeded")
+	}
+
+	// 3) The SAME (user,item_id,reason) tagged to charA, then charB — BOTH succeed
+	//    (same item wanted for two characters ⇒ two rows; real char ids stay distinct).
+	if err := addWant(&catItem, "Catalog Item", "buy", &charA); err != nil {
+		t.Errorf("expected the catalog want tagged to charA to succeed (distinct from the NULL want), got: %v", err)
+	}
+	if err := addWant(&catItem, "Catalog Item", "buy", &charB); err != nil {
+		t.Errorf("expected the catalog want tagged to charB to succeed (distinct from charA), got: %v", err)
+	}
+	// 4) A SECOND want for the same item tagged to charA AGAIN collides (per-char dedup).
+	if err := addWant(&catItem, "Catalog Item", "buy", &charA); err == nil {
+		t.Errorf("expected a second catalog want for the same (user,item,reason,charA) to collide, but it succeeded")
+	}
+
+	// --- Custom path (item_id NULL, dedup on item_name) ---
+	// 5) A first account-level (NULL) custom want.
+	if err := addWant(nil, "Custom Label", "quest", nil); err != nil {
+		t.Fatalf("first account-level custom want: %v", err)
+	}
+	// 6) A SECOND account-level (NULL) custom want for the same (user,item_name,reason)
+	//    COLLIDES on wantlist_custom_uidx.
+	if err := addWant(nil, "Custom Label", "quest", nil); err == nil {
+		t.Errorf("expected a second account-level (NULL) custom want for the same (user,label,reason) to collide on wantlist_custom_uidx, but it succeeded")
+	}
+	// 7) The SAME (user,item_name,reason) tagged to two DIFFERENT chars — both succeed.
+	if err := addWant(nil, "Custom Label", "quest", &charA); err != nil {
+		t.Errorf("expected the custom want tagged to charA to succeed (distinct from the NULL want), got: %v", err)
+	}
+	if err := addWant(nil, "Custom Label", "quest", &charB); err != nil {
+		t.Errorf("expected the custom want tagged to charB to succeed (distinct from charA), got: %v", err)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00010 DB
+	// returns nil AND the goose_db_version row count is unchanged.
+	var beforeVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
+		t.Fatalf("count goose_db_version before re-run: %v", err)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00010 should be a no-op, got error: %v", err)
+	}
+	var afterVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
+		t.Fatalf("count goose_db_version after re-run: %v", err)
+	}
+	if beforeVersions != afterVersions {
+		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
 // mustInsertOwner inserts an owner with the given label and (nullable)
 // discord_user_id, returning its id. discordUserID is *string so a NULL-owner
 // (legacy/unlinked) is distinguishable from a linked one.

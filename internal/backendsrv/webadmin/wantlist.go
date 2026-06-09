@@ -48,6 +48,13 @@ type addWantReq struct {
 	Reason   string `json:"reason"`
 	Priority string `json:"priority"`
 	Note     string `json:"note"`
+	// CharacterID is the OPTIONAL character tag (CWANT-01). A pointer (mirroring
+	// ItemID's optional-pointer idiom) so an absent/null character_id is an
+	// account-level want; a non-nil one tags the want to that character. The body is
+	// UNTRUSTED — the tag is authorized server-side via store.IsCharAssignedToTx inside
+	// AddWantHandler's withTx (NEVER here), so a member cannot tag a want to a character
+	// not assigned to them (T-28-05 IDOR).
+	CharacterID *int64 `json:"character_id"`
 }
 
 // validReasons / validPriorities are the server-side enum allow-lists (the DB CHECK
@@ -81,6 +88,13 @@ func validWant(req addWantReq) bool {
 		// A custom want (no catalog id) needs a non-blank label (D-04).
 		return false
 	}
+	// V5 shape check: a non-nil character_id must be a positive id. AUTHORIZATION
+	// (is it assigned to the caller?) is NOT done here — it is the in-tx guard in
+	// AddWantHandler (store.IsCharAssignedToTx, T-28-05). This is purely a malformed-id
+	// reject so a 0/negative tag is a 400, not a silent FK miss.
+	if req.CharacterID != nil && *req.CharacterID <= 0 {
+		return false
+	}
 	return true
 }
 
@@ -93,6 +107,10 @@ func mapWantErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrDuplicateWant):
 		writeJSONError(w, http.StatusConflict, "duplicate")
+	case errors.Is(err, store.ErrCharNotAssigned):
+		// T-28-05: the caller tagged a want to a character NOT assigned to them. The
+		// in-tx guard (store.IsCharAssignedToTx) returned the typed sentinel → 403.
+		writeJSONError(w, http.StatusForbidden, "char_not_assigned")
 	default:
 		slog.Error("wantlist write failed", "err", err)
 		writeJSONError(w, http.StatusInternalServerError, "internal")
@@ -142,16 +160,28 @@ func AddWantHandler(db *sql.DB) http.HandlerFunc {
 
 		var newID int64
 		err := withTx(ctx, db, func(tx *sql.Tx) error {
-			// characterID is nil here: the character-tag handler path is wired in Plan 02
-			// (it authorizes the tag via store.IsCharAssignedToTx before insert). This
-			// existing add-want endpoint stays account-level until then.
-			id, e := store.AddWantTx(ctx, tx, callerID, req.ItemID, itemName, req.Reason, priority, notePtr, nil, now)
+			// T-28-05 IDOR guard: when a character tag is supplied, AUTHORIZE it UNDER the
+			// SAME tx BEFORE the insert (TOCTOU-safe). A character_id in the (untrusted)
+			// body that is not assigned to the caller → store.ErrCharNotAssigned →
+			// mapWantErr → 403; the rollback leaves no row and no audit. An account-level
+			// want (CharacterID nil) skips the guard entirely.
+			if req.CharacterID != nil {
+				ok, e := store.IsCharAssignedToTx(ctx, tx, *req.CharacterID, callerID)
+				if e != nil {
+					return e
+				}
+				if !ok {
+					return store.ErrCharNotAssigned
+				}
+			}
+			id, e := store.AddWantTx(ctx, tx, callerID, req.ItemID, itemName, req.Reason, priority, notePtr, req.CharacterID, now)
 			if e != nil {
 				return e // ErrDuplicateWant → mapWantErr → 409 duplicate
 			}
 			newID = id
-			// V7: detail carries item_id ONLY — never the note text.
-			return AppendAuditTx(ctx, tx, "wantlist_add", callerID, map[string]any{"item_id": req.ItemID}, now)
+			// V7: detail carries item_id + character_id (IDS ONLY) — never the note text,
+			// never the character name.
+			return AppendAuditTx(ctx, tx, "wantlist_add", callerID, map[string]any{"item_id": req.ItemID, "character_id": req.CharacterID}, now)
 		})
 		if err != nil {
 			mapWantErr(w, err)
@@ -239,6 +269,31 @@ func ListOwnWantsHandler(db *sql.DB) http.HandlerFunc {
 		out, err := store.ListOwnWants(ctx, db, callerID)
 		if err != nil {
 			slog.Error("list own wants failed", "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		writeJSON(w, out) // non-nil from the store → JSON []
+	}
+}
+
+// ListGuildWantsHandler (GET) returns the GUILDWIDE wantlist — every active want
+// across ALL members (CWANT-03/04, the "what does the guild want" read). Unlike
+// ListOwnWantsHandler it is NOT caller-scoped: it calls store.ListGuildWants(ctx, db)
+// with NO callerID. The store read JOINs the owner's username + LEFT JOINs the tagged
+// character name and EXCLUDES the private note (T-28-07) — so a login-gated member can
+// see the roll-up without leaking anyone's private "why you wanted it" note. The route
+// wraps this in webauth.RequireSession (login-only, NOT RequireOfficer — the read API
+// has been login-only since P15). The store returns a non-nil slice ⇒ JSON [] for empty.
+func ListGuildWantsHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ctx := r.Context()
+		out, err := store.ListGuildWants(ctx, db) // guild-wide — NO caller scope
+		if err != nil {
+			slog.Error("list guild wants failed", "err", err)
 			writeJSONError(w, http.StatusInternalServerError, "internal")
 			return
 		}

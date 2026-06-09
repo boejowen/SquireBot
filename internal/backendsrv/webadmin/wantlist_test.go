@@ -59,6 +59,164 @@ func activeWantCount(t *testing.T, ctx context.Context, db *sql.DB, discordID st
 // i64p is a small *int64 helper for catalog item ids.
 func i64p(v int64) *int64 { return &v }
 
+// seedAssignment inserts a character_assignment row (charID → discordID), the
+// fixture behind the tagged-want IDOR cases: a row owned by the CALLER is the
+// authorized tag; a row owned by ANOTHER member is the forged-tag (403) fixture.
+func seedAssignment(t *testing.T, ctx context.Context, db *sql.DB, charID int64, discordID string) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO character_assignment (character_id, discord_user_id, assigned_at, assigned_by)
+		 VALUES (?, ?, ?, 'self')`, charID, discordID, 1700000000); err != nil {
+		t.Fatalf("seed character_assignment (char=%d, %s): %v", charID, discordID, err)
+	}
+}
+
+// characterIDOf reads the character_id stored on a wantlist row (the "the tagged
+// want persisted with that character_id" assertion).
+func characterIDOf(t *testing.T, ctx context.Context, db *sql.DB, wantID int64) (int64, bool) {
+	t.Helper()
+	var cid sql.NullInt64
+	if err := db.QueryRowContext(ctx,
+		`SELECT character_id FROM wantlist_item WHERE id = ?`, wantID).Scan(&cid); err != nil {
+		t.Fatalf("read character_id (id=%d): %v", wantID, err)
+	}
+	if !cid.Valid {
+		return 0, false
+	}
+	return cid.Int64, true
+}
+
+func TestAddWant_TaggedAssignedChar_Persists_AuditsCharacterID(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	caller := "disc-tag-ok"
+	seedWebUser(t, ctx, db, caller, "Tagger")
+	// A char assigned to the caller — the authorized tag.
+	charID := asgInsertChar(t, ctx, db, "Tankbert")
+	seedAssignment(t, ctx, db, charID, caller)
+
+	h := withCaller(caller, AddWantHandler(db))
+	rec := postJSON(t, h, `{"item_id":321,"item_name":"Mithril Bracer","reason":"buy","priority":"med","character_id":`+itoa(charID)+`}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	var row store.WantlistRow
+	if err := json.Unmarshal(rec.Body.Bytes(), &row); err != nil {
+		t.Fatalf("decode add resp: %v", err)
+	}
+	// The tagged want persists with that character_id.
+	got, ok := characterIDOf(t, ctx, db, row.ID)
+	if !ok || got != charID {
+		t.Fatalf("stored character_id = (%d, %v), want %d", got, ok, charID)
+	}
+	// The audit detail carries character_id (an id), never a name.
+	var detail string
+	if err := db.QueryRowContext(ctx,
+		`SELECT detail FROM audit_log WHERE event = 'wantlist_add'`).Scan(&detail); err != nil {
+		t.Fatalf("read audit detail: %v", err)
+	}
+	if !strings.Contains(detail, "character_id") {
+		t.Fatalf("audit detail %q missing character_id", detail)
+	}
+	if strings.Contains(detail, "Tankbert") {
+		t.Fatalf("audit detail leaked character name: %q", detail)
+	}
+}
+
+func TestAddWant_TaggedUnassignedChar_403(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	caller := "disc-tag-bad"
+	seedWebUser(t, ctx, db, caller, "Forger")
+	// A char assigned to ANOTHER member — the caller forges its id into the body.
+	other := "disc-tag-victim"
+	seedWebUser(t, ctx, db, other, "Victim")
+	charID := asgInsertChar(t, ctx, db, "NotMine")
+	seedAssignment(t, ctx, db, charID, other)
+
+	h := withCaller(caller, AddWantHandler(db))
+	rec := postJSON(t, h, `{"item_id":654,"item_name":"Forged Tag","reason":"buy","character_id":`+itoa(charID)+`}`)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (forged character_id tag) (body=%s)", rec.Code, rec.Body.String())
+	}
+	// Nothing persisted for the caller — the in-tx guard rolled the insert back.
+	if n := activeWantCount(t, ctx, db, caller); n != 0 {
+		t.Fatalf("active wants for caller = %d, want 0 (the forged-tag add must not persist)", n)
+	}
+	if c := auditCount(t, ctx, db, "wantlist_add"); c != 0 {
+		t.Fatalf("wantlist_add audit rows = %d, want 0 (rejected add not audited)", c)
+	}
+}
+
+func TestAddWant_NoCharacterID_AccountLevel(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	caller := "disc-tag-none"
+	seedWebUser(t, ctx, db, caller, "Accounter")
+
+	h := withCaller(caller, AddWantHandler(db))
+	rec := postJSON(t, h, `{"item_id":777,"item_name":"Plain Want","reason":"buy"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	var row store.WantlistRow
+	if err := json.Unmarshal(rec.Body.Bytes(), &row); err != nil {
+		t.Fatalf("decode add resp: %v", err)
+	}
+	if _, ok := characterIDOf(t, ctx, db, row.ID); ok {
+		t.Fatalf("account-level want stored a character_id, want NULL")
+	}
+}
+
+func TestListGuildWants_AllMembers_NoNote(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	a := "disc-guild-a"
+	b := "disc-guild-b"
+	seedWebUser(t, ctx, db, a, "Aaa")
+	seedWebUser(t, ctx, db, b, "Bbb")
+
+	// Two wants across two members; one carries a private note.
+	addA := withCaller(a, AddWantHandler(db))
+	if r := postJSON(t, addA, `{"item_id":1,"item_name":"A Want","reason":"buy","note":"private-secret-note"}`); r.Code != http.StatusOK {
+		t.Fatalf("add A status = %d (body=%s)", r.Code, r.Body.String())
+	}
+	addB := withCaller(b, AddWantHandler(db))
+	if r := postJSON(t, addB, `{"item_id":2,"item_name":"B Want","reason":"quest"}`); r.Code != http.StatusOK {
+		t.Fatalf("add B status = %d (body=%s)", r.Code, r.Body.String())
+	}
+
+	listH := withCaller(a, ListGuildWantsHandler(db))
+	rec := httptest.NewRecorder()
+	listH.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("guild list status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	// The all-members roll-up returns BOTH members' wants (not caller-scoped).
+	var rows []store.GuildWantRow
+	if err := json.Unmarshal(rec.Body.Bytes(), &rows); err != nil {
+		t.Fatalf("decode guild list: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("guild list len = %d, want 2 (all members)", len(rows))
+	}
+	// T-28-02: the private note must NOT be exposed by the guildwide read.
+	if strings.Contains(rec.Body.String(), "private-secret-note") {
+		t.Fatalf("guildwide list leaked a private note: %s", rec.Body.String())
+	}
+}
+
+func TestListGuildWants_MethodNotGet(t *testing.T) {
+	db := store.NewTestDB(t)
+	caller := "disc-guild-m"
+	seedWebUser(t, context.Background(), db, caller, "Methoder")
+	listH := withCaller(caller, ListGuildWantsHandler(db))
+	rec := postJSON(t, listH, `{}`)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST to guild list status = %d, want 405", rec.Code)
+	}
+}
+
 func TestAddWant_Catalog_AuditsItemIDOnly(t *testing.T) {
 	db := store.NewTestDB(t)
 	ctx := context.Background()

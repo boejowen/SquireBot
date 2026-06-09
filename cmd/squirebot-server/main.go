@@ -342,6 +342,10 @@ func runServe(args []string) int {
 	mux.Handle("GET /api/v1/wantlist", webauth.RequireSession(db, webadmin.ListOwnWantsHandler(db)))
 	mux.Handle("POST /api/v1/wantlist", webauth.RequireSession(db, webadmin.AddWantHandler(db)))
 	mux.Handle("POST /api/v1/wantlist/remove", webauth.RequireSession(db, webadmin.RemoveOwnWantHandler(db)))
+	// Guildwide wantlist roll-up (Phase 28 / CWANT-03/04) — LOGIN-ONLY (RequireSession,
+	// NOT RequireOfficer): every signed-in member sees the all-members "what does the
+	// guild want" list; the store read excludes the private note (T-28-07).
+	mux.Handle("GET /api/v1/wantlist/guild", webauth.RequireSession(db, webadmin.ListGuildWantsHandler(db)))
 	// D-10 full-catalog item search — session-gated like the view endpoints
 	// (readapi, takes the read-side st):
 	mux.Handle("GET /api/v1/items/search", webauth.RequireSession(db, readapi.NewItemSearch(st)))

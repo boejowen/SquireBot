@@ -187,7 +187,7 @@ func ListGuildWants(ctx context.Context, db *sql.DB) ([]GuildWantRow, error) {
 		   JOIN web_user wu ON wu.discord_user_id = w.discord_user_id
 		   LEFT JOIN character c ON c.id = w.character_id
 		  WHERE w.active = 1
-		  ORDER BY w.created_at DESC`)
+		  ORDER BY w.created_at DESC, w.id DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("list guild wants: %w", err)
 	}

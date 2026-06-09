@@ -129,7 +129,9 @@
 		for (const w of wants) {
 			if (w.character_id === null) hasAccountLevel = true;
 			else if (!m.has(w.character_id))
-				m.set(w.character_id, w.character_name ?? `#${w.character_id}`);
+				// MD-01: a want tagged to a since-removed character reads character_name=null
+				// server-side — label it "Removed character" rather than a nonsense #<id>.
+				m.set(w.character_id, w.character_name ?? 'Removed character');
 		}
 		return {
 			chars: [...m.entries()].map(([id, name]) => ({ id, name })),
@@ -160,7 +162,11 @@
 
 	/** Flip the My/Guild view; lazy-load the guild roll-up on first switch to Guild. */
 	function setView(v: WantView) {
+		if (v === wantView) return;
 		wantView = v;
+		// LOW-02: drop a stale per-character filter when switching views (the char <select>
+		// only renders in 'mine'; a left-over selection shouldn't survive a Guild round-trip).
+		charFilterValue = '';
 		if (v === 'guild') void loadGuild();
 	}
 

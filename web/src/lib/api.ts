@@ -592,6 +592,13 @@ export interface WantlistRow {
 	 * conditional "add if missing"); WantMuteCell reads it to choose the bell glyph.
 	 */
 	muted: boolean;
+	/**
+	 * CWANT-01 optional character tag. null ⇒ an account-level want; non-null ⇒ scoped
+	 * to that character (mirrors the Go WantlistRow.CharacterID — LEFT JOIN character).
+	 */
+	character_id: number | null;
+	/** CWANT-06 the tagged character's name (LEFT JOIN character.name); null ⇒ account-level (or a removed char). */
+	character_name: string | null;
 }
 
 /** A catalog match from the PigParse-getall corpus (GET /api/v1/items/search). */
@@ -607,6 +614,37 @@ export function fetchOwnWants(f: typeof fetch = fetch): Promise<WantlistRow[]> {
 	return getJSON<WantlistRow[]>('/api/v1/wantlist', f);
 }
 
+/**
+ * One active want in the GUILDWIDE roll-up (GET /api/v1/wantlist/guild — CWANT-03/04).
+ * Mirrors the Go store.GuildWantRow: it surfaces the owner's username + the OPTIONAL
+ * tagged character name, across ALL members.
+ *
+ * SECURITY (T-28-02 / T-28-12): there is intentionally NO `note` field. The per-want
+ * note is private to its owner; the guildwide read MUST NOT expose it (the server's
+ * ListGuildWants excludes it). Do NOT add a note field here — the client cannot surface
+ * a column the API does not send.
+ */
+export interface GuildWantRow {
+	id: number;
+	/** null ⇒ a custom text want (no catalog item_id). */
+	item_id: number | null;
+	item_name: string;
+	reason: 'buy' | 'quest';
+	priority: 'low' | 'med' | 'high';
+	discord_user_id: string;
+	/** web_user.username — the owner attribution (CWANT-03/04). */
+	owner: string;
+	/** null ⇒ an account-level want. */
+	character_id: number | null;
+	/** the tagged character's name; null ⇒ account-level (or a removed char). */
+	character_name: string | null;
+}
+
+/** GET /api/v1/wantlist/guild → GuildWantRow[] ([] when empty). Login-only; owner + character attribution, NO note. */
+export function fetchGuildWants(f: typeof fetch = fetch): Promise<GuildWantRow[]> {
+	return getJSON<GuildWantRow[]>('/api/v1/wantlist/guild', f);
+}
+
 /** GET /api/v1/items/search?q=… → CatalogItem[] (server returns [] for q<2). */
 export function searchCatalog(q: string, f: typeof fetch = fetch): Promise<CatalogItem[]> {
 	return getJSON<CatalogItem[]>('/api/v1/items/search?q=' + encodeURIComponent(q), f);
@@ -620,6 +658,13 @@ export function addWant(
 		reason: 'buy' | 'quest';
 		priority: 'low' | 'med' | 'high';
 		note?: string;
+		/**
+		 * CWANT-01 optional character tag. null/absent ⇒ an account-level want. The
+		 * server authorizes the tag (IsCharAssignedToTx, Plan 02) — a forged char the
+		 * caller does not own is rejected 403; the <select> sourcing options from
+		 * fetchMyCharacters is UX, NOT the gate (T-28-11).
+		 */
+		character_id?: number | null;
 	},
 	f: typeof fetch = fetch
 ): Promise<WantlistRow> {

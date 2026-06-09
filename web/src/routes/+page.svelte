@@ -25,12 +25,15 @@
 		fetchBank,
 		fetchMeta,
 		fetchBankToons,
+		fetchMyCharacters,
 		type ViewRow,
 		type GearCheckRow,
 		type SpellCheckRow,
 		type MetaResponse,
-		type BankToon
+		type BankToon,
+		type MyCharacter
 	} from '$lib/api';
+	import { myCharNameSet, applyMyFilter } from '$lib/myview';
 	import { hasRecordedCoin } from '$lib/coin';
 	import {
 		viewColumns,
@@ -92,17 +95,26 @@
 	// (the same login-only source BankCoinForm writes). This replaces P14's
 	// "Coin: not yet recorded" placeholder once any toon has a recorded value.
 	let bankToons = $state<BankToon[]>([]);
+	// 27-01 (MYVIEW-01/02): the caller's assigned characters drive the additive
+	// "My characters" quick-filter + single-char drill-down. `mineOnly` defaults OFF
+	// so all-members visibility is unchanged for everyone (the filter narrows only
+	// THIS browser's grid — never a server-side row scope; see myview.ts header /
+	// T-27-01). `selectedChar` (the drill-down) dominates when set.
+	let myCharacters = $state<MyCharacter[]>([]);
+	let mineOnly = $state(false);
+	let selectedChar = $state<string | null>(null);
 
 	async function load() {
 		status = 'loading';
 		try {
-			const [v, g, s, b, m, bt] = await Promise.all([
+			const [v, g, s, b, m, bt, mc] = await Promise.all([
 				fetchView(),
 				fetchGearCheck(),
 				fetchSpellCheck(),
 				fetchBank(),
 				fetchMeta(),
-				fetchBankToons()
+				fetchBankToons(),
+				fetchMyCharacters()
 			]);
 			viewRows = v;
 			gearRows = g;
@@ -110,6 +122,7 @@
 			bankRows = b.rows;
 			meta = m;
 			bankToons = bt;
+			myCharacters = mc;
 			status = 'ready';
 		} catch (err) {
 			// Server-truth (B-2): a 401/403 from ANY of the read endpoints means the
@@ -154,6 +167,44 @@
 	function coinLine(t: BankToon): string {
 		return `${t.plat ?? 0}p ${t.gold ?? 0}g ${t.silver ?? 0}s ${t.copper ?? 0}c`;
 	}
+
+	// 27-01: the additive "My characters" filter, applied client-side over the rows
+	// already in memory (the four grids are fed the FILTERED arrays; the SearchBox is
+	// deliberately NOT — it stays guild-wide). Default mineOnly=false / selectedChar=null
+	// passes rows through UNCHANGED, so all-members visibility is the default.
+	let mineNames = $derived(myCharNameSet(myCharacters));
+	let filteredViewRows = $derived(applyMyFilter(viewRows, mineNames, mineOnly, selectedChar));
+	let filteredGearRows = $derived(applyMyFilter(gearRows, mineNames, mineOnly, selectedChar));
+	let filteredSpellRows = $derived(applyMyFilter(spellRows, mineNames, mineOnly, selectedChar));
+	let filteredBankRows = $derived(applyMyFilter(bankRows, mineNames, mineOnly, selectedChar));
+
+	// The filter is "active" (narrowing) whenever mine-only is on OR a single char is
+	// selected — drives the DISTINCT "none of YOUR characters" empty copy (vs the
+	// generic all-members "no data" StateBlock), so an active filter that empties a grid
+	// never reads as missing data (Pitfall 3/5).
+	let filterActive = $derived(mineOnly || selectedChar !== null);
+	// A member who has claimed nothing: the "My characters" + per-char options are dead —
+	// disable them and show a hint linking to /my-characters (Pitfall 5).
+	let hasMine = $derived(myCharacters.length > 0);
+
+	// The single <select>'s current value: 'all' (default) / 'mine' / a character name.
+	let filterValue = $derived(selectedChar ?? (mineOnly ? 'mine' : 'all'));
+
+	/** Translate the single control's value into the two filter primitives. 'all' →
+	 *  all-members (filter OFF); 'mine' → my-characters; any other value is a character
+	 *  name → drill-down (which dominates). */
+	function onFilterChange(value: string) {
+		if (value === 'all') {
+			mineOnly = false;
+			selectedChar = null;
+		} else if (value === 'mine') {
+			mineOnly = true;
+			selectedChar = null;
+		} else {
+			selectedChar = value;
+			mineOnly = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -172,6 +223,40 @@
 		<SearchBox rows={viewRows} />
 	</section>
 
+	<!-- 27-01: the SINGLE "My characters" control (MYVIEW-01 + MYVIEW-02). ONE <select>
+	     drives both the my-characters quick-filter and the single-character drill-down.
+	     It lives in the view-orchestration layer (NEVER inside DataGrid — the grid stays
+	     view-agnostic, fed pre-filtered data; CLAUDE.md consolidated-views LOCK). The
+	     filter is presentation only, never access control (T-27-01). -->
+	<div class="filter-bar">
+		<label class="filter-label" for="char-filter">Show</label>
+		<select
+			id="char-filter"
+			class="char-filter"
+			aria-label="Filter views by character"
+			value={filterValue}
+			onchange={(e) => onFilterChange(e.currentTarget.value)}
+		>
+			<option value="all">All members</option>
+			<!-- "My characters" + the per-char drill-down options are sourced ONLY from
+			     fetchMyCharacters() (session-scoped, IDOR-safe — T-27-03), never
+			     meta.characters. Names render via plain {} (Svelte auto-escapes —
+			     never the raw-HTML directive; T-27-02). Disabled when the caller has
+			     claimed nothing. -->
+			<option value="mine" disabled={!hasMine}>My characters</option>
+			{#each myCharacters as c (c.character_id)}
+				<option value={c.name}>{c.name}</option>
+			{/each}
+		</select>
+		{#if !hasMine}
+			<!-- Zero claimed characters: the control is never a dead empty toggle — point
+			     the member at where they can claim (Pitfall 5). -->
+			<span class="filter-hint">
+				<a href="/my-characters">Claim characters</a> to filter to your own.
+			</span>
+		{/if}
+	</div>
+
 	<!-- View nav: 4 tabs over the ONE reusable DataGrid. -->
 	<nav class="view-nav" aria-label="Views">
 		{#each TABS as tab (tab.id)}
@@ -189,24 +274,36 @@
 
 	<section class="view-panel">
 		{#if active === 'view'}
-			{#if viewRows.length === 0}
-				<StateBlock kind="view-empty" viewName="inventory" />
+			{#if filteredViewRows.length === 0}
+				{#if filterActive}
+					<p class="filter-empty">None of your characters have rows in this view.</p>
+				{:else}
+					<StateBlock kind="view-empty" viewName="inventory" />
+				{/if}
 			{:else}
-				<DataGrid data={viewRows} columns={viewColumns} defaultSorting={SORT.view} />
+				<DataGrid data={filteredViewRows} columns={viewColumns} defaultSorting={SORT.view} />
 			{/if}
 		{:else if active === 'gear_check'}
 			<StatusLegend variant="gear" />
-			{#if gearRows.length === 0}
-				<StateBlock kind="view-empty" viewName="gear check" />
+			{#if filteredGearRows.length === 0}
+				{#if filterActive}
+					<p class="filter-empty">None of your characters have rows in this view.</p>
+				{:else}
+					<StateBlock kind="view-empty" viewName="gear check" />
+				{/if}
 			{:else}
-				<DataGrid data={gearRows} columns={gearCheckColumns} defaultSorting={SORT.gear_check} />
+				<DataGrid data={filteredGearRows} columns={gearCheckColumns} defaultSorting={SORT.gear_check} />
 			{/if}
 		{:else if active === 'spell_check'}
 			<StatusLegend variant="spell" />
-			{#if spellRows.length === 0}
-				<StateBlock kind="view-empty" viewName="spell check" />
+			{#if filteredSpellRows.length === 0}
+				{#if filterActive}
+					<p class="filter-empty">None of your characters have rows in this view.</p>
+				{:else}
+					<StateBlock kind="view-empty" viewName="spell check" />
+				{/if}
 			{:else}
-				<DataGrid data={spellRows} columns={spellCheckColumns} defaultSorting={SORT.spell_check} />
+				<DataGrid data={filteredSpellRows} columns={spellCheckColumns} defaultSorting={SORT.spell_check} />
 			{/if}
 		{:else if active === 'bank'}
 			<!-- coin is null in P14 (ADMIN-05 fills it in P15) — render the
@@ -234,12 +331,16 @@
 				     the bank view, reachable by any authenticated member, D-12). -->
 				<a class="record-coin" href="/bank-coin">Record coin</a>
 			</div>
-			{#if bankRows.length === 0}
-				<!-- bank may be legitimately empty until P16 sets is_bank_toon — empty
-				     state, NOT an error (RESEARCH Open-Q4 / A7). -->
-				<StateBlock kind="view-empty" viewName="bank" />
+			{#if filteredBankRows.length === 0}
+				{#if filterActive}
+					<p class="filter-empty">None of your characters have rows in this view.</p>
+				{:else}
+					<!-- bank may be legitimately empty until P16 sets is_bank_toon — empty
+					     state, NOT an error (RESEARCH Open-Q4 / A7). -->
+					<StateBlock kind="view-empty" viewName="bank" />
+				{/if}
 			{:else}
-				<DataGrid data={bankRows} columns={bankColumns} defaultSorting={SORT.bank} />
+				<DataGrid data={filteredBankRows} columns={bankColumns} defaultSorting={SORT.bank} />
 			{/if}
 		{/if}
 	</section>
@@ -282,6 +383,56 @@
 	.tab:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
+	}
+	/* 27-01: the "My characters" filter bar (view-orchestration layer, above the grid).
+	   Styled with the same EQ-theme token set as DataGrid's .facet <select>. */
+	.filter-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		margin: 8px 0;
+	}
+	.filter-label {
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text);
+		opacity: 0.85;
+	}
+	.char-filter {
+		min-height: 44px; /* touch target */
+		padding: 8px 12px;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+		background: var(--panel);
+		color: var(--text);
+		font-family: var(--font-body);
+		font-size: 16px;
+		cursor: pointer;
+	}
+	.char-filter:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.filter-hint {
+		font-family: var(--font-body);
+		font-size: 14px;
+		opacity: 0.8;
+	}
+	.filter-hint a {
+		color: var(--accent);
+	}
+	/* Distinct copy when the filter is active but empties the grid — NOT the generic
+	   all-members "no data" StateBlock (Pitfall 3/5). */
+	.filter-empty {
+		font-family: var(--font-body);
+		font-size: 16px;
+		opacity: 0.85;
+		padding: 24px 0;
+		text-align: center;
 	}
 	.view-panel {
 		display: flex;

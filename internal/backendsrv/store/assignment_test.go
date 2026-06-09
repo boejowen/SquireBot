@@ -775,3 +775,55 @@ func TestListAssignmentsAndPendingRequests(t *testing.T) {
 		t.Errorf("ListPendingRequests = %+v, want one (Aaa, bob)", pending)
 	}
 }
+
+// TestIsCharAssignedToTx covers the Phase 28 character-tagged-wantlist IDOR guard
+// (T-28-01): (true,nil) when (characterID, callerID) is assigned; (false,nil) — NOT an
+// error — when the char is assigned to someone else, unassigned, or does not exist.
+func TestIsCharAssignedToTx(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	ownerID := insertOwner(t, ctx, db, "Guildie-A")
+	mineChar := insertChar(t, ctx, db, ownerID, "Mine", false)
+	othersChar := insertChar(t, ctx, db, ownerID, "Theirs", false)
+	unassignedChar := insertChar(t, ctx, db, ownerID, "Free", false)
+	insertWebUser(t, ctx, db, "member-1", "Member1")
+	insertWebUser(t, ctx, db, "member-2", "Member2")
+
+	// Seed: member-1 holds mineChar, member-2 holds othersChar (via the real claim path).
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		if e := ClaimCharTx(ctx, tx, mineChar, "member-1", 100); e != nil {
+			return e
+		}
+		return ClaimCharTx(ctx, tx, othersChar, "member-2", 100)
+	}); err != nil {
+		t.Fatalf("seed assignments: %v", err)
+	}
+
+	check := func(charID int64, caller string) (bool, error) {
+		var got bool
+		err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+			var e error
+			got, e = IsCharAssignedToTx(ctx, tx, charID, caller)
+			return e
+		})
+		return got, err
+	}
+
+	// Positive: member-1 holds mineChar → (true, nil).
+	if got, err := check(mineChar, "member-1"); err != nil || !got {
+		t.Errorf("IsCharAssignedToTx(mine, member-1) = (%v, %v), want (true, nil)", got, err)
+	}
+	// Negative: othersChar is member-2's, not member-1's → (false, nil).
+	if got, err := check(othersChar, "member-1"); err != nil || got {
+		t.Errorf("IsCharAssignedToTx(theirs, member-1) = (%v, %v), want (false, nil)", got, err)
+	}
+	// Negative: an unassigned char → (false, nil).
+	if got, err := check(unassignedChar, "member-1"); err != nil || got {
+		t.Errorf("IsCharAssignedToTx(unassigned, member-1) = (%v, %v), want (false, nil)", got, err)
+	}
+	// Negative: a non-existent character_id → (false, nil), NOT an error (sql.ErrNoRows path).
+	if got, err := check(int64(999999), "member-1"); err != nil || got {
+		t.Errorf("IsCharAssignedToTx(nonexistent, member-1) = (%v, %v), want (false, nil)", got, err)
+	}
+}

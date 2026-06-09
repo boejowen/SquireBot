@@ -62,6 +62,11 @@ var (
 	// ErrDuplicateRequest: a second pending request for the same (char, requester)
 	// collides on the partial-unique pending index.
 	ErrDuplicateRequest = errors.New("duplicate_request")
+	// ErrCharNotAssigned: the IDOR guard for the character-tagged wantlist (Phase 28,
+	// T-28-01). A member tried to tag a want to a character that is NOT assigned to them.
+	// IsCharAssignedToTx reports the (false, nil) condition; the handler (28-02) maps this
+	// sentinel to HTTP 403 when it decides to reject the tag.
+	ErrCharNotAssigned = errors.New("char_not_assigned")
 )
 
 // Assignment is one assigned character joined to its identity (ListMyAssignments /
@@ -101,6 +106,29 @@ func charSharedTx(ctx context.Context, tx *sql.Tx, characterID int64) (bool, err
 		return false, fmt.Errorf("check char shared (character_id=%d): %w", characterID, err)
 	}
 	return isBank == 1 || isBot == 1, nil
+}
+
+// IsCharAssignedToTx is the character-tagged-wantlist IDOR guard (Phase 28, T-28-01): it
+// reports whether characterID is assigned to callerID on the tx snapshot. The handler
+// (28-02) calls it inside its withTx BEFORE inserting a tagged want, so a member can only
+// tag a want to a character they actually hold — a `character_id` in the request body is
+// untrusted and authorized HERE, not in the handler glue. It mirrors charSharedTx exactly:
+// a missing/foreign assignment → (false, nil) (NOT an error — never leak existence); a real
+// (characterID, callerID) row → (true, nil); any other error is %w-wrapped. *sql.Tx (not
+// *sql.DB) so it runs under the same transaction as the subsequent insert (TOCTOU-safe).
+func IsCharAssignedToTx(ctx context.Context, tx *sql.Tx, characterID int64, callerID string) (bool, error) {
+	var one int
+	err := tx.QueryRowContext(ctx,
+		`SELECT 1 FROM character_assignment WHERE character_id = ? AND discord_user_id = ?`,
+		characterID, callerID,
+	).Scan(&one)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("check char assigned (character_id=%d): %w", characterID, err)
+	}
+	return true, nil
 }
 
 // ClaimCharTx self-claims an UNASSIGNED, non-shared char for callerID (D-06). It

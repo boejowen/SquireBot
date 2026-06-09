@@ -10,7 +10,7 @@
 - ✅ **v2.0** — "Off Google" — Website Frontend — Phases 11–16 (shipped 2026-05-31 as tag `v2.0.0`) — archive: [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md)
 - ✅ **v2.1** — Self-Service Watcher Linking — Phases 17–18 (shipped 2026-06-02 as tag `v2.1`) — archive: [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md)
 - 🔄 **v2.2** — Wantlist + Discord Pinger — Phases 19–25 (**Track 1 SHIPPED LIVE 2026-06-06** — Phases 19–21 deployed to api.squirebot.quest; Phases 24–25 quality/platform shipped; **Track 2 (Phases 22–23) PARKED — invite-gated** on the 3 Raid Alliance bot invites, not abandoned; milestone held open, **no tag** until Track 2 lands)
-- 🔄 **v2.3** — Character Assignment & Per-Character Wantlists — Phases 26–28 (opened 2026-06-08; associate users with characters, a "my characters" inventory filter, and character-tagged wantlists that roll up to the guildwide list — backend + web only, **watcher untouched**, new `00009` migration → schema **v9**)
+- 🔄 **v2.3** — Character Assignment & Per-Character Wantlists — Phases 26–28 (**all 3 phases SHIPPED + deployed live 2026-06-08/09** — character assignment, a "my characters" inventory filter, and character-tagged wantlists rolling up to the guildwide list; backend + web only, **watcher untouched**; migrations `00009` (P26 assignment) + `00010` (P28 wantlist `character_id`) → schema **v10**; **feature-complete, pending milestone audit/close**)
 
 ## Phases
 
@@ -292,7 +292,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | v2.0 | 6 | 29/29 | ✅ Shipped (tag `v2.0.0`; Google decommissioned) | 2026-05-31 |
 | v2.1 | 2 | 4/4 | ✅ Complete (Phases 17–18 shipped) | 2026-06-02 |
 | v2.2 | 6 | 13/TBD | 🔄 **Track 1 SHIPPED LIVE** (Phases 19–21 deployed 2026-06-06 + Phase 24 quality done); Track 2 (22–23) invite-gated, parked | — |
-| v2.3 | 3 | 0/TBD | 🔄 Planning (Phases 26–28; backend + web only, watcher untouched) | — |
+| v2.3 | 3 | 7/7 | ✅ Feature-complete — all 3 phases SHIPPED + deployed live (schema v10); pending milestone audit/close | 2026-06-09 |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -311,9 +311,9 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 23. Quest-Target Raid Monitor | v2.2 | 0/TBD | Not started (INVITE-GATED) | — |
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |
 | 25. Linux Watcher | v2.2 | 3/3 | ✅ Complete (25-03 done — OS-specific manifest assets + runtime.GOOS auto-update selection, tarball + systemd user unit + install.sh, additive release.yml linux build; linux closure CGO-free, Windows NSIS path + `go test ./...` unchanged) | Human UAT on a real Linux+WINE box (watch→upload→autostart→self-update) |
-| 26. Character Assignment | v2.3 | 0/3 | Planned (3 plans, 3 waves) | — |
+| 26. Character Assignment | v2.3 | 3/3 | ✅ SHIPPED — deployed live + browser-smoke PASS (ASSIGN-01..06) | 2026-06-08 |
 | 27. My-Characters Inventory Filter | v2.3 | 1/1 | ✅ SHIPPED — deployed live + browser-smoke PASS (MYVIEW-01/02) | 2026-06-08 |
-| 28. Character-Tagged Wantlist | v2.3 | 3/3 | ✅ Executed + verified(human_needed) — code-complete, gates green; live v9→v10 deploy + browser-smoke pending | — |
+| 28. Character-Tagged Wantlist | v2.3 | 3/3 | ✅ SHIPPED — deployed live v10 + browser-smoke PASS (CWANT-01..06) | 2026-06-09 |
 
 ## Backlog
 

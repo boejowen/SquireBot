@@ -21,7 +21,29 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Prior state (v1.x lineage):** v1.0 shipped 2026-05-11 (5 phases, 31 plans — installer + OAuth watcher + Apps Script Sheet); v1.0.1 patch 2026-05-12 (installer shim + officer-only eviction + test/doc debt); v1.0.2 binary 2026-05-13 (robustness polish — milestone close superseded by the v2.0 pivot). Archives in `.planning/milestones/`. The v1 Google-Sheet system is now decommissioned.
 
-## Current Milestone: v2.2 — Wantlist + Discord Pinger
+## Shipped: v2.3 — Character Assignment & Per-Character Wantlists (2026-06-09)
+
+**Goal (MET):** Associate SquireBot users with specific characters, let them view those characters' inventory, and create character-tagged wantlist items that roll up to the guildwide wantlist. All three delivered, deployed live (schema v10), browser-smoke verified; the milestone audit PASSED 2026-06-09 (14/14 requirements · 3/3 phases · 6/6 integration). Archive: `milestones/v2.3-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`.
+
+**What shipped (Phases 26–28, 7 plans, 2 days):**
+- **Character assignment** — members self-claim/release their characters (including ones uploaded under an unlinked/legacy owner); officers assign/reassign/remove + approve/deny requests + designate bank/bot characters from the admin panel. `00009` migration (schema v9): `character_assignment` (single-assignee PK), `assignment_request`, `character.is_guild_bot`, idempotent auto-seed; every change audited.
+- **"My characters" inventory filter** — an additive client-side quick-filter + single-character drill-down over the all-members consolidated views; visibility stays all-members (CLAUDE.md consolidated-views rule intact, zero backend change).
+- **Character-tagged wantlist** — wants gain an optional character dimension (`00010` migration → schema v10; nullable `character_id` with COALESCE dedup, existing wants backfill to NULL with no data loss); tagged wants aggregate into the guildwide wantlist with per-want character + owner attribution; member filter/group-by-character; the EC-monitor DM still targets the character's OWNER (embed names the character via a display-only "For <char>" field).
+
+**Scope:** backend (`internal/backendsrv`) + web (`web/`). The Go **watcher was untouched** (backend-only schema; no `WatcherMaxSchemaVersion` concern).
+
+**Locked decisions (2026-06-08):**
+- Assignment = **both** (member self-claim + officer assign/override); single-assignee PK + officer-only bank/bot designation (ASSIGN-05 resolved).
+- Inventory = **all-members views + a "my characters" filter** (additive; consolidated-views rule preserved).
+- Wantlist = **character-tagged wants** rolling up to the guildwide list (with character/owner attribution, private `note` excluded — CWANT-04 resolved); DM still to the owner (the embed names the character — CWANT-05 resolved).
+
+**Carry-forward fix:** 999.33 (officer-reversible bank/bot designation) resolved + deployed live 2026-06-09 via quick `260609-d2o`. Deferred: 999.34 cosmetic LOWs/NITs + 2 account-specific UATs (non-blocking).
+
+**Next milestone:** undefined — start via `/gsd-new-milestone`. v2.2 Track 2 (the Discord pinger WTS/raid monitors, Phases 22–23) remains parked on the 3 Raid Alliance bot invites.
+
+## In Progress (parked): v2.2 — Wantlist + Discord Pinger
+
+**Status (2026-06-08):** Track 1 **SHIPPED LIVE** (Phases 19–21: per-user wantlist CRUD, notifications/DM infrastructure, EC-tunnel auction monitor). Track 2 (Phases 22–23: cross-server WTS + quest-target raid monitors) is **PARKED on the 3 Raid Alliance Discord bot invites** — deferred to revisit when the invites land, NOT abandoned. v2.3 opened ahead of v2.2's full close because Track 2 is invite-gated. (Phases 24 test-hardening + 25 Linux watcher also shipped under this window; watcher released as `v2.1.1` 2026-06-08.)
 
 **Goal:** Guildies maintain a personal wantlist on squirebot.quest and get DMed on Discord when a wanted item appears — at EC-tunnel auction, in cross-server WTS channels, or as a raid-target tied to a wanted item's quest. (Backlog 999.12 / WANT-01..08 — the long-deferred "v2 feature," unblocked now that per-user Discord identity is paid by AUTH-09 + LINK-02.)
 
@@ -143,6 +165,12 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 - ✓ `mint-code` CLI removed; self-service is the only mint path (LINK-06) — v2.1
 - ✓ Watcher cleanups verify-or-closed — gofmt (WATCH-12), `freeConsole()` doc/impl + Debug-not-Warn (WATCH-13), SemVer-aware `IsNewer` (WATCH-14) — v2.1
 
+**v2.3 — Character Assignment & Per-Character Wantlists (shipped 2026-06-09)** — full 14-REQ-ID reconciliation in `milestones/v2.3-REQUIREMENTS.md`.
+
+- ✓ Character assignment — members self-claim/release; officers assign/reassign/remove + approve/deny + designate bank/bot from the admin panel; `00009` migration (schema v9): `character_assignment` (single-assignee PK), `assignment_request`, `character.is_guild_bot`; IDOR-safe + audited (ASSIGN-01..06) — v2.3
+- ✓ "My characters" inventory filter — additive client-side quick-filter + single-character drill-down over the all-members consolidated views; consolidated-views rule intact, zero backend change (MYVIEW-01, MYVIEW-02) — v2.3
+- ✓ Character-tagged wantlist — optional `character_id` on `wantlist_item` (`00010` → schema v10, NULL backfill, COALESCE dedup); guildwide roll-up with character/owner attribution; member filter/group-by-character; EC-monitor DM still targets the owner (embed names the character) (CWANT-01..06) — v2.3
+
 ### Active
 
 <!-- v2.2 Wantlist + Discord Pinger — requirements being defined (see REQUIREMENTS.md). -->
@@ -245,6 +273,9 @@ _Still deferred after v2.0. v2.0 pre-paid prerequisite #3 (per-user Discord iden
 | **v2.0: single-bank-toon invariant enforced at the store seam** (P16 MD-01) | `compute.Bank` assumes exactly one bank toon; `SetCharMetaTx` enforced no uniqueness, so flagging 2+ would silently merge bank-view rows. Setting `is_bank_toon=true` now clears it on all other chars in the same tx (matches v1's single-value `_meta.bank_toon_name`). | ✓ Good (fixed post-close in `0e31023` + store regression tests) |
 | **v2.1: self-mint owner derived server-side from the Discord session, never client-supplied** (P17 D-02) | The v1 `mint-code --owner <free-text>` path is an identity-spoofing hazard; the self-service endpoint instead resolves the owner from `caller(ctx)` (the session `discord_user_id`) via resolve-or-create-owner (adopt-by-label / create-fresh / refuse-on-ambiguity). Link code stays the reusable bearer token (no watcher change). | ✓ Good (live; owner-scoped list/revoke close IDOR; `mint-code` CLI removed) |
 | **v2.1: verify-or-close phases verify against LIVE state, not carried-forward notes** (P18) | The "maintainer's watcher stuck on 0.4.0-rc1" residual was carried from the v2.0 close into v2.1's requirements/roadmap/plan before anyone checked it. A live `watcher_version` query + registry check debunked it (the box was a disposable Azure test VM). | ✓ Good (zero rework shipped; cheap checks beat trusting stale notes — now a documented retro pattern) |
+| **v2.3: single-assignee `character_assignment` PK + officer-only bank/bot designation** (P26, ASSIGN-05 resolved) | A character maps to one assignee; the shared-bank case is handled by officer-only bank/bot designation rather than a many-to-many owner layer — simpler model, no schema rework needed to flip it. | ✓ Good (live; audited; surfaced the 999.33 panel-reachability gap, fixed same milestone) |
+| **v2.3: "my characters" inventory view is an ADDITIVE filter, NOT access control** (P27) | The all-members consolidated views (CLAUDE.md LOCKED — per-character view tabs would breach Google's old 200-tab limit; the rule carries to the web DataGrid) stay all-members-visible; "my characters" is a client-side `<select>` filter feeding the single reusable grid pre-filtered data. | ✓ Good (live; zero backend change; no row hidden from any member) |
+| **v2.3: character-tagged wantlist with COALESCE dedup + IDOR guard + owner-DM invariant** (P28) | `character_id` on `wantlist_item` is NULLABLE (`00010`/v10; existing wants backfill to NULL, COALESCE(character_id,-1) keys the dedup index); `AddWantHandler`'s `IsCharAssignedToTx` rejects forged tags (403); the EC-monitor DM still targets the want OWNER (`discord_user_id`) — the P28 LEFT JOIN supplies only a display "For <char>" embed field. | ✓ Good (live, schema v10; integration verdict CLEAN; owner-DM invariant holds in code) |
 
 ## Evolution
 
@@ -258,7 +289,7 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections (done for v1.0 → 2026-05-11, v1.0.1 → 2026-05-12, v2.0 → 2026-05-31, v2.1 → 2026-06-02)
+1. Full review of all sections (done for v1.0 → 2026-05-11, v1.0.1 → 2026-05-12, v2.0 → 2026-05-31, v2.1 → 2026-06-02, v2.3 → 2026-06-09)
 2. Core Value check — still the right priority? (✓ unchanged at v2.0; "what's missing, where is it in the guild" is still the load-bearing question — now answered via the website, not the Sheet)
 3. Audit Out of Scope — reasons still valid? (✓ at v2.0; the Sheet-phrased reasons were refreshed to the website, and Postgres + "Sign in with Google" added; Wantlist/pinger still validly deferred)
 4. Update Context with current state (✓ at v2.0 — now a Go backend + SvelteKit frontend + Google-free watcher; Sheet/Apps Script decommissioned)
@@ -266,4 +297,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-02 — v2.2 "Wantlist + Discord Pinger" milestone opened (continues phase numbering from 18; research-first).*
+*Last updated: after v2.3 milestone (2026-06-09) — v2.3 "Character Assignment & Per-Character Wantlists" (Phases 26–28) SHIPPED + deployed live (schema v10), milestone audit PASSED, archived to `milestones/v2.3-*`. Next milestone undefined. v2.2 Track-2 (Discord pinger WTS/raid monitors) still parked on the Raid Alliance bot invites.*

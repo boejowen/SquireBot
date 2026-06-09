@@ -143,4 +143,34 @@ Known deferred items at close: deferred HUMAN-UAT smokes for P12/P14/P15 (see ST
 
 ---
 
-*This file accumulates one entry per shipped milestone. Next entry: the post-v2.1 milestone (top candidate: the v2 Wantlist + Discord pinger 999.12 / WANT-01..08, whose per-user Discord-identity prerequisite is now fully pre-paid) — start via `/gsd-new-milestone`.*
+## v2.3 — Character Assignment & Per-Character Wantlists
+
+**Shipped:** 2026-06-09
+**Archive:** [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md) · [`milestones/v2.3-REQUIREMENTS.md`](milestones/v2.3-REQUIREMENTS.md) · [`milestones/v2.3-MILESTONE-AUDIT.md`](milestones/v2.3-MILESTONE-AUDIT.md)
+
+**Stats:** 3 phases · 7 plans (26: 3, 27: 1, 28: 3) · 2-day timeline (2026-06-08 → 2026-06-09) · 14/14 requirements satisfied (ASSIGN-01..06, MYVIEW-01/02, CWANT-01..06) · schema **v9** (`00009`, P26) + **v10** (`00010`, P28) · deployed live to `squirebot.quest` · backend + web only (the Go **watcher is UNTOUCHED**)
+
+| Phase | Name | Outcome | Date |
+|-------|------|---------|------|
+| 26 | Character Assignment | Live, schema v9 (`00009`); browser-smoke PASS | 2026-06-08 |
+| 27 | My-Characters Inventory Filter | Live (web-only); browser-smoke PASS | 2026-06-08 |
+| 28 | Character-Tagged Wantlist | Live, schema v10 (`00010`); browser-smoke PASS | 2026-06-09 |
+
+**Key accomplishments:**
+
+1. **Character assignment, live** — members self-claim/release the characters they play (including ones uploaded under an unlinked/legacy owner); officers assign/reassign/remove + approve/deny requests + designate bank/bot characters from the admin panel. Backed by `00009` (schema v9): `character_assignment` (single-assignee PK), `assignment_request`, `character.is_guild_bot`, idempotent auto-seed; every change audited.
+2. **"My characters" inventory filter** — an additive client-side quick-filter + single-character drill-down over the existing all-members consolidated views, with all-members visibility preserved (consolidated-views architecture rule LOCKED and intact — zero backend change).
+3. **Character-tagged wantlist** — wants gain an optional character dimension (`00010` → schema v10; nullable `character_id` with COALESCE dedup, existing wants backfill to NULL with no data loss); tagged wants roll up into the guildwide wantlist with per-want character + owner attribution.
+4. **EC embed names the character, owner-DM invariant preserved** — the EC-tunnel monitor DM still targets the want's OWNER (`discord_user_id`); the P28 LEFT JOIN supplies only a display-only "For <char>" embed field.
+5. **IDOR-guarded tagging** — `AddWantHandler`'s `IsCharAssignedToTx` reads P26's `character_assignment` table; a forged tag (tagging a character not yours) returns 403; the tag `<select>` only ever offers the caller's own characters.
+6. **999.33 officer-reversible-designation fix** — surfaced a "Designated characters / Clear designation" section in the officer panel (`ListDesignatedChars` read + officer-only `GET /api/v1/admin/characters/designated`) so a bank/bot character can be returned to `mode:none` from the UI; closed the original one-way-door UI reachability gap. Resolved + deployed live 2026-06-09 (quick `260609-d2o`).
+
+**Requirements coverage:** 14/14 (ASSIGN-01..06 → P26 · MYVIEW-01/02 → P27 · CWANT-01..06 → P28) — all satisfied + UAT-verified.
+
+**Status:** SHIPPED. Milestone audit PASSED 2026-06-09 (14/14 requirements · 3/3 phases · 6/6 integration · 3/3 flows). Cross-phase integration verdict CLEAN.
+
+**Known deferred items:** 999.34 cosmetic LOWs/NITs (forged-tag generic error, account-level `"character_id":null` audit noise, naming/comment nits) + 2 account-specific UATs (Phase 27 zero-claimed-characters hint, Phase 26 non-officer `/admin` 403 collapse) + the organic EC-embed confirmation — none affect correctness, security, or data (see ROADMAP backlog).
+
+---
+
+*This file accumulates one entry per shipped milestone. Next entry: the post-v2.3 milestone (next milestone undefined; v2.2 Track 2 — the Discord pinger WTS/raid monitors, Phases 22–23 — remains parked on the 3 Raid Alliance bot invites) — start via `/gsd-new-milestone`.*

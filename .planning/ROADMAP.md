@@ -10,7 +10,7 @@
 - ✅ **v2.0** — "Off Google" — Website Frontend — Phases 11–16 (shipped 2026-05-31 as tag `v2.0.0`) — archive: [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md)
 - ✅ **v2.1** — Self-Service Watcher Linking — Phases 17–18 (shipped 2026-06-02 as tag `v2.1`) — archive: [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md)
 - 🔄 **v2.2** — Wantlist + Discord Pinger — Phases 19–25 (**Track 1 SHIPPED LIVE 2026-06-06** — Phases 19–21 deployed to api.squirebot.quest; Phases 24–25 quality/platform shipped; **Track 2 (Phases 22–23) PARKED — invite-gated** on the 3 Raid Alliance bot invites, not abandoned; milestone held open, **no tag** until Track 2 lands)
-- 🔄 **v2.3** — Character Assignment & Per-Character Wantlists — Phases 26–28 (**all 3 phases SHIPPED + deployed live 2026-06-08/09** — character assignment, a "my characters" inventory filter, and character-tagged wantlists rolling up to the guildwide list; backend + web only, **watcher untouched**; migrations `00009` (P26 assignment) + `00010` (P28 wantlist `character_id`) → schema **v10**; **feature-complete, pending milestone audit/close**)
+- ✅ **v2.3** — Character Assignment & Per-Character Wantlists — Phases 26–28 (shipped 2026-06-09) — archive: [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md)
 
 ## Phases
 
@@ -105,23 +105,20 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 - [x] **Phase 24: Watcher test hardening (C1/C2 coverage)** — quality/tech-debt; close the Church audit's two CRITICAL coverage gaps (spellbook-upload path tests + `eqfind` walk tests) via a twin-handler refactor. Independent of the wantlist track — can run anytime. ✅ 2026-06-03
 - [x] **Phase 25: Linux Watcher** — cross-cutting platform; a headless, fully-static (CGO-free) `linux/amd64` watcher build for guildies running P99 under WINE — Linux impls behind the existing build-tag seams (0600-file credential, WINE-prefix EQ discovery, CLI onboarding, XDG paths) + a tarball/systemd-user-unit/install.sh. Additive — Windows build unchanged. (LNX-01..06)
 
-### 🔄 v2.3 — Character Assignment & Per-Character Wantlists (Phases 26–28)
+<details>
+<summary>✅ v2.3 — Character Assignment & Per-Character Wantlists (Phases 26–28) — SHIPPED 2026-06-09</summary>
 
-**Milestone Goal:** Associate SquireBot users with specific characters, let them view those characters' inventory, and create character-tagged wantlist items that roll up to the guildwide wantlist.
+Full details in [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md).
 
-**Scope:** backend (`internal/backendsrv`) + web (`web/`) ONLY. The Go **watcher is UNTOUCHED** — backend-only schema change; **no `WatcherMaxSchemaVersion` concern**. New goose migration `00009` → schema **v9** (additive/extend-only, version-stamped, idempotent; `character_id` on `wantlist_item` is NULLABLE — existing wants backfill to NULL with no data loss).
+**Milestone Goal:** Associate SquireBot users with specific characters, let them view those characters' inventory, and create character-tagged wantlist items that roll up to the guildwide wantlist. Goal MET — all 3 phases shipped + deployed live; backend + web only, **watcher untouched**; migrations `00009` (P26 assignment, schema v9) + `00010` (P28 wantlist `character_id`, schema **v10**). Milestone audit PASSED 2026-06-09.
 
-**Builds on (verified in code, do not rebuild):** `character.owner_id → owner.discord_user_id → web_user` already links each character to one upload-owner; v2.3 adds the explicit claim/assign surface (likely a many-to-many `character_assignment` layer over upload provenance). Read views stay **all-members consolidated** (CLAUDE.md LOCKED) — MYVIEW is an ADDITIVE filter, NOT access control. `wantlist_item` (00006) is per-user; v2.3 adds the optional character dimension. The EC-tunnel monitor (`internal/backendsrv/ec`) still DMs the **owner** (notifications key on `discord_user_id`).
+- [x] **Phase 26: Character Assignment** (3 plans) — `character_assignment` layer (`00009`, schema v9, single-assignee PK); member self-claim/release + officer assign/reassign/designate API (IDOR-safe, audited); "My characters" + officer admin panel. (ASSIGN-01..06) ✅ 2026-06-08
+- [x] **Phase 27: My-Characters Inventory Filter** (1 plan) — additive "my characters" quick-filter + single-character drill-down over the all-members consolidated views; consolidated-views rule intact, zero backend change. (MYVIEW-01/02) ✅ 2026-06-08
+- [x] **Phase 28: Character-Tagged Wantlist** (3 plans) — optional `character_id` on `wantlist_item` (`00010`, schema v10, NULL backfill, COALESCE dedup); tagged wants roll up to the guildwide list with owner/char attribution; EC-monitor DM still targets the owner (embed names the character). (CWANT-01..06) ✅ 2026-06-09
 
-**Locked decisions (2026-06-08):** assignment = **BOTH** member self-claim + officer assign/override; inventory = **all-members views + a "my characters" filter** (additive); wantlist = **character-tagged** wants rolling up to the guildwide list, DM still to the owner.
+**Total:** 7 plans · 3 phases · 14/14 requirements satisfied. Plus carry-forward fix 999.33 (officer-reversible bank/bot designation) shipped via quick `260609-d2o` 2026-06-09.
 
-**Open sub-decisions (resolve in spec/plan, flagged on the phases):** multi-user assignment for shared bank toons (ASSIGN-05, Phase 26); whether the guildwide wantlist displays character/owner attribution (CWANT-04, Phase 28); whether the EC-monitor embed names the character (CWANT-05, Phase 28).
-
-**Execution order:** strict dependency chain — **26 → 27 → 28**. The character-assignment data layer (P26) is the foundation BOTH the my-characters filter (P27) and the character-tagged wantlist (P28) build on — each needs the authoritative "which characters are mine" answer.
-
-- [ ] **Phase 26: Character Assignment** — the data-layer foundation: `00009` migration (schema v9) adding the `character_assignment` layer; member self-claim/release + officer assign/reassign API (IDOR-safe, owner/officer-scoped, audited); the assign/claim UI ("My characters" + officer admin panel). (ASSIGN-01..06)
-- [ ] **Phase 27: My-Characters Inventory Filter** — an ADDITIVE "my characters" quick-filter + single-character drill-down over the existing all-members consolidated views; visibility stays all-members (consolidated-views rule intact). (MYVIEW-01, MYVIEW-02)
-- [ ] **Phase 28: Character-Tagged Wantlist** — the wantlist gains an OPTIONAL character dimension (NULLABLE `character_id` on `wantlist_item`, existing wants backfill to NULL); character-tagged wants roll up into the guildwide wantlist; per-user filter/group-by-character; the EC-monitor DM still targets the owner. (CWANT-01..06)
+</details>
 
 ## Phase Details
 
@@ -228,57 +225,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   - [x] 25-02-PLAN.md — Linux runtime impls: 0600-file credstore + WINE-prefix eqfind walk + CLI --setup/--status onboarding + new unit tests (LNX-02/03/04/06) ✅ 2026-06-06
   - [x] 25-03-PLAN.md — packaging + auto-update: release.yml linux build/tarball/systemd-unit/install.sh + manifest OS-asset selection (LNX-05) ✅ 2026-06-06
 
-### Phase 26: Character Assignment
-**Goal**: Members can self-claim the characters they play (including ones uploaded under an unlinked/legacy owner) and officers can assign/override/reassign any character from the admin panel — backed by a versioned, audited assignment data layer.
-**Milestone**: v2.3
-**Track**: Foundation (everything in v2.3 depends on this — "which characters are mine" is the load-bearing answer)
-**Depends on**: Nothing in v2.3 (builds on the live v2.0/v2.1 platform — `character.owner_id → owner.discord_user_id → web_user`, the `webadmin/account.go` IDOR-safe pattern, the Discord-OAuth session identity, the officer-gate from ADMIN-04..06, and the audit-log seam)
-**Requirements**: ASSIGN-01, ASSIGN-02, ASSIGN-03, ASSIGN-04, ASSIGN-05, ASSIGN-06
-**Open sub-decision (resolve in spec/plan)**: ASSIGN-05 — single- vs multi-owner for shared bank toons (likely a many-to-many `character_assignment` table layered over `owner_id`); do NOT force single-vs-multi in the roadmap.
-**Success Criteria** (what must be TRUE):
-  1. A signed-in member sees "My characters" — the list of characters currently assigned to them — and can self-claim a character (including one uploaded under an unlinked/legacy owner, or currently unassigned) so it appears under "My characters" (ASSIGN-01, ASSIGN-02).
-  2. A member can release/unclaim a character they hold, returning it to unassigned so it (or an officer) can reassign it (ASSIGN-03).
-  3. An officer can assign any character to any member, and reassign/override an existing assignment, from the admin panel — gated by the existing officer check, IDOR-safe (ASSIGN-04).
-  4. The model supports the shared-bank-toon case per the ASSIGN-05 spec decision (single- vs multi-owner resolved at plan time) without a schema rework being needed to flip it.
-  5. Every assignment change (self-claim, release, officer assign/reassign) is recorded in the audit log with actor, character, action, and time (ASSIGN-06).
-  6. The `00009` goose migration applies idempotently on the live DB, stamping schema v9 and adding the `character_assignment` layer without disturbing the existing schema or any current data.
-**Plans**: 3 plans
-  - [ ] 26-01-PLAN.md — migration 00009 (character_assignment + assignment_request + is_guild_bot, auto-seed) + store layer (claim/release/request/officer/designate + reads) + is_bank_toon reconciliation (relax single-bank invariant)
-  - [ ] 26-02-PLAN.md — backend API: member claim/release/request handlers (RequireSession, IDOR-safe) + officer assign/reassign/remove/approve/deny/designate (RequireOfficer + in-tx IsOfficerTx) + 12 routes + char-meta de-bank-toon + audit
-  - [ ] 26-03-PLAN.md — web UI: api.ts wrappers + 'My characters' member panel/route/nav + officer assignment admin section + CharMetaForm bank-toon removal
-**UI hint**: yes
-
-### Phase 27: My-Characters Inventory Filter
-**Goal**: A member can narrow the existing all-members consolidated views to just their assigned characters — a "my characters" quick-filter plus a single-character drill-down — as a purely ADDITIVE convenience, with all-members visibility unchanged.
-**Milestone**: v2.3
-**Track**: Read-view (additive filtering only — NOT an access-control change; consolidated-views rule LOCKED)
-**Depends on**: Phase 26 (needs the authoritative "which characters are mine" assignment data to drive the filter)
-**Requirements**: MYVIEW-01, MYVIEW-02
-**Success Criteria** (what must be TRUE):
-  1. A member can apply a "my characters" quick-filter to the consolidated views (inventory/bank/gear/spell) so they see only their assigned characters' rows — WITHOUT changing the existing all-members visibility (any member can still toggle back to all members) (MYVIEW-01).
-  2. A member can drill into a single specific assigned character's inventory from that filter (MYVIEW-02).
-  3. The filter is client-side/read-only over the existing consolidated DataGrid — no per-character view tabs are created and no row becomes hidden from other members (the consolidated-views architecture rule is preserved).
-**Plans**: 1 plan
-  - [x] 27-01-PLAN.md — pure myview.ts filter helper + node test, then the single 'My characters' <select> (All members / My characters / per-char drill-down) wired into +page.svelte feeding the four grids pre-filtered data (zero backend change) ✅ 2026-06-08
-**UI hint**: yes
-
-### Phase 28: Character-Tagged Wantlist
-**Goal**: Wants gain an optional character dimension — a member can tag a want to one of their assigned characters, those wants roll up into the guildwide wantlist alongside untagged/pre-existing wants, and the member can filter/group their own wantlist by character — while the EC-tunnel monitor DM still targets the character's OWNER.
-**Milestone**: v2.3
-**Track**: Wantlist (the `00010`/schema-v10 `character_id` touch lands here — NOT 00009; 00009 shipped as character_assignment in P26)
-**Depends on**: Phase 26 (the "my assigned characters" set is what a want can be tagged to). Reuses the live v2.2 `wantlist_item` (00006), the EC-tunnel monitor (`internal/backendsrv/ec` + `wantmatch.ForItem`), and the `notify`/`alert_log` spine.
-**Requirements**: CWANT-01, CWANT-02, CWANT-03, CWANT-04, CWANT-05, CWANT-06
-**Resolved sub-decisions (locked 2026-06-08)**: CWANT-04 — the guildwide wantlist SHOWS per-want character + owner (`web_user.username`) attribution, EXCLUDING the private `note`; CWANT-05 — the EC-monitor embed NAMES the character via a display-only "For <char>" field (the DM target stays the owner `discord_user_id`, structurally unchanged).
-**Success Criteria** (what must be TRUE):
-  1. When adding a wantlist item, a member can OPTIONALLY tag it to one of their assigned characters; wants with no character (account-level) and all pre-existing wants remain valid — the `00010` migration backfills existing `wantlist_item` rows to a NULL `character_id` with no data loss (CWANT-01, CWANT-02).
-  2. Character-tagged wants aggregate ("filter up") into the guildwide wantlist alongside untagged wants; the guildwide list surfaces character/owner attribution per the CWANT-04 spec decision (CWANT-03, CWANT-04).
-  3. A member can filter/group their own wantlist by character (CWANT-06).
-  4. The EC-tunnel monitor DM for a character-tagged want still targets the character's OWNER (keys on `discord_user_id`); whether the embed names the character follows the CWANT-05 spec decision (CWANT-05).
-**Plans**: 3 plans
-  - [x] 28-01-PLAN.md — migration 00010 (nullable character_id + COALESCE-keyed dedup-index rewrite) + store (AddWantTx/ListOwnWants +char, NEW ListGuildWants) + the IsCharAssignedToTx IDOR guard + ErrCharNotAssigned
-  - [x] 28-02-PLAN.md — API: AddWantHandler IDOR guard + ListGuildWantsHandler + GET /api/v1/wantlist/guild route; wantmatch.Hit.CharacterName LEFT JOIN (DM target unchanged) + EC embed "For <char>" field
-  - [x] 28-03-PLAN.md — web: api.ts char fields + fetchGuildWants; pure groupByChar.ts + node test; WantAddForm character <select>; WantlistPanel My/Guild toggle + group-by-char
-**UI hint**: yes
+_v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter, 28 Character-Tagged Wantlist) — SHIPPED 2026-06-09; collapsed into the v2.3 `<details>` block above. Full per-phase goals, success criteria, and plan lists in [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md)._
 
 ## Progress
 
@@ -345,4 +292,4 @@ Carried forward from v1.0 / v1.0.1 / v1.0.2 (candidates for a future Sheet-ortho
 
 ---
 
-*Roadmap created: 2026-04-30. v1.0 shipped: 2026-05-11. v1.0.1 shipped: 2026-05-12. v1.0.2 binary shipped: 2026-05-13. v2.0 "Off Google" shipped 2026-05-31, Phases 11–16; milestone archived (`milestones/v2.0-ROADMAP.md`). v2.1 "Self-Service Watcher Linking" shipped 2026-06-02 (Phases 17–18). Last reorganized: 2026-06-02 — appended v2.2 "Wantlist + Discord Pinger" milestone (Phases 19–23); 8/8 v2.2 requirements mapped (Track 1 unblocked: WANT-01/02/03/04/05/08 across Phases 19–21; Track 2 invite-gated: WANT-06/07 across Phases 22–23); Phase 19 ready to plan. **2026-06-08: appended v2.3 "Character Assignment & Per-Character Wantlists" (Phases 26–28); 14/14 v2.3 requirements mapped (ASSIGN-01..06 → P26 · MYVIEW-01/02 → P27 · CWANT-01..06 → P28); v2.2 Track 2 (Phases 22–23) explicitly marked PARKED/invite-gated; Phase 26 ready to plan.***
+*Roadmap created: 2026-04-30. v1.0 shipped: 2026-05-11. v1.0.1 shipped: 2026-05-12. v1.0.2 binary shipped: 2026-05-13. v2.0 "Off Google" shipped 2026-05-31, Phases 11–16; milestone archived (`milestones/v2.0-ROADMAP.md`). v2.1 "Self-Service Watcher Linking" shipped 2026-06-02 (Phases 17–18). Last reorganized: 2026-06-02 — appended v2.2 "Wantlist + Discord Pinger" milestone (Phases 19–23); 8/8 v2.2 requirements mapped (Track 1 unblocked: WANT-01/02/03/04/05/08 across Phases 19–21; Track 2 invite-gated: WANT-06/07 across Phases 22–23); Phase 19 ready to plan. **2026-06-09: v2.3 "Character Assignment & Per-Character Wantlists" (Phases 26–28) SHIPPED + deployed live (schema v10); milestone audit PASSED (14/14 requirements; ASSIGN-01..06 → P26 · MYVIEW-01/02 → P27 · CWANT-01..06 → P28); detail collapsed + archived to `milestones/v2.3-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. v2.2 Track 2 (Phases 22–23) remains PARKED/invite-gated. Next milestone undefined.***

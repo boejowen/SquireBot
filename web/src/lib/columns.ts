@@ -25,7 +25,7 @@
 import type { ColumnDef, Row } from '@tanstack/table-core';
 import { renderComponent } from '$lib/table';
 import { wikiUrlFor } from '$lib/tooltip/composeNotes';
-import type { ViewRow, GearCheckRow, SpellCheckRow, WantlistRow } from '$lib/api';
+import type { ViewRow, GearCheckRow, SpellCheckRow, WantlistRow, GuildWantRow } from '$lib/api';
 import { priorityRank } from '$lib/wantlist/priority';
 import type { Holder } from '$lib/wantlist/holders';
 import StatusCell from '$lib/components/StatusCell.svelte';
@@ -272,6 +272,58 @@ export function wantlistColumns(
 			enableGlobalFilter: false,
 			cell: (ctx) =>
 				renderComponent(WantRemoveCell, { row: ctx.row.original, onRemove, busy: removeBusy })
+		}
+	];
+}
+
+// --- guild wantlist (CWANT-03/04 guildwide roll-up) -----------------------
+// The /wantlist "Guild" toggle grid: EVERY active want across ALL members, with
+// owner (username) + character attribution. Distinct from wantlistColumns: it's
+// read-only (no Remove / Mute — not the caller's rows to mutate), it adds an Owner
+// column and a Character column, and it surfaces NO Note (T-28-12 — the GuildWantRow
+// API shape carries no note; the client cannot render a column the server omits).
+// Still ONE DataGrid (CLAUDE.md consolidated-views LOCK — a client toggle, not a tab).
+
+/** Custom TanStack sortingFn for the guild grid: order Priority by rank, not alpha. */
+function guildPrioritySort(a: Row<GuildWantRow>, b: Row<GuildWantRow>): number {
+	return priorityRank(a.original.priority) - priorityRank(b.original.priority);
+}
+
+/**
+ * Build the guildwide wantlist ColumnDef[]. Owner · Character · Priority · Item ·
+ * Reason. Owner + character names render via plain accessor strings (TanStack
+ * auto-escapes the text node) — NEVER {@html} (T-28-10). An account-level want shows
+ * a blank Character cell. No Note column (private, excluded server-side, T-28-12).
+ */
+export function guildWantlistColumns(): ColumnDef<GuildWantRow, unknown>[] {
+	return [
+		{ id: 'owner', accessorKey: 'owner', header: 'Owner', meta: { filter: 'facet' } },
+		{
+			id: 'character',
+			// Account-level wants (character_id null) render a blank Character cell.
+			accessorFn: (row) => row.character_name ?? '',
+			header: 'Character',
+			meta: { filter: 'facet' }
+		},
+		{
+			id: 'priority',
+			accessorKey: 'priority',
+			header: 'Priority',
+			sortingFn: guildPrioritySort,
+			meta: { filter: 'facet' },
+			cell: (ctx) => renderComponent(PriorityCell, { priority: ctx.row.original.priority })
+		},
+		{
+			id: 'item',
+			accessorKey: 'item_name',
+			header: 'Item'
+		},
+		{
+			id: 'reason',
+			accessorKey: 'reason',
+			header: 'Reason',
+			meta: { filter: 'facet' },
+			cell: (ctx) => renderComponent(ReasonCell, { reason: ctx.row.original.reason })
 		}
 	];
 }

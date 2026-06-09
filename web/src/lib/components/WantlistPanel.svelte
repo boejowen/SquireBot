@@ -21,16 +21,19 @@
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import WantAddForm from './WantAddForm.svelte';
 	import { AUTH_GUARD_KEY, type AuthGuard } from './AuthGate.svelte';
-	import { wantlistColumns } from '$lib/columns';
+	import { wantlistColumns, guildWantlistColumns } from '$lib/columns';
 	import { holdersFor, type Holder } from '$lib/wantlist/holders';
+	import { groupByChar, ACCOUNT_LEVEL, type CharSelection } from '$lib/wantlist/groupByChar';
 	import {
 		fetchOwnWants,
+		fetchGuildWants,
 		fetchView,
 		removeWant,
 		muteWant,
 		classifyAdminError,
 		Unauthenticated,
 		type WantlistRow,
+		type GuildWantRow,
 		type ViewRow
 	} from '$lib/api';
 
@@ -40,6 +43,30 @@
 	let phase = $state<Phase>('loading');
 	let wants = $state<WantlistRow[]>([]);
 	let viewRows = $state<ViewRow[]>([]);
+
+	// CWANT-03/04 My/Guild toggle. 'mine' (default) = the caller's own wants; 'guild' =
+	// the all-members roll-up (lazy-loaded the first time the toggle flips to Guild, then
+	// cached — server-truth, never optimistic-mutate). The toggle is a client-side view
+	// switch over the SAME single DataGrid (CLAUDE.md consolidated-views LOCK), NOT a tab.
+	type WantView = 'mine' | 'guild';
+	let wantView = $state<WantView>('mine');
+	let guildWants = $state<GuildWantRow[]>([]);
+	let guildLoaded = $state(false);
+	let guildLoading = $state(false);
+	let guildError = $state('');
+
+	// CWANT-06 group/filter MY wantlist by character. `charFilter`: null = All characters;
+	// a number = that character_id; ACCOUNT_LEVEL = the untagged (account-level) wants.
+	// Bound as a STRING ('' = all, 'account' = account-level, else a character_id), coerced
+	// to the CharSelection the pure groupByChar helper takes.
+	let charFilterValue = $state('');
+	let charFilter = $derived<CharSelection>(
+		charFilterValue === ''
+			? null
+			: charFilterValue === 'account'
+				? ACCOUNT_LEVEL
+				: Number(charFilterValue)
+	);
 
 	// Add announce (polite aria-live).
 	let addAnnounce = $state('');
@@ -88,6 +115,54 @@
 		{ id: 'priority', desc: true },
 		{ id: 'in_guild', desc: false }
 	];
+
+	// CWANT-06 the own-wants grid is fed the CHARACTER-FILTERED rows (pure groupByChar —
+	// presentation only, never access control). charFilter=null passes through unchanged.
+	let filteredWants = $derived(groupByChar(wants, charFilter));
+
+	// The distinct (character_id, name) pairs present on the caller's OWN wants — drives
+	// the group-by-char <select> options. A Map de-dupes by id; account-level wants are
+	// offered via a fixed "Account-level" option only when at least one exists.
+	let charOptions = $derived.by(() => {
+		const m = new Map<number, string>();
+		let hasAccountLevel = false;
+		for (const w of wants) {
+			if (w.character_id === null) hasAccountLevel = true;
+			else if (!m.has(w.character_id))
+				m.set(w.character_id, w.character_name ?? `#${w.character_id}`);
+		}
+		return {
+			chars: [...m.entries()].map(([id, name]) => ({ id, name })),
+			hasAccountLevel
+		};
+	});
+
+	// The Guild grid columns (Owner · Character · Priority · Item · Reason; no Note).
+	const guildColumns = guildWantlistColumns();
+	const guildDefaultSorting = [{ id: 'priority', desc: true }];
+
+	/** Lazy-load the guildwide roll-up the first time the Guild view is shown (then cache;
+	 *  server-truth — re-fetch on retry, never optimistic). A 401 routes to AuthGate. */
+	async function loadGuild() {
+		if (guildLoaded || guildLoading) return;
+		guildLoading = true;
+		guildError = '';
+		try {
+			guildWants = await fetchGuildWants();
+			guildLoaded = true;
+		} catch (err) {
+			if (route(err)) return;
+			guildError = "Couldn't load the guild wantlist. Try again.";
+		} finally {
+			guildLoading = false;
+		}
+	}
+
+	/** Flip the My/Guild view; lazy-load the guild roll-up on first switch to Guild. */
+	function setView(v: WantView) {
+		wantView = v;
+		if (v === 'guild') void loadGuild();
+	}
 
 	async function load() {
 		phase = 'loading';
@@ -228,10 +303,63 @@
 			<p class="result success" aria-live="polite">{muteAnnounce}</p>
 		{/if}
 
-		{#if wants.length === 0}
-			<StateBlock kind="no-wants" />
+		<!-- CWANT-03/04 the My/Guild toggle + CWANT-06 the (My-only) group-by-character
+		     control. One control bar over the SINGLE DataGrid (consolidated-views LOCK) —
+		     the toggle switches the row SOURCE, the char filter narrows THIS browser's own
+		     view (presentation, never access control — T-28-11). -->
+		<div class="filter-bar">
+			<div class="seg" role="group" aria-label="Whose wantlist to show">
+				<button
+					type="button"
+					class="seg-btn"
+					class:active={wantView === 'mine'}
+					aria-pressed={wantView === 'mine'}
+					onclick={() => setView('mine')}>My wantlist</button
+				>
+				<button
+					type="button"
+					class="seg-btn"
+					class:active={wantView === 'guild'}
+					aria-pressed={wantView === 'guild'}
+					onclick={() => setView('guild')}>Guild wantlist</button
+				>
+			</div>
+
+			{#if wantView === 'mine' && (charOptions.chars.length > 0 || charOptions.hasAccountLevel)}
+				<label class="filter-label" for="want-char-filter">Character</label>
+				<select
+					id="want-char-filter"
+					class="char-filter"
+					aria-label="Filter your wantlist by character"
+					bind:value={charFilterValue}
+				>
+					<option value="">All characters</option>
+					{#if charOptions.hasAccountLevel}
+						<option value="account">Account-level (no character)</option>
+					{/if}
+					{#each charOptions.chars as c (c.id)}
+						<option value={String(c.id)}>{c.name}</option>
+					{/each}
+				</select>
+			{/if}
+		</div>
+
+		{#if wantView === 'mine'}
+			{#if wants.length === 0}
+				<StateBlock kind="no-wants" />
+			{:else if filteredWants.length === 0}
+				<p class="filter-empty">No wants are tagged to that character.</p>
+			{:else}
+				<DataGrid data={filteredWants} {columns} {defaultSorting} />
+			{/if}
+		{:else if guildLoading}
+			<StateBlock kind="loading" />
+		{:else if guildError}
+			<p class="result error" aria-live="polite">{guildError}</p>
+		{:else if guildWants.length === 0}
+			<p class="filter-empty">No one in the guild has any active wants yet.</p>
 		{:else}
-			<DataGrid data={wants} {columns} {defaultSorting} />
+			<DataGrid data={guildWants} columns={guildColumns} defaultSorting={guildDefaultSorting} />
 		{/if}
 	</div>
 
@@ -267,5 +395,76 @@
 	}
 	.result.error {
 		color: var(--status-missing);
+	}
+	/* CWANT-03/04/06 control bar (above the single grid) — same EQ-theme token set as
+	   the P27 view filter bar (+page.svelte) and DataGrid's .facet <select>. */
+	.filter-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+	.seg {
+		display: inline-flex;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+		overflow: hidden;
+	}
+	.seg-btn {
+		min-height: 44px;
+		padding: 8px 16px;
+		background: var(--panel);
+		border: none;
+		color: var(--text);
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+	.seg-btn + .seg-btn {
+		border-left: 1px solid var(--border, var(--accent));
+	}
+	.seg-btn.active {
+		background: var(--accent);
+		color: var(--bg);
+	}
+	.seg-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.filter-label {
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text);
+		opacity: 0.85;
+		margin-left: 8px;
+	}
+	.char-filter {
+		min-height: 44px;
+		padding: 8px 12px;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+		background: var(--panel);
+		color: var(--text);
+		font-family: var(--font-body);
+		font-size: 16px;
+		cursor: pointer;
+	}
+	.char-filter:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	/* Distinct copy when the char filter empties the grid — NOT the no-wants StateBlock. */
+	.filter-empty {
+		font-family: var(--font-body);
+		font-size: 16px;
+		opacity: 0.85;
+		padding: 24px 0;
+		text-align: center;
 	}
 </style>

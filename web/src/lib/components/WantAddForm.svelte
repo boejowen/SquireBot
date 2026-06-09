@@ -16,7 +16,14 @@
 	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import FormField from './FormField.svelte';
 	import ItemTooltip from './ItemTooltip.svelte';
-	import { searchCatalog, addWant, type CatalogItem } from '$lib/api';
+	import { onMount } from 'svelte';
+	import {
+		searchCatalog,
+		addWant,
+		fetchMyCharacters,
+		type CatalogItem,
+		type MyCharacter
+	} from '$lib/api';
 	import { noteRuneCount } from '$lib/wantlist/priority';
 
 	let {
@@ -43,9 +50,31 @@
 	let priority = $state<'low' | 'med' | 'high'>('med');
 	let note = $state('');
 
+	// CWANT-01 the OPTIONAL character tag. `myCharacters` sources the <select> options
+	// from the caller's OWN assigned characters (fetchMyCharacters, P26 — REUSED, not
+	// reinvented). `charSelect` is the bound <select> value as a STRING ('' = the
+	// "(no character)" default → account-level); submit coerces it to a number|null.
+	// The select is UX convenience, NOT the gate — the server's IsCharAssignedToTx
+	// (Plan 02) is the authority; a forged body is rejected 403 (T-28-11).
+	let myCharacters = $state<MyCharacter[]>([]);
+	let charSelect = $state('');
+
 	// Submit state.
 	let adding = $state(false);
 	let addErrorMsg = $state('');
+
+	// Load the caller's own characters for the optional tag <select>. A failure is
+	// non-fatal — the tag is optional, so on error we just leave the list empty and the
+	// form still adds account-level wants (the only option being "(no character)").
+	onMount(() => {
+		void (async () => {
+			try {
+				myCharacters = await fetchMyCharacters();
+			} catch {
+				myCharacters = [];
+			}
+		})();
+	});
 
 	let noteCount = $derived(noteRuneCount(note));
 	// Disabled until an item is chosen (catalog OR non-blank custom) AND a reason.
@@ -103,6 +132,7 @@
 		reason = '';
 		priority = 'med';
 		note = '';
+		charSelect = '';
 		query = '';
 		results = [];
 		addErrorMsg = '';
@@ -112,6 +142,9 @@
 		if (!canSubmit) return;
 		const itemName = pickedItem ? pickedItem.name : (customLabel ?? '');
 		const itemId = pickedItem ? pickedItem.item_id : null;
+		// '' (the "(no character)" default) → null (account-level); else the picked
+		// character_id as a number. The server re-authorizes the tag (T-28-11).
+		const charId = charSelect === '' ? null : Number(charSelect);
 		adding = true;
 		addErrorMsg = '';
 		try {
@@ -120,7 +153,8 @@
 				item_name: itemName,
 				reason: reason as 'buy' | 'quest',
 				priority,
-				note: note.trim() || undefined
+				note: note.trim() || undefined,
+				character_id: charId
 			});
 			onAdded(itemName);
 			resetStaging();
@@ -218,6 +252,19 @@
 						<option value="low">Low</option>
 						<option value="med">Med</option>
 						<option value="high">High</option>
+					</select>
+				</FormField>
+
+				<!-- CWANT-01 the OPTIONAL character tag. Options come ONLY from the caller's
+				     own assigned characters (fetchMyCharacters) — the "(no character)" default
+				     is account-level. Character names render via plain auto-escaped braces, never
+				     raw-HTML (T-28-10). The select is UX, not the gate; the server re-authorizes. -->
+				<FormField label="Character (optional)" id="want-character">
+					<select id="want-character" class="field" bind:value={charSelect}>
+						<option value="">(no character)</option>
+						{#each myCharacters as c (c.character_id)}
+							<option value={String(c.character_id)}>{c.name}</option>
+						{/each}
 					</select>
 				</FormField>
 

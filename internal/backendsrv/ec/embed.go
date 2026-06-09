@@ -148,6 +148,19 @@ func buildEmbed(hit wantmatch.Hit, a enrich.ItemAuctionDetail, seller, seenStr s
 		Value:  whyWanted(hit),
 		Inline: false,
 	})
+	// For <char> — DISPLAY-ONLY (CWANT-05), present ONLY when the matched want is
+	// character-tagged (CharacterName non-nil) AND the name is non-blank (the OMIT-when-
+	// empty idiom the Price/Seen/Seller fields use). This NEVER touches the send path or
+	// DiscordUserID — naming the character does not change who receives the DM (T-28-06).
+	// The value is a PLAIN-TEXT embed field (character.name is constrained in-game text);
+	// it is NOT interpolated into a URL or markdown-evaluated for mentions.
+	if hit.CharacterName != nil && strings.TrimSpace(*hit.CharacterName) != "" {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   "For",
+			Value:  *hit.CharacterName,
+			Inline: true,
+		})
+	}
 
 	return &discordgo.MessageEmbed{
 		Title:  hit.ItemName + " — WTS",

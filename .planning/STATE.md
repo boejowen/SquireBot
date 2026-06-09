@@ -2,16 +2,18 @@
 gsd_state_version: 1.0
 milestone: v2.3
 milestone_name: Character Assignment & Per-Character Wantlists
-status: planning
-last_updated: "2026-06-08T05:30:00.000Z"
-last_activity: 2026-06-08
+status: complete
+last_updated: "2026-06-09T15:00:00.000Z"
+last_activity: 2026-06-09
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 7
+  percent: 100
 ---
+
+> **v2.3 SHIPPED + ARCHIVED 2026-06-09** — all 3 phases (26→27→28) deployed live (schema v10) + browser-smoke verified; milestone audit PASSED (14/14 reqs, integration clean); archived to `.planning/milestones/v2.3-*`; REQUIREMENTS.md retired for the next cycle. Carry-forwards: 999.33 fixed+deployed (quick 260609-d2o), 999.34 cosmetics backlogged. **No git tag pushed** (v2.3 = backend+web only; a `v*` tag fires the watcher release CI, and the watcher is unchanged). **Next: `/gsd-new-milestone`** (v2.2 Track 2 still parked on the Raid Alliance invites — independent).
 
 # State: SquireBot
 

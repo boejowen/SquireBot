@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.2
-milestone_name: — Wantlist + Discord Pinger
-status: executing
-last_updated: "2026-06-06T06:00:00.000Z"
-last_activity: 2026-06-06
+milestone: v2.3
+milestone_name: Character Assignment & Per-Character Wantlists
+status: planning
+last_updated: "2026-06-08T05:30:00.000Z"
+last_activity: 2026-06-08
 progress:
-  total_phases: 6
-  completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
-  percent: 100
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # State: SquireBot
@@ -29,10 +29,48 @@ See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 ## Current Position
 
-Phase: 25 — Linux Watcher (cross-cutting platform; appended outside the v2.2 Track-1/2 numbering, like Phase 24) — **COMPLETE (3/3 plans)**
-Plan: 25-03 COMPLETE (3/3 plans) — packaging + auto-update (the FINAL plan). Phase 25 code-complete.
-Status: Phase 25 done — the Linux watcher is built (CGO-free static ELF, 25-01), functionally complete (credstore/eqfind/onboarding/CLI, 25-02), and packaged + self-updating (25-03). 25-03 made the auto-updater OS-aware (`Manifest.binaryAsset()` selects the bare linux `squirebot` by `runtime.GOOS` — a linux box never self-updates to the Windows `.exe`, Pitfall 3/T-25-10; old Windows-only manifests still parse), authored `packaging/linux/` (systemd USER unit `Restart=always`/`WantedBy=default.target`, idempotent POSIX `install.sh` with enable --now + opt-in `--linger` + first-run `--setup`, Linux README), and added additive `release.yml` steps (CGO-free linux build, `squirebot-linux-amd64.tar.gz`, bare-binary SHA-256, `binary_url_linux`/`binary_sha256_linux` in latest.json, both linux assets uploaded). The Windows NSIS/installer/`.exe` path is byte-unchanged; `go test ./...` green on the host; the linux/amd64 closure still CGO-free (systray=0); the cross-compile produced a verified static ELF; release.yml YAML valid. All six reqs (LNX-01..06) code-complete. Remaining = a human UAT on a real Linux+WINE box. Next: `/gsd-verify-work 25` (or close Phase 25). v2.2 Track 1 remains SHIPPED LIVE; Track 2 (22–23) parked, invite-gated.
-Last activity: 2026-06-06
+Phase: 26 — Character Assignment (EXECUTED 2026-06-08 — code-complete; UAT + 2 advisory MEDIUMs pending)
+Execution: 3/3 plans complete (10 commits aff1553..c08b4e6, all on master, code only). 26-01 store/migration (00009→v9), 26-02 API (12 routes), 26-03 web UI. Gates: go build/vet/test green; web check(0 warn)/build/test(287) green. Verifier=human_needed (6/6 criteria + 6/6 ASSIGN code-verified; web interactive + live-DB deploy = UAT). Code review=issues_found, 0 BLOCKER/0 HIGH; 2 MEDIUM + 2 NIT FIXED via /gsd-code-review-fix (commits b1852eb/29170a6/55d06d3, ff-merged to master; gates re-green). MD-01: RequestTx now rejects non-contested chars (unassigned/self-held) → 409 not_contested (ErrCharNotContested). MD-02: added ListMyPendingRequests + GET /api/v1/assignments/requests/mine + panel hydration (Request→Cancel survives reload). 3 LOW deferred (out-of-tx assignee probe [FK-backstopped], unused current_assignee UI plumbing, post-approval re-request). SECURITY: /gsd-secure-phase 26 PASSED — 26-SECURITY.md threats_open:0, 18/18 closed (17 mitigate + 1 accept AR-26-07 multiple-guild-banks). Phase 26 = code-complete + verified(human_needed) + review-clean + threat-secure. DEPLOYED LIVE 2026-06-08: R2 backup (squirebot-2026-06-08.db.gz) → backend binary swapped (.bak kept) → goose.Up applied 00009 (schema v8→v9; `OK 00009_character_assignment.sql`; bot reconnected; scheduler 4 jobs) → AUTO-SEED 4/4 eligible chars assigned → web tarball+atomic-swap (squirebot.old kept). External verify GREEN: apex 200, JS content-type canary passes, /my-characters serves 200, whoami-web 200, api healthy. Rollback: cp /usr/local/bin/squirebot-server.bak → restart (old binary runs against v9 DB — extend-only); web mv squirebot.old back. BROWSER-SMOKE UAT 2026-06-08: **PASS** (see 26-HUMAN-UAT.md). Blocks A (member claim/release/re-claim + inline 409)/B (officer assign/reassign/remove/designate)/C (My-characters nav link + de-banked CharMetaForm) all green; live-DB seed verified directly on-box (4/4 assignments, real bank toon Findom preserved). Found 1 MEDIUM UI bug → **backlog 999.33** (commit 9c3022f): designating a char bank/bot clears its character_assignment row so it drops out of ListAllAssignments — the only list AssignmentAdminPanel renders + the host of the designate/reassign controls — AND it's excluded from member claimable, so bank/bot is a UI one-way door (data layer correct/reversible; fix = surface designated chars in the panel). Surfaced live: tester designated all 4 assigned chars → panel emptied → scoped direct-DB recovery (R2 backup first; cleared flags on ids 1/14/15/16 + re-seed assigned_by='migration'; Findom untouched; +assignment_restore audit rows). DEFERRED (tester's discretion): non-officer /admin 403 UI-collapse (needs a 2nd account; server gate already code-verified via TestOfficerEndpoints_NonOfficer_Rejected) + the Request→Cancel (A5)/Approve-Deny (B4) interactive flows (UI trigger can't occur today — claimable=unassigned-only; API test-covered). Optional: /gsd-ui-review 26. Next: /gsd-plan-phase 27 (stacks on committed code). v2.3 Phase 26 SHIPPED + UAT-verified.
+PRIOR planning state:
+Plan: 3 plans (26-01 store/migration → 26-02 API → 26-03 web), 3 waves, ASSIGN-01..06 covered. RESEARCH.md + PATTERNS.md + 3 PLAN.md written; plan-checker: 0 blockers / 4 warnings (all fixed in a revision pass).
+Status: Planning complete. Locked resolutions from research: guild bank SUBSUMES is_bank_toon (officer-only; single-bank invariant RELAXED — multiple banks OK, bank view unchanged, 2-bank test added); guild bot = NEW is_guild_bot column; character_assignment PK on character_id = single-assignee; assignment_request (pending|approved|denied|cancelled) + partial-unique-pending; idempotent INSERT OR IGNORE auto-seed from owner.discord_user_id; goose v9, NO _meta.schema_version cell; owner_id never re-homed; watcher UNTOUCHED. Each plan has a STRIDE threat_model. Browser-smoke gap flagged for /gsd-ui-review (web tests node-only). NOT YET EXECUTED — Phase 26 writes a LIVE-backend schema migration (00009) + API + web; execution + deploy is a deliberate next step. Next: `/gsd-execute-phase 26`.
+Last activity: 2026-06-08 — Phase 26 planned (research → pattern-map → 3 plans → checked → revised). Next: `/gsd-execute-phase 26`.
+
+## v2.3 Phase Plan (created 2026-06-08)
+
+Phases continue from v2.2 (which ran 19–25). Phase dirs 11–25 exist on disk — never reuse them. v2.3 starts at **26**.
+
+**Execution order:** strict dependency chain **26 → 27 → 28**. The character-assignment data layer (P26) is the foundation BOTH the my-characters filter (P27) and the character-tagged wantlist (P28) build on — each needs the authoritative "which characters are mine" answer.
+
+| Phase | Name | Requirements | Success Criteria | UI |
+|-------|------|--------------|------------------|----|
+| 26 | Character Assignment | ASSIGN-01, ASSIGN-02, ASSIGN-03, ASSIGN-04, ASSIGN-05, ASSIGN-06 | 6 | yes |
+| 27 | My-Characters Inventory Filter | MYVIEW-01, MYVIEW-02 | 3 | yes |
+| 28 | Character-Tagged Wantlist | CWANT-01, CWANT-02, CWANT-03, CWANT-04, CWANT-05, CWANT-06 | 4 | yes |
+
+**Phase 26 — Character Assignment (foundation):** `00009` goose migration → schema **v9** adding the `character_assignment` layer over the existing `character.owner_id` upload provenance; member self-claim/release + officer assign/reassign API (IDOR-safe, owner/officer-scoped via the ADMIN-04..06 gate, audited); the "My characters" + officer admin-panel UI. **Open sub-decision:** ASSIGN-05 single- vs multi-owner for shared bank toons (resolve in spec/plan; likely many-to-many).
+
+**Phase 27 — My-Characters Inventory Filter:** an ADDITIVE "my characters" quick-filter + single-character drill-down over the existing all-members consolidated views (inventory/bank/gear/spell). Visibility stays all-members — the CLAUDE.md consolidated-views rule is intact; this is NOT access control. Read-only/client-side over the existing DataGrid; no per-character view tabs.
+
+**Phase 28 — Character-Tagged Wantlist:** the wantlist gains an OPTIONAL character dimension — NULLABLE `character_id` on `wantlist_item` (00009 backfills existing wants to NULL, no data loss); character-tagged wants roll up into the guildwide wantlist; per-user filter/group-by-character; the EC-tunnel monitor DM still targets the character's OWNER (keys on `discord_user_id`). **Open sub-decisions:** CWANT-04 guildwide attribution display; CWANT-05 whether the EC embed names the character.
+
+## Milestone v2.3 Scope (locked 2026-06-08)
+
+**Goal:** Associate SquireBot users with specific characters, let them view those characters' inventory, and create character-tagged wantlist items that roll up to the guildwide wantlist.
+
+**Locked decisions:**
+- **Assignment = BOTH** — member self-claim (incl. characters under an unlinked/legacy owner) AND officer assign/override/reassign.
+- **Inventory = ALL-MEMBERS + FILTER** — keep the all-members consolidated views (CLAUDE.md LOCKED); ADD a "my characters" filter/drill-down. ADDITIVE, not an access-control restriction.
+- **Wantlist = CHARACTER-TAGGED** — wants gain an optional character dimension and aggregate into the guildwide wantlist; the EC-monitor DM still targets the OWNER.
+
+**Scope:** backend (`internal/backendsrv`) + web (`web/`). The Go **watcher is untouched** (backend-only schema; no `WatcherMaxSchemaVersion` concern). New `00009` migration → schema **v9** (extend-only, version-stamped, idempotent; `character_id` NULLABLE).
+
+**Open sub-decisions (resolve in spec/plan):** ASSIGN-05 (multi-user shared bank toons), CWANT-04 (guildwide attribution display), CWANT-05 (EC embed names the character).
+
+<details><summary>v2.2 history (parked — Track 2 invite-gated; preserved below)</summary>
+
+Phase: 25 — Linux Watcher — **COMPLETE (3/3 plans)**. v2.1.1 watcher SHIPPED 2026-06-08 (tag pushed; release.yml green; latest.json permalink → 2.1.1; win+linux assets reachable; bundles Linux watcher P25 + eqfind EQLite autodetect quick 260607-vgb). Earlier 2026-06-08: 260607-sdh web gear-menu IA cleanup DEPLOYED to prod via tarball+atomic-swap. v2.2 Track 1 (P19-21) SHIPPED LIVE; Track 2 (22-23 Discord pinger) parked on the 3 Raid Alliance bot invites. Detailed P21/P25 activity logs retained below.
+</details>
 
 Phase 25 post-execution (2026-06-06): verified (6/6 criteria code-verified, human_needed — 4 on-machine UATs in 25-HUMAN-UAT.md). Code review found 2 BLOCKERS + 6 warnings — both blockers were install-flow bugs (CR-01: `--status` always exit 0 → install.sh skipped first-run `--setup` so a fresh box sat red; CR-02: per-prompt bufio.Reader dropped piped stdin) — ALL 8 FIXED (25-REVIEW-FIX.md; commits bebe961/b12f013/0ac0bc0/f7f8736/bd197d7/c47efdc/81b4b28), gates re-green. Local snapshot tarball assembled + inspected (static ELF + README + systemd unit + install.sh; `install -Dm755` sets the exec bit on install). HANDOFF: ready for a Linux guildie to smoke-test (run install.sh → --setup → play P99 → confirm upload on squirebot.quest); canonical release tarball builds via release.yml on a tagged release.
 
@@ -122,6 +160,8 @@ Carried forward at v2.1 close (non-blocking):
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260602-u7m | Church of Clean Code audit follow-up — save report + low-risk fixes (.gitignore, CLAUDE.md dep doctrine, enrich naming) | 2026-06-03 | 922b441 | [260602-u7m-church-audit-follow-up-save-report-low-r](./quick/260602-u7m-church-audit-follow-up-save-report-low-r/) |
+| 260607-sdh | Reorganize web top bar into an accessible header settings dropdown (gear menu): theme picker + Watcher-codes + Character-details + officer Admin + identity/Sign-out fold in; header slims to Wantlist + Notifications + gear. Absorbed & deleted SessionIndicator. | 2026-06-08 | bdde646 | [260607-sdh-reorganize-web-top-bar-into-accessible-s](./quick/260607-sdh-reorganize-web-top-bar-into-accessible-s/) |
+| 260607-vgb | eqfind autodetect: add EQLite-bundle + system-location coverage (Linux `/opt/...EQLite` direct-hit + `systemCandidateRoots` walk; HOME `~/Desktop/EQLite`; Windows `%USERPROFILE%\Desktop\EQLite` etc.). Fixes a guildie's `/opt/everquest/EQLite` being invisible (Linux scan was WINE-`drive_c`-only). Ships to guildies only via a tagged release (auto-update). | 2026-06-08 | add17e9 | [260607-vgb-add-eqlite-bundle-system-location-covera](./quick/260607-vgb-add-eqlite-bundle-system-location-covera/) |
 
 ---
 

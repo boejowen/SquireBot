@@ -36,7 +36,12 @@ import (
 // resolved from the want, NOT a request body), and enough item context for the
 // DM body. ItemID is a pointer — a custom want has a NULL item_id.
 type Hit struct {
-	WantID        int64
+	WantID int64
+	// DiscordUserID is the DM target — it is ALWAYS wantlist_item.discord_user_id (the
+	// want OWNER, the person who created the want), and MUST NOT be derived from
+	// character_id, character.owner_id, or any character_assignment. The character tag
+	// (CharacterName) is DISPLAY-ONLY; tagging a want to a character owned/assigned to a
+	// DIFFERENT member never changes who gets the DM (T-28-06).
 	DiscordUserID string
 	ItemID        *int64
 	ItemName      string
@@ -45,6 +50,11 @@ type Hit struct {
 	// pointer because wantlist_item.note is nullable — a want may have no note.
 	// The EC producer (P21 Plan 03) echoes it into the alert embed.
 	Note *string
+	// CharacterName is the OPTIONAL tagged character's name (CWANT-05), via a LEFT JOIN
+	// character on wantlist_item.character_id. nil ⇒ an untagged (account-level) want, or
+	// a tag whose character was removed. DISPLAY-ONLY (the EC embed's "For <char>" field);
+	// it NEVER affects DiscordUserID / the DM recipient.
+	CharacterName *string
 }
 
 // ForItem returns one Hit per ACTIVE, NON-muted wantlist_item whose item_id
@@ -54,9 +64,10 @@ type Hit struct {
 // matcher. Returns a non-nil (possibly empty) slice.
 func ForItem(ctx context.Context, db *sql.DB, itemID int64) ([]Hit, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, discord_user_id, item_id, item_name, reason, note
-		   FROM wantlist_item
-		  WHERE item_id = ? AND active = 1 AND muted = 0`, itemID)
+		`SELECT w.id, w.discord_user_id, w.item_id, w.item_name, w.reason, w.note, c.name AS character_name
+		   FROM wantlist_item w
+		   LEFT JOIN character c ON c.id = w.character_id
+		  WHERE w.item_id = ? AND w.active = 1 AND w.muted = 0`, itemID)
 	if err != nil {
 		return nil, fmt.Errorf("wantmatch.ForItem (item=%d): %w", itemID, err)
 	}
@@ -71,9 +82,10 @@ func ForItem(ctx context.Context, db *sql.DB, itemID int64) ([]Hit, error) {
 // soft-removed want is excluded at the matcher. Returns a non-nil slice.
 func ForName(ctx context.Context, db *sql.DB, name string) ([]Hit, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, discord_user_id, item_id, item_name, reason, note
-		   FROM wantlist_item
-		  WHERE item_name = ? COLLATE NOCASE AND active = 1 AND muted = 0`, name)
+		`SELECT w.id, w.discord_user_id, w.item_id, w.item_name, w.reason, w.note, c.name AS character_name
+		   FROM wantlist_item w
+		   LEFT JOIN character c ON c.id = w.character_id
+		  WHERE w.item_name = ? COLLATE NOCASE AND w.active = 1 AND w.muted = 0`, name)
 	if err != nil {
 		return nil, fmt.Errorf("wantmatch.ForName (name=%q): %w", name, err)
 	}
@@ -87,11 +99,15 @@ func scanHits(rows *sql.Rows, ctxLabel string) ([]Hit, error) {
 	out := make([]Hit, 0) // non-nil so callers iterate cleanly on no matches
 	for rows.Next() {
 		var (
-			h      Hit
-			itemID sql.NullInt64
-			note   sql.NullString
+			h        Hit
+			itemID   sql.NullInt64
+			note     sql.NullString
+			charName sql.NullString
 		)
-		if err := rows.Scan(&h.WantID, &h.DiscordUserID, &itemID, &h.ItemName, &h.Reason, &note); err != nil {
+		// NB: &h.DiscordUserID is scanned from w.discord_user_id (the want owner) — its
+		// scan target is UNCHANGED by the CharacterName addition (T-28-06). characterName
+		// is appended at the END, matching the trailing c.name column in both SELECTs.
+		if err := rows.Scan(&h.WantID, &h.DiscordUserID, &itemID, &h.ItemName, &h.Reason, &note, &charName); err != nil {
 			return nil, fmt.Errorf("wantmatch scan hit (%s): %w", ctxLabel, err)
 		}
 		if itemID.Valid {
@@ -101,6 +117,10 @@ func scanHits(rows *sql.Rows, ctxLabel string) ([]Hit, error) {
 		if note.Valid {
 			v := note.String
 			h.Note = &v
+		}
+		if charName.Valid {
+			v := charName.String
+			h.CharacterName = &v
 		}
 		out = append(out, h)
 	}

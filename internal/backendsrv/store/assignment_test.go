@@ -722,6 +722,56 @@ func TestDesignateCharTx_MissingChar(t *testing.T) {
 	}
 }
 
+// TestListDesignatedChars: the officer "undesignate" read returns ONLY the live
+// bank+bot chars (with the correct kind), never a normal char and never a removed bank.
+func TestListDesignatedChars(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	ownerID := insertOwner(t, ctx, db, "Guildie-A")
+	bank := insertChar(t, ctx, db, ownerID, "Guildbank", true) // is_bank_toon=1
+	bot := insertChar(t, ctx, db, ownerID, "Buffbot", false)
+	setGuildBot(t, ctx, db, bot) // is_guild_bot=1
+	insertChar(t, ctx, db, ownerID, "Normalchar", false)       // neither — excluded
+	removedBank := insertChar(t, ctx, db, ownerID, "Oldbank", true)
+	if _, err := db.ExecContext(ctx, `UPDATE character SET is_removed = 1 WHERE id = ?`, removedBank); err != nil {
+		t.Fatalf("mark removed bank: %v", err)
+	}
+
+	got, err := ListDesignatedChars(ctx, db)
+	if err != nil {
+		t.Fatalf("ListDesignatedChars: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2 (the live bank + bot only); got %+v", len(got), got)
+	}
+	// Ordered by name COLLATE NOCASE → "Buffbot" before "Guildbank".
+	if got[0].CharacterID != bot || got[0].Kind != "bot" {
+		t.Errorf("got[0] = %+v, want {id:%d kind:bot}", got[0], bot)
+	}
+	if got[1].CharacterID != bank || got[1].Kind != "bank" {
+		t.Errorf("got[1] = %+v, want {id:%d kind:bank}", got[1], bank)
+	}
+}
+
+// TestListDesignatedChars_EmptyIsNil: no designated chars → a nil slice (the handler
+// normalizes nil → [] so the wire is never null).
+func TestListDesignatedChars_EmptyIsNil(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	ownerID := insertOwner(t, ctx, db, "Guildie-A")
+	insertChar(t, ctx, db, ownerID, "Normalchar", false) // no bank/bot at all
+
+	got, err := ListDesignatedChars(ctx, db)
+	if err != nil {
+		t.Fatalf("ListDesignatedChars: %v", err)
+	}
+	if got != nil {
+		t.Errorf("got = %+v, want nil for the empty state", got)
+	}
+}
+
 // TestListAssignmentsAndPendingRequests: ListMyAssignments scopes to the caller;
 // ListAllAssignments returns every assignment; ListPendingRequests returns the pending
 // queue with the contested character's name.

@@ -71,6 +71,32 @@ func ListAllAssignmentsHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+// ListDesignatedCharsHandler (GET) returns every live character currently designated a
+// guild bank/bot for the officer "undesignate" surface (backlog 999.33): a plain JSON
+// array (non-nil → [] for the empty state). It only READS — no audit, no tx (a plain
+// *sql.DB read). Mirrors ListAllAssignmentsHandler. The actual clear is the EXISTING
+// DesignateCharHandler with mode:none; this read just makes the designated chars visible
+// (they otherwise drop out of ListAllAssignments + ListClaimable).
+func ListDesignatedCharsHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		ctx := r.Context()
+		designated, err := store.ListDesignatedChars(ctx, db)
+		if err != nil {
+			slog.Error("list designated chars failed", "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		if designated == nil {
+			designated = []store.DesignatedChar{}
+		}
+		writeJSON(w, designated)
+	}
+}
+
 // officerAssignReq is the {character_id, assignee} body for a direct officer assign /
 // reassign (D-09). The ACTOR is the session caller, never the body; `assignee` is the
 // TARGET who receives the assignment.

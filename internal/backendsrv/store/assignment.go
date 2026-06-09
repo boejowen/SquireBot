@@ -573,6 +573,55 @@ func ListClaimable(ctx context.Context, db *sql.DB) ([]ClaimableChar, error) {
 	return out, nil
 }
 
+// DesignatedChar is one live character currently designated a guild bank or guild bot
+// (the officer "undesignate" surface — backlog 999.33). snake_case JSON tags — crosses
+// the API boundary. Kind is "bank" (is_bank_toon=1) or "bot" (is_guild_bot=1); if both
+// flags are somehow set, "bank" is preferred (deterministic).
+type DesignatedChar struct {
+	CharacterID int64  `json:"character_id"`
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+}
+
+// ListDesignatedChars returns the live characters currently designated a guild bank
+// (is_bank_toon=1) OR guild bot (is_guild_bot=1) — the officer surface that makes the
+// designation REVERSIBLE (backlog 999.33). Without this read a bank/bot char drops out
+// of ListAllAssignments AND ListClaimable, so it could only return to mode:none via a
+// direct DB/API call. Live chars only (is_removed=0). Ordered by name. Kind is derived
+// deterministically: "bank" when is_bank_toon=1 (preferred even if is_guild_bot is also
+// set), else "bot". Empty → nil (the handler normalizes nil → []).
+func ListDesignatedChars(ctx context.Context, db *sql.DB) ([]DesignatedChar, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT c.id, c.name, c.is_bank_toon, c.is_guild_bot
+		   FROM character c
+		  WHERE c.is_removed = 0
+		    AND (c.is_bank_toon = 1 OR c.is_guild_bot = 1)
+		  ORDER BY c.name COLLATE NOCASE`)
+	if err != nil {
+		return nil, fmt.Errorf("list designated chars: %w", err)
+	}
+	defer rows.Close()
+
+	var out []DesignatedChar
+	for rows.Next() {
+		var dc DesignatedChar
+		var isBank, isBot int
+		if err := rows.Scan(&dc.CharacterID, &dc.Name, &isBank, &isBot); err != nil {
+			return nil, fmt.Errorf("scan designated char row: %w", err)
+		}
+		if isBank == 1 {
+			dc.Kind = "bank" // prefer bank when both flags are set (deterministic)
+		} else {
+			dc.Kind = "bot"
+		}
+		out = append(out, dc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate designated chars: %w", err)
+	}
+	return out, nil
+}
+
 // ListAllAssignments returns every live-char assignment (ASSIGN-04, the officer view).
 // Joined to character.name; live chars only. Ordered by name.
 func ListAllAssignments(ctx context.Context, db *sql.DB) ([]Assignment, error) {

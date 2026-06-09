@@ -400,6 +400,7 @@ func runServe(args []string) int {
 	// INSIDE their write tx (WR-04 TOCTOU). The actor is the session caller — the body
 	// carries a TARGET (the assignee / mode), never the actor. Every mutation is audited.
 	mux.Handle("GET /api/v1/admin/assignments", webauth.RequireOfficer(db, webadmin.ListAllAssignmentsHandler(db)))
+	mux.Handle("GET /api/v1/admin/characters/designated", webauth.RequireOfficer(db, webadmin.ListDesignatedCharsHandler(db)))
 	mux.Handle("POST /api/v1/admin/assignments/assign", webauth.RequireOfficer(db, webadmin.OfficerAssignHandler(db)))
 	mux.Handle("POST /api/v1/admin/assignments/remove", webauth.RequireOfficer(db, webadmin.OfficerRemoveAssignHandler(db)))
 	mux.Handle("POST /api/v1/admin/assignments/approve", webauth.RequireOfficer(db, webadmin.ApproveRequestHandler(db)))

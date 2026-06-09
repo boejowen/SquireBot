@@ -309,7 +309,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |
 | 25. Linux Watcher | v2.2 | 3/3 | ✅ Complete (25-03 done — OS-specific manifest assets + runtime.GOOS auto-update selection, tarball + systemd user unit + install.sh, additive release.yml linux build; linux closure CGO-free, Windows NSIS path + `go test ./...` unchanged) | Human UAT on a real Linux+WINE box (watch→upload→autostart→self-update) |
 | 26. Character Assignment | v2.3 | 0/3 | Planned (3 plans, 3 waves) | — |
-| 27. My-Characters Inventory Filter | v2.3 | 1/1 | ✅ Executed + verified(human_needed) — code-complete, gates green; browser-smoke UAT pending | — |
+| 27. My-Characters Inventory Filter | v2.3 | 1/1 | ✅ SHIPPED — deployed live + browser-smoke PASS (MYVIEW-01/02) | 2026-06-08 |
 | 28. Character-Tagged Wantlist | v2.3 | 0/TBD | Not started | — |
 
 ## Backlog

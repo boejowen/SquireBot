@@ -38,7 +38,7 @@ func TestAddWantTx_InsertsActiveRowAndReturnsID(t *testing.T) {
 	var newID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		newID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Rusty Dagger", "buy", "high", strptr("for alt"), 1700)
+		newID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Rusty Dagger", "buy", "high", strptr("for alt"), nil, 1700)
 		return e
 	}); err != nil {
 		t.Fatalf("AddWantTx: %v", err)
@@ -73,14 +73,14 @@ func TestListOwnWants_OwnerScopedActiveOnlyNonNil(t *testing.T) {
 
 	i1, i2 := int64(10), int64(20)
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		if _, e := AddWantTx(ctx, tx, "disc-1", &i1, "Item Ten", "buy", "med", nil, 1); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-1", &i1, "Item Ten", "buy", "med", nil, nil, 1); e != nil {
 			return e
 		}
-		if _, e := AddWantTx(ctx, tx, "disc-1", &i2, "Item Twenty", "quest", "low", nil, 2); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-1", &i2, "Item Twenty", "quest", "low", nil, nil, 2); e != nil {
 			return e
 		}
 		// Bob's want must NOT appear in Alice's list (owner scoping).
-		if _, e := AddWantTx(ctx, tx, "disc-2", &i1, "Item Ten", "buy", "med", nil, 3); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-2", &i1, "Item Ten", "buy", "med", nil, nil, 3); e != nil {
 			return e
 		}
 		return nil
@@ -107,7 +107,7 @@ func TestRemoveOwnWantTx_SoftDeleteExcludesFromList(t *testing.T) {
 	var wantID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Soft Me", "buy", "med", nil, 1)
+		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Soft Me", "buy", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed want: %v", err)
@@ -139,7 +139,7 @@ func TestRemoveOwnWantTx_CrossOwnerSilentNoOp(t *testing.T) {
 	var wantID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Alice Only", "buy", "med", nil, 1)
+		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Alice Only", "buy", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed Alice want: %v", err)
@@ -171,7 +171,7 @@ func TestAddWantTx_DuplicateReturnsTypedSentinel(t *testing.T) {
 	itemID := int64(42)
 	// First add succeeds.
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "buy", "med", nil, 1)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "buy", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("first AddWantTx: %v", err)
@@ -179,7 +179,7 @@ func TestAddWantTx_DuplicateReturnsTypedSentinel(t *testing.T) {
 
 	// Exact (owner, item, reason) re-add → TYPED ErrDuplicateWant (not a raw driver error).
 	addErr := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "buy", "med", nil, 2)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "buy", "med", nil, nil, 2)
 		return e
 	})
 	if !errors.Is(addErr, ErrDuplicateWant) {
@@ -188,7 +188,7 @@ func TestAddWantTx_DuplicateReturnsTypedSentinel(t *testing.T) {
 
 	// SAME item, DIFFERENT reason → inserts fine (D-05: buy + quest coexist).
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "quest", "med", nil, 3)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "quest", "med", nil, nil, 3)
 		return e
 	}); err != nil {
 		t.Fatalf("same item different reason AddWantTx should succeed, got: %v", err)
@@ -206,7 +206,7 @@ func TestListOwnWants_ReturnsMutedDefaultFalse(t *testing.T) {
 
 	itemID := int64(99)
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, 1)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed want: %v", err)
@@ -232,7 +232,7 @@ func TestSetMutedTx_OwnerScopedAndReflectedInList(t *testing.T) {
 	var wantID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, 1)
+		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed want: %v", err)
@@ -281,6 +281,138 @@ func TestSetMutedTx_OwnerScopedAndReflectedInList(t *testing.T) {
 	}
 }
 
+// TestAddWantTx_PersistsCharacterTagAndListSurfacesName proves AddWantTx persists a
+// non-nil characterID and ListOwnWants returns that row with character_id + character_name
+// (the LEFT JOIN character) populated (CWANT-01/06).
+func TestAddWantTx_PersistsCharacterTagAndListSurfacesName(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	insertWebUser(t, ctx, db, "disc-1", "Alice")
+	ownerID := insertOwner(t, ctx, db, "Alice-Owner")
+	charID := insertChar(t, ctx, db, ownerID, "Slampeach", false)
+
+	itemID := int64(1234)
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Tagged Item", "buy", "high", nil, i64ptr(charID), 1700)
+		return e
+	}); err != nil {
+		t.Fatalf("AddWantTx tagged: %v", err)
+	}
+
+	got := listWants(t, ctx, db, "disc-1")
+	if len(got) != 1 {
+		t.Fatalf("ListOwnWants len = %d, want 1", len(got))
+	}
+	r := got[0]
+	if r.CharacterID == nil || *r.CharacterID != charID {
+		t.Errorf("CharacterID = %v, want %d", r.CharacterID, charID)
+	}
+	if r.CharacterName == nil || *r.CharacterName != "Slampeach" {
+		t.Errorf("CharacterName = %v, want \"Slampeach\"", r.CharacterName)
+	}
+}
+
+// TestAddWantTx_NilCharacterTagListsAsNull proves a nil characterID lists back as
+// character_id NULL + character_name NULL (an account-level want).
+func TestAddWantTx_NilCharacterTagListsAsNull(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	insertWebUser(t, ctx, db, "disc-1", "Alice")
+
+	itemID := int64(1234)
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Account Item", "buy", "med", nil, nil, 1700)
+		return e
+	}); err != nil {
+		t.Fatalf("AddWantTx account-level: %v", err)
+	}
+
+	got := listWants(t, ctx, db, "disc-1")
+	if len(got) != 1 {
+		t.Fatalf("ListOwnWants len = %d, want 1", len(got))
+	}
+	if got[0].CharacterID != nil {
+		t.Errorf("CharacterID = %v, want nil (account-level)", got[0].CharacterID)
+	}
+	if got[0].CharacterName != nil {
+		t.Errorf("CharacterName = %v, want nil (account-level)", got[0].CharacterName)
+	}
+}
+
+// TestListGuildWants_AllMembersWithOwnerAndOptionalChar proves ListGuildWants returns
+// active wants from MULTIPLE members, each with the owner username, a tagged want shows
+// the character name and an untagged one shows nil — and that the empty list is a non-nil
+// JSON [] (CWANT-03/04).
+func TestListGuildWants_AllMembersWithOwnerAndOptionalChar(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	// Empty → non-nil empty slice (JSON []).
+	if got, err := ListGuildWants(ctx, db); err != nil {
+		t.Fatalf("ListGuildWants (empty): %v", err)
+	} else if got == nil {
+		t.Fatalf("ListGuildWants on empty DB returned nil, want non-nil empty slice")
+	} else if len(got) != 0 {
+		t.Fatalf("ListGuildWants on empty DB len = %d, want 0", len(got))
+	}
+
+	insertWebUser(t, ctx, db, "disc-1", "Alice")
+	insertWebUser(t, ctx, db, "disc-2", "Bob")
+	aliceOwner := insertOwner(t, ctx, db, "Alice-Owner")
+	aliceChar := insertChar(t, ctx, db, aliceOwner, "Slampeach", false)
+
+	i1, i2 := int64(10), int64(20)
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		// Alice: one tagged want.
+		if _, e := AddWantTx(ctx, tx, "disc-1", &i1, "Alice Tagged", "buy", "high", nil, i64ptr(aliceChar), 1); e != nil {
+			return e
+		}
+		// Bob: one untagged (account-level) want.
+		if _, e := AddWantTx(ctx, tx, "disc-2", &i2, "Bob Untagged", "quest", "low", nil, nil, 2); e != nil {
+			return e
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed wants: %v", err)
+	}
+
+	got, err := ListGuildWants(ctx, db)
+	if err != nil {
+		t.Fatalf("ListGuildWants: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ListGuildWants len = %d, want 2 (all members)", len(got))
+	}
+
+	byItem := map[string]GuildWantRow{}
+	for _, r := range got {
+		byItem[r.ItemName] = r
+	}
+	at, ok := byItem["Alice Tagged"]
+	if !ok {
+		t.Fatalf("Alice's tagged want missing from guild roll-up")
+	}
+	if at.Owner != "Alice" {
+		t.Errorf("Alice Tagged owner = %q, want \"Alice\"", at.Owner)
+	}
+	if at.DiscordUserID != "disc-1" {
+		t.Errorf("Alice Tagged discord_user_id = %q, want \"disc-1\"", at.DiscordUserID)
+	}
+	if at.CharacterName == nil || *at.CharacterName != "Slampeach" {
+		t.Errorf("Alice Tagged character_name = %v, want \"Slampeach\"", at.CharacterName)
+	}
+	bu, ok := byItem["Bob Untagged"]
+	if !ok {
+		t.Fatalf("Bob's untagged want missing from guild roll-up")
+	}
+	if bu.Owner != "Bob" {
+		t.Errorf("Bob Untagged owner = %q, want \"Bob\"", bu.Owner)
+	}
+	if bu.CharacterID != nil || bu.CharacterName != nil {
+		t.Errorf("Bob Untagged char = (%v, %v), want (nil, nil)", bu.CharacterID, bu.CharacterName)
+	}
+}
+
 func TestAddWantTx_CustomDuplicateReturnsTypedSentinel(t *testing.T) {
 	db := NewTestDB(t)
 	ctx := context.Background()
@@ -288,7 +420,7 @@ func TestAddWantTx_CustomDuplicateReturnsTypedSentinel(t *testing.T) {
 
 	// First custom want (item_id NULL, dedupe on item_name).
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "buy", "med", nil, 1)
+		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "buy", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("first custom AddWantTx: %v", err)
@@ -297,7 +429,7 @@ func TestAddWantTx_CustomDuplicateReturnsTypedSentinel(t *testing.T) {
 	// Exact (owner, label, reason) re-add of a custom want → ErrDuplicateWant
 	// (the wantlist_custom_uidx partial index; NULL item_id is dedupe-safe).
 	addErr := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "buy", "med", nil, 2)
+		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "buy", "med", nil, nil, 2)
 		return e
 	})
 	if !errors.Is(addErr, ErrDuplicateWant) {

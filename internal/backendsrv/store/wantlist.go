@@ -50,14 +50,16 @@ const sqliteConstraintUnique = 2067
 // a pointer so an absent note marshals as null. The JSON tags match the frontend
 // WantlistRow interface (api.ts).
 type WantlistRow struct {
-	ID        int64   `json:"id"`
-	ItemID    *int64  `json:"item_id"` // null ⇒ custom want (D-04, D-07)
-	ItemName  string  `json:"item_name"`
-	Reason    string  `json:"reason"`
-	Priority  string  `json:"priority"`
-	Note      *string `json:"note"`
-	CreatedAt int64   `json:"created_at"`
-	Muted     bool    `json:"muted"` // D-09 per-want mute; the mute-bell rendered state reads this
+	ID            int64   `json:"id"`
+	ItemID        *int64  `json:"item_id"` // null ⇒ custom want (D-04, D-07)
+	ItemName      string  `json:"item_name"`
+	Reason        string  `json:"reason"`
+	Priority      string  `json:"priority"`
+	Note          *string `json:"note"`
+	CreatedAt     int64   `json:"created_at"`
+	Muted         bool    `json:"muted"`          // D-09 per-want mute; the mute-bell rendered state reads this
+	CharacterID   *int64  `json:"character_id"`   // CWANT-01: null ⇒ account-level want
+	CharacterName *string `json:"character_name"` // CWANT-06: LEFT JOIN character.name; null ⇒ account-level (or removed char)
 }
 
 // AddWantTx inserts a new wantlist_item for the caller (discordID, resolved from the
@@ -67,11 +69,16 @@ type WantlistRow struct {
 // returns the TYPED ErrDuplicateWant, detected via the driver's extended result code
 // (review MUST-FIX 2) — NOT the raw driver error, and NOT a string-match. itemID is nil
 // for a custom want; note is nil when absent.
-func AddWantTx(ctx context.Context, tx *sql.Tx, discordID string, itemID *int64, itemName, reason, priority string, note *string, now int64) (int64, error) {
+// characterID is the OPTIONAL character tag (CWANT-01): nil ⇒ an account-level want,
+// non-nil ⇒ scoped to that character (the handler authorizes the tag via
+// IsCharAssignedToTx BEFORE calling this — Plan 02). The COALESCE(character_id,-1) dedup
+// index (00010) still raises 2067 on a duplicate, so the ErrDuplicateWant detection below
+// is UNCHANGED.
+func AddWantTx(ctx context.Context, tx *sql.Tx, discordID string, itemID *int64, itemName, reason, priority string, note *string, characterID *int64, now int64) (int64, error) {
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		discordID, itemID, itemName, reason, priority, note, now)
+		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, character_id, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		discordID, itemID, itemName, reason, priority, note, characterID, now)
 	if err != nil {
 		// Detect the unique-constraint violation via the modernc driver's extended
 		// result code, NOT by string-matching the driver's textual message (brittle —
@@ -96,10 +103,12 @@ func AddWantTx(ctx context.Context, tx *sql.Tx, discordID string, itemID *int64,
 // sql.Null* and converted to pointers (NULL ⇒ JSON null).
 func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]WantlistRow, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, item_id, item_name, reason, priority, note, created_at, muted
-		   FROM wantlist_item
-		  WHERE discord_user_id = ? AND active = 1
-		  ORDER BY created_at DESC`, discordID)
+		`SELECT w.id, w.item_id, w.item_name, w.reason, w.priority, w.note, w.created_at, w.muted,
+		        w.character_id, c.name AS character_name
+		   FROM wantlist_item w
+		   LEFT JOIN character c ON c.id = w.character_id
+		  WHERE w.discord_user_id = ? AND w.active = 1
+		  ORDER BY w.created_at DESC`, discordID)
 	if err != nil {
 		return nil, fmt.Errorf("list own wants (user=%s): %w", discordID, err)
 	}
@@ -108,12 +117,14 @@ func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]Wantlist
 	out := make([]WantlistRow, 0) // non-nil → JSON []
 	for rows.Next() {
 		var (
-			r      WantlistRow
-			itemID sql.NullInt64
-			note   sql.NullString
-			muted  int
+			r       WantlistRow
+			itemID  sql.NullInt64
+			note    sql.NullString
+			muted   int
+			charID  sql.NullInt64
+			charNme sql.NullString
 		)
-		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Reason, &r.Priority, &note, &r.CreatedAt, &muted); err != nil {
+		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Reason, &r.Priority, &note, &r.CreatedAt, &muted, &charID, &charNme); err != nil {
 			return nil, fmt.Errorf("scan own-want row (user=%s): %w", discordID, err)
 		}
 		if itemID.Valid {
@@ -125,10 +136,91 @@ func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]Wantlist
 			r.Note = &v
 		}
 		r.Muted = muted != 0 // INTEGER 0/1 → bool (the mute-bell read path, D-09)
+		if charID.Valid {
+			v := charID.Int64
+			r.CharacterID = &v
+		}
+		if charNme.Valid {
+			v := charNme.String
+			r.CharacterName = &v
+		}
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate own wants (user=%s): %w", discordID, err)
+	}
+	return out, nil
+}
+
+// GuildWantRow is one active want in the GUILDWIDE roll-up (ListGuildWants — CWANT-03/04,
+// the "what does the guild want" read). It surfaces the owner's username (web_user.username,
+// JOINed) and the OPTIONAL tagged character name (LEFT JOIN character; NULL ⇒ account-level).
+//
+// SECURITY (T-28-02): there is intentionally NO Note field. The per-want note is private to
+// its owner; the guildwide read MUST NOT expose it. ListOwnWants is the only read that
+// returns note (owner-scoped). Do NOT add a note column to this struct or its SELECT.
+type GuildWantRow struct {
+	ID            int64   `json:"id"`
+	ItemID        *int64  `json:"item_id"`
+	ItemName      string  `json:"item_name"`
+	Reason        string  `json:"reason"`
+	Priority      string  `json:"priority"`
+	DiscordUserID string  `json:"discord_user_id"`
+	Owner         string  `json:"owner"`          // web_user.username
+	CharacterID   *int64  `json:"character_id"`   // null ⇒ account-level want
+	CharacterName *string `json:"character_name"` // null ⇒ account-level (or removed char)
+	// NB: NO note field — private, excluded (Security recommendation, T-28-02).
+}
+
+// ListGuildWants returns EVERY active want across ALL members (CWANT-03/04, the guildwide
+// roll-up), newest first. Distinct from ListOwnWants: it is NOT owner-scoped (no
+// discord_user_id filter) and it JOINs web_user for the owner's username + LEFT JOINs
+// character for the optional tag name. It EXCLUDES the private note (T-28-02). Plain
+// *sql.DB (read-only, no tx). Always returns a NON-NIL slice (possibly empty) so the
+// handler emits JSON [] not null. Nullable item_id/character_id/character_name are scanned
+// via sql.Null* → pointers (NULL ⇒ JSON null).
+func ListGuildWants(ctx context.Context, db *sql.DB) ([]GuildWantRow, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT w.id, w.item_id, w.item_name, w.reason, w.priority,
+		        w.discord_user_id, wu.username AS owner, w.character_id, c.name AS character_name
+		   FROM wantlist_item w
+		   JOIN web_user wu ON wu.discord_user_id = w.discord_user_id
+		   LEFT JOIN character c ON c.id = w.character_id
+		  WHERE w.active = 1
+		  ORDER BY w.created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list guild wants: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]GuildWantRow, 0) // non-nil → JSON []
+	for rows.Next() {
+		var (
+			r       GuildWantRow
+			itemID  sql.NullInt64
+			charID  sql.NullInt64
+			charNme sql.NullString
+		)
+		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Reason, &r.Priority,
+			&r.DiscordUserID, &r.Owner, &charID, &charNme); err != nil {
+			return nil, fmt.Errorf("scan guild-want row: %w", err)
+		}
+		if itemID.Valid {
+			v := itemID.Int64
+			r.ItemID = &v
+		}
+		if charID.Valid {
+			v := charID.Int64
+			r.CharacterID = &v
+		}
+		if charNme.Valid {
+			v := charNme.String
+			r.CharacterName = &v
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate guild wants: %w", err)
 	}
 	return out, nil
 }

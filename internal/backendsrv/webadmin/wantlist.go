@@ -142,7 +142,10 @@ func AddWantHandler(db *sql.DB) http.HandlerFunc {
 
 		var newID int64
 		err := withTx(ctx, db, func(tx *sql.Tx) error {
-			id, e := store.AddWantTx(ctx, tx, callerID, req.ItemID, itemName, req.Reason, priority, notePtr, now)
+			// characterID is nil here: the character-tag handler path is wired in Plan 02
+			// (it authorizes the tag via store.IsCharAssignedToTx before insert). This
+			// existing add-want endpoint stays account-level until then.
+			id, e := store.AddWantTx(ctx, tx, callerID, req.ItemID, itemName, req.Reason, priority, notePtr, nil, now)
 			if e != nil {
 				return e // ErrDuplicateWant → mapWantErr → 409 duplicate
 			}

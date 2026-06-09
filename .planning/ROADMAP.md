@@ -265,16 +265,19 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 ### Phase 28: Character-Tagged Wantlist
 **Goal**: Wants gain an optional character dimension — a member can tag a want to one of their assigned characters, those wants roll up into the guildwide wantlist alongside untagged/pre-existing wants, and the member can filter/group their own wantlist by character — while the EC-tunnel monitor DM still targets the character's OWNER.
 **Milestone**: v2.3
-**Track**: Wantlist (the 00009/schema-v9 character_id touch lands here)
+**Track**: Wantlist (the `00010`/schema-v10 `character_id` touch lands here — NOT 00009; 00009 shipped as character_assignment in P26)
 **Depends on**: Phase 26 (the "my assigned characters" set is what a want can be tagged to). Reuses the live v2.2 `wantlist_item` (00006), the EC-tunnel monitor (`internal/backendsrv/ec` + `wantmatch.ForItem`), and the `notify`/`alert_log` spine.
 **Requirements**: CWANT-01, CWANT-02, CWANT-03, CWANT-04, CWANT-05, CWANT-06
-**Open sub-decisions (resolve in spec/plan)**: CWANT-04 — whether the guildwide wantlist surfaces character/owner attribution per want; CWANT-05 — whether the EC-monitor embed NAMES the character (the DM target is locked to the owner regardless).
+**Resolved sub-decisions (locked 2026-06-08)**: CWANT-04 — the guildwide wantlist SHOWS per-want character + owner (`web_user.username`) attribution, EXCLUDING the private `note`; CWANT-05 — the EC-monitor embed NAMES the character via a display-only "For <char>" field (the DM target stays the owner `discord_user_id`, structurally unchanged).
 **Success Criteria** (what must be TRUE):
-  1. When adding a wantlist item, a member can OPTIONALLY tag it to one of their assigned characters; wants with no character (account-level) and all pre-existing wants remain valid — the `00009` migration backfills existing `wantlist_item` rows to a NULL `character_id` with no data loss (CWANT-01, CWANT-02).
+  1. When adding a wantlist item, a member can OPTIONALLY tag it to one of their assigned characters; wants with no character (account-level) and all pre-existing wants remain valid — the `00010` migration backfills existing `wantlist_item` rows to a NULL `character_id` with no data loss (CWANT-01, CWANT-02).
   2. Character-tagged wants aggregate ("filter up") into the guildwide wantlist alongside untagged wants; the guildwide list surfaces character/owner attribution per the CWANT-04 spec decision (CWANT-03, CWANT-04).
   3. A member can filter/group their own wantlist by character (CWANT-06).
   4. The EC-tunnel monitor DM for a character-tagged want still targets the character's OWNER (keys on `discord_user_id`); whether the embed names the character follows the CWANT-05 spec decision (CWANT-05).
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 28-01-PLAN.md — migration 00010 (nullable character_id + COALESCE-keyed dedup-index rewrite) + store (AddWantTx/ListOwnWants +char, NEW ListGuildWants) + the IsCharAssignedToTx IDOR guard + ErrCharNotAssigned
+  - [ ] 28-02-PLAN.md — API: AddWantHandler IDOR guard + ListGuildWantsHandler + GET /api/v1/wantlist/guild route; wantmatch.Hit.CharacterName LEFT JOIN (DM target unchanged) + EC embed "For <char>" field
+  - [ ] 28-03-PLAN.md — web: api.ts char fields + fetchGuildWants; pure groupByChar.ts + node test; WantAddForm character <select>; WantlistPanel My/Guild toggle + group-by-char
 **UI hint**: yes
 
 ## Progress

@@ -1,6 +1,77 @@
-# Milestone v2.2 — Requirements: Wantlist + Discord Pinger
+# Milestone v2.3 — Requirements: Character Assignment & Per-Character Wantlists
 
-**Status:** 🔄 In progress — opened 2026-06-02. Continues phase numbering at **19**.
+**Status:** 🔄 In progress — opened 2026-06-08. Continues phase numbering at **26**.
+
+**Milestone goal:** Associate SquireBot users with specific characters, let them view those characters' inventory, and create character-tagged wantlist items that roll up to the guildwide wantlist.
+
+**Builds on (verified in code, do not rebuild):** `character.owner_id → owner.discord_user_id → web_user` already links each character to one user (bound by whoever's watcher code uploaded it). Inventory is per-character; read views are all-members consolidated (Char column). `wantlist_item` (00006) is per-user with NO character_id; the EC-tunnel monitor (`internal/backendsrv/ec`) DMs the user via `wantmatch.ForItem`. Schema at v8 (latest `00008_ec_cursor`); this milestone adds `00009` → schema **v9**.
+
+**Locked decisions (2026-06-08):**
+- **Assignment = BOTH** — members self-claim (incl. characters under an unlinked/legacy owner) AND officers assign/override/reassign.
+- **Inventory = ALL-MEMBERS + FILTER** — keep the all-members consolidated views (CLAUDE.md LOCKED), ADD a "my characters" filter/drill-down. ADDITIVE — not an access-control restriction.
+- **Wantlist = CHARACTER-TAGGED** — wants gain an optional character dimension and aggregate into the guildwide wantlist; the EC-monitor DM still targets the character's OWNER (notifications key on `discord_user_id`).
+
+**Scope:** backend (`internal/backendsrv`) + web (`web/`). The Go **watcher is untouched** (backend-only schema; no `WatcherMaxSchemaVersion` concern).
+
+**Open sub-decisions (⚠ to resolve in spec/plan, flagged on the affected REQ-IDs below):** multi-user assignment for shared bank toons (ASSIGN-05); whether the guildwide wantlist displays character/owner attribution (CWANT-04); whether the EC-monitor embed names the character (CWANT-05).
+
+---
+
+## v2.3 Requirements
+
+### Character Assignment (ASSIGN)
+
+- [ ] **ASSIGN-01**: A signed-in member can see "My characters" — the list of characters currently assigned to them.
+- [ ] **ASSIGN-02**: A signed-in member can self-claim a character (including one uploaded under an unlinked/legacy owner, or currently unassigned) so it appears under "My characters."
+- [ ] **ASSIGN-03**: A member can release/unclaim a character they hold, returning it to unassigned so it can be reassigned.
+- [ ] **ASSIGN-04**: An officer can assign any character to any member, and reassign/override an existing assignment, from the admin panel.
+- [ ] **ASSIGN-05**: ⚠ *(open)* A character may be assigned to more than one member (shared bank toons) — resolve single- vs multi-owner in spec; likely a many-to-many `character_assignment` table layered over `owner_id` (upload provenance).
+- [ ] **ASSIGN-06**: Every assignment change (self-claim, release, officer assign/reassign) is recorded in the audit log (actor, character, action, time).
+
+### My-Characters Inventory Filter (MYVIEW)
+
+- [ ] **MYVIEW-01**: A member can filter the consolidated views (inventory/bank/gear/spell) to just their assigned characters — a "my characters" quick-filter — WITHOUT changing the existing all-members visibility.
+- [ ] **MYVIEW-02**: A member can drill into a single specific assigned character's inventory.
+
+### Character-Tagged Wantlist (CWANT)
+
+- [ ] **CWANT-01**: When adding a wantlist item, a member can optionally tag it to one of their assigned characters.
+- [ ] **CWANT-02**: Wants without a character (account-level, and all pre-existing wants) remain valid — the character tag is OPTIONAL; the `00010` migration backfills existing wants to no-character with no data loss (schema → v10). *(00010/v10, NOT 00009 — 00009 shipped as the P26 character_assignment migration.)*
+- [ ] **CWANT-03**: Character-tagged wants aggregate ("filter up") into the guildwide wantlist alongside untagged wants.
+- [ ] **CWANT-04**: ⚠ *(open)* The guildwide wantlist surfaces character/owner attribution per want (who / which character wants it) — confirm display in spec.
+- [ ] **CWANT-05**: The EC-tunnel monitor DM for a character-tagged want still targets the character's OWNER (keys on `discord_user_id`); ⚠ *(open)* the embed MAY name the character — confirm in spec.
+- [ ] **CWANT-06**: A member can filter/group their own wantlist by character.
+
+---
+
+## v2.3 Traceability
+
+_Maps each v2.3 REQ-ID to exactly one phase. Phases continue at **26**. All 14 v2.3 requirements mapped; no orphans, no duplicates._
+
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| ASSIGN-01 | Phase 26 — Character Assignment | Pending |
+| ASSIGN-02 | Phase 26 — Character Assignment | Pending |
+| ASSIGN-03 | Phase 26 — Character Assignment | Pending |
+| ASSIGN-04 | Phase 26 — Character Assignment | Pending |
+| ASSIGN-05 | Phase 26 — Character Assignment *(open: single- vs multi-owner)* | Pending |
+| ASSIGN-06 | Phase 26 — Character Assignment | Pending |
+| MYVIEW-01 | Phase 27 — My-Characters Inventory Filter | Pending |
+| MYVIEW-02 | Phase 27 — My-Characters Inventory Filter | Pending |
+| CWANT-01 | Phase 28 — Character-Tagged Wantlist | Pending |
+| CWANT-02 | Phase 28 — Character-Tagged Wantlist | Pending |
+| CWANT-03 | Phase 28 — Character-Tagged Wantlist | Pending |
+| CWANT-04 | Phase 28 — Character-Tagged Wantlist *(open: guildwide attribution display)* | Pending |
+| CWANT-05 | Phase 28 — Character-Tagged Wantlist *(open: EC embed names character)* | Pending |
+| CWANT-06 | Phase 28 — Character-Tagged Wantlist | Pending |
+
+**Coverage:** 14/14 v2.3 requirements mapped across Phases 26–28 (ASSIGN-01..06 → P26 · MYVIEW-01/02 → P27 · CWANT-01..06 → P28). Strict dependency order 26 → 27 → 28. Backend (`internal/backendsrv`) + web (`web/`) only; the Go watcher is untouched; `00009` migration → schema v9 (`character_id` NULLABLE).
+
+---
+
+# (PARKED) Milestone v2.2 — Requirements: Wantlist + Discord Pinger
+
+**Status:** ⏸ Parked 2026-06-08 — Track 1 (WANT-01/02/03/04/05/08, Phases 19–21) SHIPPED LIVE; Track 2 (WANT-06/07, Phases 22–23) parked on the 3 Raid Alliance bot invites. LNX-01..06 (Phase 25) shipped (watcher v2.1.1). Revisit Track 2 when the invites land. Opened 2026-06-02; continued phase numbering at **19**.
 
 **Milestone goal:** Guildies maintain a personal wantlist on squirebot.quest and get DMed on Discord when a wanted item appears — at EC-tunnel auction, in cross-server WTS channels, or as a raid-target tied to a wanted item's quest. (Backlog 999.12 / WANT-01..08.)
 

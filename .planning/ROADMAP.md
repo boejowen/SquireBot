@@ -258,7 +258,8 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
   1. A member can apply a "my characters" quick-filter to the consolidated views (inventory/bank/gear/spell) so they see only their assigned characters' rows — WITHOUT changing the existing all-members visibility (any member can still toggle back to all members) (MYVIEW-01).
   2. A member can drill into a single specific assigned character's inventory from that filter (MYVIEW-02).
   3. The filter is client-side/read-only over the existing consolidated DataGrid — no per-character view tabs are created and no row becomes hidden from other members (the consolidated-views architecture rule is preserved).
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 27-01-PLAN.md — pure myview.ts filter helper + node test, then the single 'My characters' <select> (All members / My characters / per-char drill-down) wired into +page.svelte feeding the four grids pre-filtered data (zero backend change)
 **UI hint**: yes
 
 ### Phase 28: Character-Tagged Wantlist
@@ -308,7 +309,7 @@ Full details in [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md).
 | 24. Watcher test hardening (C1/C2 coverage) | v2.2 | 2/2 | ✅ Complete (C1/C2/REFACTOR closed; 10/10 verified) | 2026-06-03 |
 | 25. Linux Watcher | v2.2 | 3/3 | ✅ Complete (25-03 done — OS-specific manifest assets + runtime.GOOS auto-update selection, tarball + systemd user unit + install.sh, additive release.yml linux build; linux closure CGO-free, Windows NSIS path + `go test ./...` unchanged) | Human UAT on a real Linux+WINE box (watch→upload→autostart→self-update) |
 | 26. Character Assignment | v2.3 | 0/3 | Planned (3 plans, 3 waves) | — |
-| 27. My-Characters Inventory Filter | v2.3 | 0/TBD | Not started | — |
+| 27. My-Characters Inventory Filter | v2.3 | 0/1 | Planned (1 plan, 1 wave) | — |
 | 28. Character-Tagged Wantlist | v2.3 | 0/TBD | Not started | — |
 
 ## Backlog

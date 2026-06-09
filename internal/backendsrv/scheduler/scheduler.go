@@ -171,7 +171,7 @@ func Start(ctx context.Context, db *sql.DB, botSession *discordgo.Session) {
 			// first real end-to-end alert. ~10-min cadence (dueEC). The Run closure
 			// captures db + the threaded botSession (nil ⇒ ec.RunMatch no-ops cleanly)
 			// + the production politefetch.Fetch. ec.RunMatch is the THIN producer:
-			// poll-set → getdetails/0/{name} → diff on the per-item ec_auction_cursor
+			// poll-set → getdetails/1/{name} → diff on the per-item ec_auction_cursor
 			// → wantmatch.ForItem → notify.Send(embed). The job-level job_run cursor
 			// (advance-always, for cadence/observability) is DISTINCT from the per-item
 			// ec_auction_cursor (the diff state, advance-only-on-success inside

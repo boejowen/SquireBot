@@ -4,11 +4,17 @@ package ec
 // RunMatch composes poll → diff → match → embed → send. It is the scheduler
 // ec_auction_match job's Run target. The flow, per wanted item:
 //
-//	ECPollSet → GetETag → getdetails/0/{name} (conditional) → 304? skip : parse →
+//	ECPollSet → GetETag → getdetails/1/{name} (conditional) → 304? skip : parse →
 //	  per-item cursor diff (advance-only-on-success; first-sight baseline =
 //	  record-but-don't-DM) → SetETag → resolve wantmatch.ForItem(item_id) ONCE per
 //	  item → for each NEW WTS auction (t>cursor AND u∈{0,2}): buildEmbed →
 //	  notify.Send(Source:"ec_auction", WantID, Embed)
+//
+// SERVER (corrected 2026-06-09 — server=0 was Green; see 21-SPIKE correction): the
+// getdetails server segment is 1 = the LIVE P99 Blue tunnel (matches getall/1=Blue).
+// The spike originally pinned server=0 as "live Blue", but that was disproven — a
+// Blue guildie got a real false-ping for a Green seller. server=0 is Green. See
+// urls.go getDetailsBase for the full correction note.
 //
 // Politeness (D-09): the per-item getdetails URL doubles as an etag_cache key, so
 // each poll sends If-None-Match and an unchanged item 304s — skipping the body

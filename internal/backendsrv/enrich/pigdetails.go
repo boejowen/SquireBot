@@ -11,11 +11,13 @@ package enrich
 // direction or matches WTS on the wrong field. Filter WTS on `u ∈ {0,2}` and diff
 // on `t`.
 //
-// Endpoint (the spike pinned this — see 21-SPIKE.md):
+// Endpoint (corrected 2026-06-09 — server=0 was Green; see 21-SPIKE correction):
 //
 //	GET https://pigparse.azurewebsites.net/api/item/getdetails/{server}/{itemname}
-//	    {server}=0 is the LIVE Blue tunnel (NOT 1 — 1 is stale); the NAME form is
-//	    the only working lookup key (the id form returns 400/empty).
+//	    {server}=1 is the LIVE Blue feed (matches the catalog convention
+//	    getall/1=Blue); {server}=0 is GREEN (the spike originally mislabeled 0 as
+//	    "live Blue" — disproven when a Blue guildie got a Green-seller false-ping).
+//	    The NAME form is the only working lookup key (the id form returns 400/empty).
 //
 // Returns ItemDetail = { items: ItemAuctionDetail[] (nullable→empty), itemName,
 // players (seller best-effort, key→auction relationship undocumented — D-05) }.

@@ -24,10 +24,18 @@ import (
 // getDetailsBase is the per-auction getdetails feed base — a hardcoded
 // host/scheme constant (T-21-08 SSRF mitigation: no caller controls the host or
 // scheme; only the catalog-sourced item NAME is interpolated, escaped). The
-// server segment is 0 (the LIVE Blue tunnel — the spike pinned this: server=1 is
-// ~11h stale; see 21-SPIKE.md). The NAME form is the ONLY working lookup key (the
-// bare-id form 400s; an id in the name slot returns empty).
-const getDetailsBase = "https://pigparse.azurewebsites.net/api/item/getdetails/0/"
+// server segment is 1 — the LIVE P99 Blue tunnel (matches the catalog convention
+// getall/1 = Blue). The NAME form is the ONLY working lookup key (the bare-id form
+// 400s; an id in the name slot returns empty).
+//
+// CORRECTED 2026-06-09: the Phase 21 spike's critical finding "server=0 = LIVE
+// Blue" was DISPROVEN — server=0 is GREEN. A guildie who plays Blue got a real
+// false-ping for a Green seller, and a live probe showed server=1 is the fresher
+// live Blue feed (e.g. Cloak of Flames server=1 max_t 2026-06-08T23:02 > server=0).
+// server=0 merely LOOKED "fresher" in the spike because Green has more parsers. See
+// 21-SPIKE.md correction. The getdetails records carry no per-auction server field,
+// so the URL server segment is the only lever for which P99 server we poll.
+const getDetailsBase = "https://pigparse.azurewebsites.net/api/item/getdetails/1/"
 
 // getDetailsURL builds the getdetails poll URL for one wanted item, keyed on its
 // catalog NAME (the only working query key — 21-SPIKE.md). The name segment is

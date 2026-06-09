@@ -28,6 +28,7 @@
 	import { requestStatusLabel } from '$lib/assignments';
 	import {
 		fetchAllAssignments,
+		fetchDesignatedChars,
 		officerAssign,
 		officerRemoveAssign,
 		approveRequest,
@@ -37,6 +38,7 @@
 		Unauthenticated,
 		type Assignment,
 		type PendingRequest,
+		type DesignatedChar,
 		type DesignateMode
 	} from '$lib/api';
 
@@ -46,6 +48,10 @@
 	let phase = $state<Phase>('loading');
 	let assignments = $state<Assignment[]>([]);
 	let requests = $state<PendingRequest[]>([]);
+	// The live guild-bank/bot chars — the "undesignate" surface (backlog 999.33). A
+	// designated char is absent from `assignments` (it has no assignee) so it is listed
+	// here; clearing it (mode:none) drops it from this list and returns it to claimable.
+	let designated = $state<DesignatedChar[]>([]);
 
 	// The per-row Assign/Reassign assignee input, keyed by character_id (a discord_user_id
 	// string the officer pastes — the raw API contract; there is no username picker in the
@@ -66,9 +72,13 @@
 	async function load() {
 		phase = 'loading';
 		try {
-			const all = await fetchAllAssignments();
+			const [all, designatedChars] = await Promise.all([
+				fetchAllAssignments(),
+				fetchDesignatedChars()
+			]);
 			assignments = all.assignments;
 			requests = all.requests;
+			designated = designatedChars;
 			phase = 'ready';
 		} catch (err) {
 			if (route(err)) return;
@@ -111,9 +121,18 @@
 	}
 
 	async function reloadAll() {
-		const all = await fetchAllAssignments();
+		const [all, designatedChars] = await Promise.all([
+			fetchAllAssignments(),
+			fetchDesignatedChars()
+		]);
 		assignments = all.assignments;
 		requests = all.requests;
+		designated = designatedChars;
+	}
+
+	/** The human label for a designated char's kind. */
+	function designatedKindLabel(kind: DesignatedChar['kind']): string {
+		return kind === 'bank' ? 'Guild bank' : 'Guild bot';
 	}
 
 	/** Run a mutation under a busy guard with uniform result/error handling + reload. */
@@ -187,6 +206,21 @@
 				await designateChar(a.character_id, mode);
 			},
 			`Updated the designation for ${a.name}.`
+		);
+	}
+
+	/**
+	 * Clear a guild-bank/bot designation (backlog 999.33): reuses designateChar with
+	 * mode:none. After the reload the char leaves `designated` and re-enters the
+	 * assignable/claimable pool.
+	 */
+	function doClearDesignation(dc: DesignatedChar) {
+		void act(
+			`undesignate-${dc.character_id}`,
+			async () => {
+				await designateChar(dc.character_id, 'none');
+			},
+			`Cleared the ${designatedKindLabel(dc.kind).toLowerCase()} designation for ${dc.name}.`
 		);
 	}
 
@@ -297,6 +331,40 @@
 									onclick={() => doDeny(req)}
 								>
 									{busyKey === `deny-${req.id}` ? 'Denying…' : 'Deny'}
+								</button>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</div>
+
+		<!-- 3. Designated characters — clear a guild bank/bot designation (999.33). -->
+		<div class="block">
+			<div class="divider"></div>
+			<h3 class="sub-heading">Designated characters (guild bank / bot)</h3>
+			{#if designated.length === 0}
+				<p class="empty-note">No characters are designated as guild bank/bot.</p>
+			{:else}
+				<ul class="assign-list">
+					{#each designated as dc (dc.character_id)}
+						<li class="assign-row">
+							<div class="assign-meta">
+								<span class="char-name">{dc.name}</span>
+								<span class="assignee">
+									<span class="status-chip">{designatedKindLabel(dc.kind)}</span>
+								</span>
+							</div>
+							<div class="assign-actions">
+								<button
+									type="button"
+									class="revoke-btn"
+									disabled={busyKey !== null}
+									onclick={() => doClearDesignation(dc)}
+								>
+									{busyKey === `undesignate-${dc.character_id}`
+										? 'Clearing…'
+										: 'Clear designation'}
 								</button>
 							</div>
 						</li>

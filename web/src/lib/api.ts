@@ -947,6 +947,19 @@ export interface AllAssignments {
 /** An officer designate mode (mutually-exclusive guild bank / guild bot / neither). */
 export type DesignateMode = 'bank' | 'bot' | 'none';
 
+/**
+ * One currently-designated character (GET /api/v1/admin/characters/designated — the
+ * officer "undesignate" read, backlog 999.33). Mirrors the Go store.DesignatedChar:
+ * `kind` is 'bank' (is_bank_toon=1) or 'bot' (is_guild_bot=1). A designated char drops
+ * out of fetchAllAssignments + claimable, so this read is the ONLY UI surface that lists
+ * it; the clear reuses the existing designateChar(character_id, 'none').
+ */
+export interface DesignatedChar {
+	character_id: number;
+	name: string;
+	kind: 'bank' | 'bot';
+}
+
 /** GET /api/v1/assignments/mine → MyCharacter[] ([] when none). Login-only. */
 export function fetchMyCharacters(f: typeof fetch = fetch): Promise<MyCharacter[]> {
 	return getJSON<MyCharacter[]>('/api/v1/assignments/mine', f);
@@ -985,6 +998,11 @@ export function cancelRequest(character_id: number, f: typeof fetch = fetch): Pr
 /** GET /api/v1/admin/assignments → { assignments, requests }. Officer-only (403 not_authorized for a member). */
 export function fetchAllAssignments(f: typeof fetch = fetch): Promise<AllAssignments> {
 	return getJSON<AllAssignments>('/api/v1/admin/assignments', f);
+}
+
+/** GET /api/v1/admin/characters/designated → DesignatedChar[] ([] when none). Officer-only; the "undesignate" read (backlog 999.33). */
+export function fetchDesignatedChars(f: typeof fetch = fetch): Promise<DesignatedChar[]> {
+	return getJSON<DesignatedChar[]>('/api/v1/admin/characters/designated', f);
 }
 
 /** POST /api/v1/admin/assignments/assign → { assigned }. Officer-only; body {character_id, assignee}. */

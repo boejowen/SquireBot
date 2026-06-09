@@ -1,5 +1,8 @@
 # Phase 21 — PigParse `getdetails` Feasibility Spike
 
+> ## ⚠ CORRECTION 2026-06-09 — the "server=0 = LIVE Blue" finding below is WRONG
+> The spike's headline finding ("§ CRITICAL FINDING — the live Blue tunnel is server=0, NOT server=1") is **disproven.** It only ever proved server=0 was *fresher* (more parsers) — never which P99 server it was. **server=0 is GREEN; server=1 is Blue** (consistent with the catalog convention `getall/1`=Blue). A guildie who plays **Blue** got an EC DM whose listed seller was auctioning on **Green** (2026-06-09); a live probe confirmed server=1 is live Blue (e.g. Cloak of Flames server=1 `max_t` 2026-06-08T23:02, *fresher* than server=0 at that moment). Each getdetails record carries **no per-auction server field**, so the URL server segment is the only lever. **Fixed:** `ec/urls.go` now polls `getdetails/1/` (Blue); the live `ec_auction_cursor` was cleared to re-baseline against Blue (quick `260609-er6`, commit `de15933`, deployed 2026-06-09). Blue coverage is sparser than Green (fewer parsers) — correct-but-intermittent, per the D-07 caveat below. **Treat the "server=0=Blue" claim in §"CRITICAL FINDING" and the hand-off as historical/incorrect.**
+
 **Run:** 2026-06-06 ~02:11–02:13 UTC (live, read-only HTTPS GETs against `https://pigparse.azurewebsites.net`)
 **Gate:** ROADMAP Phase 21 criterion 1 / Pitfall 1. D-08 = no checkpoint — threshold applied, path chosen, phase proceeds.
 **Verdict:** ✅ **Adopt per-auction `getdetails` (the default path).** Both threshold conditions met.

@@ -19,13 +19,14 @@ import { createSvelteTable } from '../table/createSvelteTable';
 import { viewColumns } from '../columns';
 import type { ViewRow } from '../api';
 
-/** A column id -> whether the global filter should inspect it (WR-02 contract). */
+/** A column id -> whether the global filter should inspect it (WR-02 contract).
+ *  (No `id` entry — the raw item-ID column was removed from the member-facing
+ *  grid entirely; quick 260610-fm5 WS2.) */
 const GLOBAL_FILTERABLE: Record<string, boolean> = {
 	char: true,
 	slot: true,
 	item: true,
 	count: true,
-	id: false,
 	wiki: false,
 	price: false,
 	last_synced: false
@@ -76,6 +77,10 @@ describe('viewColumns global-filter scoping (WR-02)', () => {
 			// and explicitly false for the excluded ones.
 			expect(col?.enableGlobalFilter ?? true, `column ${id} global-filterable`).toBe(expected);
 		}
+	});
+
+	it('no longer defines a raw item-ID column (260610-fm5 WS2 — IDs are not member-facing)', () => {
+		expect(findCol('id')).toBeUndefined();
 	});
 
 	it('the global filter no longer matches the raw last_synced ISO string', () => {

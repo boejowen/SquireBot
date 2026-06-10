@@ -1,7 +1,7 @@
 <script lang="ts">
 	// SearchResults — renders the cross-character search output (14-UI-SPEC
 	// Search Contract). Per matched item: the item name (accent link + the same
-	// ItemTooltip trigger) + a de-emphasized id, then ONE LINE PER HOLDER
+	// ItemTooltip trigger), then ONE LINE PER HOLDER
 	//   ↳ <Char>: <Location>, count <n>
 	// surfacing which character(s)/location(s) hold it — the core-value framing.
 	// Groups with >5 holders (group.collapsed) render collapsed behind an expand
@@ -76,7 +76,6 @@
 					>
 						<span class="item-name">{g.itemName}</span>
 					</ItemTooltip>
-					<span class="item-id">#{g.itemId}</span>
 				</div>
 				<ul class="holders">
 					{#each shown as r (r.char + '|' + r.location)}
@@ -133,11 +132,6 @@
 		border-bottom: 1px solid var(--accent);
 		font-family: var(--font-body);
 		font-size: 16px;
-	}
-	.item-id {
-		font-size: 13px;
-		opacity: 0.55;
-		font-variant-numeric: tabular-nums;
 	}
 	.holders {
 		list-style: none;

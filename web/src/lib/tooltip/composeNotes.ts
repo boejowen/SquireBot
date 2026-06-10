@@ -146,9 +146,9 @@ export function composeItemNote(
     parts.push('<p class="tooltip-price tooltip-no-price">No recent transactions on PigParse.</p>');
   }
 
-  // 4. Quest flag.
+  // 4. Quest flag ("in-game flag" is sourcing jargon — members just need the fact).
   if (summary?.is_quest_item) {
-    parts.push('<p class="tooltip-quest-flag">Quest item: yes (in-game flag)</p>');
+    parts.push('<p class="tooltip-quest-flag">Quest item</p>');
   }
 
   // 5. Used-in-quests list (notes_link only, max 5; each name escaped).

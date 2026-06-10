@@ -116,15 +116,18 @@
 		<div class="col-filters">
 			{#each table.getAllLeafColumns() as col (col.id)}
 				{#if col.getCanFilter()}
+					<!-- Label filters with the DISPLAY header (e.g. "Status"), never the
+					     raw column id (e.g. "in_guild") — ids are plumbing, not UI copy. -->
+					{@const colLabel = String(col.columnDef.header ?? col.id)}
 					{#if col.columnDef.meta?.filter === 'facet'}
 						<select
 							class="facet"
-							aria-label={`Filter by ${col.id}`}
+							aria-label={`Filter by ${colLabel}`}
 							value={(col.getFilterValue() as string) ?? ''}
 							onchange={(e) =>
 								col.setFilterValue(e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
 						>
-							<option value="">{col.id} (all)</option>
+							<option value="">{colLabel} (all)</option>
 							{#each facetOptions(col.id) as opt (opt)}
 								<option value={opt}>{opt}</option>
 							{/each}
@@ -133,11 +136,11 @@
 						<input
 							class="col-text"
 							type="text"
-							placeholder={String(col.columnDef.header ?? col.id)}
+							placeholder={colLabel}
 							value={(col.getFilterValue() as string) ?? ''}
 							oninput={(e) =>
 								col.setFilterValue(e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
-							aria-label={`Filter by ${col.id}`}
+							aria-label={`Filter by ${colLabel}`}
 						/>
 					{/if}
 				{/if}

@@ -64,17 +64,17 @@ function tierSort(a: Row<GearCheckRow>, b: Row<GearCheckRow>): number {
 }
 
 // --- view / bank (identical column set; UI-SPEC) -------------------------
-// Char · Slot · Item · ID · Count · Wiki · Price · Last Synced.
+// Char · Slot · Item · Count · Wiki · Price · Last Synced. (No raw item-ID
+// column — IDs are watcher plumbing, not member-facing data.)
 // Default sort Char asc, then item asc, then location asc (DataGrid seeds the
 // multi-sort state; these accessors back it).
-// The global "Filter all columns" box runs `includesString` over each column's
+// The global filter box runs `includesString` over each column's
 // raw accessor value. For columns whose accessor diverges from what the user
 // actually sees rendered, that produces confusing "phantom" matches (review
 // WR-02): `last_synced` carries the raw ISO string ("2026-05-09T00:00:00Z")
 // while the cell renders only "2026-05-09", `wiki` carries the full wiki URL
 // while the cell renders just an icon (no visible text), and `price` carries a
-// raw number that the cell formats as "1,234pp". `id` is excluded too so a
-// price/count digit-run can't match unrelated item IDs. Each of these sets
+// raw number that the cell formats as "1,234pp". Each of these sets
 // `enableGlobalFilter: false` so the global box only matches the user-visible
 // text columns (Char / Slot / Item); per-column filtering is unaffected.
 export const viewColumns: ColumnDef<ViewRow, unknown>[] = [
@@ -86,7 +86,6 @@ export const viewColumns: ColumnDef<ViewRow, unknown>[] = [
 		header: 'Item',
 		cell: (ctx) => renderComponent(ItemCell, { row: ctx.row.original })
 	},
-	{ id: 'id', accessorKey: 'id', header: 'ID', enableGlobalFilter: false },
 	{ id: 'count', accessorKey: 'count', header: 'Count' },
 	{
 		id: 'wiki',
@@ -190,9 +189,9 @@ function prioritySort(a: Row<WantlistRow>, b: Row<WantlistRow>): number {
  * The In-guild column's accessor returns the COARSE status ('in'/'not'/'na') so
  * the secondary sort (D-08) and the facet filter work; the rich `↳ Char: count`
  * lines render in the cell. `enableGlobalFilter: false` on the computed In-guild
- * column and on `item_id` — their raw accessor value diverges from the rendered
- * cell (the columns.ts global-filter caveat), so the global box would otherwise
- * produce phantom matches.
+ * column — its raw accessor value diverges from the rendered cell (the
+ * columns.ts global-filter caveat), so the global box would otherwise produce
+ * phantom matches. (No raw item-ID column — IDs aren't member-facing data.)
  */
 export function wantlistColumns(
 	holdersOf: (row: WantlistRow) => Holder[],
@@ -215,14 +214,6 @@ export function wantlistColumns(
 			accessorKey: 'item_name',
 			header: 'Item',
 			cell: (ctx) => renderComponent(WantItemCell, { row: ctx.row.original })
-		},
-		{
-			id: 'item_id',
-			accessorKey: 'item_id',
-			header: 'ID',
-			enableGlobalFilter: false,
-			enableColumnFilter: false,
-			enableSorting: false
 		},
 		{
 			id: 'in_guild',

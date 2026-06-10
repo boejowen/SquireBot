@@ -27,9 +27,9 @@
 
 	/**
 	 * Map a send_status to its delivery badge. DELIVERED = have-it green; CAN'T DM =
-	 * rose-red (the one outcome the user must ACT on — earns the hint); ERROR =
-	 * neutral (a transient backend hiccup). An unknown status degrades to ERROR
-	 * rather than rendering a blank badge.
+	 * rose-red (the one outcome the user must ACT on — earns the hint); NOT SENT =
+	 * neutral (a transient backend hiccup — friendlier than the raw 'error' enum).
+	 * An unknown status degrades to NOT SENT rather than rendering a blank badge.
 	 */
 	export function deliveryBadge(status: SendStatus | string): DeliveryBadge {
 		switch (status) {
@@ -39,7 +39,25 @@
 				return { word: "CAN'T DM", token: 'var(--status-missing)', blocked: true };
 			case 'error':
 			default:
-				return { word: 'ERROR', token: 'var(--status-other)', blocked: false };
+				return { word: 'NOT SENT', token: 'var(--status-other)', blocked: false };
+		}
+	}
+
+	/**
+	 * Friendly fallback label for a row with no server-composed detail. The raw
+	 * `source` enum (ec_auction / wts / raid_target) is backend plumbing — never
+	 * shown to members. Unknown sources degrade to the generic label.
+	 */
+	export function sourceLabel(source: string): string {
+		switch (source) {
+			case 'ec_auction':
+				return 'EC auction alert';
+			case 'wts':
+				return 'WTS alert';
+			case 'raid_target':
+				return 'Raid target alert';
+			default:
+				return 'SquireBot alert';
 		}
 	}
 
@@ -96,9 +114,10 @@
 
 	let badge = $derived(deliveryBadge(row.send_status));
 	let unread = $derived(row.read_at === null);
-	// The alert text: the server-composed detail, or a quiet fallback. Rendered via
-	// plain {} ONLY (XSS boundary — never {@html}).
-	let alertText = $derived(row.detail ?? `Alert from ${row.source}`);
+	// The alert text: the server-composed detail, or the friendly source-label
+	// fallback (never the raw source enum). Rendered via plain {} ONLY (XSS
+	// boundary — never {@html}).
+	let alertText = $derived(row.detail ?? sourceLabel(row.source));
 	let rel = $derived(relativeTime(row.sent_at));
 	let abs = $derived(absoluteTime(row.sent_at));
 </script>

@@ -38,7 +38,7 @@ describe('composeItemNote', () => {
     expect(html).toContain('A reagent used for several spells.');
     expect(html).toContain('Recent ask: 4,500pp (30d avg, 75 transactions)');
     expect(html).toContain('Buy posts: 3,200pp (30d avg, 12 transactions)');
-    expect(html).toContain('Quest item: yes (in-game flag)');
+    expect(html).toContain('<p class="tooltip-quest-flag">Quest item</p>');
     expect(html).toContain('Used in quests: Call of the Hero, Death Pact');
     // wiki anchor carries rel="noopener" + target="_blank"
     expect(html).toContain('href="https://wiki.project1999.com/Words_of_the_Spoken"');
@@ -66,7 +66,7 @@ describe('composeItemNote', () => {
 
   it('quest flag without notes-links produces just the flag line', () => {
     const html = composeItemNote('Item', '', { summary: 'X', is_quest_item: true }, [], []);
-    expect(html).toContain('Quest item: yes (in-game flag)');
+    expect(html).toContain('<p class="tooltip-quest-flag">Quest item</p>');
     expect(html).not.toContain('Used in quests');
   });
 
@@ -82,7 +82,7 @@ describe('composeItemNote', () => {
       ],
     );
     expect(html).toContain('Used in quests: A, B');
-    expect(html).not.toContain('Quest item: yes');
+    expect(html).not.toContain('tooltip-quest-flag');
   });
 
   it('caps quest-links at 5', () => {

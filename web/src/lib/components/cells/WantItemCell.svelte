@@ -1,7 +1,7 @@
 <script lang="ts">
 	// WantItemCell — the wantlist `Item` column cell. A catalog want (item_id
-	// non-null) renders as an accent link + ItemTooltip trigger + a de-emphasized
-	// `#<item_id>` (the ItemCell idiom). A custom want (item_id null, D-04) renders
+	// non-null) renders as an accent link + ItemTooltip trigger (no raw item ID —
+	// IDs aren't member-facing data). A custom want (item_id null, D-04) renders
 	// a plain --text label + the neutral "Custom — won't trigger alerts" chip, with
 	// NO tooltip and NO link. The item name / custom label render via plain {}
 	// (Svelte auto-escapes) — NEVER {@html} (T-19-13 XSS boundary).
@@ -19,7 +19,6 @@
 		<ItemTooltip itemName={row.item_name} wikiUrl="">
 			<span class="item-link">{row.item_name}</span>
 		</ItemTooltip>
-		<span class="item-id">#{row.item_id}</span>
 	</span>
 {:else}
 	<span class="want-item">
@@ -39,11 +38,6 @@
 		color: var(--accent);
 		border-bottom: 1px solid var(--accent);
 		font-family: var(--font-body);
-	}
-	.item-id {
-		font-size: 13px;
-		opacity: 0.55;
-		font-variant-numeric: tabular-nums;
 	}
 	.custom-label {
 		color: var(--text);

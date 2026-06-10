@@ -201,7 +201,6 @@
 							<ItemTooltip itemName={item.name} wikiUrl="">
 								<span class="result-name">{item.name}</span>
 							</ItemTooltip>
-							<span class="result-id">#{item.item_id}</span>
 						</button>
 					</li>
 				{/each}
@@ -217,12 +216,11 @@
 
 	{#if staged}
 		<div class="staged">
-			<!-- Item read-back (locked). Catalog pick shows the name + #id; a custom
+			<!-- Item read-back (locked). Catalog pick shows the name; a custom
 			     want shows the label + the mandatory "won't trigger alerts" chip. -->
 			<div class="staged-item">
 				{#if pickedItem}
 					<span class="staged-name">{pickedItem.name}</span>
-					<span class="staged-id">#{pickedItem.item_id}</span>
 				{:else}
 					<span class="staged-name">{customLabel}</span>
 					<span
@@ -351,11 +349,6 @@
 		font-family: var(--font-body);
 		font-size: 16px;
 	}
-	.result-id {
-		font-size: 13px;
-		opacity: 0.55;
-		font-variant-numeric: tabular-nums;
-	}
 	/* The custom-want affordance is an accent text button (D-04). */
 	.custom-affordance {
 		align-self: flex-start;
@@ -389,11 +382,6 @@
 		font-family: var(--font-body);
 		font-size: 16px;
 		color: var(--text);
-	}
-	.staged-id {
-		font-size: 13px;
-		opacity: 0.55;
-		font-variant-numeric: tabular-nums;
 	}
 	.custom-chip {
 		font-family: var(--font-display);

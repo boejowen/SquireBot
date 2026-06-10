@@ -8,7 +8,7 @@
 //      helper treats the input as seconds (the ×1000 happens exactly once).
 
 import { describe, it, expect } from 'vitest';
-import { deliveryBadge, relativeTime, absoluteTime } from './NotificationRow.svelte';
+import { deliveryBadge, relativeTime, absoluteTime, sourceLabel } from './NotificationRow.svelte';
 
 describe('deliveryBadge — send_status → word + token (color is never the only signal)', () => {
 	it("maps 'sent' → DELIVERED / status-ok / not blocked", () => {
@@ -25,17 +25,30 @@ describe('deliveryBadge — send_status → word + token (color is never the onl
 		expect(b.blocked).toBe(true);
 	});
 
-	it("maps 'error' → ERROR / status-other / not blocked", () => {
+	it("maps 'error' → NOT SENT / status-other / not blocked (no raw enum word)", () => {
 		const b = deliveryBadge('error');
-		expect(b.word).toBe('ERROR');
+		expect(b.word).toBe('NOT SENT');
 		expect(b.token).toBe('var(--status-other)');
 		expect(b.blocked).toBe(false);
 	});
 
-	it('degrades an unknown status to ERROR rather than a blank badge', () => {
+	it('degrades an unknown status to NOT SENT rather than a blank badge', () => {
 		const b = deliveryBadge('totally-unexpected');
-		expect(b.word).toBe('ERROR');
+		expect(b.word).toBe('NOT SENT');
 		expect(b.blocked).toBe(false);
+	});
+});
+
+describe('sourceLabel — friendly fallback for a detail-less row (never the raw source enum)', () => {
+	it('maps the three known sources to member-friendly labels', () => {
+		expect(sourceLabel('ec_auction')).toBe('EC auction alert');
+		expect(sourceLabel('wts')).toBe('WTS alert');
+		expect(sourceLabel('raid_target')).toBe('Raid target alert');
+	});
+
+	it('degrades an unknown source to the generic SquireBot label', () => {
+		expect(sourceLabel('some_future_source')).toBe('SquireBot alert');
+		expect(sourceLabel('')).toBe('SquireBot alert');
 	});
 });
 

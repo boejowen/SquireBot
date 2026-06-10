@@ -38,8 +38,8 @@
 	// (260607-sdh, a LOCKED IA decision). It absorbs everything that used to clutter
 	// the top bar: the signed-in identity (avatar/officer-shield/username, formerly
 	// SessionIndicator), the ThemePicker, the Watcher-codes (/account) +
-	// Character-details (/char-meta) links, the officer-only Admin (/admin) link,
-	// and Sign out. The header now keeps only the wordmark + Wantlist +
+	// Set-class-&-level (/char-meta) links, the officer-only Admin (/admin) link,
+	// and Sign out. The header now keeps only the wordmark + Inventory + Wantlist +
 	// Notifications(+badge) + this gear.
 	//
 	// A11y contract (modeled on ConfirmDialog § Accessibility):
@@ -183,11 +183,12 @@
 				<ThemePicker bind:theme />
 			</div>
 
-			<!-- 3–5. Navigation menu items. Account is relabeled "Watcher codes".
-			     /my-characters is member-accessible (D-06/D-08) — it sits OUTSIDE the
-			     officer gate below, beside /account + /char-meta. -->
+			<!-- 3–5. Navigation menu items. Account is relabeled "Watcher codes";
+			     /char-meta is labeled "Set class & level" (260610-fm5 WS3 — say what
+			     it does). /my-characters is member-accessible (D-06/D-08) — it sits
+			     OUTSIDE the officer gate below, beside /account + /char-meta. -->
 			<a href="/account" role="menuitem" class="menu-link">Watcher codes</a>
-			<a href="/char-meta" role="menuitem" class="menu-link">Character details</a>
+			<a href="/char-meta" role="menuitem" class="menu-link">Set class &amp; level</a>
 			<a href="/my-characters" role="menuitem" class="menu-link">My characters</a>
 			{#if session?.isOfficer}
 				<!-- Officer-only Admin (Layer-1 UX suppression; the server re-checks

@@ -16,6 +16,7 @@
 	// join is the honest superset of the guild bank — review MUST-FIX 3).
 
 	import { onMount, getContext } from 'svelte';
+	import type { Snippet } from 'svelte';
 	import DataGrid from './DataGrid.svelte';
 	import StateBlock from './StateBlock.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
@@ -36,6 +37,11 @@
 		type GuildWantRow,
 		type ViewRow
 	} from '$lib/api';
+
+	// 260610-fm5 WS3 (item 8): the page passes its intro (h1 + purpose) as children;
+	// it renders INSIDE the panel's 720px add-card so intro + add form share one card
+	// while the filter bar + grids below break out to full width (the home layout).
+	let { children }: { children?: Snippet } = $props();
 
 	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
 
@@ -291,23 +297,17 @@
 	<StateBlock kind="error" onRetry={load} />
 {:else}
 	<div class="wantlist-panel">
-		<!-- Add-item block (above the grid). On success it re-fetches the wants. -->
-		<WantAddForm {onAdded} />
-		{#if addAnnounce}
-			<p class="result success" aria-live="polite">{addAnnounce}</p>
-		{/if}
-
-		<div class="divider"></div>
-
-		{#if removeSuccessMsg}
-			<p class="result success" aria-live="polite">{removeSuccessMsg}</p>
-		{/if}
-		{#if removeErrorMsg}
-			<p class="result error" aria-live="polite">{removeErrorMsg}</p>
-		{/if}
-		{#if muteAnnounce}
-			<p class="result success" aria-live="polite">{muteAnnounce}</p>
-		{/if}
+		<!-- 260610-fm5 WS3 (item 8): intro (page snippet) + the add form stay in the
+		     720px --panel card; everything below (filter bar + grids) is full width.
+		     The add announce stays here, adjacent to the form it reports on. -->
+		<section class="add-card">
+			{@render children?.()}
+			<!-- Add-item block (above the grid). On success it re-fetches the wants. -->
+			<WantAddForm {onAdded} />
+			{#if addAnnounce}
+				<p class="result success" aria-live="polite">{addAnnounce}</p>
+			{/if}
+		</section>
 
 		<!-- CWANT-03/04 the My/Guild toggle + CWANT-06 the (My-only) group-by-character
 		     control. One control bar over the SINGLE DataGrid (consolidated-views LOCK) —
@@ -351,6 +351,18 @@
 		</div>
 
 		{#if wantView === 'mine'}
+			<!-- 260610-fm5 WS3 (item 9): the remove/mute announces sit DIRECTLY above
+			     the grid they report on (message-adjacent-to-control), not up by the
+			     add form. Remove/mute only act on MY wants, so they live in this branch. -->
+			{#if removeSuccessMsg}
+				<p class="result success" aria-live="polite">{removeSuccessMsg}</p>
+			{/if}
+			{#if removeErrorMsg}
+				<p class="result error" aria-live="polite">{removeErrorMsg}</p>
+			{/if}
+			{#if muteAnnounce}
+				<p class="result success" aria-live="polite">{muteAnnounce}</p>
+			{/if}
 			{#if wants.length === 0}
 				<StateBlock kind="no-wants" />
 			{:else if filteredWants.length === 0}
@@ -388,8 +400,18 @@
 		flex-direction: column;
 		gap: 24px;
 	}
-	.divider {
-		border-top: 1px solid var(--border, var(--accent));
+	/* 260610-fm5 WS3 (item 8): the 720px card holding intro + add form — the same
+	   .form-card treatment as /account and /char-meta (the old route-level card,
+	   moved here so the grids below can escape it to full width). */
+	.add-card {
+		max-width: 720px;
+		padding: 24px; /* lg (19-UI-SPEC § Page Layout) */
+		background: var(--panel);
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 6px;
+		display: flex;
+		flex-direction: column;
+		gap: 24px;
 	}
 	.result {
 		font-family: var(--font-body);

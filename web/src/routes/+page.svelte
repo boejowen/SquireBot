@@ -157,7 +157,15 @@
 	// fetch by `active` or a query param) — refactor-fragile (review WR-03).
 	// refetch() (the Retry handler) calls load() directly, so the effect is not
 	// needed for retry either.
+	//
+	// 260610-fm5 WS3: a ?view= query param seeds the active tab (the /bank-coin
+	// "Back to bank" link lands on /?view=bank). VALIDATED against the actual TABS
+	// ids — an unknown value is ignored (T-fm5-04; the param is never rendered).
 	onMount(() => {
+		const v = new URLSearchParams(window.location.search).get('view');
+		if (v && TABS.some((t) => t.id === v)) {
+			active = v as ViewId;
+		}
 		void load();
 	});
 
@@ -197,17 +205,34 @@
 	// disable them and show a hint linking to /my-characters (Pitfall 5).
 	let hasMine = $derived(myCharacters.length > 0);
 
-	// The single <select>'s current value: 'all' (default) / 'mine' / a character name.
-	let filterValue = $derived(selectedChar ?? (mineOnly ? 'mine' : 'all'));
+	// 260610-fm5 WS3: the scope control is a segmented My characters/Guild toggle
+	// (the wantlist .seg pattern) + a character <select> shown only in the
+	// My-characters scope. PRESENTATION ONLY — the same two filter primitives
+	// (mineOnly / selectedChar) drive applyMyFilter unchanged. Default = Guild
+	// (today's all-members default).
+	type Scope = 'guild' | 'mine';
+	let scope = $derived<Scope>(mineOnly || selectedChar !== null ? 'mine' : 'guild');
 
-	/** Translate the single control's value into the two filter primitives. 'all' →
-	 *  all-members (filter OFF); 'mine' → my-characters; any other value is a character
-	 *  name → drill-down (which dominates). */
-	function onFilterChange(value: string) {
-		if (value === 'all') {
+	/** Flip the segmented scope. Guild → filter OFF; My characters → mine-only
+	 *  (the drill-down <select> then narrows further). */
+	function setScope(s: Scope) {
+		if (s === scope) return;
+		if (s === 'guild') {
 			mineOnly = false;
 			selectedChar = null;
-		} else if (value === 'mine') {
+		} else {
+			mineOnly = true;
+			selectedChar = null;
+		}
+	}
+
+	// The drill-down <select>'s value: '' = all MY characters; else a character name.
+	let charSelectValue = $derived(selectedChar ?? '');
+
+	/** '' → my-characters (no drill-down); a name → single-char drill-down (which
+	 *  dominates — same semantics as the old merged control). */
+	function onCharSelect(value: string) {
+		if (value === '') {
 			mineOnly = true;
 			selectedChar = null;
 		} else {
@@ -233,31 +258,50 @@
 		<SearchBox rows={viewRows} />
 	</section>
 
-	<!-- 27-01: the SINGLE "My characters" control (MYVIEW-01 + MYVIEW-02). ONE <select>
-	     drives both the my-characters quick-filter and the single-character drill-down.
-	     It lives in the view-orchestration layer (NEVER inside DataGrid — the grid stays
-	     view-agnostic, fed pre-filtered data; CLAUDE.md consolidated-views LOCK). The
-	     filter is presentation only, never access control (T-27-01). -->
+	<!-- 27-01 / 260610-fm5 WS3: the "My characters" scope control (MYVIEW-01 +
+	     MYVIEW-02), restyled to the wantlist's segmented-toggle pattern: a
+	     My characters | Guild two-button toggle + a character <select> shown only
+	     in the My-characters scope. It lives in the view-orchestration layer
+	     (NEVER inside DataGrid — the grid stays view-agnostic, fed pre-filtered
+	     data; CLAUDE.md consolidated-views LOCK). The filter is presentation only,
+	     never access control (T-27-01). -->
 	<div class="filter-bar">
-		<label class="filter-label" for="char-filter">Show</label>
-		<select
-			id="char-filter"
-			class="char-filter"
-			aria-label="Filter views by character"
-			value={filterValue}
-			onchange={(e) => onFilterChange(e.currentTarget.value)}
-		>
-			<option value="all">All members</option>
-			<!-- "My characters" + the per-char drill-down options are sourced ONLY from
-			     fetchMyCharacters() (session-scoped, IDOR-safe — T-27-03), never
-			     meta.characters. Names render via plain {} (Svelte auto-escapes —
-			     never the raw-HTML directive; T-27-02). Disabled when the caller has
-			     claimed nothing. -->
-			<option value="mine" disabled={!hasMine}>My characters</option>
-			{#each myCharacters as c (c.character_id)}
-				<option value={c.name}>{c.name}</option>
-			{/each}
-		</select>
+		<div class="seg" role="group" aria-label="Whose characters to show">
+			<button
+				type="button"
+				class="seg-btn"
+				class:active={scope === 'mine'}
+				aria-pressed={scope === 'mine'}
+				disabled={!hasMine}
+				onclick={() => setScope('mine')}>My characters</button
+			>
+			<button
+				type="button"
+				class="seg-btn"
+				class:active={scope === 'guild'}
+				aria-pressed={scope === 'guild'}
+				onclick={() => setScope('guild')}>Guild</button
+			>
+		</div>
+		{#if scope === 'mine'}
+			<!-- The drill-down options are sourced ONLY from fetchMyCharacters()
+			     (session-scoped, IDOR-safe — T-27-03), never meta.characters. Names
+			     render via plain {} (Svelte auto-escapes — never the raw-HTML
+			     directive; T-27-02). -->
+			<label class="filter-label" for="char-filter">Character</label>
+			<select
+				id="char-filter"
+				class="char-filter"
+				aria-label="Filter views by character"
+				value={charSelectValue}
+				onchange={(e) => onCharSelect(e.currentTarget.value)}
+			>
+				<option value="">All my characters</option>
+				{#each myCharacters as c (c.character_id)}
+					<option value={c.name}>{c.name}</option>
+				{/each}
+			</select>
+		{/if}
 		{#if !hasMine}
 			<!-- Zero claimed characters: the control is never a dead empty toggle — point
 			     the member at where they can claim (Pitfall 5). -->
@@ -402,6 +446,45 @@
 		align-items: center;
 		gap: 8px;
 		margin: 8px 0;
+	}
+	/* 260610-fm5 WS3: the segmented scope toggle — DUPLICATED from WantlistPanel's
+	   .seg/.seg-btn block (CONTEXT: duplicating the small style block is acceptable;
+	   Svelte styles are component-scoped, so the classes must live here too). */
+	.seg {
+		display: inline-flex;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+		overflow: hidden;
+	}
+	.seg-btn {
+		min-height: 44px; /* touch target */
+		padding: 8px 16px;
+		background: var(--panel);
+		border: none;
+		color: var(--text);
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+	.seg-btn + .seg-btn {
+		border-left: 1px solid var(--border, var(--accent));
+	}
+	.seg-btn.active {
+		background: var(--accent);
+		color: var(--bg);
+	}
+	.seg-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	/* "My characters" is disabled until the caller has claimed at least one
+	   character (Pitfall 5 — the hint below points at /my-characters). */
+	.seg-btn:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 	.filter-label {
 		font-family: var(--font-display);

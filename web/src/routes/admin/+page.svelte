@@ -39,6 +39,9 @@
 	<StateBlock kind="officers-only" />
 {:else}
 	<div class="admin-area">
+		<!-- 260610-fm5 WS3: a page-level heading — every other page leads with an h1;
+		     the four cards below each keep their h2. -->
+		<h1 class="page-title">Admin</h1>
 		<section class="form-card">
 			<h2 class="form-title">Evict guildie</h2>
 			<EvictionForm />
@@ -63,6 +66,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 24px; /* lg between the two form sections (UI-SPEC) */
+	}
+	.page-title {
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 20px; /* Heading (UI-SPEC Typography) */
+		line-height: 1.2;
+		color: var(--text);
 	}
 	.form-card {
 		max-width: 720px;

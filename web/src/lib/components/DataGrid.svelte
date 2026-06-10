@@ -15,7 +15,9 @@
 	//    Enter/Space — a11y); an accent caret shows direction.
 	//  - A global filter input PLUS per-column filters: a faceted <select> for
 	//    columns marked meta.filter==='facet' (Status/Tier/Class), text-contains
-	//    otherwise. Filtering is client-side (data is tiny).
+	//    otherwise. Filtering is client-side (data is tiny). The per-column row
+	//    sits behind a "Filters" disclosure (default hidden — the global box
+	//    covers the common case; 260610-fm5 WS3).
 	//  - NO pagination — the table scrolls inside a fixed-height region under the
 	//    sticky header.
 	//  - Zebra striping + row hover at ~4-5% accent alpha.
@@ -57,6 +59,12 @@
 	let sorting = $state<SortingState>(seedSorting);
 	let columnFilters = $state<ColumnFiltersState>([]);
 	let globalFilter = $state('');
+	// 260610-fm5 WS3: the per-column filter row is collapsed by default behind a
+	// "Filters" disclosure. NO aria-controls id — DataGrid mounts 4x per page, so
+	// a static id would duplicate; aria-expanded on the button carries the state.
+	// Any column filters already set keep applying while the row is hidden (state
+	// lives in columnFilters, not the inputs).
+	let showColFilters = $state(false);
 
 	const table = createSvelteTable<TData>({
 		get data() {
@@ -100,52 +108,68 @@
 </script>
 
 <div class="datagrid">
-	<!-- Toolbar: global filter + per-column filters. Stacks above the grid on
-	     small screens (UI-SPEC Responsive). -->
+	<!-- Toolbar: global filter + the "Filters" disclosure for the per-column row
+	     (default hidden — 260610-fm5 WS3). Stacks above the grid on small
+	     screens (UI-SPEC Responsive). -->
 	<div class="toolbar">
 		<label class="global-filter">
 			<Search size={16} aria-hidden="true" />
 			<input
 				type="text"
-				placeholder="Filter all columns…"
+				placeholder="Filter this table…"
 				value={globalFilter}
 				oninput={(e) => (globalFilter = e.currentTarget.value)}
 				aria-label="Filter all columns"
 			/>
 		</label>
-		<div class="col-filters">
-			{#each table.getAllLeafColumns() as col (col.id)}
-				{#if col.getCanFilter()}
-					<!-- Label filters with the DISPLAY header (e.g. "Status"), never the
-					     raw column id (e.g. "in_guild") — ids are plumbing, not UI copy. -->
-					{@const colLabel = String(col.columnDef.header ?? col.id)}
-					{#if col.columnDef.meta?.filter === 'facet'}
-						<select
-							class="facet"
-							aria-label={`Filter by ${colLabel}`}
-							value={(col.getFilterValue() as string) ?? ''}
-							onchange={(e) =>
-								col.setFilterValue(e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
-						>
-							<option value="">{colLabel} (all)</option>
-							{#each facetOptions(col.id) as opt (opt)}
-								<option value={opt}>{opt}</option>
-							{/each}
-						</select>
-					{:else}
-						<input
-							class="col-text"
-							type="text"
-							placeholder={colLabel}
-							value={(col.getFilterValue() as string) ?? ''}
-							oninput={(e) =>
-								col.setFilterValue(e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
-							aria-label={`Filter by ${colLabel}`}
-						/>
+		<button
+			type="button"
+			class="filters-toggle"
+			aria-expanded={showColFilters}
+			onclick={() => (showColFilters = !showColFilters)}
+		>
+			Filters
+			{#if showColFilters}
+				<ChevronUp size={14} aria-hidden="true" />
+			{:else}
+				<ChevronDown size={14} aria-hidden="true" />
+			{/if}
+		</button>
+		{#if showColFilters}
+			<div class="col-filters">
+				{#each table.getAllLeafColumns() as col (col.id)}
+					{#if col.getCanFilter()}
+						<!-- Label filters with the DISPLAY header (e.g. "Status"), never the
+						     raw column id (e.g. "in_guild") — ids are plumbing, not UI copy. -->
+						{@const colLabel = String(col.columnDef.header ?? col.id)}
+						{#if col.columnDef.meta?.filter === 'facet'}
+							<select
+								class="facet"
+								aria-label={`Filter by ${colLabel}`}
+								value={(col.getFilterValue() as string) ?? ''}
+								onchange={(e) =>
+									col.setFilterValue(e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
+							>
+								<option value="">{colLabel} (all)</option>
+								{#each facetOptions(col.id) as opt (opt)}
+									<option value={opt}>{opt}</option>
+								{/each}
+							</select>
+						{:else}
+							<input
+								class="col-text"
+								type="text"
+								placeholder={colLabel}
+								value={(col.getFilterValue() as string) ?? ''}
+								oninput={(e) =>
+									col.setFilterValue(e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
+								aria-label={`Filter by ${colLabel}`}
+							/>
+						{/if}
 					{/if}
-				{/if}
-			{/each}
-		</div>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Scroll region: vertical scroll under the sticky header; horizontal
@@ -254,6 +278,38 @@
 		font-size: 16px;
 		padding: 8px;
 		min-height: 44px;
+	}
+	/* The "Filters" disclosure trigger — same affordance treatment as the .facet
+	   controls (panel bg + border), display type, 44px touch target. */
+	.filters-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-height: 44px; /* touch target (UI-SPEC) */
+		padding: 8px 12px;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+		background: var(--panel);
+		color: var(--text);
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+		opacity: 0.85;
+	}
+	.filters-toggle:hover {
+		opacity: 1;
+		color: var(--accent);
+	}
+	.filters-toggle[aria-expanded='true'] {
+		color: var(--accent);
+		opacity: 1;
+	}
+	.filters-toggle:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 	.col-filters {
 		display: flex;

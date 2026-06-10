@@ -20,6 +20,11 @@
 			Claim the characters you play so your guildies know who holds what. Release one to hand
 			it back, or request one that’s already taken — an officer approves it.
 		</p>
+		<!-- 260610-fm5 WS3: cross-link to the sibling setup page (/char-meta links back). -->
+		<p class="cross-link">
+			Already claimed yours? <a href="/char-meta">Set class &amp; level</a> so gear and spell
+			checks work.
+		</p>
 	</header>
 	<MyCharactersPanel />
 </section>
@@ -52,5 +57,14 @@
 		font-size: 16px;
 		line-height: 1.5;
 		opacity: 0.85;
+	}
+	.cross-link {
+		font-family: var(--font-body);
+		font-size: 16px;
+		line-height: 1.5;
+		opacity: 0.85;
+	}
+	.cross-link a {
+		color: var(--accent);
 	}
 </style>

@@ -65,10 +65,13 @@
 		<a href="/" class="wordmark">SquireBot</a>
 		<div class="shell-controls">
 			{#if session?.authenticated}
-				<!-- The header keeps only the primary nav (Wantlist + Notifications);
-				     everything else folds into the SettingsMenu gear (260607-sdh). The
-				     hidden-from-anon nav is UX; the server RequireSession gate is the
-				     real boundary (D-02/D-08). -->
+				<!-- The header keeps only the primary nav (Inventory + Wantlist +
+				     Notifications); everything else folds into the SettingsMenu gear
+				     (260607-sdh). Inventory gives the home views a LABELED entry — the
+				     wordmark still links home too, but a wordmark isn't discoverable nav
+				     (260610-fm5 WS3). The hidden-from-anon nav is UX; the server
+				     RequireSession gate is the real boundary (D-02/D-08). -->
+				<a href="/" class="char-meta-nav">Inventory</a>
 				<a href="/wantlist" class="char-meta-nav">Wantlist</a>
 				<!-- Notifications nav + unread-count badge (20-04 / D-05). The badge is
 				     the load-bearing "you missed something" signal (a CAN'T-DM alert
@@ -81,7 +84,7 @@
 					{/if}
 				</a>
 				<!-- The gear settings dropdown: identity, theme, Watcher-codes,
-				     Character-details, officer-only Admin, Sign out. Visible to any
+				     Set-class-&-level, officer-only Admin, Sign out. Visible to any
 				     authenticated member (Admin is gated inside). bind:theme keeps the
 				     +layout → SiteShell → SettingsMenu → ThemePicker chain intact. -->
 				<SettingsMenu bind:theme {session} />

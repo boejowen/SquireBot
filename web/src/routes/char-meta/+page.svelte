@@ -16,7 +16,18 @@
 </svelte:head>
 
 <section class="form-card">
-	<h1 class="form-title">Set character details</h1>
+	<header class="intro">
+		<h1 class="form-title">Set character details</h1>
+		<!-- 260610-fm5 WS3: purpose line (the .form-purpose idiom from /my-characters)
+		     + the cross-link back to claiming — the two pages are siblings in the
+		     character-setup flow. -->
+		<p class="form-purpose">
+			Set class, level, and race so gear and spell checks work for that character.
+		</p>
+		<p class="cross-link">
+			Don't see a character? <a href="/my-characters">Claim characters</a> to mark which ones you play.
+		</p>
+	</header>
 	<CharMetaForm />
 </section>
 
@@ -31,11 +42,31 @@
 		flex-direction: column;
 		gap: 24px;
 	}
+	.intro {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
 	.form-title {
 		font-family: var(--font-display);
 		font-weight: var(--weight-display);
 		font-size: 20px; /* Heading (UI-SPEC Typography) */
 		line-height: 1.2;
 		color: var(--text);
+	}
+	.form-purpose {
+		font-family: var(--font-body);
+		font-size: 16px;
+		line-height: 1.5;
+		opacity: 0.85;
+	}
+	.cross-link {
+		font-family: var(--font-body);
+		font-size: 16px;
+		line-height: 1.5;
+		opacity: 0.85;
+	}
+	.cross-link a {
+		color: var(--accent);
 	}
 </style>

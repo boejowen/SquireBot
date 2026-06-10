@@ -158,6 +158,14 @@
 			<p class="dark-note">These monitors switch on as the guild's officers enable them.</p>
 		</div>
 
+		<!-- 260610-fm5 WS3: point at the per-item mute bell (it lives on the wantlist,
+		     not here). OUTSIDE .monitors so it never dims — it's navigation, not a
+		     monitor setting. -->
+		<p class="mute-hint">
+			To mute alerts for a single item, use the bell next to it on
+			<a href="/wantlist">your wantlist</a>.
+		</p>
+
 		{#if announce}
 			<p class="result success" aria-live="polite">{announce}</p>
 		{/if}
@@ -219,6 +227,15 @@
 		font-size: 16px;
 		line-height: 1.5;
 		opacity: 0.7;
+	}
+	.mute-hint {
+		font-family: var(--font-body);
+		font-size: 16px;
+		line-height: 1.5;
+		opacity: 0.85;
+	}
+	.mute-hint a {
+		color: var(--accent);
 	}
 	.result {
 		font-family: var(--font-body);

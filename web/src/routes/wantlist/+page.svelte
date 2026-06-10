@@ -5,6 +5,12 @@
 	// owner is derived SERVER-side from the Discord session (D-02), so the page never
 	// sends an owner. Data-driven, so it inherits the layout's prerender=false and
 	// renders client-side via the 200.html SPA fallback (no +page.ts override).
+	//
+	// 260610-fm5 WS3 (item 8): the page no longer wraps the whole panel in a 720px
+	// card — the intro is passed as a snippet into WantlistPanel, which keeps it +
+	// the add form in its 720px add-card while the filter bar + grids break out to
+	// the full content width (mirroring the home layout: forms narrow, grids wide).
+	// Snippet markup is declared HERE, so this page's scoped styles apply to it.
 
 	import WantlistPanel from '$lib/components/WantlistPanel.svelte';
 </script>
@@ -13,7 +19,7 @@
 	<title>SquireBot — your wantlist</title>
 </svelte:head>
 
-<section class="form-card">
+<WantlistPanel>
 	<header class="wantlist-intro">
 		<h1 class="form-title">Your wantlist</h1>
 		<p class="form-purpose">
@@ -21,20 +27,9 @@
 			Add items from the catalog, or jot a custom want.
 		</p>
 	</header>
-	<WantlistPanel />
-</section>
+</WantlistPanel>
 
 <style>
-	.form-card {
-		max-width: 720px;
-		padding: 24px; /* lg (19-UI-SPEC § Page Layout — matches /account) */
-		background: var(--panel);
-		border: 1px solid var(--border, var(--accent));
-		border-radius: 6px;
-		display: flex;
-		flex-direction: column;
-		gap: 24px;
-	}
 	.wantlist-intro {
 		display: flex;
 		flex-direction: column;

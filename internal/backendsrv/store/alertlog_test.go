@@ -21,7 +21,7 @@ func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, i
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		v := itemID
 		var e error
-		id, e = AddWantTx(ctx, tx, discordID, &v, "Seed Want", "buy", "med", nil, nil, 1)
+		id, e = AddWantTx(ctx, tx, discordID, &v, "Seed Want", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seedWant(%q, %d): %v", discordID, itemID, err)

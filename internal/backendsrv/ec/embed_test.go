@@ -24,7 +24,6 @@ func TestBuildEmbed_TaggedWant_HasForField(t *testing.T) {
 		WantID:        9,
 		DiscordUserID: "alice",
 		ItemName:      "Fungi Tunic",
-		Reason:        "buy",
 		CharacterName: strp("Tankbert"),
 	}
 	now := time.Date(2026, 6, 6, 2, 3, 0, 0, time.UTC)
@@ -47,7 +46,6 @@ func TestBuildEmbed_UntaggedWant_NoForField(t *testing.T) {
 		WantID:        10,
 		DiscordUserID: "bob",
 		ItemName:      "Rubicite Helm",
-		Reason:        "quest",
 		// CharacterName nil ⇒ account-level want.
 	}
 	now := time.Date(2026, 6, 6, 2, 3, 0, 0, time.UTC)
@@ -66,7 +64,6 @@ func TestBuildEmbed_BlankCharacterName_NoForField(t *testing.T) {
 		WantID:        11,
 		DiscordUserID: "carol",
 		ItemName:      "Cloak of Flames",
-		Reason:        "buy",
 		CharacterName: strp("   "),
 	}
 	now := time.Date(2026, 6, 6, 2, 3, 0, 0, time.UTC)

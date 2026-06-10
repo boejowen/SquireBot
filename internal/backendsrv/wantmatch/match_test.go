@@ -119,7 +119,7 @@ func TestForItem_ReturnsActiveNonMutedAcrossUsers(t *testing.T) {
 	aliceWant := seedWant(t, ctx, db, "alice", fungiID, "Fungi Tunic", 1, 0) // hit
 	bobWant := seedWant(t, ctx, db, "bob", fungiID, "Fungi Tunic", 1, 0)     // hit (across users)
 	// muted/inactive variants live on distinct owners — the catalog partial
-	// unique index forbids two active (user,item,reason) rows for one user.
+	// unique index forbids two active (user,item) rows for one user.
 	mutedWant := seedWant(t, ctx, db, "carol", fungiID, "Fungi Tunic", 1, 1)   // muted ⇒ excluded
 	inactiveWant := seedWant(t, ctx, db, "dave", fungiID, "Fungi Tunic", 0, 0) // inactive ⇒ excluded
 	otherItem := seedWant(t, ctx, db, "alice", 9999, "Cloak of Flames", 1, 0)  // wrong item ⇒ excluded
@@ -148,7 +148,7 @@ func TestForItem_ReturnsActiveNonMutedAcrossUsers(t *testing.T) {
 		t.Fatalf("ForItem returned %d hits; want exactly 2 (alice+bob, active, non-muted)", len(hits))
 	}
 	// Hit carries the fields a notify caller needs.
-	if h := got[aliceWant]; h.DiscordUserID != "alice" || h.ItemName != "Fungi Tunic" || h.Reason != "buy" {
+	if h := got[aliceWant]; h.DiscordUserID != "alice" || h.ItemName != "Fungi Tunic" {
 		t.Errorf("Hit fields wrong: %+v", h)
 	}
 	if h := got[aliceWant]; h.ItemID == nil || *h.ItemID != fungiID {
@@ -233,7 +233,7 @@ func TestForName_ExactCaseInsensitive_NoSubstring(t *testing.T) {
 	substring := seedWant(t, ctx, db, "alice", -1, "Black Fungi Tunic", 1, 0) // CONTAINS the query but is NOT an exact match (Pitfall 6)
 	// muted want on carol (alice already has an active "Fungi Tunic" custom
 	// want — the partial unique index forbids a second active one for the same
-	// user/name/reason, so the muted variant must belong to a different owner).
+	// user/name, so the muted variant must belong to a different owner).
 	muted := seedWant(t, ctx, db, "carol", -1, "Fungi Tunic", 1, 1) // muted ⇒ excluded
 
 	hits, err := ForName(ctx, db, "Fungi Tunic")

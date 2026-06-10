@@ -3,7 +3,7 @@
 	// Contract, WANT-01 / D-03/D-04). A single debounced search field over the
 	// server catalog (GET /api/v1/items/search) → pick a result to pin an item_id,
 	// OR take the custom-want escape hatch (item_id null, flagged "won't trigger
-	// alerts"). Picking either path reveals the Reason/Priority/Note detail fields;
+	// alerts"). Picking either path reveals the Priority/Note detail fields;
 	// "Add to wantlist" POSTs and dispatches success so the panel re-fetches.
 	//
 	// XSS boundary (T-19-13): catalog names, the typed custom label, and the note
@@ -46,7 +46,6 @@
 	let customLabel = $state<string | null>(null);
 
 	// Detail fields.
-	let reason = $state<'' | 'buy' | 'quest'>('');
 	let priority = $state<'low' | 'med' | 'high'>('med');
 	let note = $state('');
 
@@ -77,9 +76,9 @@
 	});
 
 	let noteCount = $derived(noteRuneCount(note));
-	// Disabled until an item is chosen (catalog OR non-blank custom) AND a reason.
+	// Disabled until an item is chosen (catalog OR non-blank custom).
 	let staged = $derived(pickedItem !== null || customLabel !== null);
-	let canSubmit = $derived(staged && reason !== '' && !adding);
+	let canSubmit = $derived(staged && !adding);
 
 	// Debounced catalog search — does NOT query per keystroke (Pitfall A4). q<2
 	// shows nothing (the server returns [] anyway, but we short-circuit too).
@@ -129,7 +128,6 @@
 	function resetStaging() {
 		pickedItem = null;
 		customLabel = null;
-		reason = '';
 		priority = 'med';
 		note = '';
 		charSelect = '';
@@ -151,7 +149,6 @@
 			await addWant({
 				item_id: itemId,
 				item_name: itemName,
-				reason: reason as 'buy' | 'quest',
 				priority,
 				note: note.trim() || undefined,
 				character_id: charId
@@ -164,8 +161,7 @@
 					? (err as { code?: string }).code
 					: undefined;
 			if (code === 'duplicate') {
-				addErrorMsg =
-					"That's already on your list with the same reason. (The same item can be on twice — once to buy, once for a quest.)";
+				addErrorMsg = "That's already on your wantlist.";
 			} else {
 				addErrorMsg = "Couldn't add that to your wantlist. Nothing was added — try again.";
 			}
@@ -239,14 +235,6 @@
 			</div>
 
 			<div class="detail-fields">
-				<FormField label="Reason" id="want-reason">
-					<select id="want-reason" class="field" bind:value={reason}>
-						<option value="" disabled>Choose…</option>
-						<option value="buy">Buy</option>
-						<option value="quest">Quest</option>
-					</select>
-				</FormField>
-
 				<FormField label="Priority" id="want-priority">
 					<select id="want-priority" class="field" bind:value={priority}>
 						<option value="low">Low</option>

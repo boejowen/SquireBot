@@ -38,3 +38,17 @@ func RunMigrations(db *sql.DB) error {
 	// "." = the embed FS root (migrations are co-located with this file).
 	return goose.Up(db, ".")
 }
+
+// UpTo applies forward migrations up to AND including version (goose.UpTo) over
+// the SAME embedded FS RunMigrations uses. TEST-SUPPORT ONLY: migration tests
+// use it to stop at an intermediate schema version (e.g. seed pre-00011 rows,
+// then resume to prove a data pass) — production startup always calls
+// RunMigrations (HEAD). It intentionally mirrors RunMigrations' setup so the
+// dialect/FS foot-guns stay in one shape.
+func UpTo(db *sql.DB, version int64) error {
+	goose.SetBaseFS(embedMigrations)
+	if err := goose.SetDialect("sqlite3"); err != nil { // ⚠️ "sqlite3" dialect, NOT the "sqlite" driver name
+		return err
+	}
+	return goose.UpTo(db, ".", version)
+}

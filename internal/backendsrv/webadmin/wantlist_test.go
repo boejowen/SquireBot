@@ -2,13 +2,13 @@ package webadmin
 
 // wantlist_test.go covers the personal-wantlist handlers (19-02 Task 1): add
 // (catalog + custom) derives the owner from the session and audits item_id only;
-// server-side validation rejects bad enums, an oversized (TRIMMED) note, and a
-// blank custom label; a whitespace-only / 280-space note is stored NULL (never a
-// row of spaces — review WORTH-FIX 6); an exact duplicate maps to EXACTLY 409
-// {"error":"duplicate"} on BOTH the catalog and custom paths while the same item
-// with the OTHER reason is a distinct 200 row; list is owner-scoped; and a
-// cross-owner remove is a silent no-op (removed:false) that never leaks another
-// member's row (the IDOR guard).
+// server-side validation rejects a bad priority enum, an oversized (TRIMMED)
+// note, and a blank custom label; a whitespace-only / 280-space note is stored
+// NULL (never a row of spaces — review WORTH-FIX 6); a same-item re-add (in the
+// same character scope) maps to EXACTLY 409 {"error":"duplicate"} on BOTH the
+// catalog and custom paths (the buy/quest reason is gone — quick-260610-fm5);
+// list is owner-scoped; and a cross-owner remove is a silent no-op
+// (removed:false) that never leaks another member's row (the IDOR guard).
 //
 // The handlers read the acting discord_user_id via webauth.UserFromContext; these
 // unit tests inject it with withCaller (officers_test.go) without standing up the
@@ -28,12 +28,14 @@ import (
 
 // seedWant inserts a wantlist_item directly (the cross-owner IDOR fixture: a row
 // owned by SOMEONE ELSE that the caller must not be able to touch). Returns its id.
-func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, itemID *int64, itemName, reason, priority string) int64 {
+// The reason COLUMN persists (NOT NULL CHECK — 00011 keeps it), so the raw INSERT
+// hardcodes the 'buy' literal the store writes.
+func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, itemID *int64, itemName, priority string) int64 {
 	t.Helper()
 	res, err := db.ExecContext(ctx,
 		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		discordID, itemID, itemName, reason, priority, 1700000000)
+		 VALUES (?, ?, ?, 'buy', ?, ?)`,
+		discordID, itemID, itemName, priority, 1700000000)
 	if err != nil {
 		t.Fatalf("seed wantlist_item (%s): %v", discordID, err)
 	}
@@ -96,7 +98,7 @@ func TestAddWant_TaggedAssignedChar_Persists_AuditsCharacterID(t *testing.T) {
 	seedAssignment(t, ctx, db, charID, caller)
 
 	h := withCaller(caller, AddWantHandler(db))
-	rec := postJSON(t, h, `{"item_id":321,"item_name":"Mithril Bracer","reason":"buy","priority":"med","character_id":`+itoa(charID)+`}`)
+	rec := postJSON(t, h, `{"item_id":321,"item_name":"Mithril Bracer","priority":"med","character_id":`+itoa(charID)+`}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -135,7 +137,7 @@ func TestAddWant_TaggedUnassignedChar_403(t *testing.T) {
 	seedAssignment(t, ctx, db, charID, other)
 
 	h := withCaller(caller, AddWantHandler(db))
-	rec := postJSON(t, h, `{"item_id":654,"item_name":"Forged Tag","reason":"buy","character_id":`+itoa(charID)+`}`)
+	rec := postJSON(t, h, `{"item_id":654,"item_name":"Forged Tag","character_id":`+itoa(charID)+`}`)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403 (forged character_id tag) (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -155,7 +157,7 @@ func TestAddWant_NoCharacterID_AccountLevel(t *testing.T) {
 	seedWebUser(t, ctx, db, caller, "Accounter")
 
 	h := withCaller(caller, AddWantHandler(db))
-	rec := postJSON(t, h, `{"item_id":777,"item_name":"Plain Want","reason":"buy"}`)
+	rec := postJSON(t, h, `{"item_id":777,"item_name":"Plain Want"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -178,11 +180,11 @@ func TestListGuildWants_AllMembers_NoNote(t *testing.T) {
 
 	// Two wants across two members; one carries a private note.
 	addA := withCaller(a, AddWantHandler(db))
-	if r := postJSON(t, addA, `{"item_id":1,"item_name":"A Want","reason":"buy","note":"private-secret-note"}`); r.Code != http.StatusOK {
+	if r := postJSON(t, addA, `{"item_id":1,"item_name":"A Want","note":"private-secret-note"}`); r.Code != http.StatusOK {
 		t.Fatalf("add A status = %d (body=%s)", r.Code, r.Body.String())
 	}
 	addB := withCaller(b, AddWantHandler(db))
-	if r := postJSON(t, addB, `{"item_id":2,"item_name":"B Want","reason":"quest"}`); r.Code != http.StatusOK {
+	if r := postJSON(t, addB, `{"item_id":2,"item_name":"B Want"}`); r.Code != http.StatusOK {
 		t.Fatalf("add B status = %d (body=%s)", r.Code, r.Body.String())
 	}
 
@@ -224,7 +226,7 @@ func TestAddWant_Catalog_AuditsItemIDOnly(t *testing.T) {
 	seedWebUser(t, ctx, db, caller, "Adder")
 
 	h := withCaller(caller, AddWantHandler(db))
-	rec := postJSON(t, h, `{"item_id":123,"item_name":"Rusty Dagger","reason":"buy","priority":"high","note":"for the alt"}`)
+	rec := postJSON(t, h, `{"item_id":123,"item_name":"Rusty Dagger","priority":"high","note":"for the alt"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -232,7 +234,7 @@ func TestAddWant_Catalog_AuditsItemIDOnly(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &row); err != nil {
 		t.Fatalf("decode add resp: %v", err)
 	}
-	if row.ID == 0 || row.ItemID == nil || *row.ItemID != 123 || row.Reason != "buy" || row.Priority != "high" {
+	if row.ID == 0 || row.ItemID == nil || *row.ItemID != 123 || row.Priority != "high" {
 		t.Fatalf("echoed row wrong: %+v", row)
 	}
 	if c := auditCount(t, ctx, db, "wantlist_add"); c != 1 {
@@ -260,7 +262,7 @@ func TestAddWant_Custom_NullItemID(t *testing.T) {
 
 	h := withCaller(caller, AddWantHandler(db))
 	// item_id null + no priority → priority defaults to "med".
-	rec := postJSON(t, h, `{"item_id":null,"item_name":"Some custom thing","reason":"quest"}`)
+	rec := postJSON(t, h, `{"item_id":null,"item_name":"Some custom thing"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
@@ -296,12 +298,11 @@ func TestAddWant_Validation(t *testing.T) {
 		body string
 		want int
 	}{
-		{"bad reason", `{"item_id":1,"item_name":"X","reason":"maybe"}`, http.StatusBadRequest},
-		{"bad priority", `{"item_id":1,"item_name":"X","reason":"buy","priority":"urgent"}`, http.StatusBadRequest},
-		{"note 281 runes", `{"item_id":1,"item_name":"X","reason":"buy","note":"` + note281 + `"}`, http.StatusBadRequest},
-		{"blank custom label", `{"item_id":null,"item_name":"   ","reason":"buy"}`, http.StatusBadRequest},
-		{"note 280 runes ok", `{"item_id":1,"item_name":"X","reason":"buy","note":"` + note280 + `"}`, http.StatusOK},
-		{"note 280 spaces stored empty", `{"item_id":2,"item_name":"Y","reason":"buy","note":"` + note280spaces + `"}`, http.StatusOK},
+		{"bad priority", `{"item_id":1,"item_name":"X","priority":"urgent"}`, http.StatusBadRequest},
+		{"note 281 runes", `{"item_id":1,"item_name":"X","note":"` + note281 + `"}`, http.StatusBadRequest},
+		{"blank custom label", `{"item_id":null,"item_name":"   "}`, http.StatusBadRequest},
+		{"note 280 runes ok", `{"item_id":1,"item_name":"X","note":"` + note280 + `"}`, http.StatusOK},
+		{"note 280 spaces stored empty", `{"item_id":2,"item_name":"Y","note":"` + note280spaces + `"}`, http.StatusOK},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -324,7 +325,7 @@ func TestAddWant_Validation(t *testing.T) {
 	}
 }
 
-func TestAddWant_Duplicate_409_OtherReason_200(t *testing.T) {
+func TestAddWant_Duplicate_409(t *testing.T) {
 	db := store.NewTestDB(t)
 	ctx := context.Background()
 	caller := "disc-dup"
@@ -332,28 +333,26 @@ func TestAddWant_Duplicate_409_OtherReason_200(t *testing.T) {
 	h := withCaller(caller, AddWantHandler(db))
 
 	// First catalog add → 200.
-	if rec := postJSON(t, h, `{"item_id":500,"item_name":"Fungi Tunic","reason":"buy"}`); rec.Code != http.StatusOK {
+	if rec := postJSON(t, h, `{"item_id":500,"item_name":"Fungi Tunic"}`); rec.Code != http.StatusOK {
 		t.Fatalf("first add status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
-	// Exact duplicate (same item_id + reason) → EXACTLY 409 {"error":"duplicate"}.
-	rec := postJSON(t, h, `{"item_id":500,"item_name":"Fungi Tunic","reason":"buy"}`)
+	// Re-adding the SAME item (same character scope) → EXACTLY 409
+	// {"error":"duplicate"}. The buy/quest reason no longer creates a second row
+	// (quick-260610-fm5 — 00011 dropped reason from the dedup key).
+	rec := postJSON(t, h, `{"item_id":500,"item_name":"Fungi Tunic"}`)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("dup status = %d, want 409 (body=%s)", rec.Code, rec.Body.String())
 	}
 	if got := decodeErr(t, rec); got != "duplicate" {
 		t.Fatalf("dup error = %q, want duplicate", got)
 	}
-	// SAME item, OTHER reason → distinct row, 200.
-	if rec := postJSON(t, h, `{"item_id":500,"item_name":"Fungi Tunic","reason":"quest"}`); rec.Code != http.StatusOK {
-		t.Fatalf("same-item-other-reason status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
-	}
 
-	// CUSTOM-want duplicate (item_id null, same label+reason) → also 409, proving
-	// D-05's no-exact-duplicate rule on the wantlist_custom_uidx path too.
-	if rec := postJSON(t, h, `{"item_id":null,"item_name":"My Custom Want","reason":"quest"}`); rec.Code != http.StatusOK {
+	// CUSTOM-want duplicate (item_id null, same label) → also 409, proving the
+	// no-exact-duplicate rule on the wantlist_custom_uidx path too.
+	if rec := postJSON(t, h, `{"item_id":null,"item_name":"My Custom Want"}`); rec.Code != http.StatusOK {
 		t.Fatalf("first custom add status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
 	}
-	recCustom := postJSON(t, h, `{"item_id":null,"item_name":"My Custom Want","reason":"quest"}`)
+	recCustom := postJSON(t, h, `{"item_id":null,"item_name":"My Custom Want"}`)
 	if recCustom.Code != http.StatusConflict {
 		t.Fatalf("custom dup status = %d, want 409 (body=%s)", recCustom.Code, recCustom.Body.String())
 	}
@@ -381,11 +380,11 @@ func TestListOwnWants_OwnerScoped_NonNilEmpty(t *testing.T) {
 
 	// Add one for the caller + one for ANOTHER member that must not show.
 	addH := withCaller(caller, AddWantHandler(db))
-	if r := postJSON(t, addH, `{"item_id":7,"item_name":"Mine","reason":"buy"}`); r.Code != http.StatusOK {
+	if r := postJSON(t, addH, `{"item_id":7,"item_name":"Mine"}`); r.Code != http.StatusOK {
 		t.Fatalf("add own status = %d", r.Code)
 	}
 	seedWebUser(t, ctx, db, "disc-other", "Other")
-	seedWant(t, ctx, db, "disc-other", i64p(99), "Theirs", "buy", "med")
+	seedWant(t, ctx, db, "disc-other", i64p(99), "Theirs", "med")
 
 	rec2 := httptest.NewRecorder()
 	listH.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -406,7 +405,7 @@ func TestRemoveOwnWant_CrossOwnerNoOp_OwnRemoved(t *testing.T) {
 
 	// Another member's want (the IDOR fixture).
 	seedWebUser(t, ctx, db, "disc-other", "Other")
-	otherID := seedWant(t, ctx, db, "disc-other", i64p(42), "Theirs", "buy", "med")
+	otherID := seedWant(t, ctx, db, "disc-other", i64p(42), "Theirs", "med")
 
 	// Caller tries to remove the OTHER member's want → removed:false, row untouched.
 	revH := withCaller(caller, RemoveOwnWantHandler(db))
@@ -426,7 +425,7 @@ func TestRemoveOwnWant_CrossOwnerNoOp_OwnRemoved(t *testing.T) {
 
 	// Caller adds + removes its OWN want → removed:true, audited.
 	addH := withCaller(caller, AddWantHandler(db))
-	addRec := postJSON(t, addH, `{"item_id":11,"item_name":"Mine","reason":"buy"}`)
+	addRec := postJSON(t, addH, `{"item_id":11,"item_name":"Mine"}`)
 	if addRec.Code != http.StatusOK {
 		t.Fatalf("add own status = %d", addRec.Code)
 	}
@@ -471,7 +470,7 @@ func TestMuteWant_Toggle_CrossOwnerNoOp_Audits(t *testing.T) {
 
 	// Another member's want (the IDOR fixture).
 	seedWebUser(t, ctx, db, "disc-other", "Other")
-	otherID := seedWant(t, ctx, db, "disc-other", i64p(42), "Theirs", "buy", "med")
+	otherID := seedWant(t, ctx, db, "disc-other", i64p(42), "Theirs", "med")
 
 	muteH := withCaller(caller, MuteWantHandler(db))
 
@@ -493,7 +492,7 @@ func TestMuteWant_Toggle_CrossOwnerNoOp_Audits(t *testing.T) {
 
 	// Caller mutes its OWN want → muted:true, row flipped, audited (want_id only).
 	addH := withCaller(caller, AddWantHandler(db))
-	addRec := postJSON(t, addH, `{"item_id":11,"item_name":"Mine","reason":"buy"}`)
+	addRec := postJSON(t, addH, `{"item_id":11,"item_name":"Mine"}`)
 	if addRec.Code != http.StatusOK {
 		t.Fatalf("add own status = %d", addRec.Code)
 	}

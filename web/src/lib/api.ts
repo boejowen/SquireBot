@@ -582,7 +582,6 @@ export interface WantlistRow {
 	/** null for a custom text want (excluded from the in-guild join + future alerts, D-04/D-07). */
 	item_id: number | null;
 	item_name: string;
-	reason: 'buy' | 'quest';
 	priority: 'low' | 'med' | 'high';
 	note: string | null;
 	created_at: number;
@@ -629,7 +628,6 @@ export interface GuildWantRow {
 	/** null ⇒ a custom text want (no catalog item_id). */
 	item_id: number | null;
 	item_name: string;
-	reason: 'buy' | 'quest';
 	priority: 'low' | 'med' | 'high';
 	discord_user_id: string;
 	/** web_user.username — the owner attribution (CWANT-03/04). */
@@ -655,7 +653,6 @@ export function addWant(
 	body: {
 		item_id: number | null;
 		item_name: string;
-		reason: 'buy' | 'quest';
 		priority: 'low' | 'med' | 'high';
 		note?: string;
 		/**

@@ -38,7 +38,7 @@ func TestAddWantTx_InsertsActiveRowAndReturnsID(t *testing.T) {
 	var newID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		newID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Rusty Dagger", "buy", "high", strptr("for alt"), nil, 1700)
+		newID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Rusty Dagger", "high", strptr("for alt"), nil, 1700)
 		return e
 	}); err != nil {
 		t.Fatalf("AddWantTx: %v", err)
@@ -53,7 +53,7 @@ func TestAddWantTx_InsertsActiveRowAndReturnsID(t *testing.T) {
 	}
 	r := got[0]
 	if r.ID != newID || r.ItemID == nil || *r.ItemID != itemID || r.ItemName != "Rusty Dagger" ||
-		r.Reason != "buy" || r.Priority != "high" || r.Note == nil || *r.Note != "for alt" || r.CreatedAt != 1700 {
+		r.Priority != "high" || r.Note == nil || *r.Note != "for alt" || r.CreatedAt != 1700 {
 		t.Errorf("ListOwnWants row = %+v, want the inserted fields", r)
 	}
 }
@@ -73,14 +73,14 @@ func TestListOwnWants_OwnerScopedActiveOnlyNonNil(t *testing.T) {
 
 	i1, i2 := int64(10), int64(20)
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		if _, e := AddWantTx(ctx, tx, "disc-1", &i1, "Item Ten", "buy", "med", nil, nil, 1); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-1", &i1, "Item Ten", "med", nil, nil, 1); e != nil {
 			return e
 		}
-		if _, e := AddWantTx(ctx, tx, "disc-1", &i2, "Item Twenty", "quest", "low", nil, nil, 2); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-1", &i2, "Item Twenty", "low", nil, nil, 2); e != nil {
 			return e
 		}
 		// Bob's want must NOT appear in Alice's list (owner scoping).
-		if _, e := AddWantTx(ctx, tx, "disc-2", &i1, "Item Ten", "buy", "med", nil, nil, 3); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-2", &i1, "Item Ten", "med", nil, nil, 3); e != nil {
 			return e
 		}
 		return nil
@@ -107,7 +107,7 @@ func TestRemoveOwnWantTx_SoftDeleteExcludesFromList(t *testing.T) {
 	var wantID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Soft Me", "buy", "med", nil, nil, 1)
+		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Soft Me", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed want: %v", err)
@@ -139,7 +139,7 @@ func TestRemoveOwnWantTx_CrossOwnerSilentNoOp(t *testing.T) {
 	var wantID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Alice Only", "buy", "med", nil, nil, 1)
+		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Alice Only", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed Alice want: %v", err)
@@ -171,31 +171,34 @@ func TestAddWantTx_DuplicateReturnsTypedSentinel(t *testing.T) {
 	itemID := int64(42)
 	// First add succeeds.
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "buy", "med", nil, nil, 1)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("first AddWantTx: %v", err)
 	}
 
-	// Exact (owner, item, reason) re-add → TYPED ErrDuplicateWant (not a raw driver error).
+	// Exact (owner, item) re-add → TYPED ErrDuplicateWant (not a raw driver error).
 	addErr := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "buy", "med", nil, nil, 2)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "med", nil, nil, 2)
 		return e
 	})
 	if !errors.Is(addErr, ErrDuplicateWant) {
-		t.Fatalf("duplicate (user,item,reason) AddWantTx err = %v, want ErrDuplicateWant", addErr)
+		t.Fatalf("duplicate (user,item) AddWantTx err = %v, want ErrDuplicateWant", addErr)
 	}
 
-	// SAME item, DIFFERENT reason → inserts fine (D-05: buy + quest coexist).
-	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "quest", "med", nil, nil, 3)
+	// A THIRD add of the SAME item also collides — the buy/quest reason is gone
+	// (quick-260610-fm5), so there is no "other reason" escape hatch: one active
+	// row per (user, item) in the same character scope, period.
+	thirdErr := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Dup Item", "med", nil, nil, 3)
 		return e
-	}); err != nil {
-		t.Fatalf("same item different reason AddWantTx should succeed, got: %v", err)
+	})
+	if !errors.Is(thirdErr, ErrDuplicateWant) {
+		t.Fatalf("third same-item AddWantTx err = %v, want ErrDuplicateWant (no reason escape hatch)", thirdErr)
 	}
 
-	if got := listWants(t, ctx, db, "disc-1"); len(got) != 2 {
-		t.Fatalf("after dup + different-reason, ListOwnWants len = %d, want 2", len(got))
+	if got := listWants(t, ctx, db, "disc-1"); len(got) != 1 {
+		t.Fatalf("after dup re-adds, ListOwnWants len = %d, want 1", len(got))
 	}
 }
 
@@ -206,7 +209,7 @@ func TestListOwnWants_ReturnsMutedDefaultFalse(t *testing.T) {
 
 	itemID := int64(99)
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, nil, 1)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed want: %v", err)
@@ -232,7 +235,7 @@ func TestSetMutedTx_OwnerScopedAndReflectedInList(t *testing.T) {
 	var wantID int64
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		var e error
-		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "buy", "med", nil, nil, 1)
+		wantID, e = AddWantTx(ctx, tx, "disc-1", &itemID, "Bell Me", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("seed want: %v", err)
@@ -293,7 +296,7 @@ func TestAddWantTx_PersistsCharacterTagAndListSurfacesName(t *testing.T) {
 
 	itemID := int64(1234)
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Tagged Item", "buy", "high", nil, i64ptr(charID), 1700)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Tagged Item", "high", nil, i64ptr(charID), 1700)
 		return e
 	}); err != nil {
 		t.Fatalf("AddWantTx tagged: %v", err)
@@ -321,7 +324,7 @@ func TestAddWantTx_NilCharacterTagListsAsNull(t *testing.T) {
 
 	itemID := int64(1234)
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Account Item", "buy", "med", nil, nil, 1700)
+		_, e := AddWantTx(ctx, tx, "disc-1", &itemID, "Account Item", "med", nil, nil, 1700)
 		return e
 	}); err != nil {
 		t.Fatalf("AddWantTx account-level: %v", err)
@@ -364,11 +367,11 @@ func TestListGuildWants_AllMembersWithOwnerAndOptionalChar(t *testing.T) {
 	i1, i2 := int64(10), int64(20)
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
 		// Alice: one tagged want.
-		if _, e := AddWantTx(ctx, tx, "disc-1", &i1, "Alice Tagged", "buy", "high", nil, i64ptr(aliceChar), 1); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-1", &i1, "Alice Tagged", "high", nil, i64ptr(aliceChar), 1); e != nil {
 			return e
 		}
 		// Bob: one untagged (account-level) want.
-		if _, e := AddWantTx(ctx, tx, "disc-2", &i2, "Bob Untagged", "quest", "low", nil, nil, 2); e != nil {
+		if _, e := AddWantTx(ctx, tx, "disc-2", &i2, "Bob Untagged", "low", nil, nil, 2); e != nil {
 			return e
 		}
 		return nil
@@ -420,19 +423,19 @@ func TestAddWantTx_CustomDuplicateReturnsTypedSentinel(t *testing.T) {
 
 	// First custom want (item_id NULL, dedupe on item_name).
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "buy", "med", nil, nil, 1)
+		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "med", nil, nil, 1)
 		return e
 	}); err != nil {
 		t.Fatalf("first custom AddWantTx: %v", err)
 	}
 
-	// Exact (owner, label, reason) re-add of a custom want → ErrDuplicateWant
+	// Exact (owner, label) re-add of a custom want → ErrDuplicateWant
 	// (the wantlist_custom_uidx partial index; NULL item_id is dedupe-safe).
 	addErr := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "buy", "med", nil, nil, 2)
+		_, e := AddWantTx(ctx, tx, "disc-1", nil, "Homemade Label", "med", nil, nil, 2)
 		return e
 	})
 	if !errors.Is(addErr, ErrDuplicateWant) {
-		t.Fatalf("duplicate custom (user,label,reason) AddWantTx err = %v, want ErrDuplicateWant", addErr)
+		t.Fatalf("duplicate custom (user,label) AddWantTx err = %v, want ErrDuplicateWant", addErr)
 	}
 }

@@ -7,6 +7,8 @@ package migrations_test
 
 import (
 	"database/sql"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/migrations"
@@ -717,12 +719,16 @@ func TestMigrate_00009_CharacterAssignment(t *testing.T) {
 //   - wantlist_item gained the nullable character_id column (columnSet);
 //   - the COALESCE(character_id,-1)-keyed dedup rewrite PRESERVES the 00006
 //     account-level (NULL character_id) dedup: a second account-level want for the
-//     same (user, item_id, reason) collides on wantlist_catalog_uidx;
-//   - the SAME (user, item_id, reason) tagged to two DIFFERENT character_id values
+//     same (user, item_id) collides on wantlist_catalog_uidx;
+//   - the SAME (user, item_id) tagged to two DIFFERENT character_id values
 //     does NOT collide (the COALESCE sentinel keeps real char ids distinct ⇒ the
 //     same item can be wanted for two characters);
 //   - the SAME assertions hold on the custom path (item_id NULL, dedup on item_name
 //     via wantlist_custom_uidx);
+//
+// NB (quick-260610-fm5): 00011 later dropped reason from BOTH unique keys but kept
+// the COALESCE(character_id,-1) term, so every assertion below (all single-reason
+// pairs) holds UNCHANGED at HEAD — this test regression-guards the per-char dedup.
 //   - existing rows backfill to NULL character_id (the ADD COLUMN default — no data
 //     loss, CWANT-02); and
 //   - a second Up is a clean no-op (idempotent — goose_db_version row count
@@ -786,13 +792,13 @@ func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
 		t.Errorf("first account-level want character_id = %d, want NULL (backfill)", charIDNull.Int64)
 	}
 
-	// 2) A SECOND account-level (NULL) want for the same (user,item_id,reason) COLLIDES
+	// 2) A SECOND account-level (NULL) want for the same (user,item_id) COLLIDES
 	//    (the COALESCE sentinel preserves 00006 account-level dedup — T-28-04).
 	if err := addWant(&catItem, "Catalog Item", "buy", nil); err == nil {
-		t.Errorf("expected a second account-level (NULL) catalog want for the same (user,item,reason) to collide on wantlist_catalog_uidx, but it succeeded")
+		t.Errorf("expected a second account-level (NULL) catalog want for the same (user,item) to collide on wantlist_catalog_uidx, but it succeeded")
 	}
 
-	// 3) The SAME (user,item_id,reason) tagged to charA, then charB — BOTH succeed
+	// 3) The SAME (user,item_id) tagged to charA, then charB — BOTH succeed
 	//    (same item wanted for two characters ⇒ two rows; real char ids stay distinct).
 	if err := addWant(&catItem, "Catalog Item", "buy", &charA); err != nil {
 		t.Errorf("expected the catalog want tagged to charA to succeed (distinct from the NULL want), got: %v", err)
@@ -802,7 +808,7 @@ func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
 	}
 	// 4) A SECOND want for the same item tagged to charA AGAIN collides (per-char dedup).
 	if err := addWant(&catItem, "Catalog Item", "buy", &charA); err == nil {
-		t.Errorf("expected a second catalog want for the same (user,item,reason,charA) to collide, but it succeeded")
+		t.Errorf("expected a second catalog want for the same (user,item,charA) to collide, but it succeeded")
 	}
 
 	// --- Custom path (item_id NULL, dedup on item_name) ---
@@ -810,12 +816,12 @@ func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
 	if err := addWant(nil, "Custom Label", "quest", nil); err != nil {
 		t.Fatalf("first account-level custom want: %v", err)
 	}
-	// 6) A SECOND account-level (NULL) custom want for the same (user,item_name,reason)
+	// 6) A SECOND account-level (NULL) custom want for the same (user,item_name)
 	//    COLLIDES on wantlist_custom_uidx.
 	if err := addWant(nil, "Custom Label", "quest", nil); err == nil {
-		t.Errorf("expected a second account-level (NULL) custom want for the same (user,label,reason) to collide on wantlist_custom_uidx, but it succeeded")
+		t.Errorf("expected a second account-level (NULL) custom want for the same (user,label) to collide on wantlist_custom_uidx, but it succeeded")
 	}
-	// 7) The SAME (user,item_name,reason) tagged to two DIFFERENT chars — both succeed.
+	// 7) The SAME (user,item_name) tagged to two DIFFERENT chars — both succeed.
 	if err := addWant(nil, "Custom Label", "quest", &charA); err != nil {
 		t.Errorf("expected the custom want tagged to charA to succeed (distinct from the NULL want), got: %v", err)
 	}
@@ -838,6 +844,169 @@ func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
 	}
 	if beforeVersions != afterVersions {
 		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
+// TestMigrate_00011_WantlistDropReasonDedup proves the quick-260610-fm5 forward-only
+// migration 00011 (drop the buy/quest reason from the wantlist dedup key):
+//
+//	(a) NEITHER recreated unique index keys on reason any more — their
+//	    sqlite_master SQL contains no 'reason' but KEEPS the load-bearing
+//	    COALESCE(character_id, -1) term from 00010 (T-fm5-01);
+//	(b) at HEAD a 'buy' + 'quest' insert pair for the same (user, item, NULL char)
+//	    collides on the SECOND insert (reason left the key; the reason COLUMN
+//	    persists — its NOT NULL CHECK cannot be altered away in SQLite — but it no
+//	    longer differentiates rows), on the catalog AND custom paths; and
+//	(c) the DATA pass: migrating a v10 database carrying cross-reason duplicates up
+//	    to v11 soft-deletes (active=0 — NEVER DELETE; alert_log FKs these rows)
+//	    every colliding row EXCEPT MIN(id), per (user, item|label,
+//	    COALESCE(character_id,-1)) — and a char-tagged row in a COALESCE scope of
+//	    its own SURVIVES the pass (the COALESCE pin in the dedupe GROUP BYs).
+//
+// (c) cannot run through store.NewTestDB (it always migrates to HEAD), so it opens
+// a raw store.Open handle and drives migrations.UpTo (the test-support helper over
+// the SAME embedded FS RunMigrations uses) to v10, seeds, then resumes to v11.
+func TestMigrate_00011_WantlistDropReasonDedup(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00011) + t.Cleanup
+
+	// (a) Index-SQL assert: no 'reason' in either recreated unique index; the
+	// COALESCE(character_id, -1) term is retained.
+	rows, err := db.Query(
+		`SELECT name, sql FROM sqlite_master WHERE name IN ('wantlist_catalog_uidx','wantlist_custom_uidx')`)
+	if err != nil {
+		t.Fatalf("read index SQL from sqlite_master: %v", err)
+	}
+	defer rows.Close()
+	seen := 0
+	for rows.Next() {
+		var name, sqlText string
+		if err := rows.Scan(&name, &sqlText); err != nil {
+			t.Fatalf("scan sqlite_master row: %v", err)
+		}
+		seen++
+		if strings.Contains(sqlText, "reason") {
+			t.Errorf("index %q still keys on reason after 00011: %s", name, sqlText)
+		}
+		if !strings.Contains(sqlText, "COALESCE(character_id, -1)") {
+			t.Errorf("index %q lost the COALESCE(character_id, -1) term after 00011 (the 00010 per-char dedup pin): %s", name, sqlText)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate sqlite_master rows: %v", err)
+	}
+	if seen != 2 {
+		t.Fatalf("found %d of the 2 wantlist unique indexes in sqlite_master, want 2", seen)
+	}
+
+	// (b) Cross-reason collision at HEAD. Seed a web_user for the FK, then insert
+	// the same (user, item, NULL char) as 'buy' and again as 'quest' — the second
+	// MUST collide now that reason left the key.
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-r11", "ReasonProbe"); err != nil {
+		t.Fatalf("seed web_user: %v", err)
+	}
+	insWant := func(itemID any, itemName, reason string) error {
+		_, err := db.Exec(
+			`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, character_id, created_at)
+			 VALUES (?, ?, ?, ?, 'med', NULL, 0)`, "disc-r11", itemID, itemName, reason)
+		return err
+	}
+	if err := insWant(int64(6001), "Cross Reason Item", "buy"); err != nil {
+		t.Fatalf("first catalog ('buy') insert: %v", err)
+	}
+	if err := insWant(int64(6001), "Cross Reason Item", "quest"); err == nil {
+		t.Errorf("expected the 'quest' re-add of the same (user,item,NULL char) to collide after 00011, but it succeeded")
+	}
+	// Same on the custom path (item_id NULL, keyed on item_name).
+	if err := insWant(nil, "Cross Reason Label", "buy"); err != nil {
+		t.Fatalf("first custom ('buy') insert: %v", err)
+	}
+	if err := insWant(nil, "Cross Reason Label", "quest"); err == nil {
+		t.Errorf("expected the 'quest' re-add of the same (user,label,NULL char) custom want to collide after 00011, but it succeeded")
+	}
+
+	// (c) The dedupe-data pass, on a SEPARATE raw handle stopped at v10.
+	rawPath := filepath.Join(t.TempDir(), "dedupe-proof.db")
+	raw, err := store.Open(rawPath)
+	if err != nil {
+		t.Fatalf("open raw v10 DB: %v", err)
+	}
+	t.Cleanup(func() {
+		if cerr := raw.Close(); cerr != nil {
+			t.Errorf("close raw v10 DB: %v", cerr)
+		}
+	})
+	if err := migrations.UpTo(raw, 10); err != nil {
+		t.Fatalf("UpTo(10): %v", err)
+	}
+
+	// Seed cross-reason duplicate pairs that were LEGAL at v10 (reason was in the
+	// key), plus a char-tagged row in its own COALESCE scope.
+	if _, err := raw.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-dd", "DedupeUser"); err != nil {
+		t.Fatalf("seed web_user (v10): %v", err)
+	}
+	ddOwner := mustInsertOwner(t, raw, "DedupeOwner", nil)
+	ddChar := mustInsertChar(t, raw, ddOwner, "DedupeChar", false, false, false)
+
+	seedV10 := func(itemID any, itemName, reason string, charID any) int64 {
+		t.Helper()
+		res, err := raw.Exec(
+			`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, character_id, created_at)
+			 VALUES (?, ?, ?, ?, 'med', ?, 0)`, "disc-dd", itemID, itemName, reason, charID)
+		if err != nil {
+			t.Fatalf("seed v10 want (%s, %s): %v", itemName, reason, err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatalf("seed v10 want id: %v", err)
+		}
+		return id
+	}
+	catKeep := seedV10(int64(7001), "Dup Item", "buy", nil)   // MIN(id), catalog NULL-char group → stays active
+	catDrop := seedV10(int64(7001), "Dup Item", "quest", nil) // newer cross-reason dup → deactivated
+	cusKeep := seedV10(nil, "Dup Label", "buy", nil)          // MIN(id), custom NULL-char group → stays active
+	cusDrop := seedV10(nil, "Dup Label", "quest", nil)        // newer cross-reason dup → deactivated
+	// The SAME item tagged to a character is its OWN COALESCE scope — it must
+	// SURVIVE the pass (proves the dedupe GROUP BYs kept COALESCE(character_id,-1)).
+	charKeep := seedV10(int64(7001), "Dup Item", "quest", ddChar)
+
+	if err := migrations.UpTo(raw, 11); err != nil {
+		t.Fatalf("UpTo(11) over the seeded v10 DB: %v", err)
+	}
+
+	activeOf := func(id int64) int {
+		t.Helper()
+		var a int
+		if err := raw.QueryRow(`SELECT active FROM wantlist_item WHERE id = ?`, id).Scan(&a); err != nil {
+			t.Fatalf("read active (id=%d): %v", id, err)
+		}
+		return a
+	}
+	if got := activeOf(catKeep); got != 1 {
+		t.Errorf("catalog MIN(id) row active = %d, want 1 (the keeper)", got)
+	}
+	if got := activeOf(catDrop); got != 0 {
+		t.Errorf("catalog cross-reason dup active = %d, want 0 (soft-deleted by the 00011 data pass)", got)
+	}
+	if got := activeOf(cusKeep); got != 1 {
+		t.Errorf("custom MIN(id) row active = %d, want 1 (the keeper)", got)
+	}
+	if got := activeOf(cusDrop); got != 0 {
+		t.Errorf("custom cross-reason dup active = %d, want 0 (soft-deleted by the 00011 data pass)", got)
+	}
+	if got := activeOf(charKeep); got != 1 {
+		t.Errorf("char-tagged row active = %d, want 1 — the dedupe GROUP BYs must keep COALESCE(character_id,-1) (T-fm5-01)", got)
+	}
+	// Soft-delete ONLY: every seeded row still exists (alert_log FKs them).
+	var n int
+	if err := raw.QueryRow(`SELECT COUNT(*) FROM wantlist_item`).Scan(&n); err != nil {
+		t.Fatalf("count wantlist_item rows: %v", err)
+	}
+	if n != 5 {
+		t.Errorf("wantlist_item row count = %d, want 5 (the data pass must soft-delete, never DELETE)", n)
 	}
 }
 

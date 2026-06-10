@@ -35,7 +35,6 @@ import PriceCell from '$lib/components/cells/PriceCell.svelte';
 import LastSyncedCell from '$lib/components/cells/LastSyncedCell.svelte';
 import RecommendedCell from '$lib/components/cells/RecommendedCell.svelte';
 import PriorityCell from '$lib/components/cells/PriorityCell.svelte';
-import ReasonCell from '$lib/components/cells/ReasonCell.svelte';
 import WantItemCell from '$lib/components/cells/WantItemCell.svelte';
 import InGuildCell from '$lib/components/cells/InGuildCell.svelte';
 import WantRemoveCell from '$lib/components/cells/WantRemoveCell.svelte';
@@ -170,7 +169,7 @@ export const spellCheckColumns: ColumnDef<SpellCheckRow, unknown>[] = [
 ];
 
 // --- wantlist (19-UI-SPEC Grid Contract) ---------------------------------
-// Priority · Item · Reason · In guild? · Note · Remove. The 5th DataGrid
+// Priority · Item · In guild? · Note · Remove. The 5th DataGrid
 // instantiation — owner-scoped, consolidated, single grid (NEVER per-character).
 // Default sort: priority (high→low) then in_guild status (D-08) — seeded by the
 // panel's defaultSorting `[{ id: 'priority', desc: true }, { id: 'in_guild', desc: false }]`.
@@ -224,13 +223,6 @@ export function wantlistColumns(
 			enableGlobalFilter: false,
 			enableColumnFilter: false,
 			enableSorting: false
-		},
-		{
-			id: 'reason',
-			accessorKey: 'reason',
-			header: 'Reason',
-			meta: { filter: 'facet' },
-			cell: (ctx) => renderComponent(ReasonCell, { reason: ctx.row.original.reason })
 		},
 		{
 			id: 'in_guild',
@@ -290,8 +282,8 @@ function guildPrioritySort(a: Row<GuildWantRow>, b: Row<GuildWantRow>): number {
 }
 
 /**
- * Build the guildwide wantlist ColumnDef[]. Owner · Character · Priority · Item ·
- * Reason. Owner + character names render via plain accessor strings (TanStack
+ * Build the guildwide wantlist ColumnDef[]. Owner · Character · Priority · Item.
+ * Owner + character names render via plain accessor strings (TanStack
  * auto-escapes the text node) — NEVER {@html} (T-28-10). An account-level want shows
  * a blank Character cell. No Note column (private, excluded server-side, T-28-12).
  */
@@ -317,13 +309,6 @@ export function guildWantlistColumns(): ColumnDef<GuildWantRow, unknown>[] {
 			id: 'item',
 			accessorKey: 'item_name',
 			header: 'Item'
-		},
-		{
-			id: 'reason',
-			accessorKey: 'reason',
-			header: 'Reason',
-			meta: { filter: 'facet' },
-			cell: (ctx) => renderComponent(ReasonCell, { reason: ctx.row.original.reason })
 		}
 	];
 }

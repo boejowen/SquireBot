@@ -15,7 +15,6 @@ function want(over: Partial<WantlistRow> = {}): WantlistRow {
 		id: 1,
 		item_id: 100,
 		item_name: 'Cloak of Flames',
-		reason: 'buy',
 		priority: 'med',
 		note: null,
 		created_at: 0,

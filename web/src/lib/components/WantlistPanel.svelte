@@ -139,7 +139,7 @@
 		};
 	});
 
-	// The Guild grid columns (Owner · Character · Priority · Item · Reason; no Note).
+	// The Guild grid columns (Owner · Character · Priority · Item; no Note).
 	const guildColumns = guildWantlistColumns();
 	const guildDefaultSorting = [{ id: 'priority', desc: true }];
 

@@ -45,7 +45,6 @@ type Hit struct {
 	DiscordUserID string
 	ItemID        *int64
 	ItemName      string
-	Reason        string
 	// Note is the want's optional free-text "why you wanted it" (D-05). It is a
 	// pointer because wantlist_item.note is nullable — a want may have no note.
 	// The EC producer (P21 Plan 03) echoes it into the alert embed.
@@ -64,7 +63,7 @@ type Hit struct {
 // matcher. Returns a non-nil (possibly empty) slice.
 func ForItem(ctx context.Context, db *sql.DB, itemID int64) ([]Hit, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT w.id, w.discord_user_id, w.item_id, w.item_name, w.reason, w.note, c.name AS character_name
+		`SELECT w.id, w.discord_user_id, w.item_id, w.item_name, w.note, c.name AS character_name
 		   FROM wantlist_item w
 		   LEFT JOIN character c ON c.id = w.character_id
 		  WHERE w.item_id = ? AND w.active = 1 AND w.muted = 0`, itemID)
@@ -82,7 +81,7 @@ func ForItem(ctx context.Context, db *sql.DB, itemID int64) ([]Hit, error) {
 // soft-removed want is excluded at the matcher. Returns a non-nil slice.
 func ForName(ctx context.Context, db *sql.DB, name string) ([]Hit, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT w.id, w.discord_user_id, w.item_id, w.item_name, w.reason, w.note, c.name AS character_name
+		`SELECT w.id, w.discord_user_id, w.item_id, w.item_name, w.note, c.name AS character_name
 		   FROM wantlist_item w
 		   LEFT JOIN character c ON c.id = w.character_id
 		  WHERE w.item_name = ? COLLATE NOCASE AND w.active = 1 AND w.muted = 0`, name)
@@ -107,7 +106,7 @@ func scanHits(rows *sql.Rows, ctxLabel string) ([]Hit, error) {
 		// NB: &h.DiscordUserID is scanned from w.discord_user_id (the want owner) — its
 		// scan target is UNCHANGED by the CharacterName addition (T-28-06). characterName
 		// is appended at the END, matching the trailing c.name column in both SELECTs.
-		if err := rows.Scan(&h.WantID, &h.DiscordUserID, &itemID, &h.ItemName, &h.Reason, &note, &charName); err != nil {
+		if err := rows.Scan(&h.WantID, &h.DiscordUserID, &itemID, &h.ItemName, &note, &charName); err != nil {
 			return nil, fmt.Errorf("wantmatch scan hit (%s): %w", ctxLabel, err)
 		}
 		if itemID.Valid {

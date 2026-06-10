@@ -15,7 +15,7 @@ package webadmin
 //   - Owner is session-derived (D-02); no body field selects an owner. There is NO
 //     owner entity — identity keys directly on the caller's discord_user_id
 //     (19-RESEARCH Pitfall 3); the handlers call NO resolve-or-create function.
-//   - validWant re-validates the reason/priority enums + the (TRIMMED) 280-rune note
+//   - validWant re-validates the priority enum + the (TRIMMED) 280-rune note
 //     cap + the non-blank custom label server-side — never trusting the client
 //     <select>/<textarea> (the charmeta precedent). The note is TRIMMED before the
 //     rune count so a whitespace-only / 280-spaces note is treated as empty (stored
@@ -45,7 +45,6 @@ import (
 type addWantReq struct {
 	ItemID   *int64 `json:"item_id"`
 	ItemName string `json:"item_name"`
-	Reason   string `json:"reason"`
 	Priority string `json:"priority"`
 	Note     string `json:"note"`
 	// CharacterID is the OPTIONAL character tag (CWANT-01). A pointer (mirroring
@@ -57,24 +56,21 @@ type addWantReq struct {
 	CharacterID *int64 `json:"character_id"`
 }
 
-// validReasons / validPriorities are the server-side enum allow-lists (the DB CHECK
-// constraints from Plan 01 are the second line of defense; this is the first).
-var (
-	validReasons    = map[string]bool{"buy": true, "quest": true}
-	validPriorities = map[string]bool{"low": true, "med": true, "high": true}
-)
+// validPriorities is the server-side priority enum allow-list (the DB CHECK
+// constraint from Plan 01 is the second line of defense; this is the first).
+// NB: there is no reason allow-list any more — the buy/quest reason field was
+// removed end-to-end (quick-260610-fm5); a stale client's "reason" key is
+// silently ignored by Decode (no DisallowUnknownFields).
+var validPriorities = map[string]bool{"low": true, "med": true, "high": true}
 
 // validWant is the server-side V5 re-check (NEVER trust the form's <select>/
-// <textarea> — the validCharMeta precedent). reason ∈ {buy,quest}; if Priority is
+// <textarea> — the validCharMeta precedent). If Priority is
 // non-empty it must be ∈ {low,med,high} (an empty Priority is allowed and defaults
 // to "med" before the store call); the note is TRIMMED FIRST, then capped at 280
 // RUNES (utf8.RuneCountInString, NOT len bytes — Pitfall 2; trimming first means
 // 280 spaces does NOT pass as a real note — review WORTH-FIX 6); a custom want
 // (ItemID nil) requires a non-blank trimmed label.
 func validWant(req addWantReq) bool {
-	if !validReasons[req.Reason] {
-		return false
-	}
 	if req.Priority != "" && !validPriorities[req.Priority] {
 		return false
 	}
@@ -119,9 +115,9 @@ func mapWantErr(w http.ResponseWriter, err error) {
 
 // AddWantHandler (POST) adds a want for the caller (WANT-01/02). The owner is the
 // session caller (caller(ctx), D-02) — the body carries NO owner. The add + audit
-// run in ONE withTx (BEGIN IMMEDIATE) so they are atomic. On an exact duplicate the
-// store returns ErrDuplicateWant, which mapWantErr maps to 409 {"error":"duplicate"};
-// the SAME item with the OTHER reason is a distinct row (200). The audit detail
+// run in ONE withTx (BEGIN IMMEDIATE) so they are atomic. On an exact duplicate
+// (same item in the same character scope) the store returns ErrDuplicateWant,
+// which mapWantErr maps to 409 {"error":"duplicate"}. The audit detail
 // carries item_id ONLY — never the note text (V7).
 //
 // ACCEPTED TRADE-OFF (review JUDGMENT-CALL 8): for catalog wants (ItemID set) the
@@ -174,7 +170,7 @@ func AddWantHandler(db *sql.DB) http.HandlerFunc {
 					return store.ErrCharNotAssigned
 				}
 			}
-			id, e := store.AddWantTx(ctx, tx, callerID, req.ItemID, itemName, req.Reason, priority, notePtr, req.CharacterID, now)
+			id, e := store.AddWantTx(ctx, tx, callerID, req.ItemID, itemName, priority, notePtr, req.CharacterID, now)
 			if e != nil {
 				return e // ErrDuplicateWant → mapWantErr → 409 duplicate
 			}
@@ -193,7 +189,6 @@ func AddWantHandler(db *sql.DB) http.HandlerFunc {
 			ID:        newID,
 			ItemID:    req.ItemID,
 			ItemName:  itemName,
-			Reason:    req.Reason,
 			Priority:  priority,
 			Note:      notePtr,
 			CreatedAt: now,

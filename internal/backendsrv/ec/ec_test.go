@@ -511,14 +511,13 @@ func fieldByName(e *discordgo.MessageEmbed, name string) *discordgo.MessageEmbed
 
 // TestBuildEmbed_OmitsNullPriceAndSeller: a nil price omits the Price field (never
 // "0pp"); an unresolved seller omits the Seller field; the Title carries the WTS
-// tag, the URL is the wiki link, and "Why you wanted it" reflects Reason (+ Note).
+// tag, the URL is the wiki link, and "Why you wanted it" reflects the saved Note.
 func TestBuildEmbed_OmitsNullPriceAndSeller(t *testing.T) {
 	note := "tank twink, save up to 2k"
 	hit := wantmatch.Hit{
 		WantID:        7,
 		DiscordUserID: "alice",
 		ItemName:      "Flowing Black Silk Sash",
-		Reason:        "buy",
 		Note:          &note,
 	}
 	now := time.Date(2026, 6, 6, 2, 3, 0, 0, time.UTC)
@@ -541,15 +540,15 @@ func TestBuildEmbed_OmitsNullPriceAndSeller(t *testing.T) {
 	if why == nil {
 		t.Fatal("Why-you-wanted-it field missing; want present")
 	}
-	if want := "buy — " + note; why.Value != want {
-		t.Errorf("Why = %q; want %q (Reason + Note)", why.Value, want)
+	if why.Value != note {
+		t.Errorf("Why = %q; want %q (the saved Note)", why.Value, note)
 	}
 }
 
 // TestBuildEmbed_PriceAndSellerPresent: a non-nil price renders the Price field
 // (not "0pp") and a resolved seller renders the Seller field.
 func TestBuildEmbed_PriceAndSellerPresent(t *testing.T) {
-	hit := wantmatch.Hit{WantID: 1, DiscordUserID: "bob", ItemName: "Rubicite Helm", Reason: "quest"}
+	hit := wantmatch.Hit{WantID: 1, DiscordUserID: "bob", ItemName: "Rubicite Helm"}
 	now := time.Date(2026, 6, 6, 2, 3, 0, 0, time.UTC)
 	a := mkAuction(0, "2026-06-06T02:00:00+00:00", intp(2000))
 	e := buildEmbed(hit, a, "Seller1", seenAgo(a.T, now))

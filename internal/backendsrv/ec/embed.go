@@ -9,8 +9,8 @@ package ec
 //   - Price is OMITTED when nil (never render "0pp" — a null price is "unknown").
 //   - Seller is OMITTED when unresolved (best-effort via the players map; the
 //     key→auction relationship is undocumented, so this often returns "").
-//   - "Why you wanted it" echoes the want's Reason (+ the saved Note when set) so
-//     a ping months later still makes sense.
+//   - "Why you wanted it" echoes the want's saved Note (or the "on your
+//     wantlist" fallback) so a ping months later still makes sense.
 //
 // SECURITY (V7): item names + the players map are wiki/PigParse-controlled text
 // rendered into a DM the bot sends; this file shapes them into the embed but
@@ -90,23 +90,17 @@ func resolveSeller(a enrich.ItemAuctionDetail, players map[string]string) string
 	return ""
 }
 
-// whyWanted composes the "why you wanted it" line from the want's Reason plus its
-// optional saved Note (D-05). Reason is a short enum ('buy'/'quest'); the Note (when
-// present) adds the wantlister's own context. Returns at least the Reason.
+// whyWanted composes the "why you wanted it" line from the want's optional saved
+// Note (D-05) — the wantlister's own context. Returns the trimmed note when
+// present, else the "on your wantlist" fallback — NEVER empty, so the embed
+// field is always present (the never-empty contract buildEmbed relies on).
 func whyWanted(hit wantmatch.Hit) string {
-	reason := strings.TrimSpace(hit.Reason)
 	if hit.Note != nil {
 		if note := strings.TrimSpace(*hit.Note); note != "" {
-			if reason == "" {
-				return note
-			}
-			return reason + " — " + note
+			return note
 		}
 	}
-	if reason == "" {
-		return "on your wantlist"
-	}
-	return reason
+	return "on your wantlist"
 }
 
 // buildEmbed shapes the rich embed for one wantlister's hit on one new WTS auction
@@ -142,7 +136,7 @@ func buildEmbed(hit wantmatch.Hit, a enrich.ItemAuctionDetail, seller, seenStr s
 			Inline: true,
 		})
 	}
-	// Why you wanted it — always present (Reason at minimum, + Note when set).
+	// Why you wanted it — always present (the saved Note, else the fallback).
 	fields = append(fields, &discordgo.MessageEmbedField{
 		Name:   "Why you wanted it",
 		Value:  whyWanted(hit),

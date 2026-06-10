@@ -33,7 +33,7 @@ import (
 )
 
 // ErrDuplicateWant is returned by AddWantTx when the insert violates one of the
-// partial unique indexes (an exact (user,item,reason) or (user,label,reason) re-add
+// partial unique indexes (an exact (user,item[,char]) or (user,label[,char]) re-add
 // of an ACTIVE want). The handler (Plan 02) maps it to HTTP 409. Detection is via the
 // modernc driver's extended result code, NOT string-matching the message (review MUST-FIX 2).
 var ErrDuplicateWant = errors.New("wantlist: duplicate")
@@ -53,7 +53,6 @@ type WantlistRow struct {
 	ID            int64   `json:"id"`
 	ItemID        *int64  `json:"item_id"` // null ⇒ custom want (D-04, D-07)
 	ItemName      string  `json:"item_name"`
-	Reason        string  `json:"reason"`
 	Priority      string  `json:"priority"`
 	Note          *string `json:"note"`
 	CreatedAt     int64   `json:"created_at"`
@@ -65,20 +64,25 @@ type WantlistRow struct {
 // AddWantTx inserts a new wantlist_item for the caller (discordID, resolved from the
 // session upstream — NEVER the body, D-02) and returns the new row id. active defaults
 // to 1 via the migration DDL. On a partial-unique-index conflict (an exact re-add of an
-// active (user,item,reason) catalog want or (user,label,reason) custom want — D-05) it
+// active (user,item[,char]) catalog want or (user,label[,char]) custom want) it
 // returns the TYPED ErrDuplicateWant, detected via the driver's extended result code
 // (review MUST-FIX 2) — NOT the raw driver error, and NOT a string-match. itemID is nil
 // for a custom want; note is nil when absent.
 // characterID is the OPTIONAL character tag (CWANT-01): nil ⇒ an account-level want,
 // non-nil ⇒ scoped to that character (the handler authorizes the tag via
 // IsCharAssignedToTx BEFORE calling this — Plan 02). The COALESCE(character_id,-1) dedup
-// index (00010) still raises 2067 on a duplicate, so the ErrDuplicateWant detection below
+// index (00011) still raises 2067 on a duplicate, so the ErrDuplicateWant detection below
 // is UNCHANGED.
-func AddWantTx(ctx context.Context, tx *sql.Tx, discordID string, itemID *int64, itemName, reason, priority string, note *string, characterID *int64, now int64) (int64, error) {
+//
+// The reason COLUMN persists (00006's NOT NULL CHECK cannot be altered away in
+// SQLite) even though the buy/quest concept is gone (quick-260610-fm5): the INSERT
+// MUST keep supplying the literal 'buy' to satisfy the retained CHECK — dropping it
+// from the column list would 500 every add.
+func AddWantTx(ctx context.Context, tx *sql.Tx, discordID string, itemID *int64, itemName, priority string, note *string, characterID *int64, now int64) (int64, error) {
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, character_id, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		discordID, itemID, itemName, reason, priority, note, characterID, now)
+		 VALUES (?, ?, ?, 'buy', ?, ?, ?, ?)`,
+		discordID, itemID, itemName, priority, note, characterID, now)
 	if err != nil {
 		// Detect the unique-constraint violation via the modernc driver's extended
 		// result code, NOT by string-matching the driver's textual message (brittle —
@@ -103,7 +107,7 @@ func AddWantTx(ctx context.Context, tx *sql.Tx, discordID string, itemID *int64,
 // sql.Null* and converted to pointers (NULL ⇒ JSON null).
 func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]WantlistRow, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT w.id, w.item_id, w.item_name, w.reason, w.priority, w.note, w.created_at, w.muted,
+		`SELECT w.id, w.item_id, w.item_name, w.priority, w.note, w.created_at, w.muted,
 		        w.character_id, c.name AS character_name
 		   FROM wantlist_item w
 		   LEFT JOIN character c ON c.id = w.character_id
@@ -124,7 +128,7 @@ func ListOwnWants(ctx context.Context, db *sql.DB, discordID string) ([]Wantlist
 			charID  sql.NullInt64
 			charNme sql.NullString
 		)
-		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Reason, &r.Priority, &note, &r.CreatedAt, &muted, &charID, &charNme); err != nil {
+		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Priority, &note, &r.CreatedAt, &muted, &charID, &charNme); err != nil {
 			return nil, fmt.Errorf("scan own-want row (user=%s): %w", discordID, err)
 		}
 		if itemID.Valid {
@@ -163,7 +167,6 @@ type GuildWantRow struct {
 	ID            int64   `json:"id"`
 	ItemID        *int64  `json:"item_id"`
 	ItemName      string  `json:"item_name"`
-	Reason        string  `json:"reason"`
 	Priority      string  `json:"priority"`
 	DiscordUserID string  `json:"discord_user_id"`
 	Owner         string  `json:"owner"`          // web_user.username
@@ -181,7 +184,7 @@ type GuildWantRow struct {
 // via sql.Null* → pointers (NULL ⇒ JSON null).
 func ListGuildWants(ctx context.Context, db *sql.DB) ([]GuildWantRow, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT w.id, w.item_id, w.item_name, w.reason, w.priority,
+		`SELECT w.id, w.item_id, w.item_name, w.priority,
 		        w.discord_user_id, wu.username AS owner, w.character_id, c.name AS character_name
 		   FROM wantlist_item w
 		   JOIN web_user wu ON wu.discord_user_id = w.discord_user_id
@@ -201,7 +204,7 @@ func ListGuildWants(ctx context.Context, db *sql.DB) ([]GuildWantRow, error) {
 			charID  sql.NullInt64
 			charNme sql.NullString
 		)
-		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Reason, &r.Priority,
+		if err := rows.Scan(&r.ID, &itemID, &r.ItemName, &r.Priority,
 			&r.DiscordUserID, &r.Owner, &charID, &charNme); err != nil {
 			return nil, fmt.Errorf("scan guild-want row: %w", err)
 		}

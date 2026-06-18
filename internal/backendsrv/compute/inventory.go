@@ -114,6 +114,14 @@ func StructuredInventory(ctx context.Context, s *store.Store, char string) (Char
 func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterInventory {
 	inv := CharacterInventory{Char: char}
 
+	// LastSeen (the examine "Last synced", D-08 #12) is the per-CHARACTER upload freshness
+	// (character.last_seen) — the SAME value on every row, so the first row is sufficient
+	// and stable. It is DISTINCT from a slot's per-item LastListed (the price last-listed
+	// date) — Pitfall 2; do NOT cross the two. "" when there are no rows (never synced).
+	if len(rows) > 0 {
+		inv.LastSeen = rows[0].LastSeen
+	}
+
 	// Build every slot once, remembering which are top-level containers (by raw Location)
 	// so children can find their parent.
 	type indexed struct {
@@ -223,6 +231,7 @@ func slotFromRow(row store.InventoryRow, cat SlotCategory, canonical string) Inv
 		WikiSummary:   row.WikiSummary,
 		IsQuestItem:   row.IsQuestItem,
 		Prices:        prices,
+		IconID:        row.IconID, // id-joined item_master.icon_id; 0 = no icon yet (INV-04, D-02)
 	}
 }
 

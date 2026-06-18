@@ -170,6 +170,7 @@ type InventorySlot struct {
 	IsQuestItem   bool            `json:"is_quest_item"`
 	Prices        []PriceDetail   `json:"prices"`
 	Children      []InventorySlot `json:"children"` // nested bag contents (one level deep); nil when not a container
+	IconID        int64           `json:"icon_id"`  // item_master.icon_id (id-joined); 0 = none yet → colored-tile fallback (INV-04, D-02)
 }
 
 // CharacterInventory is the per-character structured slot model (INV-05).
@@ -180,6 +181,10 @@ type CharacterInventory struct {
 	Equipment []InventorySlot `json:"equipment"`
 	General   []InventorySlot `json:"general"`
 	Bank      []InventorySlot `json:"bank"`
+	// LastSeen is the per-character upload freshness (character.last_seen) for the examine
+	// "Last synced" footer (D-08 #12) — DISTINCT from per-slot LastListed (the price
+	// last-listed date). Same value on every row; "" when never synced.
+	LastSeen string `json:"last_seen"`
 }
 
 // Valuation is a bank valuation result (DATA-02/D-03): the summed pickPrice×count value

@@ -79,6 +79,7 @@ type InventoryRow struct {
 	WikiURL     string
 	WikiSummary string
 	IsQuestItem bool
+	IconID      int64   // item_master.icon_id — the P1999 wiki icon id (id-joined); 0 when NULL/no row (INV-04)
 	Direction   string  // pigparse_price.direction (TEXT); "" when no price row
 	A30         float64 // 30-day average; 0 when no price row
 	T30         int64   // 30-day transaction count; 0 when no price row
@@ -284,7 +285,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 	       GROUP BY lower(trim(name))
 	)
 	SELECT c.name, ii.location, ii.name, ii.item_id, ii.count, ii.slots,
-	       im.wiki_url, im.wiki_summary, im.is_quest_item,
+	       im.wiki_url, im.wiki_summary, im.is_quest_item, im.icon_id,
 	       pp.direction, pp.a30, pp.t30, pp.last_seen,
 	       c.last_seen, ii.row_ordinal
 	FROM inventory_item ii
@@ -308,6 +309,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 			wikiURL      sql.NullString
 			wikiSummary  sql.NullString
 			isQuest      sql.NullInt64
+			iconID       sql.NullInt64 // item_master.icon_id — NULL until enrichment runs (INV-04)
 			direction    sql.NullString
 			a30          sql.NullFloat64
 			t30          sql.NullInt64
@@ -319,7 +321,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 		)
 		if err := rows.Scan(
 			&r.Char, &r.Location, &r.ItemName, &itemID, &count, &slots,
-			&wikiURL, &wikiSummary, &isQuest,
+			&wikiURL, &wikiSummary, &isQuest, &iconID,
 			&direction, &a30, &t30, &lastListed,
 			&charLastSeen, &r.RowOrdinal,
 		); err != nil {
@@ -331,6 +333,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 		r.WikiURL = wikiURL.String
 		r.WikiSummary = wikiSummary.String
 		r.IsQuestItem = isQuest.Int64 != 0
+		r.IconID = iconID.Int64 // 0 when NULL (no icon yet) or no item_master row joined
 		r.Direction = direction.String
 		r.HasPrice = direction.Valid
 		r.A30 = a30.Float64

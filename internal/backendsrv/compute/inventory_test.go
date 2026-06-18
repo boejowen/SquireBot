@@ -9,6 +9,7 @@ package compute_test
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/compute"
@@ -439,6 +440,101 @@ func TestTotalPlatinum_LiteralPlatOnly(t *testing.T) {
 	total := compute.TotalPlatinum(toons)
 	if total != 1000 {
 		t.Errorf("TotalPlatinum = %d, want 1000 (gold 9999 excluded, nil-plat skipped, non-bank 500 excluded)", total)
+	}
+}
+
+// TestStructuredInventory_IconID proves INV-04 end-to-end through the store→compute
+// seam: an item whose item_master row carries icon_id N surfaces slot.IconID == N on
+// the matching slot (the EQ-namespace im.item_id = ii.item_id join, Pitfall 3 — NOT a
+// name join), while an item whose item_master has a NULL icon_id (or no item_master row
+// at all) surfaces IconID == 0 (the no-icon sentinel → colored-tile fallback, D-02).
+func TestStructuredInventory_IconID(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewStore(db)
+	ctx := context.Background()
+
+	char := seedChar(t, db, "owner-a", "Slampeach", "SHM", 60, "TRL", false)
+	// HIT: item_master row with icon_id 658 (Cloak of Flames' real lucy_img_ID).
+	seedInvFull(t, db, char, "Back", "Cloak of Flames", 2010, 1, 0, 1)
+	seedItemMasterIcon(t, db, 2010, "Cloak of Flames", 658)
+	// NULL icon_id: an item_master row exists but icon_id was never enriched.
+	seedInvFull(t, db, char, "Head", "Helm of Rile", 2011, 1, 0, 2)
+	seedItemMaster(t, db, 2011, "Helm of Rile", "A helm.", "http://wiki/Helm", false) // no icon_id → NULL
+	// NO item_master row at all (LEFT JOIN miss).
+	seedInvFull(t, db, char, "Hands", "Mystery Gauntlets", 2012, 1, 0, 3)
+
+	inv, err := compute.StructuredInventory(ctx, s, "Slampeach")
+	if err != nil {
+		t.Fatalf("StructuredInventory: %v", err)
+	}
+
+	hit := findSlot(inv, "Back")
+	if hit == nil {
+		t.Fatalf("Back slot not found: %+v", inv.Equipment)
+	}
+	if hit.IconID != 658 {
+		t.Errorf("Cloak of Flames IconID = %d, want 658 (item_master.icon_id, id-joined)", hit.IconID)
+	}
+	nullIcon := findSlot(inv, "Head")
+	if nullIcon == nil {
+		t.Fatalf("Head slot not found")
+	}
+	if nullIcon.IconID != 0 {
+		t.Errorf("NULL-icon item IconID = %d, want 0 (no-icon sentinel)", nullIcon.IconID)
+	}
+	noMaster := findSlot(inv, "Hands")
+	if noMaster == nil {
+		t.Fatalf("Hands slot not found")
+	}
+	if noMaster.IconID != 0 {
+		t.Errorf("no-item_master item IconID = %d, want 0 (LEFT JOIN miss → sentinel)", noMaster.IconID)
+	}
+}
+
+// TestStructuredInventory_LastSeen proves the examine "Last synced" carrier (D-08 #12 /
+// Pitfall 2): CharacterInventory.LastSeen equals the per-CHARACTER character.last_seen
+// (the same value on every row), and is DISTINCT from a slot's per-item LastListed (the
+// price last-listed-for-sale date). seedChar stamps character.last_seen=2026-05-09T00:00:00Z;
+// seedPigparse writes pigparse_price.last_seen=2026-05-09 (the LastListed value).
+func TestStructuredInventory_LastSeen(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewStore(db)
+	ctx := context.Background()
+
+	char := seedChar(t, db, "owner-a", "Slampeach", "SHM", 60, "TRL", false)
+	seedInvFull(t, db, char, "Head", "Crown of Narandi", 2050, 1, 0, 1)
+	seedPigparse(t, db, 2050, "Crown of Narandi", "0", 4500, 75) // last_seen=2026-05-09 (LastListed)
+
+	inv, err := compute.StructuredInventory(ctx, s, "Slampeach")
+	if err != nil {
+		t.Fatalf("StructuredInventory: %v", err)
+	}
+
+	// LastSeen is the per-character upload freshness (character.last_seen).
+	if inv.LastSeen != "2026-05-09T00:00:00Z" {
+		t.Errorf("CharacterInventory.LastSeen = %q, want %q (character.last_seen — upload freshness)", inv.LastSeen, "2026-05-09T00:00:00Z")
+	}
+	// It must NOT be aliased to the per-slot LastListed (the price last-listed date).
+	slot := findSlot(inv, "Head")
+	if slot == nil {
+		t.Fatalf("Head slot not found")
+	}
+	if inv.LastSeen == slot.LastListed {
+		t.Errorf("CharacterInventory.LastSeen (%q) equals the per-slot LastListed (%q) — the two last_seen sources were crossed (Pitfall 2)", inv.LastSeen, slot.LastListed)
+	}
+}
+
+// seedItemMasterIcon inserts one item_master row with an explicit icon_id (INV-04),
+// so the store→compute icon flow is seedable. The other item_master columns are
+// minimal — only the id-join (item_id) + icon_id matter here.
+func seedItemMasterIcon(t *testing.T, db *sql.DB, itemID int64, name string, iconID int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO item_master (item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed, icon_id)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'),?)`,
+		itemID, name, "", "", "", 0, "sha", iconID,
+	); err != nil {
+		t.Fatalf("seed item_master icon (item_id=%d): %v", itemID, err)
 	}
 }
 

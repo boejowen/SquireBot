@@ -134,14 +134,20 @@ func TestRunWiki_PopulatesAllTables(t *testing.T) {
 		}
 	}
 
-	// A known item's summary + SHA-1 must be populated.
-	var summary, sha string
-	if err := db.QueryRow(`SELECT wiki_summary, wikitext_sha1 FROM item_master WHERE item_id = ?`, 1001).
-		Scan(&summary, &sha); err != nil {
+	// A known item's summary + SHA-1 + statsblock must be populated (the job must carry the
+	// parsed ParsedWikiItem fields all the way into item_master — INV-02/04 end-to-end).
+	var summary, sha, statsblock string
+	if err := db.QueryRow(`SELECT wiki_summary, wikitext_sha1, statsblock FROM item_master WHERE item_id = ?`, 1001).
+		Scan(&summary, &sha, &statsblock); err != nil {
 		t.Fatalf("query item_master 1001: %v", err)
 	}
 	if summary == "" || sha == "" {
 		t.Errorf("item 1001 wiki_summary=%q wikitext_sha1=%q, want both populated", summary, sha)
+	}
+	// INV-02: the job must persist the cleaned stat block (regression — the store.ItemMaster
+	// literal once omitted the Statsblock field, so every write stored "").
+	if statsblock == "" {
+		t.Errorf("item 1001 statsblock is empty — the job did not persist the parsed stat block")
 	}
 
 	// wiki_gear_tier must contain at least one Iksar-tagged row (Pre-Raid page).

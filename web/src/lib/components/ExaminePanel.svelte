@@ -1,0 +1,144 @@
+<script lang="ts">
+	// ExaminePanel — the single pinned examine detail panel (Phase 31, INV-02,
+	// 31-UI-SPEC §G / D-07 / D-08 / D-09). Prop-driven over the SELECTED slot
+	// (single, replace-on-click) + the per-character last_seen. Renders the
+	// examineFields() rows in the LOCKED D-08 order with graceful omission (D-09 —
+	// the pure logic lives in $lib/examine, node-tested). When slot === null it
+	// shows the dimmed "click an item" prompt (§G empty state).
+	//
+	// SECURITY (T-31-14, the HIGH-severity gate): the wiki link's HTML body is the
+	// ONLY {@html} in this component and the only one this phase adds — it routes
+	// through composeItemNote (composeNotes.ts), which runs escapeHtml() over every
+	// interpolated value AND safeHttpUrl() (http/https scheme allow-list) over the
+	// href, so a guildie-named item like `<img onerror=…>` renders inert and a
+	// javascript:/data: URL never reaches the href. Every OTHER field (name, flags,
+	// slot, stats, price, last-synced) renders via plain {} interpolation (Svelte
+	// auto-escapes) — NO other {@html}. The icon never appears here; iconId-based
+	// <img> lives in PaperdollSlot.
+
+	import type { InventorySlot } from '$lib/api';
+	import { examineFields } from '$lib/examine';
+	import { composeItemNote, safeHttpUrl, wikiUrlFor } from '$lib/tooltip/composeNotes';
+
+	let {
+		slot = null,
+		charLastSeen = ''
+	}: {
+		slot?: InventorySlot | null;
+		charLastSeen?: string;
+	} = $props();
+
+	// The D-08-ordered, D-09-omitted rows (pure helper — node-tested).
+	let fields = $derived(slot ? examineFields(slot, charLastSeen) : []);
+
+	// The wiki link body — the ONE sanctioned escaped {@html} sink (composeItemNote).
+	// The href passes the safeHttpUrl scheme allow-list FIRST (so javascript:/data:
+	// can never reach it), then escapeHtml at the sink. A blank/rejected URL renders
+	// no link (composeItemNote omits the <a>). We pass only the item name + URL (no
+	// summary/prices/quests — those D-08 rows render as escaped {} text below), so
+	// the composed body is exactly the title line with the wiki <a>.
+	let wikiBodyHtml = $derived.by(() => {
+		if (!slot) return '';
+		const url = safeHttpUrl(slot.wiki_url || wikiUrlFor(slot.item));
+		if (!url) return '';
+		return composeItemNote(slot.item, url, null, [], []);
+	});
+</script>
+
+<aside class="examine" aria-label="Item details">
+	{#if !slot}
+		<p class="prompt">
+			Click an item to see its details — name, stats, PigParse price, wiki link, last-synced.
+		</p>
+	{:else}
+		{#each fields as f (f.kind)}
+			{#if f.kind === 'name'}
+				<h3 class="ex-name">{f.text}</h3>
+			{:else if f.kind === 'flags'}
+				<p class="ex-flags">{f.text}</p>
+			{:else if f.kind === 'wiki'}
+				<!-- The ONE sanctioned escaped {@html} sink (composeItemNote): the title
+				     line + the wiki <a>, fully escaped (T-31-14). -->
+				<p class="ex-wiki">{@html wikiBodyHtml}</p>
+			{:else if f.kind === 'price'}
+				<p class="ex-price">{f.text}</p>
+			{:else if f.kind === 'stats'}
+				<p class="ex-stats">{f.text}</p>
+			{:else if f.kind === 'lastsynced'}
+				<p class="ex-footer">{f.text}</p>
+			{:else}
+				<!-- slot / dmgdly / ac / wtsize / classrace — plain escaped text rows. -->
+				<p class="ex-line">{f.text}</p>
+			{/if}
+		{/each}
+	{/if}
+</aside>
+
+<style>
+	.examine {
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 6px;
+		background: var(--panel);
+		color: var(--text);
+		padding: 16px;
+		position: sticky;
+		top: 60px;
+		min-height: 200px;
+	}
+	.prompt {
+		font-family: var(--font-body);
+		font-size: 16px;
+		line-height: 1.5;
+		font-style: italic;
+		opacity: 0.75;
+	}
+	.ex-name {
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 20px; /* Heading */
+		line-height: 1.2;
+		color: var(--accent);
+		margin: 0 0 8px;
+	}
+	.ex-flags {
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px; /* Label */
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--status-other);
+		margin: 0 0 8px;
+	}
+	.ex-line,
+	.ex-stats,
+	.ex-price,
+	.ex-wiki,
+	.ex-footer {
+		font-family: var(--font-body);
+		font-size: 16px;
+		line-height: 1.5;
+		margin: 4px 0;
+	}
+	.ex-stats {
+		color: var(--status-ok);
+	}
+	.ex-price {
+		color: var(--status-other);
+		font-variant-numeric: tabular-nums;
+	}
+	.ex-footer {
+		opacity: 0.8;
+		font-size: 13px;
+		margin-top: 12px;
+	}
+	/* composeItemNote markup hooks (mirrors ItemTooltip's :global rules). */
+	.ex-wiki :global(.tooltip-title) {
+		font-family: var(--font-body);
+	}
+	.ex-wiki :global(.tooltip-wiki-link) {
+		color: var(--accent);
+		border-bottom: 1px solid var(--accent);
+		text-decoration: none;
+		margin-left: 6px;
+	}
+</style>

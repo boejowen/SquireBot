@@ -163,7 +163,7 @@
 		     monitor setting. -->
 		<p class="mute-hint">
 			To mute alerts for a single item, use the bell next to it on
-			<a href="/wantlist">your wantlist</a>.
+			<a href="/wishlist">your wishlist</a>.
 		</p>
 
 		{#if announce}

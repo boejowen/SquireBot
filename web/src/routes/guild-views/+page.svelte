@@ -1,15 +1,21 @@
 <script lang="ts">
-	// The product page: the four consolidated views + cross-character search,
-	// wired to the Go read API (WEB-01/03/04, BACKEND-05 consumption). On mount it
-	// fetches all four payloads + meta in parallel and holds loading / error /
-	// ready state. A nav switches between the four reusable DataGrid instances
-	// (ONE component, 4 instances — never per-character tabs, CLAUDE.md LOCKED),
-	// each fed its payload + the matching columns.ts def + the view's multi-key
-	// default sort. SearchBox runs over the in-memory `view` rows (D-03). bank
-	// shows the "Coin: not yet recorded" affordance (coin is null in P14).
-	// Fetch failure -> error StateBlock with a working Retry; empty payload -> the
-	// per-view-empty StateBlock; loading -> the skeleton. (The bank coin affordance
-	// renders the "not yet recorded" copy, never a fabricated zero-platinum value.)
+	// /guild-views — the PRESERVED consolidated 4-view home (Phase 30 / D-03b/D-04).
+	// This is today's home `+page.svelte` moved here VERBATIM (the four consolidated
+	// views + cross-character search), kept reachable so guild-wide lookup never
+	// regresses during the v2.4 tab transition (the Characters/Inventory/Banks
+	// placeholders link here until Phases 31-33 replace it; retired then, NOT now).
+	// `/` redirects here (D-04). The ?view= seed still works at this path
+	// (/guild-views?view=bank deep-links + the "Record coin" round-trip).
+	//
+	// Wired to the Go read API (WEB-01/03/04, BACKEND-05 consumption). On mount it
+	// fetches all four payloads + meta in parallel and holds loading / error / ready
+	// state. A nav switches between the four reusable DataGrid instances (ONE
+	// component, 4 instances — never per-character tabs, CLAUDE.md LOCKED), each fed
+	// its payload + the matching columns.ts def + the view's multi-key default sort.
+	// SearchBox runs over the in-memory `view` rows (D-03). bank shows the recorded
+	// coin (or the "not yet recorded" affordance). Fetch failure -> error StateBlock
+	// with a working Retry; empty payload -> the per-view-empty StateBlock; loading
+	// -> the skeleton.
 
 	import { onMount, getContext } from 'svelte';
 	import DataGrid from '$lib/components/DataGrid.svelte';
@@ -158,9 +164,9 @@
 	// refetch() (the Retry handler) calls load() directly, so the effect is not
 	// needed for retry either.
 	//
-	// 260610-fm5 WS3: a ?view= query param seeds the active tab (the /bank-coin
-	// "Back to bank" link lands on /?view=bank). VALIDATED against the actual TABS
-	// ids — an unknown value is ignored (T-fm5-04; the param is never rendered).
+	// 260610-fm5 WS3: a ?view= query param seeds the active tab (the "Record coin"
+	// link round-trips via /guild-views?view=bank). VALIDATED against the actual
+	// TABS ids — an unknown value is ignored (T-fm5-04; the param is never rendered).
 	onMount(() => {
 		const v = new URLSearchParams(window.location.search).get('view');
 		if (v && TABS.some((t) => t.id === v)) {
@@ -202,7 +208,7 @@
 	// never reads as missing data (Pitfall 3/5).
 	let filterActive = $derived(mineOnly || selectedChar !== null);
 	// A member who has claimed nothing: the "My characters" + per-char options are dead —
-	// disable them and show a hint linking to /my-characters (Pitfall 5).
+	// disable them and show a hint linking to the My-characters settings section (Pitfall 5).
 	let hasMine = $derived(myCharacters.length > 0);
 
 	// 260610-fm5 WS3: the scope control is a segmented My characters/Guild toggle
@@ -243,7 +249,7 @@
 </script>
 
 <svelte:head>
-	<title>SquireBot — guild inventory</title>
+	<title>SquireBot — guild views (classic)</title>
 </svelte:head>
 
 {#if status === 'loading'}
@@ -306,7 +312,7 @@
 			<!-- Zero claimed characters: the control is never a dead empty toggle — point
 			     the member at where they can claim (Pitfall 5). -->
 			<span class="filter-hint">
-				<a href="/my-characters">Claim characters</a> to filter to your own.
+				<a href="/settings">Claim characters</a> to filter to your own.
 			</span>
 		{/if}
 	</div>
@@ -381,9 +387,9 @@
 				{:else}
 					<StateBlock kind="no-coin" />
 				{/if}
-				<!-- "Record coin" affordance to /bank-coin (UI-SPEC IA: a control near
-				     the bank view, reachable by any authenticated member, D-12). -->
-				<a class="record-coin" href="/bank-coin">Record coin</a>
+				<!-- "Record coin" affordance → /settings (the BankCoinForm rehomes there);
+				     the bank round-trip seeds /guild-views?view=bank (Pitfall 5). -->
+				<a class="record-coin" href="/settings">Record coin</a>
 			</div>
 			{#if filteredBankRows.length === 0}
 				{#if filterActive}
@@ -481,7 +487,7 @@
 		outline-offset: -2px;
 	}
 	/* "My characters" is disabled until the caller has claimed at least one
-	   character (Pitfall 5 — the hint below points at /my-characters). */
+	   character (Pitfall 5 — the hint below points at /settings). */
 	.seg-btn:disabled {
 		opacity: 0.5;
 		cursor: default;

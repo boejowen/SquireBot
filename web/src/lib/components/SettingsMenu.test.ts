@@ -1,4 +1,6 @@
-// Vitest for the header SettingsMenu gear dropdown (260607-sdh).
+// Vitest for the top-right SettingsMenu account affordance (260607-sdh; Phase 30 /
+// D-06: the gear DISSOLVED to identity + Sign out — Theme/Watcher-codes/Set-class/
+// My-characters/Admin all moved into the Settings tab).
 //
 // The repo runs vitest under NODE with no jsdom and no @testing-library/svelte
 // (the established philosophy — see ConfirmDialog.test.ts / auth.test.ts), and
@@ -6,10 +8,11 @@
 // security contract two node-runnable ways:
 //   1. The dismiss decision + avatar-URL derivation are pure exported helpers
 //      (menuKeyAction / avatarUrlFor) exercised directly.
-//   2. The rendered-markup contract (gear aria-haspopup/expanded/controls, the
-//      role="menu" panel, the officer-gated /admin item, the sign-out flow,
-//      username escaped via {} never {@html}, Escape restoring focus to the
-//      trigger) is asserted by inspecting the component source.
+//   2. The rendered-markup contract (trigger aria-haspopup/expanded/controls, the
+//      role="menu" panel, the sign-out flow, username escaped via {} never {@html},
+//      Escape restoring focus to the trigger, AND — post-dissolve — that the
+//      relocated config nav links + ThemePicker are GONE from the menu) is asserted
+//      by inspecting the component source.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -91,8 +94,22 @@ describe('SettingsMenu rendered-markup a11y + security contract', () => {
 		expect(SOURCE).toContain('role="menu"');
 	});
 
-	it('the /admin item is officer-gated (`{#if session?.isOfficer}` guards it)', () => {
-		expect(SOURCE).toMatch(/\{#if session\?\.isOfficer\}[\s\S]*href="\/admin"/);
+	it('the trigger shows the "Joe ▾" affordance (avatar + username + chevron caret)', () => {
+		// Phase 30 / D-06: the gear glyph is gone — the trigger is now the identity
+		// affordance (avatar/User-glyph + the escaped username + a ChevronDown caret),
+		// with an accessible name that includes the username.
+		expect(SOURCE).toContain('chevron-down');
+		expect(SOURCE).toContain('aria-label={`Account menu, ${session.username}`}');
+	});
+
+	it('the relocated config nav links are GONE from the menu (D-06 — moved to the Settings tab)', () => {
+		// The dissolve removed Watcher codes (/account), Set class & level (/char-meta),
+		// My characters (/my-characters) and the officer Admin (/admin) — each is now an
+		// in-page Settings section, NOT a menu link.
+		expect(SOURCE).not.toContain('href="/admin"');
+		expect(SOURCE).not.toContain('href="/account"');
+		expect(SOURCE).not.toContain('href="/char-meta"');
+		expect(SOURCE).not.toContain('href="/my-characters"');
 	});
 
 	it('Sign out calls logout() then navigates to `/`', () => {
@@ -116,8 +133,10 @@ describe('SettingsMenu rendered-markup a11y + security contract', () => {
 		expect(SOURCE).not.toContain('{@html');
 	});
 
-	it('the theme is passed straight through to ThemePicker (bind:theme chain intact)', () => {
-		expect(SOURCE).toContain('<ThemePicker bind:theme />');
+	it('the ThemePicker is GONE from the menu (D-06 — it moved to the Settings tab via the theme context)', () => {
+		// The picker no longer rides the bind:theme chain through this menu; it lives in
+		// the Settings tab and reaches the single theme $state via the THEME_KEY context.
+		expect(SOURCE).not.toContain('ThemePicker');
 	});
 
 	it('outside-click and route-change close the menu', () => {

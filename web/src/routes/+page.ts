@@ -1,10 +1,19 @@
-// The root route prerenders to a static index.html so the deploy has a real
-// entry document (Cloudflare Pages serves /index.html for "/"). This is a
-// page-level override of the layout's prerender=false default: it is SAFE
-// because ssr=false (inherited) means prerendering emits only the empty
-// client-hydration shell — NO data fetch runs at build time, so the
-// 14-RESEARCH "cross-origin fetch during prerender" anti-pattern does not
-// apply here. Data-driven view routes (added in Plan 14-04) keep the
-// layout's prerender=false and render fully client-side via the 200.html
-// SPA fallback.
-export const prerender = true;
+// Default-landing redirect (Phase 30 / D-04). The 4-view consolidated home moved
+// VERBATIM to /guild-views (D-03b); during the stub window `/` resolves to that
+// functional surface, NOT the Characters "coming soon" placeholder (greeting an
+// active user with an empty stub is the worse experience). Once Phase 31 ships the
+// Characters tab, flip this target to /characters (one-line change).
+//
+// ssr=false (inherited) → the load runs client-side; the SvelteKit client router
+// catches the thrown redirect and updates the address bar (verified against
+// @sveltejs/kit 2.61.1). prerender=false: do NOT prerender a redirect page (this
+// REPLACES the former prerendered apex). Leave redirect() uncaught — wrapping it
+// in an exception handler would swallow the thrown Redirect (RESEARCH Pitfall 2).
+import { redirect } from '@sveltejs/kit';
+
+export const ssr = false;
+export const prerender = false;
+
+export function load() {
+	redirect(307, '/guild-views'); // 307 temporary — flips to /characters post-Phase-31
+}

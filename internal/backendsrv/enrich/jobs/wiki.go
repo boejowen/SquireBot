@@ -239,6 +239,7 @@ func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.ItemRef, ite
 		IsQuestItem:   item.IsQuestItem,
 		WikitextSHA1:  item.WikitextSHA1,
 		LastRefreshed: nowStr,
+		IconID:        item.IconID, // INV-04: carry the parsed lucy_img_ID into item_master.icon_id
 	}); err != nil {
 		return false, err
 	}

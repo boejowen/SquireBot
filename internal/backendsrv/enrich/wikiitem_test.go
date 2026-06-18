@@ -290,6 +290,62 @@ func TestExtractSummary_RuneWordBoundary(t *testing.T) {
 	}
 }
 
+// TestParseIconID is the INV-04 (D-01/D-02/D-03) unit suite for the pure
+// lucy_img_ID → icon-id parse. 0 is the "no icon yet" sentinel (the client falls
+// back to the colored tile, D-02), returned for absent/blank/non-numeric/negative
+// input. RESEARCH verified live: Cloak of Flames=658, Wurmslayer=736, Ring of the
+// Ancients=563. The wiki param arrives with surrounding spaces (`lucy_img_ID = 658`),
+// so the parse MUST trim before atoi.
+func TestParseIconID(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"present numeric", "658", 658},
+		{"absent (empty fallback)", "", 0},
+		{"blank", "   ", 0},
+		{"non-numeric", "abc", 0},
+		{"whitespace-wrapped", " 736 ", 736},
+		{"negative is rejected", "-5", 0},
+		{"filename-ish non-numeric", "Item_658.png", 0},
+	}
+	for _, c := range cases {
+		if got := parseIconID(c.in); got != c.want {
+			t.Errorf("parseIconID(%q) = %d, want %d (%s)", c.in, got, c.want, c.name)
+		}
+	}
+}
+
+// TestParseItempage_IconID asserts the lucy_img_ID param flows onto
+// ParsedWikiItem.IconID. The cloak-of-flames fixture carries `lucy_img_ID = 658`
+// (RESEARCH-verified); a page with no lucy_img_ID param yields IconID == 0 (the
+// no-icon sentinel — the fungi-tunic redirect fixture has no {{Itempage}} so it is
+// not usable here; instead a long wikitext with an {{Itempage}} but no lucy_img_ID
+// proves the absent case).
+func TestParseItempage_IconID(t *testing.T) {
+	// Present: the cloak-of-flames fixture has lucy_img_ID = 658.
+	wikitext, title := loadWikitext(t, "wiki-parse-cloak-of-flames")
+	item, _, ok, _ := ParseItempage(wikitext, title)
+	if !ok {
+		t.Fatal("cloak-of-flames parse failed")
+	}
+	if item.IconID != 658 {
+		t.Errorf("Cloak of Flames IconID = %d, want 658 (lucy_img_ID)", item.IconID)
+	}
+
+	// Absent: a synthetic long {{Itempage}} with NO lucy_img_ID → IconID 0.
+	noIcon := "{{Itempage\n|itemname=No Icon Item\n|notes=A plain item with no icon param at all here.\n|statsblock=MAGIC ITEM<br>Slot: HEAD\n}}" +
+		strings.Repeat(" padding to clear the 200-byte minimum wikitext length guard.", 5)
+	item2, _, ok2, reason := ParseItempage(noIcon, "No Icon Item")
+	if !ok2 {
+		t.Fatalf("synthetic no-icon parse ok=false reason=%q", reason)
+	}
+	if item2.IconID != 0 {
+		t.Errorf("no-lucy_img_ID item IconID = %d, want 0 (no-icon sentinel)", item2.IconID)
+	}
+}
+
 // isHex40 reports whether s is exactly 40 lowercase hex chars.
 func isHex40(s string) bool {
 	if len(s) != 40 {

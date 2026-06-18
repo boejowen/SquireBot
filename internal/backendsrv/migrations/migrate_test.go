@@ -1010,6 +1010,74 @@ func TestMigrate_00011_WantlistDropReasonDedup(t *testing.T) {
 	}
 }
 
+// TestMigrate_00012_AddsItemIcon proves the Phase 31 forward-only migration 00012
+// applied on a fresh DB (NewTestDB runs goose.Up over ALL twelve migrations):
+//   - item_master gained the nullable icon_id column (columnSet);
+//   - a row inserted WITHOUT icon_id reads NULL (the extend-only ADD COLUMN default,
+//     no DEFAULT/UNIQUE — coverage ships incrementally, D-02/D-03);
+//   - a row inserted WITH an icon_id round-trips that integer; and
+//   - a second Up is a clean no-op (idempotent — goose_db_version row count
+//     unchanged).
+//
+// Backend-only additive column — the watcher never reads/writes item_master, so
+// there is NO WatcherMaxSchemaVersion change. "Schema v12" == goose 00012 applied.
+func TestMigrate_00012_AddsItemIcon(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00012) + t.Cleanup
+
+	// icon_id column exists on item_master.
+	cols := columnSet(t, db, "item_master")
+	if !cols["icon_id"] {
+		t.Errorf("expected item_master to have column %q after 00012 (have: %v)", "icon_id", cols)
+	}
+
+	// A row inserted WITHOUT icon_id reads NULL (extend-only ADD COLUMN, no DEFAULT).
+	if _, err := db.Exec(
+		`INSERT INTO item_master (item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+		int64(1000), "No Icon Item", "", "", "", 0, "sha-noicon"); err != nil {
+		t.Fatalf("insert item_master without icon_id: %v", err)
+	}
+	var iconNull sql.NullInt64
+	if err := db.QueryRow(`SELECT icon_id FROM item_master WHERE item_id = ?`, int64(1000)).Scan(&iconNull); err != nil {
+		t.Fatalf("read icon_id (no-icon row): %v", err)
+	}
+	if iconNull.Valid {
+		t.Errorf("item_master.icon_id for a row inserted without it = %d, want NULL (extend-only default)", iconNull.Int64)
+	}
+
+	// A row inserted WITH an icon_id round-trips the integer.
+	if _, err := db.Exec(
+		`INSERT INTO item_master (item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed, icon_id)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'),?)`,
+		int64(1001), "Cloak of Flames", "", "", "BACK", 0, "sha-cof", int64(658)); err != nil {
+		t.Fatalf("insert item_master with icon_id: %v", err)
+	}
+	var icon int64
+	if err := db.QueryRow(`SELECT icon_id FROM item_master WHERE item_id = ?`, int64(1001)).Scan(&icon); err != nil {
+		t.Fatalf("read icon_id (icon row): %v", err)
+	}
+	if icon != 658 {
+		t.Errorf("item_master.icon_id round-trip = %d, want 658 (Cloak of Flames lucy_img_ID)", icon)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00012 DB
+	// returns nil AND the goose_db_version row count is unchanged.
+	var beforeVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
+		t.Fatalf("count goose_db_version before re-run: %v", err)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00012 should be a no-op, got error: %v", err)
+	}
+	var afterVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
+		t.Fatalf("count goose_db_version after re-run: %v", err)
+	}
+	if beforeVersions != afterVersions {
+		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
 // mustInsertOwner inserts an owner with the given label and (nullable)
 // discord_user_id, returning its id. discordUserID is *string so a NULL-owner
 // (legacy/unlinked) is distinguishable from a linked one.

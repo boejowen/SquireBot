@@ -27,6 +27,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -45,6 +46,7 @@ type ParsedWikiItem struct {
 	Slot         string // e.g. "HEAD", "CHEST", "BACK"; "" when absent
 	IsQuestItem  bool   // statsblock contains "QUEST ITEM"
 	WikitextSHA1 string // lowercase hex SHA-1 of the UTF-8 wikitext (change detection)
+	IconID       int    // {{Itempage|lucy_img_ID=...}}; the P1999 wiki icon id; 0 = none yet (INV-04 D-01/D-02)
 }
 
 // WikiQuestItemLink is one quest reference harvested from an item's notes (the
@@ -87,6 +89,7 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 		Slot:         kv["Slot"], // "" when absent (TS: ?? null)
 		IsQuestItem:  flags["QUEST ITEM"],
 		WikitextSHA1: sha1Hex(wikitext),
+		IconID:       parseIconID(getParam(params, "lucy_img_ID", "")), // INV-04: the wiki icon id; 0 when absent
 	}
 
 	questLinks := harvestQuestLinks(notesRaw, item)
@@ -430,4 +433,23 @@ func getParam(params map[string]string, key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// parseIconID extracts the numeric P1999 wiki icon id (lucy_img_ID) from the raw
+// {{Itempage}} param value: trim surrounding whitespace (the wiki writes
+// `lucy_img_ID = 658`, spaces and all), then atoi. Returns 0 when the value is
+// absent/blank/non-numeric/negative — 0 is the "no icon yet" sentinel, and the
+// client falls back to the colored tile (INV-04 / D-02). The stored icon_id is thus
+// ALWAYS a non-negative integer (never an arbitrary string), so no untrusted wiki
+// text can ever reach the later `Item_<int>.png` URL (T-31-01 type-safety control).
+func parseIconID(raw string) int {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }

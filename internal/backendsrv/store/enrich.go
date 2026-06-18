@@ -64,6 +64,7 @@ type ItemMaster struct {
 	IsQuestItem   bool
 	WikitextSHA1  string
 	LastRefreshed string
+	IconID        int // the P1999 wiki icon id (lucy_img_ID); 0 = none yet (INV-04, 00012)
 }
 
 // WikiSpell is the store-local input shape for one wiki_spells row. NormalizedName
@@ -155,12 +156,13 @@ func UpsertPigparsePricesTx(ctx context.Context, tx *sql.Tx, rows []PigparsePric
 }
 
 const itemMasterUpsert = `INSERT INTO item_master
-	(item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed)
- VALUES (?,?,?,?,?,?,?,?)
+	(item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed, icon_id)
+ VALUES (?,?,?,?,?,?,?,?,?)
  ON CONFLICT(item_id) DO UPDATE SET
    name=excluded.name, wiki_summary=excluded.wiki_summary, wiki_url=excluded.wiki_url,
    slot=excluded.slot, is_quest_item=excluded.is_quest_item,
-   wikitext_sha1=excluded.wikitext_sha1, last_refreshed=excluded.last_refreshed`
+   wikitext_sha1=excluded.wikitext_sha1, last_refreshed=excluded.last_refreshed,
+   icon_id=excluded.icon_id`
 
 // UpsertItemMaster upserts one item_master row (begins + commits its own tx).
 func (s *Store) UpsertItemMaster(ctx context.Context, item ItemMaster) error {
@@ -185,7 +187,7 @@ func UpsertItemMasterTx(ctx context.Context, tx *sql.Tx, item ItemMaster) error 
 	}
 	if _, err := tx.ExecContext(ctx, itemMasterUpsert,
 		item.ItemID, item.Name, item.WikiSummary, item.WikiURL, item.Slot,
-		quest, item.WikitextSHA1, item.LastRefreshed,
+		quest, item.WikitextSHA1, item.LastRefreshed, item.IconID,
 	); err != nil {
 		slog.Error("item_master upsert: insert", "item_id", item.ItemID, "err", err)
 		return fmt.Errorf("upsert item_master (item_id=%d): %w", item.ItemID, err)

@@ -1,0 +1,26 @@
+/* Velious — the live SquireBot default theme (dark icy blue).
+   Sketches reuse the real EQ tokens; this milestone is structure, not a re-skin. */
+:root {
+  --bg:        #060b18;
+  --bg-2:      #0a1120;
+  --panel:     #0f1729;
+  --panel-2:   #141d33;
+  --text:      #d4dee8;
+  --text-dim:  #8595a8;
+  --accent:    #a8c5e0;
+  --accent-2:  #6f93b8;
+  --border:    #243349;
+  --status-ok:      #6fbf8f;
+  --status-missing: #d77c7c;
+  --status-other:   #d8b15a;
+  --slot:      #0c1322;
+  --slot-edge: #2c3e58;
+
+  --font-display: "Cinzel Decorative", Georgia, serif;
+  --font-body:    "IM Fell English", Georgia, serif;
+  --weight-display: 600;
+
+  --radius: 4px;
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-6: 24px; --space-8: 32px;
+}

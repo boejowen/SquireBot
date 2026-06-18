@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sketch 003 — Inventory & Banks tabs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;600;700&family=IM+Fell+English&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css" id="theme-link">
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:15px; padding-top:44px; }
+  h1,h2,h3 { font-family:var(--font-display); font-weight:var(--weight-display); margin:0; }
+  a { color:var(--accent); }
+
+  #variant-nav { position:fixed; top:0; left:0; right:0; z-index:9998; background:#05080f; border-bottom:1px solid var(--border);
+    padding:7px 14px; display:flex; gap:8px; align-items:center; font-family:system-ui; font-size:12.5px; }
+  #variant-nav .lbl { color:#7f8ba0; margin-right:4px; }
+  .variant-tab { background:transparent; color:#c8d4e4; border:1px solid #2a3850; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12.5px; }
+  .variant-tab.active { background:var(--accent); color:#06101e; border-color:var(--accent); font-weight:600; }
+  .variant { display:none; } .variant.active { display:block; }
+
+  /* fake 5-tab strip so the surface reads in context */
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:11px 22px 0; border-bottom:1px solid var(--border); background:var(--bg-2); }
+  .wordmark { font-family:var(--font-display); font-weight:700; color:var(--accent); font-size:22px; text-decoration:none; }
+  .tabstrip { display:flex; gap:4px; }
+  .tabstrip .t { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.6px; font-size:12.5px; color:var(--text-dim); padding:10px 14px; border-bottom:2px solid transparent; }
+  .tabstrip .t.on { color:var(--accent); border-bottom-color:var(--accent); }
+  .ident { color:var(--text-dim); font-size:13px; padding-bottom:8px; }
+
+  .content { max-width:1060px; margin:0 auto; padding:20px 22px 60px; }
+  .qline { color:var(--text-dim); font-style:italic; font-size:13.5px; margin:2px 2px 14px; }
+
+  .search-input { width:100%; background:var(--slot); border:1px solid var(--border); color:var(--text); font-family:var(--font-body);
+    font-size:15px; padding:10px 13px; border-radius:var(--radius); margin-bottom:6px; }
+  .search-input:focus { outline:none; border-color:var(--accent); }
+  .search-hint { color:var(--text-dim); font-size:12.5px; margin:0 2px 14px; }
+
+  /* small item icon */
+  .iico { width:30px; height:30px; flex:0 0 30px; border-radius:3px; background:linear-gradient(135deg,#2a3a52,#16202f); overflow:hidden; }
+  .iico img { width:100%; height:100%; object-fit:contain; image-rendering:pixelated; display:block; }
+
+  /* ---- A: accordion ---- */
+  .item-row { border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); margin-bottom:6px; overflow:hidden; }
+  .item-head { display:grid; grid-template-columns:30px 1fr auto auto 24px; gap:12px; align-items:center; padding:10px 14px; cursor:pointer; transition:background .12s; }
+  .item-head:hover { background:var(--panel-2); }
+  .item-name { font-family:var(--font-display); font-weight:var(--weight-display); font-size:15px; color:var(--text); }
+  .item-qty { color:var(--text-dim); font-size:13px; }
+  .item-qty b { color:var(--accent); font-family:var(--font-body); }
+  .item-price { color:var(--status-other); font-size:13.5px; white-space:nowrap; }
+  .item-price a { color:var(--status-other); }
+  .chev { color:var(--text-dim); transition:transform .15s; text-align:center; }
+  .item-row.open .chev { transform:rotate(90deg); }
+  .holders { display:none; border-top:1px solid var(--border); padding:4px 14px 10px 56px; }
+  .item-row.open .holders { display:block; }
+  .holder { display:grid; grid-template-columns:1fr auto auto auto; gap:14px; align-items:center; padding:7px 0; border-bottom:1px dashed var(--border); font-size:13.5px; }
+  .holder:last-child { border-bottom:none; }
+  .holder .hc { color:var(--text); font-family:var(--font-display); font-size:13.5px; }
+  .holder .hloc { color:var(--text-dim); }
+  .holder .hq { color:var(--accent); }
+  .holder .hsync { color:var(--text-dim); font-size:12px; }
+  .tag-you { font-size:10px; text-transform:uppercase; letter-spacing:.4px; padding:1px 6px; border-radius:8px; background:var(--accent); color:#06101e; margin-left:7px; }
+  .tag-bank { font-size:10px; text-transform:uppercase; letter-spacing:.4px; padding:1px 6px; border-radius:8px; border:1px solid var(--status-other); color:var(--status-other); margin-left:7px; }
+  .wikilink { font-size:12.5px; }
+
+  /* ---- B: master-detail ---- */
+  .md { display:grid; grid-template-columns:340px 1fr; gap:18px; align-items:start; }
+  .md-list { border:1px solid var(--border); border-radius:var(--radius); background:var(--panel); max-height:70vh; overflow:auto; }
+  .md-item { display:grid; grid-template-columns:28px 1fr auto; gap:10px; align-items:center; padding:9px 12px; cursor:pointer; border-bottom:1px solid var(--border); }
+  .md-item:hover { background:var(--panel-2); }
+  .md-item.sel { background:var(--panel-2); border-left:2px solid var(--accent); }
+  .md-detail { border:1px solid var(--border); border-radius:8px; background:var(--panel); padding:16px 18px; position:sticky; top:14px; min-height:240px; }
+  .md-detail .dh { display:flex; gap:12px; align-items:center; margin-bottom:6px; }
+  .md-detail .dh .iico { width:42px; height:42px; flex-basis:42px; }
+  .md-detail h2 { color:var(--accent); font-size:19px; }
+  .md-meta { color:var(--text-dim); font-size:13px; margin-bottom:12px; }
+  .md-meta a { color:var(--status-other); }
+  .htable { width:100%; border-collapse:collapse; font-size:13.5px; }
+  .htable th { text-align:left; color:var(--accent); font-family:var(--font-display); font-size:11.5px; text-transform:uppercase; letter-spacing:.5px; padding:6px 8px; border-bottom:1px solid var(--border); }
+  .htable td { padding:7px 8px; border-bottom:1px dashed var(--border); }
+  .empty-pin { color:var(--text-dim); font-style:italic; text-align:center; padding:60px 8px; }
+
+  /* ---- C: table ---- */
+  table.grid { width:100%; border-collapse:collapse; }
+  table.grid thead th { position:sticky; top:0; background:var(--bg-2); text-align:left; color:var(--accent); font-family:var(--font-display);
+    text-transform:uppercase; letter-spacing:.5px; font-size:11.5px; padding:9px 10px; border-bottom:2px solid var(--accent); cursor:pointer; }
+  table.grid td { padding:9px 10px; border-bottom:1px solid var(--border); font-size:14px; }
+  table.grid tbody tr.it { cursor:pointer; }
+  table.grid tbody tr.it:hover { background:var(--panel); }
+  table.grid .cellitem { display:flex; align-items:center; gap:10px; }
+  table.grid .cellitem .name { font-family:var(--font-display); }
+  tr.holderrow { display:none; }
+  tr.holderrow.show { display:table-row; }
+  tr.holderrow td { background:var(--bg-2); color:var(--text-dim); font-size:13px; padding:5px 10px 5px 40px; }
+
+  /* ---- Banks ---- */
+  .totals { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:18px; }
+  .stat { border:1px solid var(--border); border-radius:8px; background:var(--panel); padding:16px 18px; }
+  .stat .k { color:var(--text-dim); font-size:12.5px; text-transform:uppercase; letter-spacing:.6px; font-family:var(--font-display); }
+  .stat .v { color:var(--accent); font-family:var(--font-display); font-size:28px; margin-top:4px; }
+  .stat .sub { color:var(--text-dim); font-size:12.5px; margin-top:2px; }
+  .bankcard { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--panel); padding:13px 16px; margin-bottom:8px; cursor:pointer; transition:all .12s; }
+  .bankcard:hover { background:var(--panel-2); border-color:var(--accent-2); }
+  .bankcard .bavatar { width:40px; height:40px; border-radius:6px; background:linear-gradient(135deg,var(--status-other),#8a6a20); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .bankcard h3 { color:var(--text); font-size:16px; }
+  .bankcard .bk { color:var(--text-dim); font-size:12.5px; }
+  .bankcard .bstats { text-align:right; font-size:13px; color:var(--text-dim); }
+  .bankcard .bstats b { color:var(--accent); font-family:var(--font-body); }
+
+  #sketch-tools { position:fixed; bottom:12px; right:12px; z-index:9999; font-family:system-ui; font-size:12px; background:rgba(0,0,0,.72);
+    color:#fff; padding:8px 12px; border-radius:8px; opacity:.4; transition:opacity .2s; display:flex; gap:8px; align-items:center; }
+  #sketch-tools:hover { opacity:1; }
+  #sketch-tools select { font-size:12px; background:#1a1a1a; color:#fff; border:1px solid #444; border-radius:5px; padding:3px 7px; }
+</style>
+</head>
+<body>
+
+<div id="variant-nav">
+  <span class="lbl">Sketch 003 · Inventory list:</span>
+  <button class="variant-tab" onclick="showVariant('a',event)">A · Accordion (spec-literal)</button>
+  <button class="variant-tab active" onclick="showVariant('b',event)">B · Master-detail ★ Chosen (matches 002)</button>
+  <button class="variant-tab" onclick="showVariant('c',event)">C · Dense table</button>
+  <button class="variant-tab" onclick="showVariant('banks',event)">▸ Banks tab</button>
+</div>
+
+<!-- shared topbar shown per variant via JS template -->
+
+<!-- A -->
+<div class="variant" id="variant-a">
+  <div id="bar-a"></div>
+  <div class="content">
+    <div class="qline">Inventory — “Which characters have this item?”</div>
+    <input class="search-input" placeholder="Search the guild’s items by name…" oninput="filterA(this.value)">
+    <div class="search-hint">Items on your characters are listed first.</div>
+    <div id="list-a"></div>
+  </div>
+</div>
+
+<!-- B -->
+<div class="variant active" id="variant-b">
+  <div id="bar-b"></div>
+  <div class="content">
+    <div class="qline">Inventory — “Which characters have this item?”</div>
+    <div class="md">
+      <div><input class="search-input" placeholder="Search items…" oninput="filterB(this.value)"><div class="md-list" id="mdlist-b"></div></div>
+      <div class="md-detail" id="detail-b"><div class="empty-pin">Select an item to see who has it —<br>character, slot, quantity, last-synced.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- C -->
+<div class="variant" id="variant-c">
+  <div id="bar-c"></div>
+  <div class="content">
+    <div class="qline">Inventory — “Which characters have this item?”</div>
+    <input class="search-input" placeholder="Search the guild’s items by name…" oninput="filterC(this.value)">
+    <div class="search-hint">Click a row to reveal holders. Click a column header to sort.</div>
+    <table class="grid"><thead><tr><th>Item</th><th>Guild-wide</th><th>PigParse</th><th>Wiki</th><th></th></tr></thead><tbody id="tbody-c"></tbody></table>
+  </div>
+</div>
+
+<!-- Banks -->
+<div class="variant" id="variant-banks">
+  <div id="bar-banks"></div>
+  <div class="content">
+    <div class="qline">Banks — “What’s in the guild’s banks specifically?”</div>
+    <div class="totals">
+      <div class="stat"><div class="k">Bank item value</div><div class="v">~1.24M pp</div><div class="sub">sum of PigParse prices across all bank characters</div></div>
+      <div class="stat"><div class="k">Platinum on hand</div><div class="v">184,920 pp</div><div class="sub">total coin recorded across the guild banks</div></div>
+    </div>
+    <input class="search-input" placeholder="Search items held in the guild banks…" oninput="filterBanks(this.value)">
+    <div class="search-hint" id="bankhint">2 guild banks · click a bank to open its inventory window.</div>
+    <div id="banklist"></div>
+    <div id="bankitems"></div>
+  </div>
+</div>
+
+<div id="sketch-tools">
+  <span>Theme</span>
+  <select onchange="document.getElementById('theme-link').href='../themes/'+this.value+'.css'">
+    <option value="default">Velious</option><option value="vanilla">Vanilla</option><option value="kunark">Kunark</option>
+  </select>
+</div>
+
+<script>
+function bar(active){ return `<div class="topbar"><a href="#" class="wordmark">SquireBot</a>
+  <div class="tabstrip">
+    <span class="t">Characters</span><span class="t ${active==='inv'?'on':''}">Inventory</span>
+    <span class="t ${active==='banks'?'on':''}">Banks</span><span class="t">Wishlist</span><span class="t">Settings</span>
+  </div><span class="ident">Joe ▾</span></div>`; }
+['a','b','c'].forEach(v=>document.getElementById('bar-'+v).innerHTML=bar('inv'));
+document.getElementById('bar-banks').innerHTML=bar('banks');
+
+const ic = (n)=> `<div class="iico">${n?`<img src="https://wiki.project1999.com/images/Item_${n}.png" alt="" onerror="this.style.display='none'">`:''}</div>`;
+
+const ITEMS = [
+ {key:'cloak_flames',n:'Cloak of Flames',ic:658,price:'~85,000pp',wiki:'Cloak_of_Flames',
+   holders:[{c:'Bashley',loc:'Worn · Back',q:1,mine:true,sync:'2026-06-16 21:40'}]},
+ {key:'crystal_chitin_boots',n:'Crystal Chitin Boots',ic:624,price:'—',wiki:'Crystal_Chitin_Boots',
+   holders:[{c:'Bashley',loc:'Worn · Feet',q:1,mine:true,sync:'2026-06-16 21:40'},{c:'Thwackz',loc:'Worn · Feet',q:1,sync:'2026-06-15 18:02'},{c:'Findom',loc:'Bank',q:1,bank:true,sync:'2026-06-14 09:11'}]},
+ {key:'velium_bar',n:'Velium Bar',ic:966,price:'~45pp',wiki:'Velium_Bar',
+   holders:[{c:'Findom',loc:'Bank',q:88,bank:true,sync:'2026-06-16 09:00'},{c:'Mulebot',loc:'Bank',q:40,bank:true,sync:'2026-06-16 09:00'},{c:'Dwarforge',loc:'General · Slot 4',q:14,sync:'2026-06-13 22:40'}]},
+ {key:'blue_diamond',n:'Blue Diamond',ic:966,price:'~250pp',wiki:'Blue_Diamond',
+   holders:[{c:'Findom',loc:'Bank',q:6,bank:true,sync:'2026-06-16 09:00'},{c:'Bashley',loc:'Bag · Large Lambent Bag',q:2,mine:true,sync:'2026-06-16 21:40'},{c:'Mistyveil',loc:'General · Slot 1',q:1,sync:'2026-06-12 14:20'}]},
+ {key:'wurmslayer',n:'Wurmslayer',ic:736,price:'~9,000pp',wiki:'Wurmslayer',
+   holders:[{c:'Bashley',loc:'General · Slot 2',q:1,mine:true,sync:'2026-06-16 21:40'},{c:'Sneakytoes',loc:'General · Slot 5',q:1,sync:'2026-06-11 03:15'}]},
+ {key:'swiftwind',n:'Swiftwind',ic:736,price:'—',wiki:'Swiftwind',
+   holders:[{c:'Bashley',loc:'Worn · Primary',q:1,mine:true,sync:'2026-06-16 21:40'}]},
+ {key:'rubicite_bp',n:'Rubicite Breastplate',ic:624,price:'~120,000pp',wiki:'Rubicite_Breastplate',
+   holders:[{c:'Thwackz',loc:'Worn · Chest',q:1,sync:'2026-06-15 18:02'}]},
+ {key:'ring_ancients',n:'Ring of the Ancients',ic:563,price:'~6,000pp',wiki:'Ring_of_the_Ancients',
+   holders:[{c:'Bashley',loc:'Worn · Finger',q:1,mine:true,sync:'2026-06-16 21:40'},{c:'Mistyveil',loc:'Worn · Finger',q:1,sync:'2026-06-12 14:20'}]},
+ {key:'cloudy_potion',n:'Cloudy Potion',ic:585,price:'~5pp',wiki:'Cloudy_Potion',
+   holders:[{c:'Bashley',loc:'Bag',q:5,mine:true,sync:'2026-06-16 21:40'},{c:'Sneakytoes',loc:'General',q:12,sync:'2026-06-11 03:15'},{c:'Zephyrwind',loc:'Bag',q:6,sync:'2026-06-10 20:00'}]},
+ {key:'peridot',n:'Peridot',ic:966,price:'~12pp',wiki:'Peridot',
+   holders:[{c:'Findom',loc:'Bank',q:20,bank:true,sync:'2026-06-16 09:00'},{c:'Biteaucul',loc:'Bag',q:11,mine:true,sync:'2026-06-15 02:10'}]},
+];
+ITEMS.forEach(it=>{ it.total=it.holders.reduce((s,h)=>s+h.q,0); it.mine=it.holders.some(h=>h.mine); });
+function sortMineFirst(arr){ return arr.slice().sort((a,b)=>(b.mine-a.mine)||a.n.localeCompare(b.n)); }
+function match(it,f){ return !f || it.n.toLowerCase().includes(f.toLowerCase()); }
+
+const wikiA=(w,label)=>`<a class="wikilink" href="https://wiki.project1999.com/${w}" onclick="return false">${label} ↗</a>`;
+const priceA=(p)=> p==='—'?'<span class="item-price">—</span>:`<span class="item-price"><a href="https://pigparse.azurewebsites.net" onclick="return false">${p} ↗</a></span>`;
+const holderLine=(h)=>`<div class="holder"><div><span class="hc">${h.c}</span>${h.mine?'<span class="tag-you">you</span>':h.bank?'<span class="tag-bank">bank</span>':''}</div>
+   <div class="hloc">${h.loc}</div><div class="hq">×${h.q}</div><div class="hsync">${h.sync}</div></div>`;
+
+/* A — accordion */
+function renderA(f=''){ const rows=sortMineFirst(ITEMS.filter(it=>match(it,f)));
+  document.getElementById('list-a').innerHTML = rows.map(it=>`
+   <div class="item-row" id="row-${it.key}">
+     <div class="item-head" onclick="document.getElementById('row-${it.key}').classList.toggle('open')">
+       ${ic(it.ic)}
+       <span class="item-name">${it.n}${it.mine?'<span class="tag-you">you</span>':''}</span>
+       <span class="item-qty"><b>${it.total}</b> guild-wide · ${it.holders.length} holder${it.holders.length>1?'s':''}</span>
+       ${priceA(it.price)} <span style="display:flex;gap:10px;align-items:center">${wikiA(it.wiki,'Wiki')}<span class="chev">›</span></span>
+     </div>
+     <div class="holders">${it.holders.map(holderLine).join('')}</div>
+   </div>`).join('') || `<div class="empty-pin">No items match.</div>`;
+}
+function filterA(v){ renderA(v); }
+
+/* B — master-detail */
+function renderBList(f=''){ const rows=sortMineFirst(ITEMS.filter(it=>match(it,f)));
+  document.getElementById('mdlist-b').innerHTML = rows.map(it=>`
+   <div class="md-item" data-key="${it.key}" onclick="selectB('${it.key}',this)">
+     ${ic(it.ic)}<span style="font-family:var(--font-display)">${it.n}</span>
+     <span class="item-qty"><b>${it.total}</b></span></div>`).join('');
+}
+function selectB(key,el){ document.querySelectorAll('#mdlist-b .md-item').forEach(x=>x.classList.remove('sel')); if(el)el.classList.add('sel');
+  const it=ITEMS.find(i=>i.key===key);
+  document.getElementById('detail-b').innerHTML = `
+    <div class="dh">${ic(it.ic)}<h2>${it.n}</h2></div>
+    <div class="md-meta"><b style="color:var(--accent)">${it.total}</b> guild-wide across ${it.holders.length} holder(s) · ${priceA(it.price)} · ${wikiA(it.wiki,'Wiki')}</div>
+    <table class="htable"><thead><tr><th>Character</th><th>Where</th><th>Qty</th><th>Last synced</th></tr></thead><tbody>
+    ${it.holders.map(h=>`<tr><td>${h.c}${h.mine?'<span class="tag-you">you</span>':h.bank?'<span class="tag-bank">bank</span>':''}</td><td style="color:var(--text-dim)">${h.loc}</td><td style="color:var(--accent)">×${h.q}</td><td style="color:var(--text-dim)">${h.sync}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+function filterB(v){ renderBList(v); }
+
+/* C — table */
+let sortKey='mine';
+function renderC(f=''){ let rows=ITEMS.filter(it=>match(it,f));
+  rows = sortKey==='total'? rows.slice().sort((a,b)=>b.total-a.total) : sortMineFirst(rows);
+  document.getElementById('tbody-c').innerHTML = rows.map(it=>`
+    <tr class="it" onclick="document.getElementById('hr-${it.key}').classList.toggle('show')">
+      <td><div class="cellitem">${ic(it.ic)}<span class="name">${it.n}</span>${it.mine?'<span class="tag-you">you</span>':''}</div></td>
+      <td><b style="color:var(--accent)">${it.total}</b> <span style="color:var(--text-dim);font-size:12px">/ ${it.holders.length}h</span></td>
+      <td>${it.price==='—'?'<span style="color:var(--text-dim)">—</span>':`<a href="https://pigparse.azurewebsites.net" style="color:var(--status-other)" onclick="return false">${it.price} ↗</a>`}</td>
+      <td>${wikiA(it.wiki,'Open')}</td><td style="color:var(--text-dim)">▾</td></tr>
+    <tr class="holderrow" id="hr-${it.key}"><td colspan="5">${it.holders.map(h=>`<span style="display:inline-block;margin-right:18px">${h.c}${h.mine?' (you)':h.bank?' (bank)':''} — ${h.loc} ×${h.q} · ${h.sync}</span>`).join('')}</td></tr>`).join('');
+}
+function filterC(v){ renderC(v); }
+document.querySelectorAll('#variant-c thead th').forEach((th,i)=>{ if(i===1) th.onclick=()=>{ sortKey='total'; renderC(document.querySelector('#variant-c .search-input').value); }; if(i===0) th.onclick=()=>{ sortKey='mine'; renderC(document.querySelector('#variant-c .search-input').value); }; });
+
+/* Banks */
+const BANKS=[
+ {name:'Findom',kind:'Guild Bank',items:128,value:'~1.18M pp',plat:'142,500 pp'},
+ {name:'Mulebot',kind:'Guild Bot',items:64,value:'~58,400 pp',plat:'42,420 pp'},
+];
+function renderBanks(){ document.getElementById('banklist').innerHTML = BANKS.map(b=>`
+  <div class="bankcard" onclick="alert('→ Opens ${b.name}\\'s bank inventory window (sketch 002 layout)')">
+    <div class="bavatar">🏦</div>
+    <div><h3>${b.name}</h3><div class="bk">${b.kind} · ${b.items} item types</div></div>
+    <div class="bstats">Items <b>${b.value}</b><br>Platinum <b>${b.plat}</b></div>
+  </div>`).join('');
+}
+function filterBanks(v){ const f=v.toLowerCase().trim(); const hits=ITEMS.filter(it=>it.holders.some(h=>h.bank)&&it.n.toLowerCase().includes(f));
+  const box=document.getElementById('bankitems'); const hint=document.getElementById('bankhint');
+  if(!f){ box.innerHTML=''; hint.textContent='2 guild banks · click a bank to open its inventory window.'; renderBanks(); document.getElementById('banklist').style.display=''; return; }
+  document.getElementById('banklist').style.display='none'; hint.textContent=`Bank items matching “${v}”:`;
+  box.innerHTML = hits.length? hits.map(it=>{ const bh=it.holders.filter(h=>h.bank);
+    return `<div class="item-row open"><div class="item-head">${ic(it.ic)}<span class="item-name">${it.n}</span><span class="item-qty">in banks: <b>${bh.reduce((s,h)=>s+h.q,0)}</b></span>${priceA(it.price)}<span>${wikiA(it.wiki,'Wiki')}</span></div>
+      <div class="holders" style="display:block">${bh.map(holderLine).join('')}</div></div>`; }).join('')
+    : `<div class="empty-pin">No bank items match “${v}”.</div>`;
+}
+
+function showVariant(v,e){ document.querySelectorAll('.variant').forEach(x=>x.classList.remove('active')); document.getElementById('variant-'+v).classList.add('active');
+  document.querySelectorAll('.variant-tab').forEach(t=>t.classList.remove('active')); e.target.classList.add('active'); }
+
+renderA(); renderBList(); renderC(); renderBanks();
+</script>
+</body>
+</html>

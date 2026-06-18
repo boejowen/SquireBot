@@ -1,0 +1,26 @@
+/* Vanilla — the live "browns + golds" theme. Proves the new structure re-themes
+   by swapping CSS vars only (one [data-theme] attribute on the live app). */
+:root {
+  --bg:        #16100a;
+  --bg-2:      #1d150d;
+  --panel:     #241a10;
+  --panel-2:   #2e2216;
+  --text:      #ece0c4;
+  --text-dim:  #a8966f;
+  --accent:    #d4af37;
+  --accent-2:  #a8842a;
+  --border:    #4a3a20;
+  --status-ok:      #8fbf6f;
+  --status-missing: #d77c5a;
+  --status-other:   #d8b15a;
+  --slot:      #1c150d;
+  --slot-edge: #5a4628;
+
+  --font-display: "Cinzel Decorative", Georgia, serif;
+  --font-body:    "IM Fell English", Georgia, serif;
+  --weight-display: 600;
+
+  --radius: 4px;
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-6: 24px; --space-8: 32px;
+}

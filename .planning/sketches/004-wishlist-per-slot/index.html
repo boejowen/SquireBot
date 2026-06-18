@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sketch 004 — Per-slot Wishlist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;600;700&family=IM+Fell+English&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css" id="theme-link">
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:15px; padding-top:44px; }
+  h1,h2,h3 { font-family:var(--font-display); font-weight:var(--weight-display); margin:0; }
+  a { color:var(--accent); }
+
+  #variant-nav { position:fixed; top:0; left:0; right:0; z-index:9998; background:#05080f; border-bottom:1px solid var(--border);
+    padding:7px 14px; display:flex; gap:8px; align-items:center; font-family:system-ui; font-size:12.5px; }
+  #variant-nav .lbl { color:#7f8ba0; margin-right:4px; }
+  .variant-tab { background:transparent; color:#c8d4e4; border:1px solid #2a3850; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12.5px; }
+  .variant-tab.active { background:var(--accent); color:#06101e; border-color:var(--accent); font-weight:600; }
+  .variant { display:none; } .variant.active { display:block; }
+
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:11px 22px 0; border-bottom:1px solid var(--border); background:var(--bg-2); }
+  .wordmark { font-family:var(--font-display); font-weight:700; color:var(--accent); font-size:22px; text-decoration:none; }
+  .tabstrip { display:flex; gap:4px; }
+  .tabstrip .t { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.6px; font-size:12.5px; color:var(--text-dim); padding:10px 14px; border-bottom:2px solid transparent; }
+  .tabstrip .t.on { color:var(--accent); border-bottom-color:var(--accent); }
+  .tabstrip .t .bdg { background:var(--accent); color:#06101e; border-radius:8px; font-size:10px; padding:0 5px; margin-left:5px; font-family:var(--font-body); }
+  .ident { color:var(--text-dim); font-size:13px; padding-bottom:8px; }
+
+  .content { max-width:1060px; margin:0 auto; padding:16px 22px 60px; }
+  .crumb { color:var(--text-dim); font-size:13px; margin-bottom:6px; } .crumb a { text-decoration:none; }
+  .chh { display:flex; align-items:baseline; gap:12px; margin-bottom:4px; }
+  .chh h1 { color:var(--accent); font-size:23px; }
+  .chh .meta { color:var(--text-dim); font-size:13.5px; }
+  .qline { color:var(--text-dim); font-style:italic; font-size:13.5px; margin:4px 0 14px; }
+
+  .iico { width:30px; height:30px; flex:0 0 30px; border-radius:3px; background:linear-gradient(135deg,#2a3a52,#16202f); overflow:hidden; }
+  .iico img { width:100%; height:100%; object-fit:contain; image-rendering:pixelated; display:block; }
+
+  /* price / wiki / listed inline bits */
+  .pp { color:var(--status-other); text-decoration:none; white-space:nowrap; }
+  .raidonly { color:#e0a0c0; font-size:12.5px; white-space:nowrap; }
+  .wk { color:var(--accent); text-decoration:none; font-size:12.5px; }
+  .listed { color:var(--text-dim); font-size:12px; white-space:nowrap; }
+  .rtag { font-size:9.5px; text-transform:uppercase; letter-spacing:.5px; background:#3a2030; color:#e7aecb; border:1px solid #6a3a52; border-radius:7px; padding:1px 6px; }
+
+  /* wish chip */
+  .wchip { display:inline-flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--accent-2); border-radius:10px;
+    padding:5px 8px 5px 12px; font-size:13px; margin:4px 6px 4px 0; }
+  .wchip .wn { font-family:var(--font-display); }
+  .wchip .bell { background:none; border:none; cursor:pointer; font-size:14px; padding:0 2px; }
+  .wchip .bell.off { opacity:.32; }
+  .wchip .rm { background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:14px; padding:0 3px; }
+  .ec-badge { font-size:9.5px; text-transform:uppercase; letter-spacing:.4px; color:#06101e; background:var(--status-other); border-radius:8px; padding:1px 6px; }
+  .addwish { background:var(--slot); border:1px dashed var(--slot-edge); color:var(--text-dim); border-radius:10px; padding:6px 11px;
+    font-family:var(--font-body); font-size:13px; min-width:200px; }
+  .addwish:focus { outline:none; border-color:var(--accent); color:var(--text); }
+
+  .eqitem { display:flex; align-items:center; gap:9px; }
+  .eqitem .en { font-family:var(--font-display); font-size:14px; }
+  .slotname { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.6px; font-size:12px; color:var(--accent); }
+
+  /* suggestion row */
+  .sugg-row { display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center; padding:7px 4px; border-bottom:1px dashed var(--border); }
+  .sugg-row:last-child { border-bottom:none; }
+  .sugg-add { background:transparent; border:1px solid var(--accent-2); color:var(--accent); border-radius:8px; cursor:pointer; font-size:16px; line-height:1; width:26px; height:26px; }
+  .sugg-add:hover { background:var(--accent); color:#06101e; }
+  .sugg-add:disabled { opacity:.3; cursor:default; }
+  .sugg-name { font-family:var(--font-display); font-size:13.5px; display:flex; align-items:center; gap:8px; }
+  .sugg-meta { text-align:right; font-size:12.5px; display:flex; gap:12px; align-items:center; justify-content:flex-end; }
+
+  /* A table */
+  table.wt { width:100%; border-collapse:collapse; }
+  table.wt th { text-align:left; color:var(--accent); font-family:var(--font-display); font-size:11px; text-transform:uppercase; letter-spacing:.5px; padding:8px 10px; border-bottom:2px solid var(--accent); }
+  table.wt td { padding:11px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  table.wt td.slotc { width:96px; } table.wt td.eqc { width:240px; }
+
+  /* B cards */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; }
+  .scard { border:1px solid var(--border); border-radius:8px; background:var(--panel); padding:13px 15px; }
+  .scard .shead { display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); padding-bottom:9px; margin-bottom:9px; }
+
+  /* C master-detail */
+  .md { display:grid; grid-template-columns:290px 1fr; gap:18px; align-items:start; }
+  .md-list { border:1px solid var(--border); border-radius:8px; background:var(--panel); max-height:74vh; overflow:auto; }
+  .md-row { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .md-row:hover { background:var(--panel-2); } .md-row.sel { background:var(--panel-2); border-left:2px solid var(--accent); }
+  .md-row .ms { font-family:var(--font-display); font-size:12.5px; color:var(--accent); text-transform:uppercase; letter-spacing:.5px; }
+  .md-row .me { color:var(--text-dim); font-size:12.5px; }
+  .md-row .cnt { background:var(--accent); color:#06101e; border-radius:9px; font-size:11px; padding:0 6px; }
+  .md-detail { border:1px solid var(--border); border-radius:8px; background:var(--panel); padding:18px 20px; position:sticky; top:14px; min-height:280px; }
+  .md-detail h2 { color:var(--accent); font-size:19px; }
+  .sub-label { color:var(--accent); font-family:var(--font-display); text-transform:uppercase; letter-spacing:.5px; font-size:12px; margin:16px 0 7px; }
+  .sugg-note { color:var(--text-dim); font-size:12px; font-style:italic; margin-top:8px; }
+  .empty-pin { color:var(--text-dim); font-style:italic; text-align:center; padding:70px 8px; }
+
+  #sketch-tools { position:fixed; bottom:12px; right:12px; z-index:9999; font-family:system-ui; font-size:12px; background:rgba(0,0,0,.72);
+    color:#fff; padding:8px 12px; border-radius:8px; opacity:.4; transition:opacity .2s; display:flex; gap:8px; align-items:center; }
+  #sketch-tools:hover { opacity:1; }
+  #sketch-tools select { font-size:12px; background:#1a1a1a; color:#fff; border:1px solid #444; border-radius:5px; padding:3px 7px; }
+</style>
+</head>
+<body>
+
+<div id="variant-nav">
+  <span class="lbl">Sketch 004 · Per-slot wishlist:</span>
+  <button class="variant-tab active" onclick="showVariant('c',event)">C · Master-detail ★ Chosen (suggestions-forward)</button>
+  <button class="variant-tab" onclick="showVariant('a',event)">A · Slot table</button>
+  <button class="variant-tab" onclick="showVariant('b',event)">B · Slot cards</button>
+</div>
+
+<div id="variant-c" class="variant active"><div id="bar-c"></div><div class="content">
+  <div class="crumb"><a href="#">Wishlist</a> › <span style="color:var(--text)">Bashley</span></div>
+  <div class="chh"><h1>Bashley</h1><span class="meta">Level 58 Half Elf Ranger · yours</span></div>
+  <div class="qline">Wishlist — pick a slot to see what’s equipped and every Velious upgrade the wiki lists for it (with price, wiki link, and last-listed-for-sale). Add as many as you like; 🔔 pings you on Discord when one appears.</div>
+  <div class="md">
+    <div class="md-list" id="mdlist-c"></div>
+    <div class="md-detail" id="detail-c"><div class="empty-pin">Select an equipped slot to manage its wishlist.</div></div>
+  </div>
+</div></div>
+
+<div id="variant-a" class="variant"><div id="bar-a"></div><div class="content">
+  <div class="crumb"><a href="#">Wishlist</a> › <span style="color:var(--text)">Bashley</span></div>
+  <div class="chh"><h1>Bashley</h1><span class="meta">Level 58 Half Elf Ranger · yours</span></div>
+  <div class="qline">One row per equipped slot. Add any number of upgrade targets; 🔔 toggles the Discord ping.</div>
+  <table class="wt"><thead><tr><th>Slot</th><th>Equipped now</th><th>Your upgrade wishlist + Velious suggestions</th></tr></thead><tbody id="tbody-a"></tbody></table>
+</div></div>
+
+<div id="variant-b" class="variant"><div id="bar-b"></div><div class="content">
+  <div class="crumb"><a href="#">Wishlist</a> › <span style="color:var(--text)">Bashley</span></div>
+  <div class="chh"><h1>Bashley</h1><span class="meta">Level 58 Half Elf Ranger · yours</span></div>
+  <div class="qline">One card per equipped slot.</div>
+  <div class="cards" id="cards-b"></div>
+</div></div>
+
+<div id="sketch-tools">
+  <span>Theme</span>
+  <select onchange="document.getElementById('theme-link').href='../themes/'+this.value+'.css'">
+    <option value="default">Velious</option><option value="vanilla">Vanilla</option><option value="kunark">Kunark</option>
+  </select>
+</div>
+
+<script>
+function bar(){ return `<div class="topbar"><a href="#" class="wordmark">SquireBot</a><div class="tabstrip">
+   <span class="t">Characters</span><span class="t">Inventory</span><span class="t">Banks</span>
+   <span class="t on">Wishlist<span class="bdg">3</span></span><span class="t">Settings</span></div><span class="ident">Joe ▾</span></div>`; }
+const ic = (n)=> `<div class="iico">${n?`<img src="https://wiki.project1999.com/images/Item_${n}.png" alt="" onerror="this.style.display='none'">`:''}</div>`;
+const wurl = (n)=>'https://wiki.project1999.com/'+n.replace(/ /g,'_');
+
+// suggestions carry: raid (no-drop & raid-only → priced null), price, listed (last seen for sale)
+let WSLOTS = [
+ {slot:'Head', eq:{n:'Crown of Narandi',ic:624,price:null}, wish:[], sugg:[
+   {n:'Spiroc War Helm',price:'~2,800pp',listed:'2026-06-14'},
+   {n:'Helm of the Hidden',price:'~5,500pp',listed:'2026-06-09'},
+   {n:'Crown of King Tormax',raid:true},
+ ]},
+ {slot:'Shoulders', eq:{n:'Bloodstained Mantle',ic:624,price:'~1,500pp'}, wish:[{n:'Crystalline Spaulders',ping:false,price:'~4,200pp',listed:'2026-06-15'}], sugg:[
+   {n:'Crystalline Spaulders',price:'~4,200pp',listed:'2026-06-15'},
+   {n:'Spaulders of a Lost Age',price:'~9,000pp',listed:'2026-05-31'},
+   {n:'Pauldrons of Dark Tidings',raid:true},
+ ]},
+ {slot:'Arms', eq:{n:'Bloodstained Mail Vambraces',ic:624,price:null}, wish:[{n:'Crystal Chitin Armplates',ping:true,ec:true,price:'~12,000pp',listed:'2026-06-12'}], sugg:[
+   {n:'Crystal Chitin Armplates',price:'~12,000pp',listed:'2026-06-12'},
+   {n:'Velium Chain Sleeves',price:'~1,900pp',listed:'2026-06-16'},
+   {n:'Spiroc Plate Vambraces',price:'~6,000pp',listed:'2026-06-02'},
+   {n:'Vambraces of the Tashanian',raid:true},
+ ]},
+ {slot:'Chest', eq:{n:'Black Panther Breastplate',ic:624,price:null}, wish:[{n:'Tunic of the Tashanian',ping:true,price:null}], sugg:[
+   {n:'Velium Chestguard',price:'~7,500pp',listed:'2026-06-13'},
+   {n:'Ringmail Tunic of the Wakening',price:'~3,100pp',listed:'2026-06-10'},
+   {n:'Tunic of the Tashanian',raid:true},
+   {n:'Mantle of the Velium Wurm',raid:true},
+ ]},
+ {slot:'Legs', eq:{n:'Crystal Chitin Leggings',ic:624,price:null}, wish:[], sugg:[
+   {n:'Velium Chain Leggings',price:'~2,400pp',listed:'2026-06-16'},
+   {n:'Greaves of the Tashanian',raid:true},
+ ]},
+ {slot:'Hands', eq:{n:'Crystal Chitin Gauntlets',ic:624,price:null}, wish:[], sugg:[
+   {n:'Velium Gauntlets',price:'~1,600pp',listed:'2026-06-15'},
+   {n:'Gauntlets of the Tashanian',raid:true},
+ ]},
+ {slot:'Feet', eq:{n:'Crystal Chitin Boots',ic:624,price:null}, wish:[], sugg:[
+   {n:'Velium Boots',price:'~1,400pp',listed:'2026-06-14'},
+   {n:'Boots of the Tashanian',raid:true},
+ ]},
+ {slot:'Wrist', eq:{n:'Bracelet of the Shadow Hive',ic:624,price:'~1,200pp'}, wish:[], sugg:[
+   {n:'Velium Bracer',price:'~900pp',listed:'2026-06-16'},
+   {n:'Bracer of Benevolence',raid:true},
+ ]},
+ {slot:'Back', eq:{n:'Cloak of Flames',ic:658,price:'~85,000pp'}, wish:[], sugg:[
+   {n:'Shawl of the Tides',price:'~6,500pp',listed:'2026-06-08'},
+   {n:'Cloak of the Choktar',raid:true},
+ ]},
+ {slot:'Neck', eq:{n:'Royal Velium Necklace',ic:563,price:'~3,000pp'}, wish:[], sugg:[
+   {n:'Coldain Hero Necklace',price:'~4,800pp',listed:'2026-06-11'},
+   {n:'Amulet of Necropotence',raid:true},
+ ]},
+ {slot:'Primary', eq:{n:'Swiftwind',ic:736,price:null}, wish:[], sugg:[
+   {n:'Spiroc Wingblade',price:'~14,000pp',listed:'2026-06-07'},
+   {n:'Halberd of Rapidity',raid:true},
+ ]},
+ {slot:'Fingers', eq:{n:'Ring of the Ancients',ic:563,price:'~6,000pp'}, wish:[], sugg:[
+   {n:'Velium Band',price:'~1,100pp',listed:'2026-06-16'},
+   {n:'Ring of Dr. Lan',raid:true},
+ ]},
+];
+
+function addWish(si,name){ name=(name||'').trim(); if(!name) return; const s=WSLOTS[si]; if(s.wish.some(w=>w.n.toLowerCase()===name.toLowerCase())) return;
+  const sg=s.sugg.find(g=>g.n.toLowerCase()===name.toLowerCase());
+  s.wish.push({n:name,ping:true,ec:false,price:sg?sg.price:undefined,listed:sg?sg.listed:undefined}); renderActive(); }
+function togglePing(si,wi){ WSLOTS[si].wish[wi].ping=!WSLOTS[si].wish[wi].ping; renderActive(); }
+function removeWish(si,wi){ WSLOTS[si].wish.splice(wi,1); renderActive(); }
+const has=(si,n)=>WSLOTS[si].wish.some(w=>w.n.toLowerCase()===n.toLowerCase());
+
+function priceMeta(it){
+  if(it.raid) return '<span class="raidonly">raid drop — not sold</span>';
+  if(it.price===null) return '<span class="raidonly">not sold</span>';
+  if(!it.price) return '';
+  return `<a class="pp" href="https://pigparse.azurewebsites.net" onclick="return false">${it.price} ↗</a>${it.listed?` <span class="listed">· last listed ${it.listed}</span>`:''}`; }
+
+function wishChip(si,wi){ const w=WSLOTS[si].wish[wi];
+  return `<span class="wchip"><span class="wn">${w.n}</span>${w.ec?'<span class="ec-badge" title="Appeared for sale in the EC tunnel">EC ✦</span>':''}
+   <span style="font-size:12px">${priceMeta(w)}</span>
+   <a class="wk" href="${wurl(w.n)}" onclick="return false">wiki ↗</a>
+   <button class="bell ${w.ping?'on':'off'}" title="${w.ping?'Discord ping ON':'Discord ping OFF'}" onclick="togglePing(${si},${wi})">🔔</button>
+   <button class="rm" title="Remove" onclick="removeWish(${si},${wi})">✕</button></span>`; }
+
+function suggRow(si,g){ const added=has(si,g.n);
+  return `<div class="sugg-row">
+    <button class="sugg-add" ${added?'disabled title="Already on your wishlist"':`onclick="addWish(${si},'${g.n.replace(/'/g,"\\'")}')"`}>${added?'✓':'+'}</button>
+    <div class="sugg-name">${g.n}${g.raid?'<span class="rtag">Raid</span>':''}</div>
+    <div class="sugg-meta">${priceMeta(g)} <a class="wk" href="${wurl(g.n)}" onclick="return false">wiki ↗</a></div>
+   </div>`; }
+function addInput(si){ return `<input class="addwish" list="sugg-${si}" placeholder="+ add any item by name…" onkeydown="if(event.key==='Enter'){addWish(${si},this.value);this.value='';}">
+   <datalist id="sugg-${si}">${WSLOTS[si].sugg.map(g=>`<option value="${g.n}">`).join('')}</datalist>`; }
+
+/* C */
+let selC=null;
+function renderC(){ document.getElementById('mdlist-c').innerHTML = WSLOTS.map((s,si)=>`
+  <div class="md-row ${selC===si?'sel':''}" onclick="selC=${si};renderC()">
+    <div><div class="ms">${s.slot}</div><div class="me">${s.eq.n}</div></div>
+    ${s.wish.length?`<span class="cnt">${s.wish.length}</span>`:'<span class="me">—</span>'}</div>`).join('');
+  if(selC!==null){ const s=WSLOTS[selC], si=selC;
+    document.getElementById('detail-c').innerHTML = `
+     <div class="slotname" style="margin-bottom:7px">${s.slot}</div>
+     <div class="eqitem" style="margin-bottom:4px">${ic(s.eq.ic)}<h2>${s.eq.n}</h2></div>
+     <div style="color:var(--text-dim);font-size:12.5px;margin-bottom:10px">Equipped now · ${priceMeta(s.eq)} · <a class="wk" href="${wurl(s.eq.n)}" onclick="return false">wiki ↗</a></div>
+     <div class="sub-label">Your upgrades</div>
+     <div>${s.wish.map((w,wi)=>wishChip(si,wi)).join('')||'<span style="color:var(--text-dim);font-size:12.5px">None yet — add from the suggestions below or type any item.</span>'}</div>
+     <div style="margin:9px 0">${addInput(si)}</div>
+     <div class="sub-label">Velious upgrade suggestions <span style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:11px;font-weight:400">— from the wiki’s Pre-raid/Grouping + Raiding lists for ${s.slot}, Ranger</span></div>
+     ${s.sugg.map(g=>suggRow(si,g)).join('')}
+     <div class="sugg-note">“Raid” = no-drop, raid-only (can’t be bought). Everything else can be grouped for or bought in EC — price + last-listed shown when SquireBot has seen it for sale.</div>`;
+  }
+}
+/* A */
+function renderA(){ document.getElementById('tbody-a').innerHTML = WSLOTS.map((s,si)=>`
+  <tr><td class="slotc"><span class="slotname">${s.slot}</span></td>
+   <td class="eqc"><div class="eqitem">${ic(s.eq.ic)}<span class="en">${s.eq.n}</span></div><div style="margin-top:4px;font-size:12px">${priceMeta(s.eq)} · <a class="wk" href="${wurl(s.eq.n)}" onclick="return false">wiki ↗</a></div></td>
+   <td>${s.wish.map((w,wi)=>wishChip(si,wi)).join('')}<div style="margin:4px 0 8px">${addInput(si)}</div>
+     <div style="border-top:1px dashed var(--border);padding-top:4px">${s.sugg.map(g=>suggRow(si,g)).join('')}</div></td></tr>`).join('');
+}
+/* B */
+function renderB(){ document.getElementById('cards-b').innerHTML = WSLOTS.map((s,si)=>`
+  <div class="scard"><div class="shead"><span class="slotname">${s.slot}</span><div class="eqitem">${ic(s.eq.ic)}<span class="en">${s.eq.n}</span></div></div>
+   <div>${s.wish.map((w,wi)=>wishChip(si,wi)).join('')||'<span style="color:var(--text-dim);font-size:12.5px">No upgrades yet.</span>'}</div>
+   <div style="margin:8px 0">${addInput(si)}</div>
+   <div style="border-top:1px dashed var(--border);padding-top:4px">${s.sugg.map(g=>suggRow(si,g)).join('')}</div></div>`).join('');
+}
+
+let active='c';
+function renderActive(){ if(active==='c')renderC(); else if(active==='a')renderA(); else renderB(); }
+function showVariant(v,e){ active=v; document.querySelectorAll('.variant').forEach(x=>x.classList.remove('active')); document.getElementById('variant-'+v).classList.add('active');
+  document.querySelectorAll('.variant-tab').forEach(t=>t.classList.remove('active')); e.target.classList.add('active'); renderActive(); }
+
+['a','b','c'].forEach(v=>document.getElementById('bar-'+v).innerHTML=bar());
+renderC(); renderA(); renderB();
+</script>
+</body>
+</html>

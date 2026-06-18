@@ -1,0 +1,25 @@
+/* Kunark — the live "jungle greens" theme. Third option in the toolbar switcher. */
+:root {
+  --bg:        #07120c;
+  --bg-2:      #0a1810;
+  --panel:     #0e2016;
+  --panel-2:   #142b1e;
+  --text:      #cfe8d4;
+  --text-dim:  #7fa888;
+  --accent:    #8fcf9f;
+  --accent-2:  #5fa06f;
+  --border:    #224a30;
+  --status-ok:      #7fdf8f;
+  --status-missing: #d77c7c;
+  --status-other:   #d8c05a;
+  --slot:      #0b1a12;
+  --slot-edge: #2c5840;
+
+  --font-display: "Cinzel Decorative", Georgia, serif;
+  --font-body:    "IM Fell English", Georgia, serif;
+  --weight-display: 600;
+
+  --radius: 4px;
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-6: 24px; --space-8: 32px;
+}

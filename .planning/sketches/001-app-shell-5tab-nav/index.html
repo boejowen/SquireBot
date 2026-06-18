@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sketch 001 — App Shell & 5-Tab Nav</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;600;700&family=IM+Fell+English&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css" id="theme-link">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--font-body); font-size: 16px; line-height: 1.45;
+    padding-top: 44px; /* room for variant nav */
+  }
+  a { color: var(--accent); }
+  h1,h2,h3 { font-family: var(--font-display); font-weight: var(--weight-display); margin: 0; }
+
+  /* ---- variant nav (sketch infra) ---- */
+  #variant-nav {
+    position: fixed; top:0; left:0; right:0; z-index:9998;
+    background:#05080f; border-bottom:1px solid var(--border);
+    padding:7px 14px; display:flex; gap:8px; align-items:center;
+    font-family: system-ui; font-size:12.5px;
+  }
+  #variant-nav .lbl { color:#7f8ba0; margin-right:4px; }
+  .variant-tab {
+    background:transparent; color:#c8d4e4; border:1px solid #2a3850;
+    padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12.5px;
+  }
+  .variant-tab.active { background:var(--accent); color:#06101e; border-color:var(--accent); font-weight:600; }
+
+  .variant { display:none; }
+  .variant.active { display:block; }
+
+  /* ---- shared shell pieces ---- */
+  .wordmark { font-family:var(--font-display); font-weight:700; color:var(--accent); font-size:26px; letter-spacing:.5px; text-decoration:none; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:14px 22px; border-bottom:1px solid var(--border); background:var(--bg-2); }
+  .ident { display:flex; align-items:center; gap:9px; color:var(--text-dim); font-size:14px; }
+  .avatar { width:26px; height:26px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent-2)); display:inline-block; }
+
+  .tab, .side-tab {
+    font-family:var(--font-display); font-weight:var(--weight-display);
+    text-transform:uppercase; letter-spacing:.6px; font-size:13.5px;
+    color:var(--text-dim); background:transparent; border:none; cursor:pointer;
+    transition: color .15s ease, border-color .15s ease;
+  }
+
+  /* top-tab strip (A & C) */
+  .tabstrip { display:flex; gap:4px; padding:0 22px; border-bottom:1px solid var(--border); background:var(--bg-2); }
+  .tabstrip .tab { padding:13px 18px 11px; border-bottom:2px solid transparent; }
+  .tabstrip .tab:hover { color:var(--text); }
+  .tabstrip .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab .badge { display:inline-block; min-width:17px; padding:0 5px; margin-left:6px; border-radius:9px;
+    background:var(--accent); color:#06101e; font-family:var(--font-body); font-size:11px; line-height:17px; text-align:center; vertical-align:middle; }
+
+  .content { max-width:1080px; margin:0 auto; padding:22px; }
+
+  /* search */
+  .searchbar { margin-bottom:16px; }
+  .search-input {
+    width:100%; background:var(--slot); border:1px solid var(--border); color:var(--text);
+    font-family:var(--font-body); font-size:15px; padding:10px 13px; border-radius:var(--radius);
+  }
+  .search-input::placeholder { color:var(--text-dim); }
+  .search-input:focus { outline:none; border-color:var(--accent); }
+  .search-hint { color:var(--text-dim); font-size:13px; margin:6px 2px 0; }
+
+  /* character list */
+  .listhead { display:flex; align-items:baseline; justify-content:space-between; margin:4px 2px 10px; }
+  .listhead h2 { color:var(--accent); font-size:18px; }
+  .listhead .q { color:var(--text-dim); font-size:13.5px; font-style:italic; }
+  .group-label { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.7px; font-size:11.5px; color:var(--text-dim); margin:16px 4px 6px; }
+  .char-row {
+    display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center;
+    padding:11px 14px; border:1px solid var(--border); border-radius:var(--radius);
+    background:var(--panel); margin-bottom:6px; cursor:pointer; transition: all .15s ease;
+  }
+  .char-row:hover { background:var(--panel-2); border-color:var(--accent-2); transform: translateX(2px); }
+  .char-name { font-family:var(--font-display); font-weight:var(--weight-display); font-size:16px; color:var(--text); }
+  .char-sub  { color:var(--text-dim); font-size:13.5px; }
+  .tags { display:flex; gap:6px; align-items:center; }
+  .tag { font-family:var(--font-body); font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+    padding:2px 7px; border-radius:9px; border:1px solid var(--border); color:var(--text-dim); }
+  .tag.you  { color:#06101e; background:var(--accent); border-color:var(--accent); }
+  .tag.bank { color:var(--status-other); border-color:var(--status-other); }
+  .tag.bot  { color:var(--accent); border-color:var(--accent-2); }
+  .chev { color:var(--text-dim); font-size:18px; }
+
+  /* placeholders for the not-yet-active tabs */
+  .placeholder { border:1px dashed var(--border); border-radius:var(--radius); padding:40px 24px; text-align:center; color:var(--text-dim); background:rgba(255,255,255,0.015); }
+  .placeholder b { color:var(--accent); font-family:var(--font-display); }
+
+  /* ---- Variant B sidebar ---- */
+  .layout-sidebar { display:grid; grid-template-columns: 224px 1fr; min-height: calc(100vh - 44px); }
+  .siderail { border-right:1px solid var(--border); background:var(--bg-2); padding:18px 12px; display:flex; flex-direction:column; gap:4px; }
+  .siderail .wordmark { display:block; padding:6px 10px 16px; font-size:22px; }
+  .side-tab { display:flex; align-items:center; justify-content:space-between; width:100%; text-align:left;
+    padding:11px 13px; border-radius:var(--radius); border-left:2px solid transparent; }
+  .side-tab:hover { color:var(--text); background:var(--panel); }
+  .side-tab.active { color:var(--accent); background:var(--panel); border-left-color:var(--accent); }
+  .side-foot { margin-top:auto; border-top:1px solid var(--border); padding:12px 12px 2px; }
+  .side-content { padding:22px 26px; max-width:1000px; }
+
+  /* ---- Variant C search-forward ---- */
+  .hero-search { background:var(--bg-2); border-bottom:1px solid var(--border); padding:26px 22px; }
+  .hero-search .wrap { max-width:760px; margin:0 auto; }
+  .hero-search h2 { color:var(--accent); font-size:18px; margin-bottom:4px; }
+  .hero-search .big-input { font-size:18px; padding:14px 16px; }
+  .hero-results { max-width:760px; margin:10px auto 0; }
+  .hero-result { padding:8px 12px; border-radius:var(--radius); color:var(--text-dim); font-size:14px; }
+  .hero-result b { color:var(--text); font-family:var(--font-display); font-weight:var(--weight-display); }
+
+  /* toast */
+  #toast { position:fixed; bottom:60px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--panel-2); color:var(--text); border:1px solid var(--accent-2);
+    padding:11px 18px; border-radius:8px; font-size:14px; opacity:0; pointer-events:none; transition:all .25s ease; z-index:9997; }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* sketch toolbar */
+  #sketch-tools { position:fixed; bottom:12px; right:12px; z-index:9999; font-family:system-ui; font-size:12px;
+    background:rgba(0,0,0,0.72); color:#fff; padding:8px 12px; border-radius:8px; opacity:.4; transition:opacity .2s; display:flex; gap:8px; align-items:center; }
+  #sketch-tools:hover { opacity:1; }
+  #sketch-tools select, #sketch-tools button { font-size:12px; background:#1a1a1a; color:#fff; border:1px solid #444; border-radius:5px; padding:3px 7px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<!-- ===== sketch variant nav ===== -->
+<div id="variant-nav">
+  <span class="lbl">Sketch 001 · App shell:</span>
+  <button class="variant-tab active" onclick="showVariant('a',event)">A · Top tabs ★ Selected</button>
+  <button class="variant-tab" onclick="showVariant('b',event)">B · Left sidebar</button>
+  <button class="variant-tab" onclick="showVariant('c',event)">C · Search-forward</button>
+</div>
+
+<!-- ============ VARIANT A — TOP TABS ============ -->
+<div class="variant active" id="variant-a">
+  <div class="topbar">
+    <a href="#" class="wordmark">SquireBot</a>
+    <span class="ident"><span class="avatar"></span> Joe ▾</span>
+  </div>
+  <div class="tabstrip" data-strip="a">
+    <button class="tab active" data-tab="characters" onclick="pickTab('a','characters',event)">Characters</button>
+    <button class="tab" data-tab="inventory" onclick="pickTab('a','inventory',event)">Inventory</button>
+    <button class="tab" data-tab="banks" onclick="pickTab('a','banks',event)">Banks</button>
+    <button class="tab" data-tab="wishlist" onclick="pickTab('a','wishlist',event)">Wishlist <span class="badge">3</span></button>
+    <button class="tab" data-tab="settings" onclick="pickTab('a','settings',event)">Settings</button>
+  </div>
+  <div class="content" id="content-a"></div>
+</div>
+
+<!-- ============ VARIANT B — LEFT SIDEBAR ============ -->
+<div class="variant" id="variant-b">
+  <div class="layout-sidebar">
+    <nav class="siderail" data-strip="b">
+      <a href="#" class="wordmark">SquireBot</a>
+      <button class="side-tab active" data-tab="characters" onclick="pickTab('b','characters',event)"><span>Characters</span></button>
+      <button class="side-tab" data-tab="inventory" onclick="pickTab('b','inventory',event)"><span>Inventory</span></button>
+      <button class="side-tab" data-tab="banks" onclick="pickTab('b','banks',event)"><span>Banks</span></button>
+      <button class="side-tab" data-tab="wishlist" onclick="pickTab('b','wishlist',event)"><span>Wishlist</span> <span class="badge" style="background:var(--accent);color:#06101e;border-radius:9px;padding:0 6px;font-size:11px;">3</span></button>
+      <button class="side-tab" data-tab="settings" onclick="pickTab('b','settings',event)"><span>Settings</span></button>
+      <div class="side-foot"><span class="ident"><span class="avatar"></span> Joe ▾</span></div>
+    </nav>
+    <div class="side-content" id="content-b"></div>
+  </div>
+</div>
+
+<!-- ============ VARIANT C — SEARCH-FORWARD ============ -->
+<div class="variant" id="variant-c">
+  <div class="topbar">
+    <a href="#" class="wordmark">SquireBot</a>
+    <span class="ident"><span class="avatar"></span> Joe ▾</span>
+  </div>
+  <div class="tabstrip" data-strip="c">
+    <button class="tab active" data-tab="characters" onclick="pickTab('c','characters',event)">Characters</button>
+    <button class="tab" data-tab="inventory" onclick="pickTab('c','inventory',event)">Inventory</button>
+    <button class="tab" data-tab="banks" onclick="pickTab('c','banks',event)">Banks</button>
+    <button class="tab" data-tab="wishlist" onclick="pickTab('c','wishlist',event)">Wishlist <span class="badge">3</span></button>
+    <button class="tab" data-tab="settings" onclick="pickTab('c','settings',event)">Settings</button>
+  </div>
+  <div class="hero-search">
+    <div class="wrap">
+      <h2 id="hero-q">Search your guild’s characters</h2>
+      <input class="search-input big-input" id="hero-input" placeholder="Type a character name…" oninput="heroSearch()">
+      <div class="search-hint">Your characters are matched first.</div>
+    </div>
+    <div class="hero-results" id="hero-results"></div>
+  </div>
+  <div class="content" id="content-c" style="padding-top:8px;"></div>
+</div>
+
+<div id="toast"></div>
+
+<!-- sketch toolbar -->
+<div id="sketch-tools">
+  <span>Theme</span>
+  <select onchange="document.getElementById('theme-link').href='../themes/'+this.value+'.css'">
+    <option value="default">Velious</option>
+    <option value="vanilla">Vanilla</option>
+    <option value="kunark">Kunark</option>
+  </select>
+  <button onclick="setW('100%')">Desktop</button>
+  <button onclick="setW('768px')">Tablet</button>
+  <button onclick="setW('390px')">Phone</button>
+</div>
+
+<script>
+  // ---- fake-but-real guild data ----
+  const CHARS = {
+    mine: [
+      { name:'Bashley',   lvl:58, race:'Half Elf',  cls:'Ranger' },
+      { name:'Biteaucul', lvl:60, race:'Dark Elf',  cls:'Necromancer' },
+      { name:'Slampeach', lvl:60, race:'Iksar',     cls:'Shadow Knight' },
+    ],
+    others: [
+      { name:'Dwarforge',  lvl:51, race:'Dwarf',     cls:'Cleric' },
+      { name:'Mistyveil',  lvl:60, race:'Gnome',     cls:'Magician' },
+      { name:'Sneakytoes', lvl:58, race:'Halfling',  cls:'Rogue' },
+      { name:'Thwackz',    lvl:60, race:'Ogre',      cls:'Warrior' },
+      { name:'Zephyrwind', lvl:55, race:'Wood Elf',  cls:'Druid' },
+    ],
+    special: [
+      { name:'Findom',  race:'Iksar', kind:'bank' },
+      { name:'Mulebot', race:'Human', kind:'bot'  },
+    ],
+  };
+
+  function rowHTML(c, badge) {
+    const sub = c.kind ? (c.kind==='bank'?'Guild bank — shared items & coin':'Guild bot — overflow storage')
+                       : `Level ${c.lvl} ${c.race} ${c.cls}`;
+    const tag = badge==='you' ? '<span class="tag you">you</span>'
+              : c.kind==='bank' ? '<span class="tag bank">bank</span>'
+              : c.kind==='bot'  ? '<span class="tag bot">bot</span>' : '';
+    return `<div class="char-row" onclick="toast('→ Opens ${c.name}\\'s in-game inventory window (sketch 002)')">
+      <div><div class="char-name">${c.name}</div><div class="char-sub">${sub}</div></div>
+      <div class="tags">${tag}<span class="chev">›</span></div>
+    </div>`;
+  }
+
+  function listHTML(filter='') {
+    const f = filter.trim().toLowerCase();
+    const match = c => !f || c.name.toLowerCase().includes(f);
+    const mine    = CHARS.mine.filter(match);
+    const others  = CHARS.others.filter(match);
+    const special = CHARS.special.filter(match);
+    let h = `<div class="listhead"><h2>Characters</h2><span class="q">“What does this character have?”</span></div>`;
+    h += `<div class="searchbar"><input class="search-input" placeholder="Search guild characters by name…" value="${filter}" oninput="onSearch(this)"><div class="search-hint">Your characters match first.</div></div>`;
+    if (mine.length)    { h += `<div class="group-label">Your characters</div>` + mine.map(c=>rowHTML(c,'you')).join(''); }
+    if (others.length)  { h += `<div class="group-label">Guild</div>` + others.map(c=>rowHTML(c)).join(''); }
+    if (special.length) { h += `<div class="group-label">Banks &amp; bots</div>` + special.map(c=>rowHTML(c)).join(''); }
+    if (!mine.length && !others.length && !special.length) h += `<div class="placeholder">No characters match “${filter}”.</div>`;
+    return h;
+  }
+
+  const TABQ = {
+    inventory: ['Inventory', '“Which characters have this item?” — guild-wide item list with holders + PigParse price + wiki link.', 'sketch 003'],
+    banks:     ['Banks', '“What’s in the guild banks?” — banks-only list + total PigParse value + total platinum.', 'sketch 003'],
+    wishlist:  ['Wishlist', '“What can I get to improve my characters?” — per-character, per-equipment-slot upgrade wishlist with wiki suggestions + Discord pings. Your notification inbox + ping prefs live here too (every alert is about a wishlist item) — the unread badge sits on this tab.', 'sketch 004'],
+    settings:  ['Settings', 'Theme · Watcher Codes · Set Class &amp; Level · My Characters · Admin — folded in here. (Notifications moved to the Wishlist tab.)', 'this sketch (Settings list)'],
+  };
+
+  function tabBody(tab, filter='') {
+    if (tab==='characters') return listHTML(filter);
+    const [name,q,where] = TABQ[tab];
+    return `<div class="listhead"><h2>${name}</h2></div>
+      <div class="placeholder">${q}<br><br><b>${name}</b> layout is explored in <b>${where}</b>.</div>`;
+  }
+
+  // ---- state per variant ----
+  const state = { a:'characters', b:'characters', c:'characters' };
+  function render(v){ document.getElementById('content-'+v).innerHTML = tabBody(state[v]); }
+
+  function pickTab(v, tab, e){
+    state[v]=tab;
+    const strip = document.querySelector(`[data-strip="${v}"]`);
+    strip.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+    render(v);
+    if(v==='c'){ document.querySelector('#variant-c .hero-search').style.display = tab==='characters' ? 'block':'none'; }
+  }
+
+  function onSearch(inp){
+    // re-render the active variant's character list, preserving focus + caret
+    const v = ['a','b','c'].find(x=>document.getElementById('variant-'+x).classList.contains('active'));
+    const val = inp.value;
+    document.getElementById('content-'+v).innerHTML = listHTML(val);
+    const ni = document.querySelector('#content-'+v+' .search-input');
+    if(ni){ ni.focus(); ni.setSelectionRange(val.length,val.length); }
+  }
+
+  function heroSearch(){
+    const val = document.getElementById('hero-input').value;
+    const f = val.trim().toLowerCase();
+    const box = document.getElementById('hero-results');
+    if(!f){ box.innerHTML=''; return; }
+    const score = c => (CHARS.mine.includes(c)?0:CHARS.others.includes(c)?1:2);
+    const all = [...CHARS.mine,...CHARS.others,...CHARS.special]
+      .filter(c=>c.name.toLowerCase().includes(f))
+      .sort((a,b)=>score(a)-score(b)||a.name.localeCompare(b.name));
+    box.innerHTML = all.length
+      ? all.map(c=>`<div class="hero-result" style="cursor:pointer" onclick="toast('→ Opens ${c.name}\\'s inventory window (sketch 002)')"><b>${c.name}</b> — ${c.kind?('guild '+c.kind):('L'+c.lvl+' '+c.race+' '+c.cls)} ${CHARS.mine.includes(c)?'· <span style=\\'color:var(--accent)\\'>yours</span>':''}</div>`).join('')
+      : `<div class="hero-result">No characters match “${val}”.</div>`;
+  }
+
+  // ---- variant + toolbar infra ----
+  function showVariant(v, e){
+    document.querySelectorAll('.variant').forEach(x=>x.classList.remove('active'));
+    document.getElementById('variant-'+v).classList.add('active');
+    document.querySelectorAll('.variant-tab').forEach(t=>t.classList.remove('active'));
+    e.target.classList.add('active');
+  }
+  let toastT;
+  function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2200); }
+  function setW(w){ document.querySelectorAll('.content, .side-content, .hero-search .wrap, .hero-results').forEach(el=>{ el.style.maxWidth = w==='100%'?'':w; el.style.marginLeft='auto'; el.style.marginRight='auto'; }); }
+
+  // initial paint
+  render('a'); render('b'); render('c');
+</script>
+</body>
+</html>

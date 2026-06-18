@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sketch 002 — Character Inventory Window</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;600;700&family=IM+Fell+English&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../themes/default.css" id="theme-link">
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:15px; padding-top:44px; }
+  h1,h2,h3 { font-family:var(--font-display); font-weight:var(--weight-display); margin:0; }
+  a { color:var(--accent); }
+
+  #variant-nav { position:fixed; top:0; left:0; right:0; z-index:9998; background:#05080f; border-bottom:1px solid var(--border);
+    padding:7px 14px; display:flex; gap:8px; align-items:center; font-family:system-ui; font-size:12.5px; }
+  #variant-nav .lbl { color:#7f8ba0; margin-right:4px; }
+  .variant-tab { background:transparent; color:#c8d4e4; border:1px solid #2a3850; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12.5px; }
+  .variant-tab.active { background:var(--accent); color:#06101e; border-color:var(--accent); font-weight:600; }
+  .variant { display:none; } .variant.active { display:block; }
+
+  /* shell crumbs */
+  .topbar { display:flex; align-items:center; gap:14px; padding:13px 22px; border-bottom:1px solid var(--border); background:var(--bg-2); }
+  .crumb { color:var(--text-dim); font-size:13px; }
+  .crumb a { text-decoration:none; }
+  .charhead { display:flex; align-items:baseline; gap:12px; padding:16px 22px 4px; }
+  .charhead h1 { color:var(--accent); font-size:24px; }
+  .charhead .meta { color:var(--text-dim); font-size:14px; }
+  .viewtoggle { margin-left:auto; display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .viewtoggle button { background:transparent; color:var(--text-dim); border:none; font-family:var(--font-display); text-transform:uppercase; letter-spacing:.5px; font-size:12px; padding:7px 14px; cursor:pointer; }
+  .viewtoggle button.active { background:var(--accent); color:#06101e; }
+
+  .wrap { padding:14px 22px 60px; }
+
+  /* ----- EQ slot cells ----- */
+  .slot { position:relative; width:62px; height:62px; background:var(--slot); border:1px solid var(--slot-edge);
+    border-radius:3px; cursor:default; transition:all .12s ease; overflow:hidden; }
+  .slot .ico { position:absolute; inset:6px; border-radius:2px; overflow:hidden; }
+  .slot .ico img { width:100%; height:100%; object-fit:contain; image-rendering:pixelated; display:block; }
+  .slot.empty .ico { display:none; }
+  .slot.empty::after { content:attr(data-slot); position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    text-align:center; font-size:8.5px; letter-spacing:.4px; text-transform:uppercase; color:#445; padding:3px; font-family:var(--font-body); }
+  .slot.filled { cursor:pointer; }
+  .slot.filled:hover { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); transform:scale(1.04); }
+  .slot .name { position:absolute; left:0; right:0; bottom:0; font-size:7.5px; line-height:1.05; padding:2px 3px; text-align:center;
+    background:rgba(0,0,0,.55); color:var(--text); }
+  .slot .count { position:absolute; top:1px; right:2px; font-size:10px; color:#fff; text-shadow:0 0 3px #000,0 0 3px #000; font-family:var(--font-body); }
+  .slot .bagmark { position:absolute; top:1px; left:2px; font-size:10px; color:var(--accent); text-shadow:0 0 3px #000; }
+
+  /* paperdoll layout (A & C) */
+  .paperdoll { display:grid; grid-template-columns:auto 1fr auto; gap:18px; align-items:start; max-width:560px; }
+  .equip-col { display:grid; grid-template-columns:repeat(2,62px); gap:6px; }
+  .doll { align-self:stretch; min-height:260px; border:1px dashed var(--border); border-radius:8px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; color:#3a4a63; gap:8px; background:radial-gradient(ellipse at center, rgba(168,197,224,.05), transparent 70%); }
+  .doll .silhouette { font-size:74px; line-height:1; filter:grayscale(1) opacity(.5); }
+  .doll .acline { font-family:var(--font-display); color:var(--text-dim); font-size:13px; }
+  .doll .acline b { color:var(--accent); }
+
+  .section-label { font-family:var(--font-display); text-transform:uppercase; letter-spacing:.7px; font-size:12px; color:var(--accent); margin:22px 2px 8px; }
+  .weaponrow, .generalrow { display:grid; grid-template-columns:repeat(8,62px); gap:6px; }
+  .hint { color:var(--text-dim); font-size:12.5px; margin:6px 2px 0; }
+
+  /* grouped layout (B) */
+  .groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; max-width:980px; }
+  .group-card { border:1px solid var(--border); border-radius:8px; background:var(--panel); padding:12px 14px; }
+  .group-card h3 { color:var(--accent); font-size:14px; text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; }
+  .group-grid { display:grid; grid-template-columns:repeat(auto-fill,62px); gap:6px; }
+
+  /* examine popover (A & B) */
+  #examine { position:fixed; z-index:9990; width:268px; background:#070d18; border:1px solid var(--accent-2);
+    border-radius:6px; padding:11px 13px; display:none; box-shadow:0 10px 30px rgba(0,0,0,.6); font-size:13px; pointer-events:none; }
+  #examine.show { display:block; }
+  .ex-name { font-family:var(--font-display); color:var(--accent); font-size:15px; margin-bottom:2px; }
+  .ex-flags { color:var(--status-other); font-size:11px; letter-spacing:.5px; text-transform:uppercase; margin-bottom:6px; }
+  .ex-line { font-size:12.5px; color:var(--text); line-height:1.5; }
+  .ex-stat { color:var(--status-ok); }
+  .ex-div { border-top:1px solid var(--border); margin:8px 0; }
+  .ex-foot { font-size:11.5px; color:var(--text-dim); line-height:1.6; }
+  .ex-foot a { color:var(--accent); }
+  .ex-price { color:var(--status-other); }
+
+  /* pinned panel (C) */
+  .layout-pin { display:grid; grid-template-columns:1fr 290px; gap:20px; align-items:start; }
+  #pin, .pinpanel { border:1px solid var(--border); border-radius:8px; background:var(--panel); padding:14px 16px; position:sticky; top:60px; min-height:200px; }
+  #pin .empty-pin, .pinpanel .empty-pin { color:var(--text-dim); font-style:italic; text-align:center; padding:40px 8px; }
+
+  /* bag modal */
+  #bagscrim { position:fixed; inset:0; background:rgba(0,0,0,.55); display:none; z-index:9991; }
+  #bagscrim.show { display:flex; align-items:center; justify-content:center; }
+  .bagwin { background:var(--bg-2); border:1px solid var(--accent-2); border-radius:8px; padding:16px 18px; width:380px; box-shadow:0 20px 50px rgba(0,0,0,.7); }
+  .bagwin h3 { color:var(--accent); font-size:15px; margin-bottom:3px; }
+  .bagwin .bsub { color:var(--text-dim); font-size:12px; margin-bottom:12px; }
+  .baggrid { display:grid; grid-template-columns:repeat(5,62px); gap:6px; }
+  .bagwin .x { float:right; cursor:pointer; color:var(--text-dim); font-size:18px; line-height:1; }
+
+  #sketch-tools { position:fixed; bottom:12px; right:12px; z-index:9999; font-family:system-ui; font-size:12px; background:rgba(0,0,0,.72);
+    color:#fff; padding:8px 12px; border-radius:8px; opacity:.4; transition:opacity .2s; display:flex; gap:8px; align-items:center; }
+  #sketch-tools:hover { opacity:1; }
+  #sketch-tools select { font-size:12px; background:#1a1a1a; color:#fff; border:1px solid #444; border-radius:5px; padding:3px 7px; }
+</style>
+</head>
+<body>
+
+<div id="variant-nav">
+  <span class="lbl">Sketch 002 · Character inventory window:</span>
+  <button class="variant-tab active" onclick="showVariant('d',event)">D · Chosen ★ (paperdoll + click-to-pin + bank below)</button>
+  <button class="variant-tab" onclick="showVariant('a',event)">A · Paperdoll (hover)</button>
+  <button class="variant-tab" onclick="showVariant('b',event)">B · Grouped panels</button>
+  <button class="variant-tab" onclick="showVariant('c',event)">C · Paperdoll + pin</button>
+</div>
+
+<!-- ===== VARIANT D — CHOSEN: paperdoll + click-to-pin + bank below general (no toggle) ===== -->
+<div class="variant active" id="variant-d">
+  <div class="topbar"><span class="crumb"><a href="#">Characters</a> › <span style="color:var(--text)">Bashley</span></span></div>
+  <div class="charhead"><h1>Bashley</h1><span class="meta">Level 58 Half Elf Ranger · yours</span></div>
+  <div class="wrap"><div class="layout-pin">
+    <div>
+      <div id="doll-d"></div>
+      <div class="section-label">General inventory</div><div class="generalrow" id="gen-d"></div>
+      <div class="section-label">Bank — stored items</div><div class="generalrow" id="bank-d"></div>
+      <div class="hint">Click any item to pin its details on the right. Click a <span style="color:var(--accent)">⊞ bag</span> to open it. Item icons load live from the P1999 wiki.</div>
+    </div>
+    <div id="pin-d" class="pinpanel"><div class="empty-pin">Click an item to see its details —<br>name, stats, PigParse price, wiki link, last-synced.</div></div>
+  </div></div>
+</div>
+
+<!-- ===== VARIANT A ===== -->
+<div class="variant" id="variant-a">
+  <div class="topbar"><span class="crumb"><a href="#">Characters</a> › <span style="color:var(--text)">Bashley</span></span></div>
+  <div class="charhead"><h1>Bashley</h1><span class="meta">Level 58 Half Elf Ranger · yours</span>
+    <span class="viewtoggle"><button class="active" onclick="setBank('a',false,event)">Inventory</button><button onclick="setBank('a',true,event)">Bank</button></span>
+  </div>
+  <div class="wrap"><div id="doll-a"></div>
+    <div class="section-label" id="genlabel-a">General inventory</div><div class="generalrow" id="gen-a"></div>
+    <div class="hint">Hover an item to examine it (name, stats, PigParse price, wiki link, last-synced). Click a <span style="color:var(--accent)">⊞ bag</span> to open it.</div>
+  </div>
+</div>
+
+<!-- ===== VARIANT B ===== -->
+<div class="variant" id="variant-b">
+  <div class="topbar"><span class="crumb"><a href="#">Characters</a> › <span style="color:var(--text)">Bashley</span></span></div>
+  <div class="charhead"><h1>Bashley</h1><span class="meta">Level 58 Half Elf Ranger · yours</span>
+    <span class="viewtoggle"><button class="active" onclick="setBank('b',false,event)">Inventory</button><button onclick="setBank('b',true,event)">Bank</button></span>
+  </div>
+  <div class="wrap"><div class="groups" id="groups-b"></div>
+    <div class="hint">A web-native abstraction: slots grouped into labeled panels instead of the literal paperdoll. Same hover-to-examine + bag drill-down.</div>
+  </div>
+</div>
+
+<!-- ===== VARIANT C ===== -->
+<div class="variant" id="variant-c">
+  <div class="topbar"><span class="crumb"><a href="#">Characters</a> › <span style="color:var(--text)">Bashley</span></span></div>
+  <div class="charhead"><h1>Bashley</h1><span class="meta">Level 58 Half Elf Ranger · yours</span>
+    <span class="viewtoggle"><button class="active" onclick="setBank('c',false,event)">Inventory</button><button onclick="setBank('c',true,event)">Bank</button></span>
+  </div>
+  <div class="wrap"><div class="layout-pin">
+    <div><div id="doll-c"></div>
+      <div class="section-label" id="genlabel-c">General inventory</div><div class="generalrow" id="gen-c"></div></div>
+    <div id="pin"><div class="empty-pin">Click an item to pin its details here.<br><br>Better for touch — no hover needed.</div></div>
+  </div></div>
+</div>
+
+<div id="examine"></div>
+
+<div id="bagscrim" onclick="if(event.target.id==='bagscrim')closeBag()"><div class="bagwin" id="bagwin"></div></div>
+
+<div id="sketch-tools">
+  <span>Theme</span>
+  <select onchange="document.getElementById('theme-link').href='../themes/'+this.value+'.css'">
+    <option value="default">Velious</option><option value="vanilla">Vanilla</option><option value="kunark">Kunark</option>
+  </select>
+</div>
+
+<script>
+// ---------- item data (real P99 names; EQ-style examine) ----------
+const I = {
+  earring_solstice:{n:"Earring of the Solstice",f:"MAGIC LORE",slot:"EAR",ac:10,st:["HP +35","MANA +40","SV FIRE +10"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"~2,500pp",wiki:"Earring_of_the_Solstice",sync:"2026-06-16 21:40"},
+  crown_narandi:{n:"Crown of Narandi",f:"MAGIC LORE NO DROP",slot:"HEAD",ac:32,st:["STR +10","STA +10","HP +90","MANA +90","SV COLD +25"],wt:"2.0",sz:"SMALL",cl:"WAR PAL SHD RNG",rc:"ALL",price:"—",wiki:"Crown_of_Narandi",sync:"2026-06-16 21:40"},
+  ssra_eyepatch:{n:"Ssra's Bloodstone Eyepatch",f:"MAGIC LORE NO DROP",slot:"FACE",ac:15,st:["DEX +9","AGI +9","HP +45","MANA +45"],wt:"0.5",sz:"SMALL",cl:"ALL",rc:"ALL",price:"—",wiki:"Ssra%27s_Bloodstone_Eyepatch",sync:"2026-06-15 02:10"},
+  royal_velium_necklace:{n:"Royal Velium Necklace",f:"MAGIC",slot:"NECK",ac:18,st:["WIS +8","INT +8","HP +50","SV MAGIC +10"],wt:"0.8",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~3,000pp",wiki:"Royal_Velium_Necklace",sync:"2026-06-16 21:40"},
+  bloodstained_mantle:{n:"Bloodstained Mantle",f:"MAGIC LORE",slot:"SHOULDERS",ac:12,st:["STR +5","DEX +5","HP +25","MANA +25"],wt:"1.5",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~1,500pp",wiki:"Bloodstained_Mantle",sync:"2026-06-16 21:40"},
+  bloodstained_vambraces:{n:"Bloodstained Mail Vambraces",f:"MAGIC LORE",slot:"ARMS",ac:20,st:["STR +6","STA +6","HP +35"],wt:"3.0",sz:"MEDIUM",cl:"WAR RNG SHD PAL",rc:"ALL",price:"—",wiki:"Bloodstained_Mail_Vambraces",sync:"2026-06-16 21:40"},
+  cloak_flames:{n:"Cloak of Flames",f:"MAGIC",slot:"BACK",ac:10,st:["DEX +5","AGI +5","HP +30","Haste +10%"],wt:"1.5",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~85,000pp",wiki:"Cloak_of_Flames",sync:"2026-06-16 21:40"},
+  bracelet_shadowhive:{n:"Bracelet of the Shadow Hive",f:"MAGIC LORE",slot:"WRIST",ac:14,st:["DEX +6","HP +40","SV DISEASE +10"],wt:"0.6",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~1,200pp",wiki:"Bracelet_of_the_Shadow_Hive",sync:"2026-06-14 19:55"},
+  crystal_chitin_gauntlets:{n:"Crystal Chitin Gauntlets",f:"MAGIC LORE",slot:"HANDS",ac:22,st:["STR +8","DEX +8","HP +45","AC bonus"],wt:"2.5",sz:"MEDIUM",cl:"WAR RNG SHD PAL",rc:"ALL",price:"—",wiki:"Crystal_Chitin_Gauntlets",sync:"2026-06-16 21:40"},
+  ring_ancients:{n:"Ring of the Ancients",f:"MAGIC LORE",slot:"FINGERS",ac:10,st:["INT +10","WIS +10","MANA +60"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"~6,000pp",wiki:"Ring_of_the_Ancients",sync:"2026-06-16 21:40"},
+  coldain_insignia:{n:"Coldain Hero's Insignia Ring",f:"MAGIC LORE NO DROP",slot:"FINGERS",ac:15,st:["STR +9","STA +9","HP +75","MANA +75"],wt:"0.2",sz:"TINY",cl:"ALL",rc:"ALL",price:"—",wiki:"Coldain_Hero%27s_Insignia_Ring",sync:"2026-06-16 21:40"},
+  black_panther_bp:{n:"Black Panther Breastplate",f:"MAGIC LORE",slot:"CHEST",ac:38,st:["STR +12","STA +10","HP +95","SV ALL +10"],wt:"6.0",sz:"LARGE",cl:"WAR RNG",rc:"ALL",price:"—",wiki:"Black_Panther_Breastplate",sync:"2026-06-16 21:40"},
+  cc_leggings:{n:"Crystal Chitin Leggings",f:"MAGIC LORE",slot:"LEGS",ac:30,st:["STR +9","STA +9","HP +70"],wt:"5.0",sz:"LARGE",cl:"WAR RNG SHD PAL",rc:"ALL",price:"—",wiki:"Crystal_Chitin_Leggings",sync:"2026-06-16 21:40"},
+  cc_boots:{n:"Crystal Chitin Boots",f:"MAGIC LORE",slot:"FEET",ac:24,st:["AGI +8","HP +50","SV COLD +10"],wt:"3.0",sz:"MEDIUM",cl:"WAR RNG SHD PAL",rc:"ALL",price:"—",wiki:"Crystal_Chitin_Boots",sync:"2026-06-16 21:40"},
+  runed_bolster_belt:{n:"Runed Bolster Belt",f:"MAGIC LORE",slot:"WAIST",ac:16,st:["STR +7","HP +45","MANA +20"],wt:"1.0",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~2,200pp",wiki:"Runed_Bolster_Belt",sync:"2026-06-16 21:40"},
+  swiftwind:{n:"Swiftwind",f:"MAGIC LORE NO DROP",slot:"PRIMARY",skill:"1H Slashing",dmg:11,dly:24,st:["DEX +10","AGI +10","HP +35","Haste"],wt:"3.5",sz:"MEDIUM",cl:"RNG",rc:"ALL",price:"—",wiki:"Swiftwind",sync:"2026-06-16 21:40"},
+  earthcaller:{n:"Earthcaller",f:"MAGIC LORE NO DROP",slot:"SECONDARY",skill:"1H Blunt",dmg:10,dly:27,st:["STR +10","STA +10","Proc: Spirit of Wood"],wt:"4.0",sz:"MEDIUM",cl:"RNG",rc:"ALL",price:"—",wiki:"Earthcaller",sync:"2026-06-16 21:40"},
+  crystaline_arrow:{n:"Crystalline Arrow",f:"",slot:"AMMO",skill:"Archery",dmg:8,dly:0,st:["Bonus DMG +5"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"3pp ea",wiki:"Crystalline_Arrow",sync:"2026-06-16 21:40",count:200},
+  // general inventory
+  large_lambent_bag:{n:"Large Lambent Bag",f:"MAGIC",slot:"GENERAL",st:["Capacity: 10","Size cap: GIANT","WT reduce 75%"],wt:"2.0",sz:"GIANT",cl:"ALL",rc:"ALL",price:"~4,000pp",wiki:"Large_Lambent_Bag",sync:"2026-06-16 21:40",container:true,bag:["peridot","cloudy_potion","word_suffering","spider_silk","rusty_dagger"]},
+  tradeskill_satchel:{n:"Tradeskill Satchel",f:"",slot:"GENERAL",st:["Capacity: 8"],wt:"1.0",sz:"GIANT",cl:"ALL",rc:"ALL",price:"~600pp",wiki:"Tradeskill_Satchel",sync:"2026-06-16 21:40",container:true,bag:["brick_velium","blue_diamond","fire_emerald"]},
+  wurmslayer:{n:"Wurmslayer",f:"MAGIC",slot:"GENERAL",skill:"1H Slashing",dmg:12,dly:33,st:["STR +5","Proc: Wave of Heat"],wt:"6.5",sz:"MEDIUM",cl:"WAR RNG ROG",rc:"ALL",price:"~9,000pp",wiki:"Wurmslayer",sync:"2026-06-13 23:02"},
+  iron_ration:{n:"Iron Ration",f:"",slot:"GENERAL",st:["Food — keeps you fed"],wt:"0.5",sz:"SMALL",cl:"ALL",rc:"ALL",price:"1pp",wiki:"Iron_Ration",sync:"2026-06-16 21:40",count:20},
+  bone_chips:{n:"Bone Chips",f:"",slot:"GENERAL",st:["Spell reagent (necro pets)"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"2pp ea",wiki:"Bone_Chips",sync:"2026-06-16 21:40",count:14},
+  // bag contents
+  peridot:{n:"Peridot",f:"",slot:"BAG",st:["Gem / spell reagent"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"~12pp",wiki:"Peridot",sync:"2026-06-16 21:40",count:12},
+  cloudy_potion:{n:"Cloudy Potion",f:"MAGIC",slot:"BAG",st:["Invisibility"],wt:"0.3",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~5pp",wiki:"Cloudy_Potion",sync:"2026-06-16 21:40",count:5},
+  word_suffering:{n:"Word of Suffering",f:"MAGIC LORE",slot:"BAG",st:["Spell scroll (necro 60)"],wt:"0.1",sz:"SMALL",cl:"NEC",rc:"ALL",price:"~1,800pp",wiki:"Word_of_Suffering",sync:"2026-06-16 21:40"},
+  spider_silk:{n:"Spider Silk",f:"",slot:"BAG",st:["Tailoring component"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"~1pp",wiki:"Spider_Silk",sync:"2026-06-16 21:40",count:8},
+  rusty_dagger:{n:"Rusty Dagger",f:"",slot:"BAG",skill:"1H Piercing",dmg:3,dly:25,st:[],wt:"1.0",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~1pp",wiki:"Rusty_Dagger",sync:"2026-06-10 18:30"},
+  brick_velium:{n:"Brick of Velium",f:"",slot:"BAG",st:["Smithing / jewelcraft ore"],wt:"2.0",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~30pp",wiki:"Brick_of_Velium",sync:"2026-06-16 21:40",count:4},
+  blue_diamond:{n:"Blue Diamond",f:"",slot:"BAG",st:["Jewelcraft gem"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"~250pp",wiki:"Blue_Diamond",sync:"2026-06-16 21:40",count:2},
+  fire_emerald:{n:"Fire Emerald",f:"",slot:"BAG",st:["Jewelcraft gem"],wt:"0.1",sz:"TINY",cl:"ALL",rc:"ALL",price:"~40pp",wiki:"Fire_Emerald",sync:"2026-06-16 21:40",count:3},
+  // bank
+  velium_bar:{n:"Velium Bar",f:"",slot:"BANK",st:["Smithing ore"],wt:"3.0",sz:"SMALL",cl:"ALL",rc:"ALL",price:"~45pp",wiki:"Velium_Bar",sync:"2026-06-16 21:40",count:8},
+  bank_bag:{n:"Bag of the Tinkerers",f:"",slot:"BANK",st:["Capacity: 10"],wt:"0.5",sz:"GIANT",cl:"ALL",rc:"ALL",price:"~3,000pp",wiki:"Bag_of_the_Tinkerers",sync:"2026-06-16 21:40",container:true,bag:["blue_diamond","fire_emerald","brick_velium"]},
+  shawl_8:{n:"Shawl of Concentration",f:"MAGIC LORE NO DROP",slot:"BANK",ac:8,st:["WIS +8","INT +8","MANA +50"],wt:"0.5",sz:"SMALL",cl:"ALL",rc:"ALL",price:"—",wiki:"Coldain_Shawl",sync:"2026-06-12 11:20"},
+};
+
+const PAPERDOLL_LEFT  = [["EAR","earring_solstice"],["HEAD","crown_narandi"],["FACE","ssra_eyepatch"],["EAR",null],["NECK","royal_velium_necklace"],["SHOULDERS","bloodstained_mantle"],["ARMS","bloodstained_vambraces"],["BACK","cloak_flames"]];
+const PAPERDOLL_RIGHT = [["WRIST","bracelet_shadowhive"],["WRIST",null],["HANDS","crystal_chitin_gauntlets"],["FINGERS","ring_ancients"],["FINGERS","coldain_insignia"],["CHEST","black_panther_bp"],["LEGS","cc_leggings"],["FEET","cc_boots"]];
+const PAPERDOLL_BOTTOM= [["CHARM",null],["PRIMARY","swiftwind"],["SECONDARY","earthcaller"],["RANGE",null],["AMMO","crystaline_arrow"],["WAIST","runed_bolster_belt"]];
+const GENERAL = ["large_lambent_bag","wurmslayer","iron_ration","bone_chips",null,null,null,"tradeskill_satchel"];
+const BANK_SLOTS = ["bank_bag","velium_bar","shawl_8",null,null,null,null,null];
+const BANK_GENERAL = []; // bank uses its own 8
+
+// real P1999 wiki item icons (https://wiki.project1999.com/images/Item_NNN.png), by category;
+// any that fail to load fall back to the colored tile beneath via onerror.
+const ICON = {
+  cloak_flames:658, wurmslayer:736, swiftwind:736, earthcaller:736, rusty_dagger:736,
+  ring_ancients:563, coldain_insignia:563, earring_solstice:563, royal_velium_necklace:563, ssra_eyepatch:563,
+  black_panther_bp:624, cc_leggings:624, cc_boots:624, bloodstained_mantle:624, bloodstained_vambraces:624,
+  crystal_chitin_gauntlets:624, bracelet_shadowhive:624, runed_bolster_belt:624, crown_narandi:624, shawl_8:624,
+  peridot:966, blue_diamond:966, fire_emerald:966, brick_velium:966, velium_bar:966,
+  cloudy_potion:585,
+};
+function cell(slotName, key){
+  if(!key) return `<div class="slot empty" data-slot="${slotName}"></div>`;
+  const it=I[key]; const cnt=it.count?`<span class="count">${it.count}</span>`:'';
+  const bag=it.container?`<span class="bagmark">⊞</span>`:'';
+  const hue = key.length*53 % 360;
+  const ic = ICON[key];
+  const img = ic ? `<img src="https://wiki.project1999.com/images/Item_${ic}.png" alt="" onerror="this.style.display='none'">` : '';
+  return `<div class="slot filled" data-key="${key}">
+    <div class="ico" style="background:linear-gradient(135deg,hsl(${hue} 45% 30%),hsl(${(hue+40)%360} 40% 18%));">${img}</div>
+    ${bag}${cnt}<div class="name">${it.n.length>16?it.n.slice(0,15)+'…':it.n}</div></div>`;
+}
+
+function examineBody(key){
+  const it=I[key]; let h=`<div class="ex-name">${it.n}</div>`;
+  if(it.f) h+=`<div class="ex-flags">${it.f}</div>`;
+  h+=`<div class="ex-line">Slot: ${it.slot}${it.skill?`  ·  ${it.skill}`:''}</div>`;
+  if(it.dmg) h+=`<div class="ex-line">DMG: ${it.dmg}   DLY: ${it.dly}</div>`;
+  if(it.ac) h+=`<div class="ex-line">AC: ${it.ac}</div>`;
+  if(it.st&&it.st.length) h+=`<div class="ex-line ex-stat">${it.st.join('  ·  ')}</div>`;
+  h+=`<div class="ex-line">WT: ${it.wt}   Size: ${it.sz}</div>`;
+  h+=`<div class="ex-line" style="color:var(--text-dim)">Class: ${it.cl}   Race: ${it.rc}</div>`;
+  h+=`<div class="ex-div"></div><div class="ex-foot">`;
+  h+=`PigParse: <span class="ex-price">${it.price}</span>${it.price!=='—'?' <a href="#" onclick="return false">↗</a>':''}<br>`;
+  h+=`Wiki: <a href="https://wiki.project1999.com/${it.wiki}" onclick="return false">${it.n} ↗</a><br>`;
+  h+=`Last synced: ${it.sync}</div>`;
+  return h;
+}
+
+// ---------- render ----------
+function renderPaperdoll(side){
+  const left=PAPERDOLL_LEFT.map(s=>cell(s[0],s[1])).join('');
+  const right=PAPERDOLL_RIGHT.map(s=>cell(s[0],s[1])).join('');
+  const bottom=PAPERDOLL_BOTTOM.map(s=>cell(s[0],s[1])).join('');
+  const ac=290;
+  document.getElementById('doll-'+side).innerHTML =
+    `<div class="paperdoll">
+       <div class="equip-col">${left}</div>
+       <div class="doll"><div class="silhouette">⚔</div><div class="acline">AC <b>${ac}</b> · ATK 1180</div><div class="acline" style="font-size:11px">Half Elf Ranger</div></div>
+       <div class="equip-col">${right}</div>
+     </div>
+     <div class="section-label">Worn — weapons &amp; misc</div>
+     <div class="weaponrow" style="grid-template-columns:repeat(6,62px)">${bottom}</div>`;
+}
+function renderGeneral(side, bank){
+  const arr = bank ? BANK_SLOTS : GENERAL;
+  document.getElementById('gen-'+side).innerHTML = arr.map(k=>cell('GENERAL',k)).join('');
+}
+function renderGrouped(bank){
+  const G = (title,cells)=>`<div class="group-card"><h3>${title}</h3><div class="group-grid">${cells}</div></div>`;
+  const armor=[["HEAD","crown_narandi"],["FACE","ssra_eyepatch"],["NECK","royal_velium_necklace"],["SHOULDERS","bloodstained_mantle"],["ARMS","bloodstained_vambraces"],["BACK","cloak_flames"],["CHEST","black_panther_bp"],["LEGS","cc_leggings"],["FEET","cc_boots"],["HANDS","crystal_chitin_gauntlets"],["WRIST","bracelet_shadowhive"],["WAIST","runed_bolster_belt"]];
+  const jewel=[["EAR","earring_solstice"],["EAR",null],["FINGERS","ring_ancients"],["FINGERS","coldain_insignia"],["CHARM",null]];
+  const weap=[["PRIMARY","swiftwind"],["SECONDARY","earthcaller"],["RANGE",null],["AMMO","crystaline_arrow"]];
+  const gen=(bank?BANK_SLOTS:GENERAL).map(k=>["GENERAL",k]);
+  document.getElementById('groups-b').innerHTML =
+    G("Worn — Armor", armor.map(s=>cell(s[0],s[1])).join('')) +
+    G("Worn — Jewelry", jewel.map(s=>cell(s[0],s[1])).join('')) +
+    G("Worn — Weapons", weap.map(s=>cell(s[0],s[1])).join('')) +
+    G(bank?"Bank":"General inventory", gen.map(s=>cell(s[0],s[1])).join(''));
+}
+
+// ---------- interactions ----------
+const ex=document.getElementById('examine');
+function showExamine(key, x, y){ ex.innerHTML=examineBody(key); ex.classList.add('show');
+  const w=268, h=ex.offsetHeight; let nx=x+16, ny=y+8;
+  if(nx+w>innerWidth) nx=x-w-16; if(ny+h>innerHeight) ny=innerHeight-h-10; ex.style.left=nx+'px'; ex.style.top=ny+'px'; }
+function hideExamine(){ ex.classList.remove('show'); }
+
+function pinExamine(key, panelId){ document.getElementById(panelId).innerHTML=examineBody(key); }
+function isPinVariant(s){ return s.closest('#variant-c') || s.closest('#variant-d'); }
+
+document.body.addEventListener('mouseover', e=>{
+  const s=e.target.closest('.slot.filled'); if(!s) return;
+  if(isPinVariant(s)) return; // pin variants use click-to-pin, no hover popover
+  showExamine(s.dataset.key, e.clientX, e.clientY);
+});
+document.body.addEventListener('mousemove', e=>{ if(ex.classList.contains('show')){ const s=e.target.closest('.slot.filled'); if(s && !isPinVariant(s)){ const w=268,h=ex.offsetHeight; let nx=e.clientX+16,ny=e.clientY+8; if(nx+w>innerWidth)nx=e.clientX-w-16; if(ny+h>innerHeight)ny=innerHeight-h-10; ex.style.left=nx+'px'; ex.style.top=ny+'px'; } } });
+document.body.addEventListener('mouseout', e=>{ if(e.target.closest('.slot.filled')) hideExamine(); });
+
+document.body.addEventListener('click', e=>{
+  const s=e.target.closest('.slot.filled'); if(!s) return;
+  const key=s.dataset.key, it=I[key];
+  if(it.container){ openBag(key); return; }
+  if(s.closest('#variant-c')) pinExamine(key, 'pin');
+  if(s.closest('#variant-d')) pinExamine(key, 'pin-d');
+});
+
+function openBag(key){
+  const it=I[key]; const cells=it.bag.map(k=>cell('BAG',k)).join('') + Array(Math.max(0,10-it.bag.length)).fill('<div class="slot empty" data-slot=""></div>').join('');
+  document.getElementById('bagwin').innerHTML =
+    `<span class="x" onclick="closeBag()">✕</span><h3>${it.n}</h3><div class="bsub">${it.bag.length} of 10 slots used · hover an item to examine</div><div class="baggrid">${cells}</div>`;
+  document.getElementById('bagscrim').classList.add('show');
+}
+function closeBag(){ document.getElementById('bagscrim').classList.remove('show'); }
+
+const bankState={a:false,b:false,c:false};
+function setBank(v, on, e){ bankState[v]=on; e.target.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active')); e.target.classList.add('active');
+  if(v==='b'){ renderGrouped(on); } else { renderGeneral(v,on); const lbl=document.getElementById('genlabel-'+v); if(lbl) lbl.textContent = on?'Bank — stored items':'General inventory'; }
+}
+
+function showVariant(v,e){ document.querySelectorAll('.variant').forEach(x=>x.classList.remove('active')); document.getElementById('variant-'+v).classList.add('active');
+  document.querySelectorAll('.variant-tab').forEach(t=>t.classList.remove('active')); e.target.classList.add('active'); hideExamine(); }
+
+// initial paint
+renderPaperdoll('d'); renderGeneral('d',false);
+document.getElementById('bank-d').innerHTML = BANK_SLOTS.map(k=>cell('GENERAL',k)).join('');
+renderPaperdoll('a'); renderGeneral('a',false);
+renderGrouped(false);
+renderPaperdoll('c'); renderGeneral('c',false);
+</script>
+</body>
+</html>

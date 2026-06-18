@@ -24,6 +24,10 @@
 		onpin,
 		/** Toggle this container's inline expand (a filled bag click — slots > 0). */
 		onopen,
+		/** Show the transient examine preview (a filled, non-container hover/focus). */
+		onhover,
+		/** Dismiss the transient preview (mouse leave / blur). */
+		onleave,
 		/** True when this is a container (slots > 0) and its inline expand is open. */
 		expanded = false
 	}: {
@@ -31,6 +35,8 @@
 		label?: string;
 		onpin?: (slot: InventorySlot) => void;
 		onopen?: (slot: InventorySlot) => void;
+		onhover?: (slot: InventorySlot, e: MouseEvent) => void;
+		onleave?: () => void;
 		expanded?: boolean;
 	} = $props();
 
@@ -83,6 +89,12 @@
 		aria-label={ariaLabel}
 		aria-expanded={isBag ? expanded : undefined}
 		onclick={activate}
+		onmouseenter={(e) => {
+			// A transient preview fires only for a filled NON-container tile (a bag
+			// opens, it doesn't preview); the parent decides what to render.
+			if (slot && !isBag) onhover?.(slot, e);
+		}}
+		onmouseleave={() => onleave?.()}
 		style={`--tile-hue: ${hue};`}
 	>
 		<span class="ico">

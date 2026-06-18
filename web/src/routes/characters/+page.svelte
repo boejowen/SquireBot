@@ -5,14 +5,14 @@
 	// viewer-first 3-band character list (left) + a scoped viewer-priority search
 	// (top) + the selected character's inventory window (right). Selection is
 	// URL-reflected via ?c=<name> (no per-character route file — one reusable window,
-	// not N routes). This plan (31-03) wires the list + search + selection + the
-	// inventory fetch; the actual InventoryWindow render lands in 31-04, so the window
-	// column shows a "Pick a character" prompt (no selection) or a minimal "Selected"
-	// marker (selection wired, window pending) for now.
+	// not N routes). The list + search + selection (31-03) drives a window-scoped
+	// fetchInventory(selected) into InventoryWindow (31-04) — the in-game paperdoll +
+	// general/bank grids + inline bag expand + hover-preview/click-to-pin examine.
 	//
-	// The pure sort/filter logic lives in $lib/roster (node-tested — roster.test.ts).
-	// The list/search/selection DOM here is NOT covered by node vitest (DOM-blind) —
-	// its browser verification is folded into Plan 31-04's deploy-then-browser-smoke.
+	// The pure sort/filter (roster.ts) + examine order/omission (examine.ts) logic is
+	// node-tested; the list/search/selection + window DOM here is NOT covered by node
+	// vitest (DOM-blind) — its browser verification is the deploy-then-browser-smoke
+	// checkpoint (node vitest can't see the paperdoll render, hover/pin, or bag expand).
 	//
 	// Data load + state machine mirrors guild-views/+page.svelte: onMount one-shot
 	// load; a 401/403 routes to the AuthGate guard (server-truth re-route), else the
@@ -23,11 +23,20 @@
 	import { onMount, getContext } from 'svelte';
 	import Search from '@lucide/svelte/icons/search';
 	import StateBlock from '$lib/components/StateBlock.svelte';
+	import InventoryWindow from '$lib/components/InventoryWindow.svelte';
 	import { AUTH_GUARD_KEY, type AuthGuard } from '$lib/components/AuthGate.svelte';
-	import { Unauthenticated, Forbidden, fetchCharacters, type RosterCharacter } from '$lib/api';
+	import {
+		Unauthenticated,
+		Forbidden,
+		fetchCharacters,
+		fetchInventory,
+		type RosterCharacter,
+		type CharacterInventory
+	} from '$lib/api';
 	import { bandOf, filterRoster, type Band } from '$lib/roster';
 
 	type Status = 'loading' | 'error' | 'ready';
+	type WinStatus = 'loading' | 'error' | 'ready';
 
 	// The AuthGate guard from context (server-truth re-routing on a 401/403, B-2).
 	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
@@ -36,6 +45,14 @@
 	let roster = $state<RosterCharacter[]>([]);
 	let query = $state('');
 	let selected = $state<string | null>(null);
+
+	// Window-scoped state machine (31-04): selecting a character fetches its
+	// inventory into its OWN loading/error/ready inside the window column (the roster
+	// list stays put). `invFor` tracks which char `inv` belongs to so a stale
+	// in-flight response for a previously-selected char can't overwrite the window.
+	let winStatus = $state<WinStatus>('loading');
+	let inv = $state<CharacterInventory | null>(null);
+	let invFor = $state<string | null>(null);
 
 	async function load() {
 		status = 'loading';
@@ -121,6 +138,56 @@
 		if (c.class) parts.push(c.class);
 		return parts.join(' ');
 	}
+
+	// Fetch the selected character's inventory into the window column's own state
+	// machine. A 401/403 routes to the AuthGate guard (same server-truth re-route as
+	// the roster load); any other failure stays the in-window error StateBlock + Retry.
+	// `char` is captured so a late response for a since-changed selection is dropped.
+	async function loadInventory(char: string) {
+		winStatus = 'loading';
+		invFor = char;
+		try {
+			const got = await fetchInventory(char);
+			// Drop a stale response (the user picked another char while this was in flight).
+			if (invFor !== char) return;
+			inv = got;
+			winStatus = 'ready';
+		} catch (err) {
+			if (invFor !== char) return;
+			if (authGuard && (err instanceof Unauthenticated || err instanceof Forbidden)) {
+				authGuard(err);
+			} else {
+				winStatus = 'error';
+			}
+		}
+	}
+
+	function retryInventory() {
+		if (selected) void loadInventory(selected);
+	}
+
+	// Drive the window fetch off the selection. A bare $effect re-runs when `selected`
+	// changes; the guard skips the null (no character) case so the §K prompt shows.
+	$effect(() => {
+		const sel = selected;
+		if (sel === null) {
+			inv = null;
+			invFor = null;
+			return;
+		}
+		// Only (re)fetch when the selection differs from what the window holds.
+		if (invFor !== sel) void loadInventory(sel);
+	});
+
+	// True when the selected character's fetched inventory has zero items anywhere
+	// (equipment + general + bank) — the §K "no inventory synced yet" state (D-11).
+	let noInventory = $derived(
+		winStatus === 'ready' &&
+			inv !== null &&
+			inv.equipment.length === 0 &&
+			inv.general.length === 0 &&
+			inv.bank.length === 0
+	);
 </script>
 
 <svelte:head>
@@ -183,18 +250,31 @@
 			{/if}
 		</div>
 
-		<!-- Right: the inventory window column. 31-03 wires selection; the actual
-		     InventoryWindow render lands in 31-04. Until then: the "Pick a character"
-		     prompt (no selection) or a minimal Selected marker (selection wired). -->
+		<!-- Right: the inventory window column. Selection (?c=) drives a window-scoped
+		     fetch; the column shows its own loading/error/no-inventory states, then the
+		     in-game InventoryWindow (paperdoll + grids + bags + examine). -->
 		<div class="window-col">
 			{#if selected === null}
+				<!-- §K "pick a character" prompt — not an error. -->
 				<div class="prompt">
 					<h2 class="prompt-heading">Pick a character</h2>
 					<p class="prompt-body">Choose a character from the list to see their gear and bags.</p>
 				</div>
-			{:else}
-				<!-- InventoryWindow mounts here in Plan 31-04. -->
-				<p class="selected-marker">Selected: {selected}</p>
+			{:else if winStatus === 'loading'}
+				<StateBlock kind="loading" />
+			{:else if winStatus === 'error'}
+				<StateBlock kind="error" onRetry={retryInventory} />
+			{:else if noInventory}
+				<!-- §K / D-11: selected char with no synced inventory yet (not a crash). -->
+				<div class="prompt">
+					<h2 class="prompt-heading">No inventory synced yet</h2>
+					<p class="prompt-body">
+						{selected} hasn't uploaded inventory yet. Once their watcher syncs, their gear and bags
+						show up here.
+					</p>
+				</div>
+			{:else if inv !== null}
+				<InventoryWindow inventory={inv} />
 			{/if}
 		</div>
 	</div>
@@ -357,13 +437,6 @@
 		line-height: 1.5;
 		max-width: 44ch;
 		color: var(--text);
-	}
-	.selected-marker {
-		font-family: var(--font-body);
-		font-size: 16px;
-		color: var(--text);
-		opacity: 0.85;
-		padding: 16px;
 	}
 
 	/* Mobile: list + window stack (§H). */

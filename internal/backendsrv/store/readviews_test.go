@@ -107,7 +107,7 @@ func TestReadViews_InventoryJoinAndGrouping(t *testing.T) {
 	s := NewStore(db)
 	ctx := context.Background()
 
-	_, charApple := seedOwnerChar(t, db, "owner-a", "Apple")  // non-bank
+	_, charApple := seedOwnerChar(t, db, "owner-a", "Apple")   // non-bank
 	_, charBank := seedOwnerChar(t, db, "owner-b", "Banktoon") // bank toon
 	setCharMeta(t, db, charApple, "NEC", 60, "HUM", false)
 	setCharMeta(t, db, charBank, "WAR", 60, "HUM", true)
@@ -330,6 +330,169 @@ func TestReadViews_PriceNoFanOutOnSharedName(t *testing.T) {
 	}
 	if len(bank) != 1 {
 		t.Fatalf("bank: got %d rows, want exactly 1 (fan-out would inflate bank totals): %+v", len(bank), bank)
+	}
+}
+
+// seedRawFull is the seedRaw twin that sets count + slots explicitly, so a container
+// shell (slots>0) and a stacked item (count>1) are seedable. seedRaw hardcodes
+// count=1, slots=0 and cannot express a container.
+func seedRawFull(t *testing.T, db *sql.DB, charID int64, location, name string, itemID, count, slots, ordinal int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO inventory_item (character_id, location, name, item_id, count, slots, row_ordinal, uploaded_at)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+		charID, location, name, itemID, count, slots, ordinal,
+	); err != nil {
+		t.Fatalf("seed inventory_item %q: %v", name, err)
+	}
+}
+
+// TestReadViews_InventoryForChar_KeepsEmptyAndContainers proves the INV-05 surface
+// keeps the rows InventoryJoin drops: empty slots (item_id=0), container shells
+// (slots>0), and *-Slot* bag-content children — all in row_ordinal order. This is
+// the INVERSE of TestReadViews_InventoryJoinAndGrouping's "excludes empty slot".
+func TestReadViews_InventoryForChar_KeepsEmptyAndContainers(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	_, charID := seedOwnerChar(t, db, "owner-a", "Slampeach")
+	setCharMeta(t, db, charID, "SHM", 60, "TRO", false)
+
+	// Seeded OUT of row_ordinal order to prove the ORDER BY ii.row_ordinal sorts them.
+	seedRawFull(t, db, charID, "General4-Slot1", "Diamond", 1071, 5, 0, 2)          // nested general child (stacked)
+	seedRawFull(t, db, charID, "General4", "Large Bag", 1038, 1, 10, 1)             // container shell, slots=10
+	seedRawFull(t, db, charID, "Finger2", "", 0, 0, 0, 4)                           // EMPTY slot (item_id=0, blank name)
+	seedRawFull(t, db, charID, "Bank1-Slot1", "Words of the Spoken", 7001, 1, 0, 3) // bank child
+
+	got, err := s.InventoryForChar(ctx, "Slampeach")
+	if err != nil {
+		t.Fatalf("InventoryForChar: %v", err)
+	}
+
+	// All four rows survive (no item_id>0 filter): empty slot + container + 2 children.
+	if len(got) != 4 {
+		t.Fatalf("got %d rows, want 4 (empty slot + container shell + 2 children all kept): %+v", len(got), got)
+	}
+
+	// Returned in row_ordinal order: General4(1), General4-Slot1(2), Bank1-Slot1(3), Finger2(4).
+	wantOrder := []struct {
+		loc    string
+		itemID int64
+	}{
+		{"General4", 1038},
+		{"General4-Slot1", 1071},
+		{"Bank1-Slot1", 7001},
+		{"Finger2", 0},
+	}
+	for i, w := range wantOrder {
+		if got[i].Location != w.loc || got[i].ItemID != w.itemID {
+			t.Errorf("row[%d] = {loc:%q id:%d}, want {loc:%q id:%d} (row_ordinal order)",
+				i, got[i].Location, got[i].ItemID, w.loc, w.itemID)
+		}
+	}
+
+	// The empty slot (item_id=0) is PRESENT — the inverse of InventoryJoin's exclusion.
+	var sawEmpty bool
+	for _, r := range got {
+		if r.Location == "Finger2" {
+			sawEmpty = true
+			if r.ItemID != 0 {
+				t.Errorf("empty slot ItemID = %d, want 0", r.ItemID)
+			}
+		}
+	}
+	if !sawEmpty {
+		t.Errorf("empty slot row (Finger2, item_id=0) absent — InventoryForChar must keep it")
+	}
+
+	// The container shell carries its capacity (Slots), which InventoryJoinRow omits.
+	for _, r := range got {
+		if r.Location == "General4" && r.Slots != 10 {
+			t.Errorf("container shell Slots = %d, want 10", r.Slots)
+		}
+	}
+}
+
+// TestReadViews_InventoryForChar_LastListedNotCharFreshness proves Pitfall 2: the two
+// `last_seen` columns (pigparse_price last-listed vs character upload freshness) are
+// NOT crossed. seedPigparse writes last_seen="2026-05-09"; setCharMeta writes
+// character.last_seen="2026-05-09T00:00:00Z" — distinct values, so a swap is visible.
+func TestReadViews_InventoryForChar_LastListedNotCharFreshness(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	_, charID := seedOwnerChar(t, db, "owner-a", "Slampeach")
+	setCharMeta(t, db, charID, "SHM", 60, "TRO", false)
+
+	seedRaw(t, db, charID, "Head", "Crown of Narandi", i64ptr(2050), 1)
+	seedPigparse(t, db, 2050, "Crown of Narandi", "0", 4500, 75) // writes last_seen="2026-05-09"
+
+	got, err := s.InventoryForChar(ctx, "Slampeach")
+	if err != nil {
+		t.Fatalf("InventoryForChar: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d rows, want 1: %+v", len(got), got)
+	}
+	r := got[0]
+
+	if r.LastListed != "2026-05-09" {
+		t.Errorf("LastListed = %q, want %q (pigparse_price.last_seen — last-listed-for-sale)", r.LastListed, "2026-05-09")
+	}
+	if r.LastSeen != "2026-05-09T00:00:00Z" {
+		t.Errorf("LastSeen = %q, want %q (character.last_seen — upload freshness)", r.LastSeen, "2026-05-09T00:00:00Z")
+	}
+	if r.LastListed == r.LastSeen {
+		t.Errorf("LastListed (%q) must NOT equal LastSeen (%q) — the two last_seen columns were crossed", r.LastListed, r.LastSeen)
+	}
+}
+
+// TestReadViews_InventoryForChar_NameJoinHitAndMiss proves the DATA-01 contract on the
+// new method: price bridges by normalized name ACROSS namespaces (catalog id != EQ id),
+// the EQ inventory item_id is preserved, and an item with no matching catalog row misses.
+func TestReadViews_InventoryForChar_NameJoinHitAndMiss(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	_, charID := seedOwnerChar(t, db, "owner-a", "Slampeach")
+	setCharMeta(t, db, charID, "SHM", 60, "TRO", false)
+
+	// HIT: inventory holds the EQ id 14536; the PigParse catalog row for the SAME NAME
+	// has a DIFFERENT id 19450 — the name bridge must attach the price.
+	seedRaw(t, db, charID, "General1", "10 Dose Ant's Potion", i64ptr(14536), 1)
+	seedPigparse(t, db, 19450, "10 Dose Ant's Potion", "0", 320, 12)
+
+	// MISS: an item with no matching pigparse_price row.
+	seedRaw(t, db, charID, "General2", "Worthless Trinket", i64ptr(9997), 2)
+
+	got, err := s.InventoryForChar(ctx, "Slampeach")
+	if err != nil {
+		t.Fatalf("InventoryForChar: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2: %+v", len(got), got)
+	}
+
+	byName := map[string]InventoryRow{}
+	for _, r := range got {
+		byName[r.ItemName] = r
+	}
+
+	pot := byName["10 Dose Ant's Potion"]
+	if !pot.HasPrice || pot.A30 != 320 || pot.T30 != 12 || pot.Direction != "0" {
+		t.Errorf("Ant's Potion price = {has:%t a30:%v t30:%d dir:%q}, want has/320/12/0 (name-bridged 14536↔19450)",
+			pot.HasPrice, pot.A30, pot.T30, pot.Direction)
+	}
+	if pot.ItemID != 14536 {
+		t.Errorf("Ant's Potion ItemID = %d, want 14536 (the EQ inventory id, not the catalog 19450)", pot.ItemID)
+	}
+
+	miss := byName["Worthless Trinket"]
+	if miss.HasPrice {
+		t.Errorf("Worthless Trinket HasPrice = true, want false (no matching pigparse row)")
 	}
 }
 

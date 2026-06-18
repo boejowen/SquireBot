@@ -58,9 +58,10 @@ package compute
 
 // PriceDetail is the raw price detail for one PigParse direction, carried inline
 // on a ViewRow/BankRow so the client tooltip (composeNotes.ts) can render WTS/WTB
-// lines without a second fetch (D-03). Because pigparse_price.item_id is the
-// PRIMARY KEY, the join yields at most ONE price row per item, so a ViewRow's
-// Prices slice holds 0 or 1 PriceDetail.
+// lines without a second fetch (D-03). The one-row guarantee now comes from the
+// pp_rep CTE's GROUP BY norm_name + MIN(item_id) fan-out guard (store/readviews.go),
+// NOT from the item_id PK — the price join is by NORMALIZED NAME, not item_id
+// (commit 0a169f3, 2026-06-06). So a ViewRow's Prices slice holds 0 or 1 PriceDetail.
 type PriceDetail struct {
 	Direction string  `json:"direction"` // "0"=WTS, "1"=WTB, "2"=BOTH
 	A30       float64 `json:"a30"`

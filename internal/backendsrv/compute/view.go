@@ -81,8 +81,11 @@ func buildViewRows(joinRows []store.InventoryJoinRow, links map[int64][]store.Qu
 	return out
 }
 
-// pricesFromJoin builds the inline price detail from a join row. The join is one
-// row per item (pigparse_price.item_id is the PK), so this is 0-or-1 PriceDetail.
+// pricesFromJoin builds the inline price detail from a join row. The join yields at
+// most one price row per item because the pp_rep CTE (store/readviews.go) collapses
+// pigparse_price to ONE representative per normalized name BEFORE the name-keyed LEFT
+// JOIN — NOT because item_id is a PK. The price join is by normalized name, not
+// item_id (commit 0a169f3). So this is 0-or-1 PriceDetail.
 func pricesFromJoin(jr store.InventoryJoinRow) []PriceDetail {
 	if !jr.HasPrice {
 		return nil
@@ -110,7 +113,7 @@ func questLinksFor(itemID int64, links map[int64][]store.QuestLinkRow) []QuestLi
 
 // pickPrice ports buildView.ts:259-265 with the TEXT-direction fix (Pitfall 6):
 // prefer the WTS direction's a30 (when > 0), then the WTB direction's a30 (when
-// > 0), else nil. The v1 returned '' (empty string) as the no-price sentinel for
+// > 0), else nil. The v1 returned ” (empty string) as the no-price sentinel for
 // the Sheet cell; here the sentinel is a nil *float64 so the JSON encodes `null`
 // and the client renders the Price column blank. Direction comparison is on the
 // STRINGIFIED value (directionWTS/directionWTB), because the SQLite column is TEXT.

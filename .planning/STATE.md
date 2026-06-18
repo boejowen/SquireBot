@@ -6,14 +6,14 @@ status: planning
 last_updated: "2026-06-17T00:00:00.000Z"
 last_activity: 2026-06-17
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
   percent: 0
 ---
 
-> **v2.4 "Web UI Revamp — 5-Tab Restructure" OPENED 2026-06-17.** Reorganize squirebot.quest around five tabs — **Characters · Inventory · Banks · Wishlist · Settings** (source spec: `Future Features.txt` on the user's desktop). **Spans backend/data architecture + web** (NOT web-only — corrected 2026-06-17 after reading the spec); reworks the just-shipped wantlist into a per-character per-slot wishlist; watcher untouched. **Consolidated-views lock RELAXED** — per-character master-detail drill-down now allowed (CLAUDE.md updated). **Approach = sketch-first:** currently mocking the 5-tab structure + in-game inventory window + per-slot wishlist via `/gsd-sketch` → user picks → requirements → roadmap. Backend/data work this implies: inventory `Location`→slot-layout parsing + container nesting, bank valuation aggregation, per-slot wishlist model + wiki-section suggestion engine. Phases continue from v2.3 (last = 28) → v2.4 starts at **29**.
+> **v2.4 "Web UI Revamp — 5-Tab Restructure" — ROADMAP CREATED 2026-06-17 (6 phases, 29–34; 27/27 requirements mapped).** Reorganize squirebot.quest around five tabs — **Characters · Inventory · Banks · Wishlist · Settings** (source spec: `Future Features.txt` on the user's desktop). **Spans backend/data architecture + web** (NOT web-only — corrected 2026-06-17 after reading the spec); reworks the just-shipped wantlist into a per-character per-slot wishlist; watcher untouched. **Consolidated-views lock RELAXED** — per-character master-detail drill-down now allowed (CLAUDE.md updated). **Approach = sketch-first:** currently mocking the 5-tab structure + in-game inventory window + per-slot wishlist via `/gsd-sketch` → user picks → requirements → roadmap. Backend/data work this implies: inventory `Location`→slot-layout parsing + container nesting, bank valuation aggregation, per-slot wishlist model + wiki-section suggestion engine. Phases continue from v2.3 (last = 28) → v2.4 starts at **29**.
 >
 > _Prior:_ **v2.3 SHIPPED + ARCHIVED 2026-06-09** (P26→28 live, schema v10, audit PASSED 14/14; no git tag — watcher unchanged; archived `.planning/milestones/v2.3-*`). Quick task 260610-fm5 UI streamline fully closed 2026-06-17 (schema v11; browser-smoke PASS all 6). Carry-forwards: 999.33 fixed+deployed, 999.34 cosmetics backlogged. **v2.2 Track 2** (Discord pinger WTS/raid, P22-23) still parked on the Raid Alliance invites — independent.
 
@@ -33,10 +33,52 @@ See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 ## Current Position
 
-Phase: Not started (defining v2.4 direction via sketch-first design exploration)
+Phase: 29 — Data Foundation (Inventory Parse + Price/Value Aggregation) — NOT started (next to plan)
 Plan: —
-Status: Sketching layout/nav directions (`/gsd-sketch`) → then requirements → roadmap
-Last activity: 2026-06-17 — Milestone v2.4 "Web UI Revamp" opened (sketch-first; web-only; phases start at 29)
+Status: Roadmap created — 6 phases (29–34), 27/27 requirements mapped. Ready to plan Phase 29.
+Last activity: 2026-06-17 — v2.4 ROADMAP.md + REQUIREMENTS traceability written (Phases 29–34; data foundation first, then app shell, then the four tab surfaces, wishlist last)
+
+## v2.4 Phase Plan (created 2026-06-17)
+
+Phases continue from v2.3 (which ran 26–28). Phase dirs 01–28 exist on disk — never reuse them. v2.4 starts at **29**.
+
+**Execution order:** strict dependency chain **29 → 30 → 31 → 32 → 33 → 34**. The data foundation (P29) is built FIRST because the Characters inventory window (P31), the Inventory tab (P32), the Banks tab (P33), and the Wishlist (P34) all read the parsed slot taxonomy + name-keyed price/value data. The app shell + 5-tab nav (P30) reframes routing for every tab surface and lands second. The Wishlist (P34) additionally depends on P31's equipped-slot detection + the already-SHIPPED v2.2 EC-monitor + notification spine (reused, not rebuilt). P32 and P33 are independent of each other once 29+30 land.
+
+| Phase | Name | Requirements | Success Criteria | UI |
+|-------|------|--------------|------------------|----|
+| 29 | Data Foundation — Inventory Parse + Price/Value Aggregation | INV-05, DATA-01, DATA-02 | 4 | no |
+| 30 | App Shell + 5-Tab Navigation | NAV-01, NAV-02, NAV-03, NAV-04 | 4 | yes |
+| 31 | Characters Tab + In-Game Inventory Window | CHAR-01, CHAR-02, CHAR-03, INV-01, INV-02, INV-03, INV-04 | 4 | yes |
+| 32 | Inventory Tab (Item-Centric) | ITEM-01, ITEM-02, ITEM-03 | 3 | yes |
+| 33 | Banks Tab + Valuation | BANK-01, BANK-02, BANK-03 | 3 | yes |
+| 34 | Wishlist Rework — Per-Character Per-Slot Upgrades | WISH-01..07 | 5 | yes |
+
+**Phase 29 — Data Foundation (backend, no new user surface):** parse the watcher's `Location`/`Slots` inventory columns server-side into a slot taxonomy (EQ paperdoll equipment slots + general inventory + bank) with container (bag) nesting + preserved stack counts (INV-05); join PigParse price + last-listed-for-sale by **normalized name** so gear-tier/wiki rows with NO item_id still resolve a price (DATA-01); aggregate guild-bank item value (summed PigParse) + total platinum from the manual bank-coin entries (DATA-02). Extend-only schema; **watcher untouched**. Unblocks 31/32/33/34.
+
+**Phase 30 — App Shell + 5-Tab Navigation (web, reframes all routing):** the five persistent top tabs (Characters · Inventory · Banks · Wishlist · Settings) with per-tab in-context search (NAV-01/02); Settings consolidates Theme/Notifications/Watcher Codes/Set Class & Level/My Characters/Admin (NAV-03); notifications + unread badge move onto the Wishlist tab (NAV-04). Can land with placeholder tab bodies ahead of the content phases. Existing 5 EQ themes reused unchanged.
+
+**Phase 31 — Characters Tab + In-Game Inventory Window:** the guild character list (viewer's first A-Z, then others, then banks/bots) + viewer-prioritized search (CHAR-01/02); selecting a character opens an in-game-style paperdoll inventory window — equipment slots, general inventory with openable bags (drill-down), bank below, stack counts, real P1999 wiki item icons, click-to-pin right-click examine (stats/price/wiki/last-synced) (CHAR-03, INV-01..04). Reads P29.
+
+**Phase 32 — Inventory Tab (item-centric):** guild-wide item list (name, guild-wide quantity, wiki + PigParse links) with viewer-prioritized search (ITEM-01/02); selecting an item shows holders + slot-on-each + quantity + last-synced as a master-detail drill-down (ITEM-03). Reads P29.
+
+**Phase 33 — Banks Tab + Valuation:** banks-only list (same ordering style), each opening its inventory window (reuses the P31 window) (BANK-01); total PigParse item value across banks + total platinum (DATA-02 aggregation) (BANK-02); per-item bank search (BANK-03).
+
+**Phase 34 — Wishlist Rework (the heaviest single feature):** reworks the v2.2/v2.3 wantlist into a per-character, per-equipment-slot, OPEN-ENDED upgrade list (WISH-01/02/03); per-slot suggestions from the COMPLETE Velious Pre-raid/Grouping + Raiding `_wiki_gear_tier` lists for that class+slot, each with PigParse price + wiki link + last-listed-for-sale, no-drop/raid-only tagged "Raid"/not-for-sale (WISH-04); Discord ping toggle + EC-hit badge reusing the SHIPPED EC-monitor + notification spine (WISH-05); right-click examine + wishlist search (WISH-06/07). Depends on P31 equipped-slot detection + P29 price data + the v2.2 notification/EC spine.
+
+## Milestone v2.4 Scope (locked 2026-06-17)
+
+**Goal:** Reorganize squirebot.quest around five top-level tabs — Characters · Inventory · Banks · Wishlist · Settings — each answering one user question, backed by the new data architecture this requires.
+
+**Locked decisions:**
+- **Consolidated-views lock RELAXED** — per-character master-detail drill-down allowed (CLAUDE.md updated); guild-wide consolidated grids remain for the item-centric Inventory tab.
+- **Data foundation first** — INV-05 inventory parse + DATA-01/02 joins/aggregation precede every web surface that consumes them.
+- **Watcher UNTOUCHED** — it already uploads `Location | Name | ID | Count | Slots`; all new work is backend parsing + web.
+- **Gear-tier/wiki rows have NO item_id** — PigParse price + last-listed join by **normalized name** (DATA-01).
+- **Pings reuse the SHIPPED spine** — WISH-05 rides the live v2.2 EC-monitor + notification/`alert_log` infrastructure; nothing rebuilt.
+- **No re-skin** — the existing 5 EQ themes are reused unchanged (out of scope).
+- **v2.2 Track 2 (WTS/raid monitors) stays PARKED** — out of scope for v2.4; independent, invite-gated.
+
+**Scope:** backend (`internal/backendsrv`) + web (`web/`). Likely a new extend-only goose migration for the per-slot wishlist model (next after `00011`); the inventory-parse/valuation work may be compute-only over existing tables. Resolve the migration footprint in per-phase planning.
 
 ---
 

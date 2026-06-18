@@ -11,6 +11,7 @@
 - ✅ **v2.1** — Self-Service Watcher Linking — Phases 17–18 (shipped 2026-06-02 as tag `v2.1`) — archive: [`milestones/v2.1-ROADMAP.md`](milestones/v2.1-ROADMAP.md)
 - 🔄 **v2.2** — Wantlist + Discord Pinger — Phases 19–25 (**Track 1 SHIPPED LIVE 2026-06-06** — Phases 19–21 deployed to api.squirebot.quest; Phases 24–25 quality/platform shipped; **Track 2 (Phases 22–23) PARKED — invite-gated** on the 3 Raid Alliance bot invites, not abandoned; milestone held open, **no tag** until Track 2 lands)
 - ✅ **v2.3** — Character Assignment & Per-Character Wantlists — Phases 26–28 (shipped 2026-06-09) — archive: [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md)
+- 🔁 **v2.4** — Web UI Revamp (5-Tab Restructure) — Phases 29–34 (opened 2026-06-17; sketch-first; backend/data parse + web; watcher untouched) — reorganizes squirebot.quest around five top tabs (Characters · Inventory · Banks · Wishlist · Settings)
 
 ## Phases
 
@@ -120,6 +121,28 @@ Full details in [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md).
 
 </details>
 
+### 🔁 v2.4 — Web UI Revamp (5-Tab Restructure) (Phases 29–34)
+
+**Milestone Goal:** Reorganize squirebot.quest around five persistent top-level tabs — **Characters · Inventory · Banks · Wishlist · Settings** — each answering one user question, backed by the new data architecture this requires. Source spec: `Future Features.txt` (2026-06-17) + the locked sketch decisions (`.planning/sketches/MANIFEST.md`, sketches 001–004).
+
+**Scope:** backend (`internal/backendsrv`) + web (`web/`). The Go **watcher is UNTOUCHED** — it already uploads the inventory `Location | Name | ID | Count | Slots` data; this milestone parses and surfaces it. Reworks the v2.2/v2.3 wantlist into the per-character, per-equipment-slot Wishlist; pings reuse the SHIPPED EC-monitor + notification spine (v2.2 Track 2 WTS/raid monitors stay PARKED — out of scope).
+
+**Locked architecture decisions (2026-06-17):** consolidated-views lock **RELAXED** — per-character master-detail drill-down allowed (CLAUDE.md updated). Gear-tier/wiki items carry **no item_id**, so PigParse price + last-listed join by **normalized name**. Existing 5 EQ themes reused unchanged (no re-skin). Real item icons from the P1999 wiki (`Item_<iconId>.png`).
+
+**The load-bearing sequencing insight:** the **data foundation comes first**. INV-05 (parse the watcher's `Location`/`Slots` into a slot taxonomy + container nesting) and DATA-01/02 (name-keyed PigParse joins + bank valuation) are foundational — the Characters inventory window (INV), the Inventory tab (ITEM), the Banks tab (BANK), and the Wishlist's equipped-slot detection (WISH) all read parsed data. So the backend parse/aggregation phase lands before any web surface that consumes it; the app shell (NAV) reframes routing for every tab and lands second; the four tab surfaces follow.
+
+**Phase checklist:**
+
+- [ ] **Phase 29: Data Foundation — Inventory Parse + Price/Value Aggregation** — backend: parse `Location`/`Slots` into a slot taxonomy + container nesting (INV-05), name-keyed PigParse price + last-listed joins (DATA-01), bank valuation + total platinum aggregation (DATA-02). No new user surface; powers every v2.4 web tab.
+- [ ] **Phase 30: App Shell + 5-Tab Navigation** — the five persistent top tabs (Characters · Inventory · Banks · Wishlist · Settings) with per-tab in-context search; Settings consolidates Theme/Notifications/Watcher Codes/Set Class & Level/My Characters/Admin; notifications + unread badge move onto the Wishlist tab. (NAV-01..04)
+- [ ] **Phase 31: Characters Tab + In-Game Inventory Window** — the guild character list (viewer's first A-Z, then others, then banks/bots) + per-character search; selecting a character opens an in-game-style paperdoll inventory window with stacks, bag drill-down, bank-below, real wiki icons, and a click-to-pin right-click examine. (CHAR-01..03, INV-01..04)
+- [ ] **Phase 32: Inventory Tab (Item-Centric)** — a guild-wide item list (name, guild-wide quantity, wiki + PigParse links); selecting an item shows which characters hold it, the slot on each, quantity, and last-synced (master-detail). (ITEM-01..03)
+- [ ] **Phase 33: Banks Tab + Valuation** — a guild-banks-only list (each opens its inventory window), the total PigParse item value across banks + total platinum, and per-item bank search. (BANK-01..03)
+- [ ] **Phase 34: Wishlist Rework — Per-Character Per-Slot Upgrades** — reworks the v2.2/v2.3 wantlist into a per-character, per-equipment-slot, open-ended upgrade list with complete Velious `_wiki_gear_tier` suggestions (price + wiki + last-listed; Raid tag for no-drop/raid-only), a Discord ping toggle + EC-hit badge (reusing the shipped EC-monitor + notification spine), the examine tooltip, and wishlist search. (WISH-01..07)
+
+**Execution order:** strict dependency chain **29 → 30 → 31 → 32 → 33 → 34**. Phase 29 (data) unblocks 31/32/33/34; Phase 30 (shell) reframes routing for all four tab phases; the Wishlist (34) additionally depends on Phase 31's equipped-slot detection + the already-shipped notification/EC spine. 32 and 33 are independent of each other once 29+30 land (could parallelize), but numbered sequentially.
+
+
 ## Phase Details
 
 ### Phase 19: Wantlist CRUD
@@ -227,9 +250,87 @@ Full details in [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md).
 
 _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter, 28 Character-Tagged Wantlist) — SHIPPED 2026-06-09; collapsed into the v2.3 `<details>` block above. Full per-phase goals, success criteria, and plan lists in [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md)._
 
+---
+
+### Phase 29: Data Foundation — Inventory Parse + Price/Value Aggregation
+**Goal**: The backend turns the watcher's raw `Location | Name | ID | Count | Slots` inventory rows into structured, query-ready data — a slot taxonomy with container nesting, name-keyed PigParse price + last-listed joins, and bank valuation totals — so every v2.4 web tab reads from a clean, computed model rather than re-parsing strings.
+**Milestone**: v2.4
+**Depends on**: Nothing new (builds on the live v2.0+ backend, the existing landing-tab ingest, the `_wiki_gear_tier` scrape, and the daily PigParse enrichment). **Watcher untouched.**
+**Requirements**: INV-05, DATA-01, DATA-02
+**Success Criteria** (what must be TRUE):
+  1. A character's stored inventory is exposed through the backend as a structured slot taxonomy — equipment slots in EQ paperdoll positions, general-inventory slots, and bank items — with each general-inventory container's contents nested under it and stack counts preserved (the watcher's `Location`/`Slots` columns parsed server-side; the watcher is unchanged).
+  2. Any item surfaced by the backend carries its PigParse price + last-listed-for-sale date joined by **normalized name** (so gear-tier/wiki rows that carry no item_id still resolve a price), available to examine views, suggestion lists, and item lists.
+  3. The backend computes, for the guild banks, the summed PigParse value of all bank-held items and the total platinum from the manual bank-coin entries — both queryable as guild-wide totals that power the Banks tab.
+  4. The parse + joins + aggregation are covered by Go unit tests against real-name inventory fixtures (slot positions, nested-bag contents, name-join hits/misses, value/platinum sums) and apply over the live data with no schema-breaking change to existing tables (extend-only).
+**Plans**: TBD
+
+### Phase 30: App Shell + 5-Tab Navigation
+**Goal**: squirebot.quest is reframed around five persistent top-level tabs, each answering one question, with per-tab search and a consolidated Settings home — the navigation chrome every other v2.4 surface plugs into.
+**Milestone**: v2.4
+**Depends on**: Nothing new (web-only routing/chrome rework over the existing SvelteKit app; can land before the tab content is fully built, with placeholder tab bodies).
+**Requirements**: NAV-01, NAV-02, NAV-03, NAV-04
+**Success Criteria** (what must be TRUE):
+  1. The site presents five persistent top-level tabs — Characters, Inventory, Banks, Wishlist, Settings — in that order, with the active tab clearly indicated and reachable from any page.
+  2. Each tab has its own in-context search bar scoped to that tab's content (a Characters search behaves differently from an Inventory search, etc.).
+  3. The Settings tab consolidates the previously-scattered surfaces — Theme, Notifications preferences, Watcher Codes, Set Class & Level, My Characters, and (officers only) Admin — reachable from one place with a settings search.
+  4. The unread-alert badge sits on the **Wishlist** tab (not Settings), and the alert inbox + per-item ping preferences are reached there — every alert is framed as a wishlist-item ping.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 31: Characters Tab + In-Game Inventory Window
+**Goal**: A guildie can find any character and open an inventory window that looks and behaves like the in-game EQ inventory menu — paperdoll equipment slots, general inventory with openable bags, the character's bank below, real wiki item icons, and a right-click-style examine.
+**Milestone**: v2.4
+**Depends on**: Phase 29 (the slot taxonomy + container nesting + name-keyed price/last-synced data the window renders), Phase 30 (the Characters tab + its scoped search live in the app shell)
+**Requirements**: CHAR-01, CHAR-02, CHAR-03, INV-01, INV-02, INV-03, INV-04
+**Success Criteria** (what must be TRUE):
+  1. The Characters tab lists all guild characters with name, level, race, and class, ordered the viewer's own characters first (A-Z), then other guild characters, then guild banks/bots; the per-character search prioritizes the viewer's characters.
+  2. Selecting a character — from the list or a search result — opens that character's inventory window: equipment slots in the EQ paperdoll arrangement, general-inventory slots, and the character's bank items listed below, with stacked slots showing their count.
+  3. A general-inventory container (bag) can be opened to view its contents, which behave like the inventory grid (the Phase 29 container nesting surfaced as drill-down).
+  4. Item icons render from the P1999 wiki item-icon images; hovering or tapping an item shows a click-to-pin right-click-style examine — name + stats from the stored wiki data, PigParse price, wiki link, and last-synced.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 32: Inventory Tab (Item-Centric)
+**Goal**: A guildie can answer "which characters have item X?" — a guild-wide item list with quantities and links, where selecting an item reveals exactly who holds it, in which slot, how many, and how fresh the data is.
+**Milestone**: v2.4
+**Depends on**: Phase 29 (guild-wide item rollups + holder-with-slot data + name-keyed PigParse price), Phase 30 (the Inventory tab + its scoped search live in the app shell)
+**Requirements**: ITEM-01, ITEM-02, ITEM-03
+**Success Criteria** (what must be TRUE):
+  1. The Inventory tab lists all guild items with name, guild-wide quantity, a wiki link, and a PigParse price that links to PigParse when applicable.
+  2. The per-item name search prioritizes items held on the viewer's own characters.
+  3. Selecting an item shows which characters hold it, the inventory slot on each, the quantity, and the last-synced day/time — a master-detail drill-down consistent with the character-window examine.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 33: Banks Tab + Valuation
+**Goal**: A guildie can answer "what's in the guild banks, and what is it worth?" — a banks-only list that opens each bank's inventory window, plus the total item value and total platinum held across the guild banks.
+**Milestone**: v2.4
+**Depends on**: Phase 29 (bank valuation + total-platinum aggregation, the inventory-window data), Phase 31 (reuses the in-game inventory window for each bank), Phase 30 (the Banks tab + its scoped search live in the app shell)
+**Requirements**: BANK-01, BANK-02, BANK-03
+**Success Criteria** (what must be TRUE):
+  1. The Banks tab lists only guild-bank characters (same ordering style as the Characters tab), and selecting one opens its inventory window.
+  2. The tab shows the total PigParse value of all items held by bank characters and the total platinum held across the guild banks (from the manual bank-coin entries).
+  3. A per-item name search runs across the items held by the guild banks.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 34: Wishlist Rework — Per-Character Per-Slot Upgrades
+**Goal**: The just-shipped wantlist becomes a per-character, per-equipment-slot upgrade wishlist — open-ended targets per slot, complete Velious wiki suggestions with price/wiki/last-listed, a Discord ping toggle with an EC-hit badge, and the right-click examine — answering "what can I get to improve my characters?"
+**Milestone**: v2.4
+**Depends on**: Phase 31 (equipped-slot detection — the currently-equipped item per slot comes from the inventory-window parse), Phase 29 (name-keyed price/last-listed on suggestions + the `_wiki_gear_tier` data), Phase 30 (the Wishlist tab + its scoped search + the notifications badge/inbox living here), and the ALREADY-SHIPPED v2.2 EC-monitor + notification spine (reused, not rebuilt)
+**Requirements**: WISH-01, WISH-02, WISH-03, WISH-04, WISH-05, WISH-06, WISH-07
+**Success Criteria** (what must be TRUE):
+  1. The Wishlist tab lists characters (the viewer's first A-Z, then others), excludes guild banks/bots, and selecting one shows that character's equipped slots with the currently-equipped item per slot.
+  2. Each equipped slot holds an open-ended set of user-entered upgrade targets (typed or chosen from suggestions); an item leaves the slot's wishlist automatically when SquireBot sees it on that character, or when the user removes it.
+  3. Per slot, SquireBot suggests upgrades from the complete Velious Pre-raid/Grouping + Raiding lists for that character's class+slot (from the existing `_wiki_gear_tier` data); each suggestion shows its PigParse price, wiki link, and last-listed-for-sale date, with no-drop/raid-only items tagged "Raid" and shown as not-for-sale.
+  4. Each wishlisted item has a Discord ping toggle; when SquireBot pings the user (e.g. the item appeared in the EC tunnel via the shipped EC-monitor + notification spine), a badge appears beside that item in the wishlist.
+  5. Hovering or tapping any item shows the right-click-style examine (stats, price, wiki, last-synced), and a wishlist search covers all items on any wishlist plus the non-bank/bot characters.
+**Plans**: TBD
+**UI hint**: yes
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently).
+**Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently). v2.3: 26 → 27 → 28 (complete). v2.4: 29 → 30 → 31 → 32 → 33 → 34 (29 data foundation first; 30 shell; then the four tab surfaces; 34 wishlist last).
 
 | Milestone | Phases | Plans Complete | Status | Completed |
 |-----------|--------|----------------|--------|-----------|
@@ -240,6 +341,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | v2.1 | 2 | 4/4 | ✅ Complete (Phases 17–18 shipped) | 2026-06-02 |
 | v2.2 | 6 | 13/TBD | 🔄 **Track 1 SHIPPED LIVE** (Phases 19–21 deployed 2026-06-06 + Phase 24 quality done); Track 2 (22–23) invite-gated, parked | — |
 | v2.3 | 3 | 7/7 | ✅ Feature-complete — all 3 phases SHIPPED + deployed live (schema v10); pending milestone audit/close | 2026-06-09 |
+| v2.4 | 6 | 0/TBD | 🔁 Planning — roadmap created (Phases 29–34); 27/27 requirements mapped; ready to plan Phase 29 | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -261,6 +363,12 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | 26. Character Assignment | v2.3 | 3/3 | ✅ SHIPPED — deployed live + browser-smoke PASS (ASSIGN-01..06) | 2026-06-08 |
 | 27. My-Characters Inventory Filter | v2.3 | 1/1 | ✅ SHIPPED — deployed live + browser-smoke PASS (MYVIEW-01/02) | 2026-06-08 |
 | 28. Character-Tagged Wantlist | v2.3 | 3/3 | ✅ SHIPPED — deployed live v10 + browser-smoke PASS (CWANT-01..06) | 2026-06-09 |
+| 29. Data Foundation — Inventory Parse + Price/Value Aggregation | v2.4 | 0/TBD | Not started | — |
+| 30. App Shell + 5-Tab Navigation | v2.4 | 0/TBD | Not started | — |
+| 31. Characters Tab + In-Game Inventory Window | v2.4 | 0/TBD | Not started | — |
+| 32. Inventory Tab (Item-Centric) | v2.4 | 0/TBD | Not started | — |
+| 33. Banks Tab + Valuation | v2.4 | 0/TBD | Not started | — |
+| 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 0/TBD | Not started | — |
 
 ## Backlog
 

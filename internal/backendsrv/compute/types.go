@@ -142,3 +142,58 @@ type SpellCheckRow struct {
 	Spell  string `json:"spell"`
 	Status string `json:"status"` // KNOWN | MISSING
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 29 (v2.4) — structured inventory + bank valuation contract (APPEND-ONLY)
+// ──────────────────────────────────────────────────────────────────────────────
+// These structs are the INV-05 / DATA-02 read-API payload shapes consumed by Phases
+// 31 (per-character window) / 32 (guild rollup) / 33 (bank valuation). snake_case
+// tags, append-only — no existing tag is renamed. Nullable money/price stays
+// *float64/*int64 so "unpriced" / "never entered" ≠ "0" (the CoinTotals discipline).
+
+// InventorySlot is one item in the structured inventory model (INV-05). Children holds
+// nested bag contents (one level deep). Price/LastListed are name-joined (DATA-01);
+// Price is nil when unpriced. Category is equipment/general/bank; CanonicalSlot is the
+// paperdoll key for equipment.
+type InventorySlot struct {
+	Location      string          `json:"location"`       // raw token, e.g. "General4" or "General4-Slot1"
+	Category      SlotCategory    `json:"category"`       // equipment|general|bank
+	CanonicalSlot string          `json:"canonical_slot"` // "Head"/"Finger1"/"General4"/"Bank1"
+	Item          string          `json:"item"`           // "" for an empty slot
+	ID            int64           `json:"id"`
+	Count         int64           `json:"count"`
+	Slots         int64           `json:"slots"`       // container capacity; 0 = not a container
+	Price         *float64        `json:"price"`       // pickPrice; null when unpriced
+	LastListed    string          `json:"last_listed"` // pigparse_price.last_seen; "" when none
+	WikiURL       string          `json:"wiki_url"`
+	WikiSummary   string          `json:"wiki_summary"`
+	IsQuestItem   bool            `json:"is_quest_item"`
+	Prices        []PriceDetail   `json:"prices"`
+	Children      []InventorySlot `json:"children"` // nested bag contents (one level deep); nil when not a container
+}
+
+// CharacterInventory is the per-character structured slot model (INV-05).
+// Equipment/General/Bank are the three grouped trees; container rows in General/Bank
+// carry their Children.
+type CharacterInventory struct {
+	Char      string          `json:"char"`
+	Equipment []InventorySlot `json:"equipment"`
+	General   []InventorySlot `json:"general"`
+	Bank      []InventorySlot `json:"bank"`
+}
+
+// Valuation is a bank valuation result (DATA-02/D-03): the summed pickPrice×count value
+// plus the count of unpriced items (the "+N unpriced" annotation so the figure is never
+// silently understated).
+type Valuation struct {
+	TotalValue    float64 `json:"total_value"`
+	UnpricedCount int64   `json:"unpriced_count"`
+}
+
+// BankValuation is the guild bank aggregate (DATA-02): per-bank valuations keyed by
+// char name, the guild-wide total, and the total platinum (literal plat only, D-04).
+type BankValuation struct {
+	PerBank       map[string]Valuation `json:"per_bank"`
+	GuildTotal    Valuation            `json:"guild_total"`
+	TotalPlatinum int64                `json:"total_platinum"`
+}

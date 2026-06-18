@@ -36,7 +36,8 @@ import (
 // the PigParse catalog (pigparse_price) and the EQ /outputfile inventory
 // (inventory_item) are DIFFERENT item_id namespaces (only ~58/713 inventory ids
 // exist in the catalog by id, vs ~559 names matching by name), so the old
-// pp.item_id = ii.item_id join silently left ~91% of held rows unpriced. The CTE
+// id-keyed price join (matching pigparse_price.item_id to inventory_item.item_id)
+// silently left ~91% of held rows unpriced. The CTE
 // (see InventoryJoin) collapses pigparse_price to ONE representative row per
 // normalized name BEFORE the LEFT JOIN, so the join still yields AT MOST ONE price
 // row per inventory row (no fan-out, no inflated bank counts) even when two catalog
@@ -56,7 +57,34 @@ type InventoryJoinRow struct {
 	A30         float64 // 30-day average; 0 when no price row
 	T30         int64   // 30-day transaction count; 0 when no price row
 	HasPrice    bool    // true iff a pigparse_price row joined (direction present)
+	LastListed  string  // pigparse_price.last_seen (last-listed-for-sale ISO string); "" when no price row. DISTINCT from LastSeen (char upload freshness). DATA-01.
 	LastSeen    string  // character.last_seen (ISO string); "" when null
+	RowOrdinal  int64
+}
+
+// InventoryRow is one inventory_item row for the per-character INV-05 surface. Unlike
+// InventoryJoinRow it carries Slots (container capacity, 0 = not a container) and is NOT
+// filtered on item_id (empty slots + container shells + *-Slot* children all survive), so
+// compute.StructuredInventory can classify + nest the full slot layout. Price bridges by
+// normalized name (the pp_rep CTE — never item_id; PigParse catalog ids != EQ inventory
+// ids), and LastListed (pigparse_price.last_seen) is the last-listed-for-sale date —
+// distinct from LastSeen (character.last_seen, upload freshness).
+type InventoryRow struct {
+	Char        string
+	Location    string
+	ItemName    string
+	ItemID      int64
+	Count       int64
+	Slots       int64 // inventory_item.slots — container capacity; 0 = not a container
+	WikiURL     string
+	WikiSummary string
+	IsQuestItem bool
+	Direction   string  // pigparse_price.direction (TEXT); "" when no price row
+	A30         float64 // 30-day average; 0 when no price row
+	T30         int64   // 30-day transaction count; 0 when no price row
+	HasPrice    bool    // true iff a pigparse_price row joined
+	LastListed  string  // pigparse_price.last_seen — last-listed-for-sale; "" when no price row
+	LastSeen    string  // character.last_seen — upload freshness; "" when null
 	RowOrdinal  int64
 }
 
@@ -149,7 +177,7 @@ func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJo
 	)
 	SELECT c.name, ii.location, ii.name, ii.item_id, ii.count,
 	       im.wiki_url, im.wiki_summary, im.is_quest_item,
-	       pp.direction, pp.a30, pp.t30,
+	       pp.direction, pp.a30, pp.t30, pp.last_seen,
 	       c.last_seen, ii.row_ordinal
 	FROM inventory_item ii
 	JOIN character c            ON c.id = ii.character_id
@@ -182,14 +210,15 @@ func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJo
 			direction   sql.NullString
 			a30         sql.NullFloat64
 			t30         sql.NullInt64
-			lastSeen    sql.NullString
+			lastListed  sql.NullString // pigparse_price.last_seen — DISTINCT from c.last_seen below
+			lastSeen    sql.NullString // character.last_seen (upload freshness)
 			itemID      sql.NullInt64
 			count       sql.NullInt64
 		)
 		if err := rows.Scan(
 			&r.Char, &r.Location, &r.ItemName, &itemID, &count,
 			&wikiURL, &wikiSummary, &isQuest,
-			&direction, &a30, &t30,
+			&direction, &a30, &t30, &lastListed,
 			&lastSeen, &r.RowOrdinal,
 		); err != nil {
 			return nil, fmt.Errorf("scan inventory join row: %w", err)
@@ -203,11 +232,95 @@ func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJo
 		r.HasPrice = direction.Valid
 		r.A30 = a30.Float64
 		r.T30 = t30.Int64
+		r.LastListed = lastListed.String // pp.last_seen (last-listed); never aliased to LastSeen
 		r.LastSeen = lastSeen.String
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate inventory join rows: %w", err)
+	}
+	return out, nil
+}
+
+// InventoryForChar returns EVERY inventory_item row for one character — including
+// empty-slot rows (item_id 0/NULL), container shells (slots>0), and *-Slot* bag-content
+// children — ordered by row_ordinal (file/slot order), so compute.StructuredInventory can
+// classify + nest the full INV-05 slot layout. Unlike InventoryJoin it does NOT filter on
+// item_id (the paperdoll/nesting needs the empty + container rows InventoryJoin drops).
+//
+// The price join is the SAME name-keyed pp_rep bridge as InventoryJoin (commit 0a169f3) —
+// NEVER an item_id price join (PigParse catalog ids != EQ inventory ids; the id-join
+// silently left ~91% of held rows unpriced). item_master stays id-keyed (the watcher's own
+// EQ namespace). pp.last_seen is projected as the DATA-01 last-listed-for-sale date,
+// distinct from c.last_seen (upload freshness).
+//
+// char is the only user-controlled value; it is bound via a `?` placeholder (never
+// concatenated). slog is silent on the happy path; the error path logs op+err only.
+func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryRow, error) {
+	const query = `WITH pp_rep AS (
+	       SELECT lower(trim(name)) AS norm_name, MIN(item_id) AS rep_item_id
+	       FROM pigparse_price
+	       WHERE name IS NOT NULL AND trim(name) <> ''
+	       GROUP BY lower(trim(name))
+	)
+	SELECT c.name, ii.location, ii.name, ii.item_id, ii.count, ii.slots,
+	       im.wiki_url, im.wiki_summary, im.is_quest_item,
+	       pp.direction, pp.a30, pp.t30, pp.last_seen,
+	       c.last_seen, ii.row_ordinal
+	FROM inventory_item ii
+	JOIN character c            ON c.id = ii.character_id
+	LEFT JOIN item_master im     ON im.item_id = ii.item_id
+	LEFT JOIN pp_rep             ON pp_rep.norm_name = lower(trim(ii.name))
+	LEFT JOIN pigparse_price pp  ON pp.item_id = pp_rep.rep_item_id
+	WHERE c.is_removed = 0 AND c.name = ?
+	ORDER BY ii.row_ordinal`
+
+	rows, err := s.db.QueryContext(ctx, query, char)
+	if err != nil {
+		return nil, fmt.Errorf("query inventory for char: %w", err)
+	}
+	defer rows.Close()
+
+	var out []InventoryRow
+	for rows.Next() {
+		var (
+			r            InventoryRow
+			wikiURL      sql.NullString
+			wikiSummary  sql.NullString
+			isQuest      sql.NullInt64
+			direction    sql.NullString
+			a30          sql.NullFloat64
+			t30          sql.NullInt64
+			lastListed   sql.NullString // pigparse_price.last_seen — DISTINCT from charLastSeen
+			charLastSeen sql.NullString // character.last_seen (upload freshness)
+			itemID       sql.NullInt64
+			count        sql.NullInt64
+			slots        sql.NullInt64
+		)
+		if err := rows.Scan(
+			&r.Char, &r.Location, &r.ItemName, &itemID, &count, &slots,
+			&wikiURL, &wikiSummary, &isQuest,
+			&direction, &a30, &t30, &lastListed,
+			&charLastSeen, &r.RowOrdinal,
+		); err != nil {
+			return nil, fmt.Errorf("scan inventory row: %w", err)
+		}
+		r.ItemID = itemID.Int64
+		r.Count = count.Int64
+		r.Slots = slots.Int64
+		r.WikiURL = wikiURL.String
+		r.WikiSummary = wikiSummary.String
+		r.IsQuestItem = isQuest.Int64 != 0
+		r.Direction = direction.String
+		r.HasPrice = direction.Valid
+		r.A30 = a30.Float64
+		r.T30 = t30.Int64
+		r.LastListed = lastListed.String // pp.last_seen (last-listed); never aliased to LastSeen
+		r.LastSeen = charLastSeen.String // character.last_seen (upload freshness)
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate inventory rows: %w", err)
 	}
 	return out, nil
 }

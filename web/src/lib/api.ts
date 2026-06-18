@@ -208,6 +208,48 @@ export interface CharacterInventory {
 	bank: InventorySlot[];
 }
 
+// --- Phase 32: Inventory tab (item-centric) -----------------------------
+// Mirrors compute/types.go ItemRollup/ItemHolder (snake_case, Plan 32-01,
+// append-only). The /api/v1/items route is session-gated (RequireSession) — the
+// fetchItems() wrapper rides the same credentialed getJSON + typed 401/403 the
+// AuthGate re-routes on. The pure viewer-first sort/filter over ItemRollup lives
+// in $lib/items (node-testable), NOT inlined in inventory/+page.svelte. REUSES
+// the existing PriceDetail interface (api.ts:79) — do NOT redeclare it.
+
+/** One holding of an item (ITEM-03 holders-table row): the character holding it,
+ *  the slot label (classifySlot — P29), the stack qty, the per-char last-synced
+ *  (= character.last_seen), and the viewer/bank flags for the holder banding/tags. */
+export interface ItemHolder {
+	char: string;
+	slot_label: string;
+	qty: number;
+	last_synced: string;
+	is_mine: boolean;
+	is_bank: boolean;
+}
+
+/** One guild-wide item (grouped by normalized name, D-01): every copy held anywhere
+ *  (equipped + general + bag contents + bank) across every character, bank toon, and
+ *  guild bot collapses to ONE rollup. `summed_qty` = Σ stack counts; `holder_count` =
+ *  distinct holding characters; `is_mine` = any holder on a viewer-assigned char
+ *  (D-02/ITEM-02). `price` null = unpriced (D-09); `icon_id` 0 = colored-tile fallback
+ *  (D-02); `statsblock` "" = examine omits the stats line. */
+export interface ItemRollup {
+	name: string;
+	summed_qty: number;
+	holder_count: number;
+	is_mine: boolean;
+	/** null when no PigParse price resolved — the row omits the price slot (D-09). */
+	price: number | null;
+	prices: PriceDetail[];
+	wiki_url: string;
+	wiki_summary: string;
+	is_quest_item: boolean;
+	icon_id: number;
+	statsblock: string;
+	holders: ItemHolder[];
+}
+
 // --- Fetch core ----------------------------------------------------------
 
 /**
@@ -297,6 +339,14 @@ export function fetchCharacters(f: typeof fetch = fetch): Promise<RosterCharacte
  *  are guildie-controlled (the server re-binds it as a ? placeholder). */
 export function fetchInventory(char: string, f: typeof fetch = fetch): Promise<CharacterInventory> {
 	return getJSON<CharacterInventory>(`/api/v1/inventory/${encodeURIComponent(char)}`, f);
+}
+
+/** GET /api/v1/items → ItemRollup[] ([] when empty). Session-gated; the server
+ *  returns the guild-wide rollup (grouped by normalized name) with the viewer's
+ *  items flagged is_mine. The catalog search lives at /items/search (P19) — this is
+ *  the guild-HOLDINGS rollup, a distinct route. */
+export function fetchItems(f: typeof fetch = fetch): Promise<ItemRollup[]> {
+	return getJSON<ItemRollup[]>('/api/v1/items', f);
 }
 
 // --- Write core: postJSON (15-05 Task 1) ---------------------------------

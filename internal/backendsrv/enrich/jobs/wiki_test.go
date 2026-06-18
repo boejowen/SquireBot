@@ -181,6 +181,56 @@ func TestRunWiki_SHA1ShortCircuit(t *testing.T) {
 	}
 }
 
+// TestRunWiki_BackfillsStaleIcon is the INV-04 icon-backfill regression (2026-06-18): a
+// row written BEFORE the icon_id column (migration 00012) has the correct wikitext SHA-1
+// but a 0 icon. The OLD short-circuit skipped on SHA-1 alone and left such a row's icon
+// permanently 0; the fix must re-write and backfill the icon even though the wikitext is
+// unchanged. (The one-time production backfill clears etag_cache so the pages re-fetch —
+// mirrored here.)
+func TestRunWiki_BackfillsStaleIcon(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedAllItemRefs(t, db)
+	srv := newWikiFixtureServer(t, wikiServerOpts{})
+
+	// Run 1 populates item_master incl. icon_id from the fixture's lucy_img_ID.
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #1: %v", err)
+	}
+	const cofID = 18950 // Cloak of Flames — its fixture carries a lucy_img_ID
+	var icon0 int64
+	if err := db.QueryRow(`SELECT icon_id FROM item_master WHERE item_id=?`, cofID).Scan(&icon0); err != nil {
+		t.Fatalf("read icon after run 1: %v", err)
+	}
+	if icon0 == 0 {
+		t.Fatalf("precondition: Cloak of Flames icon_id is 0 after run 1 — fixture lacks a lucy_img_ID")
+	}
+
+	// Simulate a pre-00012 row: same wikitext SHA-1, but a 0 icon. Clear etag_cache so the
+	// page re-fetches (the production backfill clears it for exactly this reason).
+	if _, err := db.Exec(`UPDATE item_master SET icon_id=0 WHERE item_id=?`, cofID); err != nil {
+		t.Fatalf("zero the icon: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM etag_cache`); err != nil {
+		t.Fatalf("clear etag_cache: %v", err)
+	}
+
+	// Run 2: identical fixtures → unchanged SHA-1 → the OLD code skipped and left icon 0.
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #2: %v", err)
+	}
+	var icon1 int64
+	if err := db.QueryRow(`SELECT icon_id FROM item_master WHERE item_id=?`, cofID).Scan(&icon1); err != nil {
+		t.Fatalf("read icon after run 2: %v", err)
+	}
+	if icon1 != icon0 {
+		t.Errorf("icon_id after backfill run = %d, want %d (an unchanged-SHA1 row must still backfill its icon)", icon1, icon0)
+	}
+}
+
 func TestRunWiki_304SkipsResource(t *testing.T) {
 	restore := setWikiSleepNoop()
 	defer restore()

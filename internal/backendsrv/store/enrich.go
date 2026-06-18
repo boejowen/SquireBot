@@ -212,6 +212,27 @@ func GetItemMasterSHA1Tx(ctx context.Context, tx *sql.Tx, itemID int64) (string,
 	return sha.String, nil // NullString.String is "" when NULL
 }
 
+// GetItemMasterFreshnessTx returns the stored wikitext_sha1 AND icon_id for itemID
+// (sha "" and iconID 0 when the row is absent or the column is NULL). The wiki job's
+// short-circuit compares BOTH: an unchanged wikitext alone is not enough to skip the
+// upsert, because a row written BEFORE the INV-04 icon_id column (migration 00012) has
+// the same SHA-1 yet a 0 icon — skipping on SHA-1 alone would leave its icon permanently
+// unbackfilled. Writing whenever sha OR icon differs backfills those rows and keeps icon
+// changes propagating, while a row whose sha+icon both match is still skipped.
+func GetItemMasterFreshnessTx(ctx context.Context, tx *sql.Tx, itemID int64) (sha string, iconID int64, err error) {
+	var s sql.NullString
+	var icon sql.NullInt64
+	qerr := tx.QueryRowContext(ctx,
+		`SELECT wikitext_sha1, icon_id FROM item_master WHERE item_id = ?`, itemID).Scan(&s, &icon)
+	switch {
+	case qerr == sql.ErrNoRows:
+		return "", 0, nil
+	case qerr != nil:
+		return "", 0, fmt.Errorf("read item_master freshness (item_id=%d): %w", itemID, qerr)
+	}
+	return s.String, icon.Int64, nil // NullX zero-values when NULL
+}
+
 // UpsertWikiSpellsForClass replaces all wiki_spells rows for class (begins +
 // commits its own tx).
 func (s *Store) UpsertWikiSpellsForClass(ctx context.Context, class string, rows []WikiSpell) error {

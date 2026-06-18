@@ -196,14 +196,17 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 			failed++
 			continue
 		}
+		// Persist the page ETag after a successful fetch+parse — WHETHER OR NOT we wrote. The
+		// ETag corresponds to the page we just validated, so caching it lets the next run
+		// 304-skip an unchanged page. (Previously only set after a write; combined with the
+		// one-time icon-backfill etag_cache clear, that left every no-write item with no
+		// cached ETag and thus re-fetched on every weekly run.)
+		if serr := s.SetETag(ctx, url, page.etag, page.lastModified); serr != nil {
+			slog.Warn(wikiJobName+": item set etag failed", "item_id", ref.ItemID, "err", serr)
+		}
 		if !didWrite {
 			unchanged++
 			continue
-		}
-
-		// Persist the page ETag only after a successful write.
-		if serr := s.SetETag(ctx, url, page.etag, page.lastModified); serr != nil {
-			slog.Warn(wikiJobName+": item set etag failed", "item_id", ref.ItemID, "err", serr)
 		}
 		written++
 	}
@@ -221,12 +224,15 @@ func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.ItemRef, ite
 	}
 	defer tx.Rollback() // no-op after Commit
 
-	existing, err := store.GetItemMasterSHA1Tx(ctx, tx, ref.ItemID)
+	existingSHA, existingIcon, err := store.GetItemMasterFreshnessTx(ctx, tx, ref.ItemID)
 	if err != nil {
 		return false, err
 	}
-	if existing == item.WikitextSHA1 {
-		// Unchanged — skip the write (the empty tx rolls back via defer).
+	if existingSHA == item.WikitextSHA1 && existingIcon == int64(item.IconID) {
+		// Both the wikitext AND the icon are unchanged — skip the write (the empty tx rolls
+		// back via defer). NOTE: SHA-1 alone is NOT sufficient — a row written before the
+		// INV-04 icon_id column (migration 00012) has the same SHA-1 yet a 0 icon, and must
+		// still be re-written to backfill its icon (INV-04 icon backfill, 2026-06-18).
 		return false, nil
 	}
 

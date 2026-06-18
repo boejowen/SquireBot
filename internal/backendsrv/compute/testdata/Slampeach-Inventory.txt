@@ -1,0 +1,20 @@
+Location	Name	ID	Count	Slots
+Charm	Emblem of the Sky	6001	1	0
+Head	Crown of Narandi	2050	1	0
+Head-Slot1	Diamondine Hilt	8001	1	0
+Neck	Shaman Spirit Necklace	6002	1	0
+Finger1	Ring of the Ages	6003	1	0
+Finger2		0	0	0
+Chest	Rygorrs Bladed Armor	6004	1	0
+Primary	The Scythe of Burning Souls	6005	1	0
+General1	Tome of the Spurned	6006	1	0
+General2	Worthless Trinket	9997	1	0
+General4	Large Bag	1038	1	10
+General4-Slot1	Diamond	1071	5	0
+General4-Slot2	Black Pearl	1072	1	0
+General4-Slot3	Words of the Spoken	7001	1	0
+Bank1	Bag of Holding	1039	1	8
+Bank1-Slot1	Words of the Spoken	7001	1	0
+Bank1-Slot2	Rough Diamond	7002	3	0
+Bank2	Worthless Trinket	9998	1	0
+Bank3	Coldain Velium Temper	7003	2	0

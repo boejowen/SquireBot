@@ -12,6 +12,10 @@ package compute_test
 
 import (
 	"database/sql"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
@@ -60,6 +64,64 @@ func seedInv(t *testing.T, db *sql.DB, charID int64, location, name string, item
 		charID, location, name, itemID, 1, 0, ordinal,
 	); err != nil {
 		t.Fatalf("seed inventory_item %q: %v", name, err)
+	}
+}
+
+// seedInvFull seeds one inventory_item row with explicit count + slots + location, so
+// container shells (slots>0), stacked items (count>1), and nested children (location with
+// a "-SlotN" suffix) are all testable. Mirrors seedInv but exposes count/slots/location —
+// seedInv hardcodes count=1, slots=0 and cannot seed a container shell or a nested child.
+func seedInvFull(t *testing.T, db *sql.DB, charID int64, location, name string, itemID, count, slots, ordinal int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO inventory_item (character_id, location, name, item_id, count, slots, row_ordinal, uploaded_at)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+		charID, location, name, itemID, count, slots, ordinal,
+	); err != nil {
+		t.Fatalf("seed inventory_item %q: %v", name, err)
+	}
+}
+
+// loadInventoryFixture reads a real-name watcher-format inventory dump from testdata/
+// (tab-separated, header `Location\tName\tID\tCount\tSlots`) and seeds each data line
+// into inventory_item via seedInvFull, assigning an incrementing row_ordinal so file
+// (slot) order is preserved. It skips the header line and any line whose ID is not an
+// integer (mirroring the watcher's own non-int-ID skip in internal/parse/inventory.go),
+// so container shells (Slots>0), stacked items (Count>1), empty slots (ID 0), and nested
+// `<Parent>-Slot<N>` children all land in the store for the INV-05 nesting/value tests.
+func loadInventoryFixture(t *testing.T, db *sql.DB, charID int64, name string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatalf("read inventory fixture %q: %v", name, err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	var ordinal int64
+	for i, line := range lines {
+		if i == 0 {
+			continue // header
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		cols := strings.Split(line, "\t")
+		if len(cols) < 5 {
+			t.Fatalf("inventory fixture %q line %d has %d cols, want 5: %q", name, i+1, len(cols), line)
+		}
+		itemID, err := strconv.ParseInt(strings.TrimSpace(cols[2]), 10, 64)
+		if err != nil {
+			continue // non-int ID — matches the watcher's parse skip
+		}
+		count, err := strconv.ParseInt(strings.TrimSpace(cols[3]), 10, 64)
+		if err != nil {
+			t.Fatalf("inventory fixture %q line %d bad Count %q: %v", name, i+1, cols[3], err)
+		}
+		slots, err := strconv.ParseInt(strings.TrimSpace(cols[4]), 10, 64)
+		if err != nil {
+			t.Fatalf("inventory fixture %q line %d bad Slots %q: %v", name, i+1, cols[4], err)
+		}
+		ordinal++
+		seedInvFull(t, db, charID, cols[0], cols[1], itemID, count, slots, ordinal)
 	}
 }
 

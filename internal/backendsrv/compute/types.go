@@ -203,3 +203,48 @@ type BankValuation struct {
 	GuildTotal    Valuation            `json:"guild_total"`
 	TotalPlatinum int64                `json:"total_platinum"`
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 32 (v2.4) — item-centric Inventory tab rollup contract (APPEND-ONLY)
+// ──────────────────────────────────────────────────────────────────────────────
+// ItemRollup / ItemHolder are the ITEM-01..03 read-API payload shapes consumed by the
+// guild-wide Inventory tab (web/src/routes/inventory). snake_case tags, append-only —
+// no existing tag is renamed. Identity is the NORMALIZED NAME (D-01), never item_id:
+// the EQ-inventory ids and the PigParse/gear-tier catalog ids are different namespaces
+// (gear-tier rows have no id at all), so name is the only consistent group/join key.
+// Price stays *float64 so "unpriced" ≠ "0" (the CoinTotals discipline).
+
+// ItemRollup is one guild-wide item grouped by normalized name (D-01): every copy held
+// anywhere (equipped + general + bag contents + bank) across every character, bank toon,
+// and guild bot collapses to ONE rollup. SummedQty is the Σ of stack counts; HolderCount
+// is the distinct holding-character count; IsMine is true when ANY holder is on a
+// viewer-assigned char (D-02/ITEM-02). Price/Prices/WikiURL/WikiSummary/IsQuestItem are
+// copied from the representative (first-seen) holding — name-keyed in the store's pp_rep
+// CTE, NOT re-selected here. IconID/Statsblock are looked up id-correctly from item_master
+// (the watcher's own EQ namespace). Holders carries one ItemHolder per holding (ITEM-03).
+type ItemRollup struct {
+	Name        string        `json:"name"`         // representative display name (first-seen casing)
+	SummedQty   int64         `json:"summed_qty"`   // Σ Count across all holdings (D-01/D-04)
+	HolderCount int64         `json:"holder_count"` // distinct holding characters (D-04)
+	IsMine      bool          `json:"is_mine"`      // any holder on a viewer-assigned char (D-02/ITEM-02)
+	Price       *float64      `json:"price"`        // pickPrice; null when unpriced (D-04/D-09)
+	Prices      []PriceDetail `json:"prices"`       // raw WTS/WTB detail (examine)
+	WikiURL     string        `json:"wiki_url"`
+	WikiSummary string        `json:"wiki_summary"`
+	IsQuestItem bool          `json:"is_quest_item"`
+	IconID      int64         `json:"icon_id"`      // 0 → colored-tile fallback (D-02)
+	Statsblock  string        `json:"statsblock"`   // "" → examine omits the stats line (D-09)
+	Holders     []ItemHolder  `json:"holders"`      // one per holding (ITEM-03)
+}
+
+// ItemHolder is one holding of an item (ITEM-03 holders-table row): a character holding it,
+// the slot label (from classifySlot — P29), the stack qty, the per-char last-synced day/time
+// (= character.last_seen), and the viewer/bank flags for the holder banding + tags.
+type ItemHolder struct {
+	Char       string `json:"char"`
+	SlotLabel  string `json:"slot_label"`  // from classifySlot (P29)
+	Qty        int64  `json:"qty"`
+	LastSynced string `json:"last_synced"` // ViewRow.LastSynced (= character.last_seen)
+	IsMine     bool   `json:"is_mine"`
+	IsBank     bool   `json:"is_bank"` // is_bank_toon || is_guild_bot
+}

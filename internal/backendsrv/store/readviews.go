@@ -647,6 +647,46 @@ func (s *Store) CharFreshness(ctx context.Context) ([]CharFreshness, error) {
 	return out, nil
 }
 
+// IconStats is item_master's per-item icon + stat-block, id-correct in the watcher's
+// own EQ namespace (item_master is keyed by the EQ inventory item_id — distinct from
+// the PigParse catalog ids). It carries the INV-04 icon_id (0 = none yet → colored-tile
+// fallback) + the INV-02 statsblock ("" = none yet → examine omits the stats line).
+type IconStats struct {
+	IconID     int64
+	Statsblock string
+}
+
+// ItemMasterIconStats returns icon_id + statsblock per item_id (P31 schema v13 columns
+// 00012/00013). The id-key is correct HERE because item_master is the watcher's own EQ
+// namespace — NOT the PigParse catalog (the Phase 32 rollup uses the representative
+// ViewRow.ID ONLY for this id-correct lookup, NEVER for price). Full-table SELECT, `?`-free
+// (no untrusted input); a NULL icon_id maps to 0 and a NULL statsblock to "" (the
+// nullable-scan idiom at InventoryForChar).
+func (s *Store) ItemMasterIconStats(ctx context.Context) (map[int64]IconStats, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT item_id, icon_id, statsblock FROM item_master`)
+	if err != nil {
+		return nil, fmt.Errorf("query item_master icon/stats: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int64]IconStats)
+	for rows.Next() {
+		var (
+			id    int64
+			icon  sql.NullInt64
+			stats sql.NullString
+		)
+		if err := rows.Scan(&id, &icon, &stats); err != nil {
+			return nil, fmt.Errorf("scan item_master icon/stats row: %w", err)
+		}
+		out[id] = IconStats{IconID: icon.Int64, Statsblock: stats.String} // NULL → 0 / ""
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate item_master icon/stats rows: %w", err)
+	}
+	return out, nil
+}
+
 // RosterRow is one row of the Phase 31-02 viewer-aware Characters-tab roster: a
 // character's identity + metadata + the bank/bot designation flags + the per-char
 // upload freshness + whether the row is assigned to the VIEWING member (is_mine).

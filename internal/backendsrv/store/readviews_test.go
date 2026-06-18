@@ -664,6 +664,45 @@ func TestRosterFor(t *testing.T) {
 	}
 }
 
+// TestItemMasterIconStats proves the Phase 32 id-keyed icon/stats read (Pattern-1
+// option b): a full-table SELECT of item_master's icon_id + statsblock keyed by item_id,
+// with the nullable-scan idiom — a NULL icon_id maps to 0 and a NULL statsblock to "".
+// The id-key is correct HERE because item_master is the watcher's own EQ namespace.
+func TestItemMasterIconStats(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	// Row 1: fully populated icon + statsblock (the enriched case).
+	seedItemMaster(t, db, 1234, "Circlet of Vallon", "summary", "http://wiki/Circlet", false)
+	if _, err := db.Exec(
+		`UPDATE item_master SET icon_id = ?, statsblock = ? WHERE item_id = ?`,
+		560, "MAGIC ITEM\nAC: 5", 1234,
+	); err != nil {
+		t.Fatalf("set icon/stats on 1234: %v", err)
+	}
+
+	// Row 2: NULL icon_id + NULL statsblock (the un-enriched case — seedItemMaster
+	// leaves both columns NULL).
+	seedItemMaster(t, db, 5678, "Robe of the Lost Circle", "summary", "http://wiki/Robe", false)
+
+	got, err := s.ItemMasterIconStats(ctx)
+	if err != nil {
+		t.Fatalf("ItemMasterIconStats: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d icon/stats rows, want 2: %+v", len(got), got)
+	}
+
+	if ic := got[1234]; ic.IconID != 560 || ic.Statsblock != "MAGIC ITEM\nAC: 5" {
+		t.Errorf("item 1234 = {icon:%d stats:%q}, want 560 / %q", ic.IconID, ic.Statsblock, "MAGIC ITEM\nAC: 5")
+	}
+	// NULL → zero-values (0 icon = colored-tile fallback; "" stats = examine omits the line).
+	if ic := got[5678]; ic.IconID != 0 || ic.Statsblock != "" {
+		t.Errorf("item 5678 = {icon:%d stats:%q}, want 0 / \"\" (NULL → zero-values)", ic.IconID, ic.Statsblock)
+	}
+}
+
 // TestReadViews_GearAndSpellInputs proves the wiki_gear_tier / wiki_spells /
 // spellbook read methods feeding gear_check + spell_check.
 func TestReadViews_GearAndSpellInputs(t *testing.T) {

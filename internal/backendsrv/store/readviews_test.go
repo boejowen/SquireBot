@@ -544,6 +544,126 @@ func TestGearTierPrices_NameJoin_HitMiss(t *testing.T) {
 	}
 }
 
+// seedAssignment assigns charID to discordUserID (the viewer "yours" flag source).
+// character_assignment.discord_user_id has an FK to web_user, so the caller must
+// have seeded the web_user row first (insertWebUser).
+func seedAssignment(t *testing.T, db *sql.DB, charID int64, discordUserID string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO character_assignment (character_id, discord_user_id, assigned_at, assigned_by)
+		 VALUES (?, ?, 0, 'test')`,
+		charID, discordUserID,
+	); err != nil {
+		t.Fatalf("seed character_assignment (char=%d, %s): %v", charID, discordUserID, err)
+	}
+}
+
+// TestRosterFor proves the Phase 31-02 viewer-aware roster read (D-10): the full
+// roster shape (name/level/race/class + is_mine + bank/bot flags + last_seen that
+// no existing read returns together — Pitfall 4), band-tagged viewer-first
+// (yours → guild → banks/bots) and A-Z within each band, with the viewer id bound
+// ONLY as a ? placeholder.
+func TestRosterFor(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	const viewer = "discord-viewer-1"
+	const other = "discord-other-2"
+	insertWebUser(t, ctx, db, viewer, "Viewer")
+	insertWebUser(t, ctx, db, other, "Other")
+
+	// Two of the viewer's own chars (Zelda, Apple) to prove A-Z WITHIN the "yours"
+	// band — Apple must sort before Zelda even though Zelda was assigned first.
+	_, zeldaID := seedOwnerChar(t, db, "owner-z", "Zelda")
+	_, appleID := seedOwnerChar(t, db, "owner-a", "Apple")
+	setCharMeta(t, db, zeldaID, "WIZ", 55, "ERU", false)
+	// Apple has NULL class/level/race (seedOwnerChar leaves them unset) — proves the
+	// nullable-meta scan resolves to ""/0/"".
+
+	// A plain guild char (not the viewer's, not a bank/bot) → the middle band.
+	_, guildID := seedOwnerChar(t, db, "owner-g", "Guildie")
+	setCharMeta(t, db, guildID, "CLR", 60, "HIE", false)
+
+	// One bank toon + one guild bot → the banks/bots band (A-Z: "Banker" < "Botley").
+	_, bankID := seedOwnerChar(t, db, "owner-b", "Banker")
+	setCharMeta(t, db, bankID, "WAR", 60, "DWF", true) // is_bank_toon
+	_, botID := seedOwnerChar(t, db, "owner-bo", "Botley")
+	if _, err := db.Exec(`UPDATE character SET is_guild_bot = 1 WHERE id = ?`, botID); err != nil {
+		t.Fatalf("set is_guild_bot: %v", err)
+	}
+
+	// The two assignments: both of the viewer's chars are theirs; "other" owns none
+	// of these (so nothing is wrongly flagged is_mine for the viewer).
+	seedAssignment(t, db, zeldaID, viewer)
+	seedAssignment(t, db, appleID, viewer)
+
+	got, err := s.RosterFor(ctx, viewer)
+	if err != nil {
+		t.Fatalf("RosterFor: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("roster = %d rows, want 5: %+v", len(got), got)
+	}
+
+	// D-10 band order: yours (A-Z) → guild → banks/bots (A-Z).
+	wantOrder := []string{"Apple", "Zelda", "Guildie", "Banker", "Botley"}
+	for i, want := range wantOrder {
+		if got[i].Name != want {
+			t.Errorf("roster[%d] = %q, want %q (viewer-first band order: %v)", i, got[i].Name, want, wantOrder)
+		}
+	}
+
+	byName := map[string]RosterRow{}
+	for _, r := range got {
+		byName[r.Name] = r
+	}
+
+	// (b) IsMine: true only for the viewer's two chars.
+	if !byName["Apple"].IsMine || !byName["Zelda"].IsMine {
+		t.Errorf("Apple/Zelda IsMine = %t/%t, want true/true (assigned to the viewer)", byName["Apple"].IsMine, byName["Zelda"].IsMine)
+	}
+	if byName["Guildie"].IsMine || byName["Banker"].IsMine || byName["Botley"].IsMine {
+		t.Errorf("Guildie/Banker/Botley IsMine = %t/%t/%t, want all false (not the viewer's)",
+			byName["Guildie"].IsMine, byName["Banker"].IsMine, byName["Botley"].IsMine)
+	}
+
+	// (c) Nullable meta: Apple has NULL class/level/race → ""/0/"".
+	if a := byName["Apple"]; a.Class != "" || a.Level != 0 || a.Race != "" {
+		t.Errorf("Apple meta = {class:%q level:%d race:%q}, want empty (NULL → zero-values)", a.Class, a.Level, a.Race)
+	}
+	// A populated char carries its meta + last_seen.
+	if z := byName["Zelda"]; z.Class != "WIZ" || z.Level != 55 || z.Race != "ERU" || z.LastSeen == "" {
+		t.Errorf("Zelda meta = {class:%q level:%d race:%q lastSeen:%q}, want WIZ/55/ERU/non-empty", z.Class, z.Level, z.Race, z.LastSeen)
+	}
+
+	// (d) The banks/bots band: the bank toon AND the guild bot both land there.
+	if b := byName["Banker"]; !b.IsBankToon || b.IsGuildBot {
+		t.Errorf("Banker flags = {bank:%t bot:%t}, want bank=true bot=false", b.IsBankToon, b.IsGuildBot)
+	}
+	if b := byName["Botley"]; b.IsBankToon || !b.IsGuildBot {
+		t.Errorf("Botley flags = {bank:%t bot:%t}, want bank=false bot=true", b.IsBankToon, b.IsGuildBot)
+	}
+
+	// (e) A viewer with NO assignments sees the same 5 chars, none flagged is_mine,
+	// and the "yours" band collapses → guild (Apple,Guildie,Zelda A-Z) then banks/bots.
+	emptyViewer, err := s.RosterFor(ctx, "discord-nobody-9")
+	if err != nil {
+		t.Fatalf("RosterFor(no-assignments): %v", err)
+	}
+	for _, r := range emptyViewer {
+		if r.IsMine {
+			t.Errorf("char %q flagged IsMine for a viewer with no assignments", r.Name)
+		}
+	}
+	wantNoneOrder := []string{"Apple", "Guildie", "Zelda", "Banker", "Botley"}
+	for i, want := range wantNoneOrder {
+		if emptyViewer[i].Name != want {
+			t.Errorf("no-assignment roster[%d] = %q, want %q (all guild A-Z then banks/bots)", i, emptyViewer[i].Name, want)
+		}
+	}
+}
+
 // TestReadViews_GearAndSpellInputs proves the wiki_gear_tier / wiki_spells /
 // spellbook read methods feeding gear_check + spell_check.
 func TestReadViews_GearAndSpellInputs(t *testing.T) {

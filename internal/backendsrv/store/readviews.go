@@ -27,6 +27,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 )
 
 // InventoryJoinRow is one row of the view/bank join: an inventory_item row joined
@@ -641,4 +642,115 @@ func (s *Store) CharFreshness(ctx context.Context) ([]CharFreshness, error) {
 		return nil, fmt.Errorf("iterate char freshness rows: %w", err)
 	}
 	return out, nil
+}
+
+// RosterRow is one row of the Phase 31-02 viewer-aware Characters-tab roster: a
+// character's identity + metadata + the bank/bot designation flags + the per-char
+// upload freshness + whether the row is assigned to the VIEWING member (is_mine).
+// No existing read returns this full shape together (CharsWithMeta lacks
+// is_guild_bot+last_seen; CharFreshness lacks meta — RESEARCH Pitfall 4). Class/
+// Race are "" and Level 0 when the metadata is unset (NULL → zero-values, D-11).
+type RosterRow struct {
+	ID         int64
+	Name       string
+	Class      string // "" when unknown
+	Level      int64  // 0 when unknown
+	Race       string // "" when unknown
+	IsBankToon bool
+	IsGuildBot bool
+	LastSeen   string // character.last_seen ("" when never synced)
+	IsMine     bool   // assigned to the viewer (v2.3 character_assignment)
+}
+
+// RosterFor returns every non-removed character as a RosterRow, already in the
+// D-10 viewer-first order (the Characters tab renders the slice directly). The
+// VIEWER's own characters come first (A-Z), then other guild characters, then
+// guild banks/bots — A-Z within each band.
+//
+// viewerDiscordID is the authenticated discord_user_id (webauth.UserFromContext
+// in the handler). It is the SINGLE `?` bind in the LEFT JOIN to
+// character_assignment that computes is_mine — NEVER string-concatenated into the
+// SQL (V5 / Tampering). An empty viewer (no session id) simply flags nothing
+// is_mine and the "yours" band collapses; the read still returns every char.
+//
+// The SQL fetches A-Z (ORDER BY name COLLATE NOCASE); the three-band viewer-first
+// ordering is then applied in Go (a pure, table-testable stable sort) so the
+// banding logic stays observable to a unit test rather than buried in SQL.
+func (s *Store) RosterFor(ctx context.Context, viewerDiscordID string) ([]RosterRow, error) {
+	const query = `
+		SELECT c.id, c.name, c.class, c.level, c.race,
+		       c.is_bank_toon, c.is_guild_bot, c.last_seen,
+		       (a.discord_user_id IS NOT NULL) AS is_mine
+		  FROM character c
+		  LEFT JOIN character_assignment a
+		    ON a.character_id = c.id AND a.discord_user_id = ?
+		 WHERE c.is_removed = 0
+		 ORDER BY c.name COLLATE NOCASE`
+
+	rows, err := s.db.QueryContext(ctx, query, viewerDiscordID)
+	if err != nil {
+		return nil, fmt.Errorf("query roster: %w", err)
+	}
+	defer rows.Close()
+
+	var out []RosterRow
+	for rows.Next() {
+		var (
+			r          RosterRow
+			class      sql.NullString
+			level      sql.NullInt64
+			race       sql.NullString
+			lastSeen   sql.NullString
+			isBankToon int
+			isGuildBot int
+			isMine     int
+		)
+		if err := rows.Scan(
+			&r.ID, &r.Name, &class, &level, &race,
+			&isBankToon, &isGuildBot, &lastSeen, &isMine,
+		); err != nil {
+			return nil, fmt.Errorf("scan roster row: %w", err)
+		}
+		r.Class = class.String
+		r.Level = level.Int64
+		r.Race = race.String
+		r.LastSeen = lastSeen.String
+		r.IsBankToon = isBankToon == 1
+		r.IsGuildBot = isGuildBot == 1
+		r.IsMine = isMine == 1
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate roster rows: %w", err)
+	}
+
+	sortRosterViewerFirst(out)
+	return out, nil
+}
+
+// sortRosterViewerFirst stable-sorts rows into the three D-10 bands in place,
+// preserving the SQL's A-Z (COLLATE NOCASE) order WITHIN each band. The input is
+// already A-Z, so a STABLE sort keyed only on the band index reorders the bands
+// without disturbing the alphabetical order inside them.
+//
+// Tie-break: a char that is BOTH the viewer's AND a bank/bot sorts as MINE
+// (band 0) — IsMine wins over the banks/bots designation, so a guildie who has
+// claimed a bank toon still finds it at the top.
+func sortRosterViewerFirst(rows []RosterRow) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rosterBand(rows[i]) < rosterBand(rows[j])
+	})
+}
+
+// rosterBand returns the D-10 band index for a row: 0 = yours (IsMine, wins the
+// tie-break), 2 = banks/bots (IsBankToon || IsGuildBot), 1 = everyone else.
+func rosterBand(r RosterRow) int {
+	switch {
+	case r.IsMine:
+		return 0
+	case r.IsBankToon || r.IsGuildBot:
+		return 2
+	default:
+		return 1
+	}
 }

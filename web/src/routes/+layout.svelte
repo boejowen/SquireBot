@@ -37,14 +37,17 @@
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
-<!-- The [data-theme] root stays OUTERMOST so the themed shell (wordmark +
-     ThemePicker + footer) shows on the login / not-member screens too. AuthGate
-     wraps the page content inside the shell: it provides the session via
-     context (SiteShell reads it for the header SettingsMenu: identity + the
-     officer-only Admin item) and renders the pre-auth screens or the app (D-01). -->
+<!-- The [data-theme] root stays OUTERMOST so the themed shell (wordmark + the
+     identity affordance + footer) shows on the login / not-member screens too.
+     AuthGate wraps the page content inside the shell: it provides the session via
+     context (SiteShell reads it for the top-right identity menu) and renders the
+     pre-auth screens or the app (D-01). The theme is no longer threaded through
+     SiteShell as a prop — the relocated ThemePicker reaches this single `theme`
+     $state through the THEME_KEY context (D-06); the $effect above is the sole
+     [data-theme] writer. -->
 <div class="theme-root" data-theme={theme} bind:this={rootEl}>
 	<AuthGate>
-		<SiteShell bind:theme>
+		<SiteShell>
 			{@render children()}
 		</SiteShell>
 	</AuthGate>

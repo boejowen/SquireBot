@@ -83,11 +83,11 @@
 						<span class="unread-badge" aria-hidden="true">{badgeText}</span>
 					{/if}
 				</a>
-				<!-- The gear settings dropdown: identity, theme, Watcher-codes,
-				     Set-class-&-level, officer-only Admin, Sign out. Visible to any
-				     authenticated member (Admin is gated inside). bind:theme keeps the
-				     +layout → SiteShell → SettingsMenu → ThemePicker chain intact. -->
-				<SettingsMenu bind:theme {session} />
+				<!-- The top-right account affordance: identity + Sign out only (Phase 30 /
+				     D-06 — the gear dissolved; Theme/Watcher-codes/Set-class/My-characters/
+				     Admin all moved into the Settings tab). No bind:theme — the relocated
+				     ThemePicker reaches the single theme state via the theme context. -->
+				<SettingsMenu {session} />
 			{/if}
 		</div>
 	</header>

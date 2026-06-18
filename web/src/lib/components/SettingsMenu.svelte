@@ -1,9 +1,11 @@
 <script lang="ts" module>
-	// Pure, DOM-free decision helpers for the settings menu, split out so they're
+	// Pure, DOM-free decision helpers for the account menu, split out so they're
 	// unit-testable in the node test project (the repo runs vitest under node with
 	// NO jsdom and NO @testing-library; see ConfirmDialog.test.ts / auth.test.ts).
 	// The .svelte instance below is a thin renderer that wires these to real DOM
-	// events. (260607-sdh: gear settings dropdown — IA cleanup.)
+	// events. (260607-sdh: gear settings dropdown; Phase 30 / D-06: DISSOLVED — the
+	// gear's config items moved into the Settings tab; this menu is now identity +
+	// Sign out only, triggered by an avatar + username + chevron affordance.)
 
 	import type { Session } from '$lib/auth';
 
@@ -34,43 +36,41 @@
 </script>
 
 <script lang="ts">
-	// SettingsMenu — the header "settings" dropdown opened from a gear trigger
-	// (260607-sdh, a LOCKED IA decision). It absorbs everything that used to clutter
-	// the top bar: the signed-in identity (avatar/officer-shield/username, formerly
-	// SessionIndicator), the ThemePicker, the Watcher-codes (/account) +
-	// Set-class-&-level (/char-meta) links, the officer-only Admin (/admin) link,
-	// and Sign out. The header now keeps only the wordmark + Inventory + Wantlist +
-	// Notifications(+badge) + this gear.
+	// SettingsMenu — the top-right "Joe ▾"-style account affordance (Phase 30 / D-06,
+	// 30-UI-SPEC §C). The header gear DISSOLVED: Theme, Watcher codes, Set class &
+	// level, My characters, and the officer-only Admin all moved into the Settings
+	// tab (the canonical route in is the tab strip — there is intentionally no
+	// "Settings" item here, "one place per concept"). What stays top-right is ONLY
+	// the signed-in identity (avatar / officer shield / username) + Sign out, the web
+	// convention users expect.
 	//
-	// A11y contract (modeled on ConfirmDialog § Accessibility):
+	// A11y contract (modeled on ConfirmDialog § Accessibility — unchanged from the gear):
 	//   - The trigger is a <button> with aria-haspopup="menu", aria-expanded bound
-	//     to `open`, and aria-controls the panel id.
-	//   - The panel is role="menu"; its links/buttons are role="menuitem".
-	//   - Escape closes the menu and RESTORES focus to the gear trigger.
+	//     to `open`, and aria-controls the panel id; aria-label includes the username.
+	//   - The panel is role="menu"; its items are role="menuitem".
+	//   - Escape closes the menu and RESTORES focus to the trigger.
 	//   - An outside (pointerdown) click closes; a route change closes.
 	//   - On open, focus moves to the first menu item.
 	//   - Theme tokens only; 44px touch targets; focus-visible 2px accent outline.
 	//
-	// SECURITY (T-15-22, carried verbatim from SessionIndicator): the username is
-	// user-controlled (Discord). It renders ONLY via plain {} interpolation (Svelte
-	// auto-escapes) — never the raw-HTML directive — and the avatar `alt` is the
-	// same escaped username. A malicious display name is inert text, never a live tag.
+	// SECURITY (T-15-22 / T-30-01, carried verbatim): the username is user-controlled
+	// (Discord). It renders ONLY via plain {} interpolation (Svelte auto-escapes) —
+	// never the raw-HTML directive — and the avatar `alt` is the same escaped
+	// username. A malicious display name is inert text, never a live tag.
 
 	import { tick } from 'svelte';
 	import { page } from '$app/stores';
-	import Settings from '@lucide/svelte/icons/settings';
 	import UserIcon from '@lucide/svelte/icons/user';
 	import Shield from '@lucide/svelte/icons/shield';
 	import LogOut from '@lucide/svelte/icons/log-out';
-	import ThemePicker from './ThemePicker.svelte';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import { logout } from '$lib/auth';
-	import type { ThemeKey } from '$lib/theme/themes';
 	// `Session` is already imported in the <script module> block above (in scope here).
 
-	// The theme stays $bindable so the +layout → SiteShell → SettingsMenu →
-	// ThemePicker chain is intact (no context, no store — D-06). +layout's
-	// $effect(applyTheme) is the single [data-theme] writer.
-	let { theme = $bindable(), session }: { theme: ThemeKey; session: Session } = $props();
+	// Phase 30 / D-06: the theme picker moved to Settings (via the theme context in
+	// +layout), so this menu no longer carries a $bindable theme — props are the
+	// session only.
+	let { session }: { session: Session } = $props();
 
 	let open = $state(false);
 	let signingOut = $state(false);
@@ -93,7 +93,7 @@
 		if (menuKeyAction(e.key, open) === 'close') {
 			e.preventDefault();
 			open = false;
-			// Escape returns focus to the gear trigger.
+			// Escape returns focus to the trigger.
 			triggerEl?.focus();
 		}
 	}
@@ -146,24 +146,38 @@
 
 <!-- The root scopes the outside-click test (rootEl.contains). -->
 <div class="settings-menu" bind:this={rootEl}>
+	<!-- The "Joe ▾" trigger (30-UI-SPEC §C): avatar (or User glyph fallback) +
+	     escaped username + officer shield + chevron. The accessible name includes the
+	     username. T-30-01: the username + alt render via plain {} ONLY. -->
 	<button
 		type="button"
-		class="gear"
+		class="trigger"
 		bind:this={triggerEl}
 		aria-haspopup="menu"
 		aria-expanded={open}
 		aria-controls="settings-menu-panel"
-		aria-label="Settings"
+		aria-label={`Account menu, ${session.username}`}
 		onclick={toggle}
 	>
-		<Settings size={20} aria-hidden="true" />
+		{#if avatarUrl}
+			<img class="avatar" src={avatarUrl} alt={session.username} width="28" height="28" />
+		{:else}
+			<span class="avatar avatar-fallback" aria-hidden="true">
+				<UserIcon size={16} />
+			</span>
+		{/if}
+		{#if session?.isOfficer}
+			<Shield size={14} aria-label="Officer" class="officer-badge" />
+		{/if}
+		<span class="username">{session.username}</span>
+		<ChevronDown size={16} aria-hidden="true" class="caret" />
 	</button>
 
 	{#if open}
 		<div id="settings-menu-panel" class="panel" role="menu" bind:this={panelEl} tabindex="-1">
-			<!-- 1. Identity header (absorbed from SessionIndicator). T-15-22: the
-			     username renders via plain {} ONLY (auto-escaped); the avatar alt is
-			     the same escaped username. NEVER the raw-HTML directive. -->
+			<!-- 1. Identity header. T-15-22 / T-30-01: the username renders via plain {}
+			     ONLY (auto-escaped); the avatar alt is the same escaped username.
+			     NEVER the raw-HTML directive. -->
 			<div class="identity">
 				{#if avatarUrl}
 					<img class="avatar" src={avatarUrl} alt={session.username} width="28" height="28" />
@@ -178,29 +192,10 @@
 				<span class="username">{session.username}</span>
 			</div>
 
-			<!-- 2. Theme picker — bind:theme passes straight through (chain intact). -->
-			<div class="menu-theme">
-				<ThemePicker bind:theme />
-			</div>
-
-			<!-- 3–5. Navigation menu items. Account is relabeled "Watcher codes";
-			     /char-meta is labeled "Set class & level" (260610-fm5 WS3 — say what
-			     it does). /my-characters is member-accessible (D-06/D-08) — it sits
-			     OUTSIDE the officer gate below, beside /account + /char-meta. -->
-			<a href="/account" role="menuitem" class="menu-link">Watcher codes</a>
-			<a href="/char-meta" role="menuitem" class="menu-link">Set class &amp; level</a>
-			<a href="/my-characters" role="menuitem" class="menu-link">My characters</a>
-			{#if session?.isOfficer}
-				<!-- Officer-only Admin (Layer-1 UX suppression; the server re-checks
-				     officer status on every /admin endpoint — 15-03). A non-officer
-				     never sees this affordance, but the hidden nav is never the gate. -->
-				<a href="/admin" role="menuitem" class="menu-link">Admin</a>
-			{/if}
-
-			<!-- 6. Divider. -->
+			<!-- 2. Divider. -->
 			<hr class="divider" aria-hidden="true" />
 
-			<!-- 7. Sign out (reuses the SessionIndicator signingOut guard). -->
+			<!-- 3. Sign out (the only menu item now — D-06). Reuses the signingOut guard. -->
 			<button
 				type="button"
 				role="menuitem"
@@ -221,13 +216,13 @@
 		display: inline-flex;
 		align-items: center;
 	}
-	.gear {
+	/* The "Joe ▾" trigger — avatar + username + chevron (30-UI-SPEC §C). */
+	.trigger {
 		display: inline-flex;
 		align-items: center;
-		justify-content: center;
-		min-width: 44px; /* touch target (UI-SPEC) */
-		min-height: 44px;
-		padding: 8px;
+		gap: 8px;
+		min-height: 44px; /* touch target (UI-SPEC) */
+		padding: 4px 12px;
 		color: var(--text);
 		background: none;
 		border: 1px solid var(--border, var(--accent));
@@ -235,13 +230,17 @@
 		cursor: pointer;
 		opacity: 0.85;
 	}
-	.gear:hover {
+	.trigger:hover {
 		opacity: 1;
 		color: var(--accent);
 	}
-	.gear:focus-visible {
+	.trigger:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
+	}
+	:global(.caret) {
+		flex: none;
+		opacity: 0.7;
 	}
 	.panel {
 		position: absolute;
@@ -294,9 +293,6 @@
 		font-size: 13px; /* Label (UI-SPEC) */
 		letter-spacing: 0.04em;
 		color: var(--text);
-	}
-	.menu-theme {
-		padding: 4px 8px;
 	}
 	.menu-link {
 		display: inline-flex;

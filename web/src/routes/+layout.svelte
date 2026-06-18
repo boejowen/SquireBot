@@ -6,11 +6,13 @@
 	// write, no rebuild, no per-component re-theming. SiteShell renders the
 	// chrome (wordmark + ThemePicker + footer) and binds `theme` so the picker
 	// mutates this single source of truth.
+	import { setContext } from 'svelte';
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import SiteShell from '$lib/components/SiteShell.svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { loadTheme, applyTheme, type ThemeKey } from '$lib/theme/themes';
+	import { THEME_KEY, type ThemeContext } from '$lib/theme/themeContext';
 
 	let { children } = $props();
 
@@ -24,6 +26,13 @@
 	$effect(() => {
 		applyTheme(theme, rootEl ?? null);
 	});
+
+	// Theme-context bridge (Phase 30 / D-06): the ThemePicker now lives in the
+	// Settings tab, not the dissolved header gear. A {@render children()} page can't
+	// receive bind:theme as a prop, so expose a get/set accessor over THIS single
+	// `theme` $state. The $effect above stays the ONLY [data-theme] writer — the
+	// relocated picker just calls set(), which mutates `theme` and re-runs the effect.
+	setContext(THEME_KEY, { get: () => theme, set: (v) => (theme = v) } satisfies ThemeContext);
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>

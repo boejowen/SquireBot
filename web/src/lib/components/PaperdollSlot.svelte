@@ -96,9 +96,10 @@
 		aria-expanded={isBag ? expanded : undefined}
 		onclick={activate}
 		onmouseenter={(e) => {
-			// A transient preview fires only for a filled NON-container tile (a bag
-			// opens, it doesn't preview); the parent decides what to render.
-			if (slot && !isBag) onhover?.(slot, e);
+			// A transient preview fires for ANY filled tile — including a bag, so the hover
+			// identifies which bag is which. (A bag still OPENS on click; the preview is just
+			// identify-on-hover.) The parent decides what to render.
+			if (slot) onhover?.(slot, e);
 		}}
 		onmouseleave={() => onleave?.()}
 		style={`--tile-hue: ${hue};`}

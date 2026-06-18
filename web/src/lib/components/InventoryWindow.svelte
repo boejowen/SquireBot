@@ -37,12 +37,15 @@
 
 	// --- the 23 canonical equipment slots (slotconst.go — authoritative, NOT 21) ---
 	// Placement per 31-UI-SPEC §E: left column, right column, then the bottom WORN row.
-	const LEFT_SLOTS = ['Ear1', 'Head', 'Face', 'Ear2', 'Neck', 'Shoulders', 'Arms', 'Back'];
-	const RIGHT_SLOTS = ['Wrist1', 'Wrist2', 'Hands', 'Finger1', 'Finger2', 'Chest', 'Legs', 'Feet'];
+	// Left column leads with Head + Face, then the two ear slots, then the rest (user layout).
+	const LEFT_SLOTS = ['Head', 'Face', 'Ear1', 'Ear2', 'Neck', 'Shoulders', 'Arms', 'Back'];
+	// Waist lives up here with the worn armor (body column), not down in the weapons row.
+	const RIGHT_SLOTS = ['Wrist1', 'Wrist2', 'Hands', 'Finger1', 'Finger2', 'Chest', 'Legs', 'Feet', 'Waist'];
 	// No Charm or Power Source position: both equipment slots were added in post-Velious
 	// expansions Project 1999 will never implement, so they never hold an item — omit them
-	// from the paperdoll rather than render a permanently-empty tile (2026-06-18).
-	const WORN_SLOTS = ['Primary', 'Secondary', 'Range', 'Ammo', 'Waist'];
+	// from the paperdoll rather than render a permanently-empty tile (2026-06-18). The bottom
+	// row is now weapons + ammo only (Waist moved up).
+	const WORN_SLOTS = ['Primary', 'Secondary', 'Range', 'Ammo'];
 
 	// Index the equipment array by canonical_slot so each paperdoll position maps to
 	// its slot (or null → an empty labelled tile, D-11).
@@ -79,6 +82,7 @@
 	}
 
 	function toggleBag(s: InventorySlot) {
+		preview = null; // opening/closing a bag dismisses any transient hover preview
 		const next = new Set(openBags);
 		if (next.has(s.location)) next.delete(s.location);
 		else next.add(s.location);
@@ -96,10 +100,10 @@
 	}
 
 	function hoverEnter(s: InventorySlot, e: MouseEvent) {
-		// Transient preview only for a filled NON-container tile (PaperdollSlot already
-		// suppresses the bag case). pointer-events:none means the floating preview
-		// never steals the next hover/click. Positioned at the cursor entry point.
-		if (isContainer(s)) return;
+		// Transient preview for ANY filled tile — including a bag, so a user can tell which
+		// bag is which (e.g. "Bag of Sewn Evil-Eye") on hover without opening it. A bag still
+		// OPENS on click (it doesn't pin); the preview is purely the identify-on-hover affordance.
+		// pointer-events:none means the floating preview never steals the next hover/click.
 		preview = s;
 		previewPos = { x: e.clientX + 14, y: e.clientY + 14 };
 	}

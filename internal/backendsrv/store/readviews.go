@@ -181,7 +181,7 @@ type CharFreshness struct {
 // Rows are ordered Char asc → item asc → location asc (the v1 sort); compute
 // preserves this order without re-sorting.
 func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJoinRow, error) {
-	// pp_by_name collapses pigparse_price to ONE representative row per normalized
+	// pp_rep collapses pigparse_price to ONE representative row per normalized
 	// name (lower(trim(name))). Cross-namespace bridge fix: the price join keys on
 	// NAME, not item_id (catalog ids != EQ inventory ids). The fan-out guard lives
 	// in this CTE — two catalog ids sharing a normalized name yield a single

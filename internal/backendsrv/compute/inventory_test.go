@@ -607,6 +607,29 @@ func TestStructuredInventory_SharedBank(t *testing.T) {
 	}
 }
 
+// TestStructuredInventory_HeldCursorExcluded: the "Held" cursor slot (a transient item on
+// the cursor) is dropped from the window — it must never surface as a loose tile.
+func TestStructuredInventory_HeldCursorExcluded(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewStore(db)
+	ctx := context.Background()
+
+	char := seedChar(t, db, "owner-a", "Slampeach", "SHM", 60, "TRL", false)
+	seedInvFull(t, db, char, "Held", "Fine Steel Long Sword", 7032, 1, 0, 1)
+	seedInvFull(t, db, char, "General1", "Backpack", 17005, 1, 8, 2)
+
+	inv, err := compute.StructuredInventory(ctx, s, "Slampeach")
+	if err != nil {
+		t.Fatalf("StructuredInventory: %v", err)
+	}
+	if findSlot(inv, "Held") != nil {
+		t.Errorf("Held cursor slot surfaced in the window, want excluded: %+v", inv)
+	}
+	if findSlot(inv, "General1") == nil {
+		t.Errorf("General1 missing — only the Held cursor slot should be dropped")
+	}
+}
+
 // seedItemMasterIcon inserts one item_master row with an explicit icon_id (INV-04),
 // so the store→compute icon flow is seedable. The other item_master columns are
 // minimal — only the id-join (item_id) + icon_id matter here.

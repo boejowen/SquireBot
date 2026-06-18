@@ -166,6 +166,14 @@ func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterI
 	pairSeq := make(map[string]int)              // canonical prefix → occurrences, numbering the doubled equipment slots
 
 	for _, row := range rows {
+		// The "Held" slot is the in-game CURSOR (a transient item being carried), not stored
+		// inventory — exclude it from the window entirely (it would otherwise classify to the
+		// general default and render as a loose/empty tile). Covers a bare "Held" and any
+		// "Held-Slot<N>" (a bag held on the cursor). 2026-06-18.
+		if isHeldCursor(row.Location) {
+			continue
+		}
+
 		cat, canonical := classifySlot(row.Location)
 
 		parent, isChild := splitChild(row.Location)
@@ -281,6 +289,18 @@ func pricesFromRow(row store.InventoryRow) []PriceDetail {
 		return nil
 	}
 	return []PriceDetail{{Direction: row.Direction, A30: row.A30, T30: row.T30}}
+}
+
+// isHeldCursor reports whether a Location is the in-game CURSOR slot ("Held", or a
+// "Held-Slot<N>" for a bag carried on the cursor) — transient, not stored inventory, so
+// buildStructuredInventory drops it from the window. Split on the FIRST '-' so the bag case
+// is caught; compared case-insensitively (A5), mirroring the other slot matchers.
+func isHeldCursor(location string) bool {
+	parent := location
+	if i := strings.IndexByte(location, '-'); i >= 0 {
+		parent = location[:i]
+	}
+	return strings.EqualFold(parent, "Held")
 }
 
 // splitChild splits a "-Slot<N>" child Location into (parentLocation, true); a top-level

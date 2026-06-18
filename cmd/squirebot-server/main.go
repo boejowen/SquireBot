@@ -362,6 +362,13 @@ func runServe(args []string) int {
 	mux.Handle("GET /api/v1/inventory/{char}", webauth.RequireSession(db, readapi.NewInventory(st)))
 	mux.Handle("GET /api/v1/characters", webauth.RequireSession(db, readapi.NewCharacters(st)))
 
+	// Inventory tab (Phase 32 / ITEM-01..03) — LOGIN-ONLY (RequireSession, NEVER
+	// public, NEVER RequireOfficer): a guild-wide item rollup (one row per normalized
+	// name) with per-holder detail; the viewer id from the RequireSession context flags
+	// is_mine (D-02/ITEM-02). DISTINCT from GET /api/v1/items/search (line 351, P19
+	// catalog search) — a separate Go 1.22+ ServeMux pattern, no shadowing.
+	mux.Handle("GET /api/v1/items", webauth.RequireSession(db, readapi.NewItems(st)))
+
 	// Notifications (Phase 20 / WANT-04 / D-02) — LOGIN-ONLY (RequireSession, NEVER
 	// RequireOfficer): every signed-in member manages their OWN prefs + reads their
 	// OWN inbox; the owner is derived server-side from the Discord session, never the

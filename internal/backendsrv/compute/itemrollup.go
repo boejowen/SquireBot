@@ -8,9 +8,10 @@ package compute
 // public-fn → pure-helper split).
 //
 // THE IRON LAW (same as the rest of compute): this file authors ZERO SQL. It composes
-// View (which already reuses pickPrice + the name-bridged pp_rep price + WikiURL/Prices/
-// IsQuestItem/LastSynced), RosterFor (the is_mine / bank / bot flags), and a small
-// item_master icon/stats map.
+// View (which already selects the representative price + the name-bridged pp_rep price +
+// WikiURL/Prices/IsQuestItem/LastSynced), RosterFor (the is_mine / bank / bot flags), and
+// a small item_master icon/stats map. It NEVER re-selects a price — it copies the
+// representative ViewRow's Price/Prices (set by View, the only correct name-bridged path).
 //
 // Group by lower(trim(name)), NEVER item_id: the EQ-inventory ids and the PigParse/
 // gear-tier catalog ids are different namespaces (gear-tier rows have no id at all), so
@@ -29,9 +30,10 @@ import (
 // Items computes the guild-wide item rollup: every copy of every item held anywhere
 // (equipped + general + bag contents + bank) across every character, bank toon, and
 // guild bot, collapsed to one ItemRollup per normalized name (D-01). It composes
-// compute.View (reuses pickPrice + inline enrichment), store.RosterFor (the per-char
-// is_mine / bank / bot flags, joined by char name), and store.ItemMasterIconStats (the
-// id-correct icon/stats lookup). viewerDiscordID is the authenticated session id; "" →
+// compute.View (which carries the representative selected price + inline enrichment),
+// store.RosterFor (the per-char is_mine / bank / bot flags, joined by char name), and
+// store.ItemMasterIconStats (the id-correct icon/stats lookup). viewerDiscordID is the
+// authenticated session id; "" →
 // nothing is flagged is_mine, but the list is still complete.
 func Items(ctx context.Context, s *store.Store, viewerDiscordID string) ([]ItemRollup, error) {
 	viewRows, err := View(ctx, s)
@@ -70,7 +72,7 @@ func buildItemRollups(viewRows []ViewRow, roster []store.RosterRow, iconStats ma
 			ic := iconStats[vr.ID] // representative id-correct icon/stats (item_master EQ namespace)
 			roll = &ItemRollup{
 				Name:        vr.Item, // first-seen casing
-				Price:       vr.Price, // already pickPrice-selected + name-bridged in View
+				Price:       vr.Price, // representative price — already selected + name-bridged by View
 				Prices:      vr.Prices,
 				WikiURL:     vr.WikiURL,
 				WikiSummary: vr.WikiSummary,

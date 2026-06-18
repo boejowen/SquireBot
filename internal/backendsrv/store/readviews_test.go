@@ -496,6 +496,54 @@ func TestReadViews_InventoryForChar_NameJoinHitAndMiss(t *testing.T) {
 	}
 }
 
+// TestGearTierPrices_NameJoin_HitMiss proves DATA-01 / ROADMAP SC #2: a wiki_gear_tier
+// row (item_id ALWAYS NULL — Pitfall 4) resolves its PigParse price + last-listed by
+// NORMALIZED ITEM NAME via the pp_rep CTE, NEVER by wgt.item_id. A name-matched row is a
+// HIT (HasPrice true, A30 = seeded, LastListed = the pigparse last_seen — Pitfall 2); an
+// unmatched row is a MISS (HasPrice false, zero-values), so the consumer renders "no
+// price". This is the UNCONDITIONAL gear-tier name-join test that closes SC #2 in Phase 29.
+func TestGearTierPrices_NameJoin_HitMiss(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	// HIT row: a NULL-item_id gear-tier rec whose item_name matches a pigparse_price row
+	// by normalized name — but the catalog row carries a DIFFERENT id (9999) than any EQ
+	// id, proving the cross-namespace NAME bridge (the join is lower(trim(item_name)) →
+	// pp_rep, never wgt.item_id which is always NULL).
+	seedWikiGear(t, db, "Velious Raiding", "WAR", "Head", "Crown of Narandi", 1)
+	seedPigparse(t, db, 9999, "Crown of Narandi", "0", 4500, 75) // writes last_seen="2026-05-09"
+
+	// MISS row: a gear-tier rec with NO name-matching pigparse_price row.
+	seedWikiGear(t, db, "Velious Raiding", "WAR", "Chest", "Unlisted Relic", 1)
+
+	got, err := s.GearTierPrices(ctx)
+	if err != nil {
+		t.Fatalf("GearTierPrices: %v", err)
+	}
+
+	byName := map[string]GearTierPriceRow{}
+	for _, r := range got {
+		byName[r.ItemName] = r
+	}
+
+	hit := byName["Crown of Narandi"]
+	if !hit.HasPrice || hit.A30 != 4500 {
+		t.Errorf("Crown of Narandi = {has:%t a30:%v}, want has/4500 (name-bridged, NULL gear-tier id)", hit.HasPrice, hit.A30)
+	}
+	if hit.LastListed != "2026-05-09" {
+		t.Errorf("Crown of Narandi LastListed = %q, want %q (pigparse_price.last_seen — last-listed-for-sale, Pitfall 2)", hit.LastListed, "2026-05-09")
+	}
+
+	miss := byName["Unlisted Relic"]
+	if miss.HasPrice {
+		t.Errorf("Unlisted Relic HasPrice = true, want false (no name-matching pigparse row → consumer renders 'no price')")
+	}
+	if miss.A30 != 0 || miss.LastListed != "" {
+		t.Errorf("Unlisted Relic = {a30:%v lastListed:%q}, want zero-values (nil price resolves to zero)", miss.A30, miss.LastListed)
+	}
+}
+
 // TestReadViews_GearAndSpellInputs proves the wiki_gear_tier / wiki_spells /
 // spellbook read methods feeding gear_check + spell_check.
 func TestReadViews_GearAndSpellInputs(t *testing.T) {

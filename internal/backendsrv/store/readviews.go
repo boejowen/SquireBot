@@ -105,6 +105,26 @@ type WikiGearTierRow struct {
 	Rank     int64
 }
 
+// GearTierPriceRow is one wiki_gear_tier recommendation with its PigParse price resolved
+// by NORMALIZED NAME. A gear-tier row's id column is ALWAYS NULL (enrich/wikigear.go,
+// Pitfall 4), so the price can ONLY bridge via lower(trim(item_name)) → pp_rep — never by
+// the gear-tier id. HasPrice is false when no pigparse row name-matches (consumer renders "no price").
+// LastListed = pigparse_price.last_seen (last-listed-for-sale, distinct from any char
+// freshness). Consumed by Phase 34 (WISH-04) wishlist suggestions; the RESOLUTION read
+// lives here (DATA-01 / ROADMAP SC #2 — gear-tier NULL-id rows resolve a name-keyed price).
+type GearTierPriceRow struct {
+	Tier       string
+	Class      string
+	Slot       string
+	ItemName   string
+	Rank       int64
+	Direction  string  // pigparse_price.direction (TEXT "0"/"1"); "" when no price row
+	A30        float64 // 30-day average; 0 when no price row
+	T30        int64   // 30-day transaction count; 0 when no price row
+	HasPrice   bool    // true iff a pigparse_price row name-matched
+	LastListed string  // pigparse_price.last_seen — last-listed-for-sale; "" when no price row
+}
+
 // WikiSpellRow is one wiki_spells row. normalized_name is already materialized in
 // the DB as lower(trim(spell_name)) — the same expression spellbook_entry uses —
 // so compute.SpellCheck joins on it directly with no recompute.
@@ -383,6 +403,67 @@ func (s *Store) WikiGearTiers(ctx context.Context) ([]WikiGearTierRow, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate wiki gear tier rows: %w", err)
+	}
+	return out, nil
+}
+
+// GearTierPrices returns every wiki_gear_tier recommendation row with its PigParse price +
+// last-listed resolved by NORMALIZED ITEM NAME (the same pp_rep CTE InventoryJoin /
+// InventoryForChar use, commit 0a169f3) — a gear-tier row's id column is ALWAYS NULL, so the
+// price can ONLY bridge by name (Pitfall 4; the join keys solely on lower(trim(item_name))
+// and NEVER references the gear-tier id column). This is
+// the DATA-01 / ROADMAP SC #2 read: a NULL-id gear-tier row whose item_name name-matches a
+// pigparse_price row resolves a price (hit); an unmatched row resolves nil (miss). Consumed
+// by Phase 34 (WISH-04). The read takes no user param (it is a full-table gear-tier read),
+// so there is nothing to bind; slog is silent on the happy path, the error path logs op+err.
+func (s *Store) GearTierPrices(ctx context.Context) ([]GearTierPriceRow, error) {
+	const query = `WITH pp_rep AS (
+	       SELECT lower(trim(name)) AS norm_name, MIN(item_id) AS rep_item_id
+	       FROM pigparse_price
+	       WHERE name IS NOT NULL AND trim(name) <> ''
+	       GROUP BY lower(trim(name))
+	)
+	SELECT wgt.tier, wgt.class, wgt.slot, wgt.item_name, wgt.rank,
+	       pp.direction, pp.a30, pp.t30, pp.last_seen
+	FROM wiki_gear_tier wgt
+	LEFT JOIN pp_rep             ON pp_rep.norm_name = lower(trim(wgt.item_name))
+	LEFT JOIN pigparse_price pp  ON pp.item_id = pp_rep.rep_item_id
+	ORDER BY wgt.tier, wgt.class, wgt.slot, wgt.rank`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query gear tier prices: %w", err)
+	}
+	defer rows.Close()
+
+	var out []GearTierPriceRow
+	for rows.Next() {
+		var (
+			r          GearTierPriceRow
+			itemName   sql.NullString
+			rank       sql.NullInt64
+			direction  sql.NullString
+			a30        sql.NullFloat64
+			t30        sql.NullInt64
+			lastListed sql.NullString // pigparse_price.last_seen — last-listed-for-sale
+		)
+		if err := rows.Scan(
+			&r.Tier, &r.Class, &r.Slot, &itemName, &rank,
+			&direction, &a30, &t30, &lastListed,
+		); err != nil {
+			return nil, fmt.Errorf("scan gear tier price row: %w", err)
+		}
+		r.ItemName = itemName.String
+		r.Rank = rank.Int64
+		r.Direction = direction.String
+		r.HasPrice = direction.Valid
+		r.A30 = a30.Float64
+		r.T30 = t30.Int64
+		r.LastListed = lastListed.String
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate gear tier price rows: %w", err)
 	}
 	return out, nil
 }

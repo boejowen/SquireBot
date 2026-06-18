@@ -30,8 +30,10 @@ func findSlot(inv compute.CharacterInventory, location string) *compute.Inventor
 
 // TestStructuredInventory_Classify seeds a Head (equipment), a General4 (general), and a
 // Bank1 (bank) and asserts each lands in the right group with the right CanonicalSlot.
-// The classifier is case-INSENSITIVE (A5), so this is robust whether live
-// inventory_item.location is Title- or upper-case.
+// The classifier is case-INSENSITIVE (A5 belt-and-suspenders): it is robust whether live
+// inventory_item.location is Title- or upper-case, so an on-box `SELECT DISTINCT location
+// FROM inventory_item LIMIT 40` mismatch (Title vs upper) does not break it — the canonical
+// OUTPUT key is always Title-case (covered explicitly by TestClassifySlot's "HEAD" case).
 func TestStructuredInventory_Classify(t *testing.T) {
 	db := newTestDB(t)
 	s := store.NewStore(db)
@@ -146,6 +148,10 @@ func TestNameJoin_HitMiss(t *testing.T) {
 
 // TestLastListed_NotCharFreshness proves Pitfall 2: a priced slot's LastListed equals the
 // pigparse last_seen (last-listed-for-sale) and differs from the char's upload freshness.
+// A7 belt-and-suspenders: pigparse_price.last_seen is the daily-getall last-listed-for-sale
+// date (post-WTS-filter), surfaced here verbatim as the ISO string LastListed; an on-box
+// `SELECT name,last_seen FROM pigparse_price LIMIT 5` confirms the semantics but does not
+// gate this test (the value is carried through, not interpreted).
 func TestLastListed_NotCharFreshness(t *testing.T) {
 	db := newTestDB(t)
 	s := store.NewStore(db)

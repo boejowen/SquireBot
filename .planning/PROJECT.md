@@ -8,6 +8,27 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.** Inventory and spell data lands in the sheet automatically; progression, gaps, and prices are computed for them. If everything else fails, this must work.
 
+## Current Milestone: v2.4 — Web UI Revamp (5-Tab Restructure)
+
+**Source spec:** `Future Features.txt` (user-authored, 2026-06-17, on the user's desktop) — the authoritative description of the target UX.
+
+**Goal:** Reorganize squirebot.quest around five top-level tabs — **Characters · Inventory · Banks · Wishlist · Settings** — each answering one user question. This spans **backend/data architecture + web** and reworks the just-shipped wantlist; it is NOT web-only (the spec's first line anticipates new data architecture + features).
+
+**The five tabs:**
+- **Characters** ("what does character X have?") — guild character list (own chars first A-Z, then others, then bots/banks) + per-character search; click a character → an **in-game-style inventory window** (real EQ slot layout, stack counts, backpack drill-down, bank-window view, right-click-style item tooltip with wiki stats + PigParse price + wiki link + last-synced).
+- **Inventory** ("which characters have item X?") — guild-wide item list (name, guild-wide count, expandable holders, wiki + PigParse links); click an item → holders + slot + last-synced.
+- **Banks** ("what's in the guild banks?") — banks-only list + total item value (PigParse) + total platinum across banks.
+- **Wishlist** ("what can I get to improve my characters?") — per-character, per-equipment-slot upgrade wishlist (3 blanks per equipped slot, wiki-suggested from the Velious Pre-raid/Grouping + Velious Raiding sections), with Discord ping toggle + EC-hit badge. Reworks the v2.2/v2.3 wantlist + EC monitor.
+- **Settings** ("how do I manage all this?") — folds in existing Theme / Notifications / Watcher Codes / Set Class & Level / My Characters / Admin.
+
+**Approach:** Sketch-first — `/gsd-sketch` mocks the 5-tab structure + headline surfaces (in-game inventory window, per-slot wishlist) for the user to react to; then requirements + roadmap.
+
+**Locked/ratified decisions (2026-06-17):**
+- Consolidated-views lock **RELAXED** for the web app — per-character master-detail drill-down ALLOWED (one reusable detail view on selection); guild-wide consolidated grids remain. (CLAUDE.md Architecture updated; [[project_consolidated_views]].)
+- Scope spans backend (inventory `Location`→slot-layout parsing + container nesting; bank valuation aggregation; per-slot wishlist data model + wiki-section suggestion engine) + web; watcher untouched (ingest already captures `Location`/`Slots` — this is parsing/surfacing, not new watcher work). Phases continue from v2.3 → v2.4 starts at **Phase 29**.
+
+**Status (2026-06-17):** milestone opened; sketching the 5-tab structure. REQUIREMENTS.md + ROADMAP.md follow the sketch.
+
 ## Current State
 
 **Shipped: v2.0 "Off Google" (2026-05-31).** The Google Sheet — both the UI and the data store — has been replaced by a self-hosted system, and Google is fully decommissioned. What shipped:
@@ -173,9 +194,11 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 
 ### Active
 
-<!-- v2.2 Wantlist + Discord Pinger — requirements being defined (see REQUIREMENTS.md). -->
+<!-- v2.4 Web UI Revamp — requirements TBD (sketch-first; defined after the design direction is chosen). v2.2 Wantlist Track 2 still parked. -->
 
-**v2.2 — Wantlist + Discord Pinger (in progress, started 2026-06-02)** — full REQ-ID list in `REQUIREMENTS.md` (WANT-01..08).
+**v2.4 — Web UI Revamp (in progress, opened 2026-06-17)** — web-only IA/navigation + component/interaction polish; requirements being defined via sketch-first design exploration (REQUIREMENTS.md filled once the direction is chosen). Phases start at 29.
+
+**v2.2 — Wantlist + Discord Pinger (Track 2 parked, started 2026-06-02)** — full REQ-ID list in `REQUIREMENTS.md` (WANT-01..08).
 
 - Per-user wantlist (website CRUD, Discord-identity-tied)
 - EC-tunnel auction monitor → Discord DM (PigParse-fed)
@@ -297,4 +320,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: after v2.3 milestone (2026-06-09) — v2.3 "Character Assignment & Per-Character Wantlists" (Phases 26–28) SHIPPED + deployed live (schema v10), milestone audit PASSED, archived to `milestones/v2.3-*`. Next milestone undefined. v2.2 Track-2 (Discord pinger WTS/raid monitors) still parked on the Raid Alliance bot invites.*
+*Last updated: 2026-06-17 — milestone **v2.4 "Web UI Revamp"** opened (web-only IA/nav + component polish; sketch-first; phases start at 29). Prior: v2.3 (Phases 26–28) SHIPPED + archived 2026-06-09 (schema v10, audit PASSED); quick 260610-fm5 UI streamline closed 2026-06-17 (schema v11). v2.2 Track-2 (Discord pinger WTS/raid monitors) still parked on the Raid Alliance bot invites.*

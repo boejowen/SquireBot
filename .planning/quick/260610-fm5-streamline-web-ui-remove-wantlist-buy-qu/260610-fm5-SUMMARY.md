@@ -139,9 +139,11 @@ Each task was committed atomically (code only; commit_docs=false — this SUMMAR
 **Total deviations:** 2 auto-fixed (1 blocking, 1 bug), 2 drift notes, 1 discretionary structure note
 **Impact on plan:** All fixes necessary for correctness; no scope creep. DEFERRED list untouched (no /char-meta fold-in, no MyCharactersPanel message reshuffle, no AssignmentAdminPanel username join).
 
-## Browser-Smoke Gap (orchestrator: post-deploy)
+## Browser-Smoke Gap (orchestrator: post-deploy) — ✅ CLOSED 2026-06-17
 
-The web vitest suite is node-only and DOM-blind (P15/P26/P27 precedent — green tests ≠ works in browser). These need a post-deploy browser smoke:
+**RESOLVED: human browser-smoke UAT on prod (logged-in Discord) PASSED all 6 items 2026-06-17.** No regressions. Item 5 (reason-free add + same-item re-add 409) confirmed the live `'buy'`-literal INSERT against schema v11 — no 500. Item 1's segmented toggle rendered styled (deviation-2 `.seg`/`.seg-btn` CSS confirmed present). 260610-fm5 is now fully closed.
+
+The web vitest suite is node-only and DOM-blind (P15/P26/P27 precedent — green tests ≠ works in browser). These were the post-deploy browser smoke items (all PASS):
 
 1. **Home segmented My characters/Guild toggle** — scope flip, char drill-down select, disabled state with zero claimed characters
 2. **DataGrid Filters disclosure** — default hidden, toggle expands/collapses, filters still apply while hidden, on all 5 grid instances (4 home + wantlist)
@@ -163,7 +165,7 @@ Also orchestrator-owned: deploy runs goose 00011 against the live DB (docs/backe
 5. Web: fresh build → tarball → scp → atomic swap with the load-bearing `chmod -R u=rwX,go=rX`.
 6. External smoke GREEN: apex 200; fresh hashed entry `start.B2_zCE6i.js` served `text/javascript` (blank-screen canary clear); `/api/v1/assignments/mine`, `/api/v1/wantlist`, `/api/v1/wantlist/guild`, `/api/v1/items/search` all 401 (login-gated, registered).
 
-Remaining: the 6-item browser-smoke checklist above needs a logged-in (Discord) human pass — headless smoke can't authenticate.
+Remaining: ~~the 6-item browser-smoke checklist above needs a logged-in (Discord) human pass~~ — **DONE: human UAT PASS all 6 items 2026-06-17.** Nothing outstanding on 260610-fm5.
 
 ## Issues Encountered
 

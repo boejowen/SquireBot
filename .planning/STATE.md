@@ -1,35 +1,46 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.3
-milestone_name: Character Assignment & Per-Character Wantlists
-status: complete
-last_updated: "2026-06-09T15:00:00.000Z"
-last_activity: 2026-06-09
+milestone: v2.4
+milestone_name: Web UI Revamp
+status: planning
+last_updated: "2026-06-17T00:00:00.000Z"
+last_activity: 2026-06-17
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-> **v2.3 SHIPPED + ARCHIVED 2026-06-09** — all 3 phases (26→27→28) deployed live (schema v10) + browser-smoke verified; milestone audit PASSED (14/14 reqs, integration clean); archived to `.planning/milestones/v2.3-*`; REQUIREMENTS.md retired for the next cycle. Carry-forwards: 999.33 fixed+deployed (quick 260609-d2o), 999.34 cosmetics backlogged. **No git tag pushed** (v2.3 = backend+web only; a `v*` tag fires the watcher release CI, and the watcher is unchanged). **Next: `/gsd-new-milestone`** (v2.2 Track 2 still parked on the Raid Alliance invites — independent).
+> **v2.4 "Web UI Revamp — 5-Tab Restructure" OPENED 2026-06-17.** Reorganize squirebot.quest around five tabs — **Characters · Inventory · Banks · Wishlist · Settings** (source spec: `Future Features.txt` on the user's desktop). **Spans backend/data architecture + web** (NOT web-only — corrected 2026-06-17 after reading the spec); reworks the just-shipped wantlist into a per-character per-slot wishlist; watcher untouched. **Consolidated-views lock RELAXED** — per-character master-detail drill-down now allowed (CLAUDE.md updated). **Approach = sketch-first:** currently mocking the 5-tab structure + in-game inventory window + per-slot wishlist via `/gsd-sketch` → user picks → requirements → roadmap. Backend/data work this implies: inventory `Location`→slot-layout parsing + container nesting, bank valuation aggregation, per-slot wishlist model + wiki-section suggestion engine. Phases continue from v2.3 (last = 28) → v2.4 starts at **29**.
+>
+> _Prior:_ **v2.3 SHIPPED + ARCHIVED 2026-06-09** (P26→28 live, schema v10, audit PASSED 14/14; no git tag — watcher unchanged; archived `.planning/milestones/v2.3-*`). Quick task 260610-fm5 UI streamline fully closed 2026-06-17 (schema v11; browser-smoke PASS all 6). Carry-forwards: 999.33 fixed+deployed, 999.34 cosmetics backlogged. **v2.2 Track 2** (Discord pinger WTS/raid, P22-23) still parked on the Raid Alliance invites — independent.
 
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-06-02 (v2.2 "Wantlist + Discord Pinger" roadmap created — Phases 19–23)
+**Last updated:** 2026-06-17 (v2.4 "Web UI Revamp" milestone opened — sketch-first)
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** Phase 21 — EC-Tunnel Auction Monitor COMPLETE (21-03 ec.RunMatch + ec_auction_match scheduler job + main.go reorder shipped; WANT-05 delivered, Track-1 finale done; next = `/gsd-discuss-phase 22` (invite-gated) or close the milestone)
+- **Current focus:** v2.4 Web UI Revamp just opened — defining the design direction via sketch-first exploration (`/gsd-sketch`, 2-4 layout/nav mockups); requirements + roadmap follow once a direction is picked. Phases start at 29.
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
+
+Phase: Not started (defining v2.4 direction via sketch-first design exploration)
+Plan: —
+Status: Sketching layout/nav directions (`/gsd-sketch`) → then requirements → roadmap
+Last activity: 2026-06-17 — Milestone v2.4 "Web UI Revamp" opened (sketch-first; web-only; phases start at 29)
+
+---
+
+## Prior milestone history (v2.3 — archived; retained as accumulated context)
 
 Phase: 28 — Character-Tagged Wantlist (SHIPPED 2026-06-09 — deployed live v10 + browser-smoke PASS; FINAL v2.3 phase)
 BROWSER-SMOKE UAT 2026-06-09: **PASS** — confirmed on prod: add a want tagged to your character (appears in My, grouped by char), account-level (no-character) wants stay valid, the Character group-by filter works, the Guild toggle shows the all-members roll-up with Owner + Character attribution and NO note, the char filter resets on view switch. #6 (live EC embed names the char) NOT exercised — no tagged item hit the tunnel during the window; organic/coverage-dependent (same as P21 live-DM), the embed path is unit-tested + the EC send-path proven live in P20/P21, so it confirms on the first real tagged match. Phase 28 = SHIPPED + UAT-verified. CWANT-01..06 delivered.
@@ -54,7 +65,7 @@ Execution: 3/3 plans complete (10 commits aff1553..c08b4e6, all on master, code 
 PRIOR planning state:
 Plan: 3 plans (26-01 store/migration → 26-02 API → 26-03 web), 3 waves, ASSIGN-01..06 covered. RESEARCH.md + PATTERNS.md + 3 PLAN.md written; plan-checker: 0 blockers / 4 warnings (all fixed in a revision pass).
 Status: Planning complete. Locked resolutions from research: guild bank SUBSUMES is_bank_toon (officer-only; single-bank invariant RELAXED — multiple banks OK, bank view unchanged, 2-bank test added); guild bot = NEW is_guild_bot column; character_assignment PK on character_id = single-assignee; assignment_request (pending|approved|denied|cancelled) + partial-unique-pending; idempotent INSERT OR IGNORE auto-seed from owner.discord_user_id; goose v9, NO _meta.schema_version cell; owner_id never re-homed; watcher UNTOUCHED. Each plan has a STRIDE threat_model. Browser-smoke gap flagged for /gsd-ui-review (web tests node-only). NOT YET EXECUTED — Phase 26 writes a LIVE-backend schema migration (00009) + API + web; execution + deploy is a deliberate next step. Next: `/gsd-execute-phase 26`.
-Last activity: 2026-06-10 — Completed quick task 260610-fm5: UI streamline (reason removal end-to-end + migration 00011 → schema v11, item-ID/enum strip, 9 placement fixes) — DEPLOYED LIVE; browser-smoke UAT pending.
+Last activity: 2026-06-17 — quick task 260610-fm5 browser-smoke UAT **PASS** (all 6 items: home My/Guild segmented toggle + char drill-down + disabled zero-claimed state, DataGrid Filters disclosure across all 5 grids, ?view=bank seeding + unknown-value ignore, full-width wantlist layout, reason-free add + same-item re-add 409 [proves the live 'buy'-literal INSERT against schema v11], friendly notification source/delivery labels). 260610-fm5 = fully closed (DEPLOYED LIVE 2026-06-10 + UAT-verified). Prior: 2026-06-10 — UI streamline shipped (reason removal end-to-end + migration 00011 → schema v11, item-ID/enum strip, 9 placement fixes).
 
 ## v2.3 Phase Plan (created 2026-06-08)
 
@@ -184,7 +195,7 @@ Carried forward at v2.1 close (non-blocking):
 | 260607-vgb | eqfind autodetect: add EQLite-bundle + system-location coverage (Linux `/opt/...EQLite` direct-hit + `systemCandidateRoots` walk; HOME `~/Desktop/EQLite`; Windows `%USERPROFILE%\Desktop\EQLite` etc.). Fixes a guildie's `/opt/everquest/EQLite` being invisible (Linux scan was WINE-`drive_c`-only). Ships to guildies only via a tagged release (auto-update). | 2026-06-08 | add17e9 | [260607-vgb-add-eqlite-bundle-system-location-covera](./quick/260607-vgb-add-eqlite-bundle-system-location-covera/) |
 | 260609-d2o | **999.33 fix** — officer-reversible guild-bank/bot designation. New `ListDesignatedChars` store read + `GET /api/v1/admin/characters/designated` (RequireOfficer) + a "Designated characters (guild bank / bot)" section in `AssignmentAdminPanel` with a "Clear designation" (→ `designateChar(id,'none')`, the existing audited endpoint) button; closes the one-way-door surfaced at the P26 UAT. No migration; watcher untouched. Gates green (go build/vet/test; web check 0/0, test 303, build). **SHIPPED — DEPLOYED LIVE 2026-06-09** (R2 backup → binary swap [.bak kept] → restart [goose no-op at v10] → web atomic-swap; external verify GREEN: apex 200, fresh JS bundle, new GET /api/v1/admin/characters/designated → 401 officer-gated, health 401). | 2026-06-09 | b7b0a48, 2b18d65 | [260609-d2o-officer-undesignate-bank-bot-char](./quick/260609-d2o-officer-undesignate-bank-bot-char/) |
 | 260609-er6 | **EC-monitor wrong-server hotfix** (P21 bug, user-reported). The `getdetails` feed was hardcoded to server=**0** = GREEN (the 21-SPIKE "server=0=Blue" finding was WRONG — only proved fresher, not which server); guildies on BLUE got DMs for GREEN sellers. Live probe confirmed **server=1 = live Blue** (Cloak of Flames srv=1 max_t 2026-06-08T23:02, fresher than srv=0; matches `getall/1`=Blue); records carry no per-auction server field → URL segment is the only lever. Changed `ec/urls.go` getDetailsBase `/getdetails/0/`→`/1/` + corrected comments (urls_test/ec.go/pigdetails.go/scheduler.go) + 21-SPIKE correction banner; NO logic change. Gates green (go build/vet/test). **SHIPPED — DEPLOYED LIVE 2026-06-09**: R2 backup → binary swap [.bak kept] → stop → `DELETE FROM ec_auction_cursor` (8→0, re-baseline against Blue, no spurious DMs) → start; logs confirm all 8 items `first-sight baseline` on boot (server=1/Blue), service active, goose 10. Honest expectation: Blue alerts sparser than Green but CORRECT (coverage = someone parsing Blue's EC tunnel, D-07). | 2026-06-09 | de15933 | [260609-er6-ec-poll-blue-not-green](./quick/260609-er6-ec-poll-blue-not-green/) |
-| 260610-fm5 | **UI streamline** (user-requested) — (1) wantlist buy/quest **reason removed end-to-end**: add form/grids/API types, Go handler/store/wantmatch/EC-embed ("Why you wanted it" now Note-only), **migration 00011** dedupe-then-reindex (unique key drops reason, KEEPS `COALESCE(character_id,-1)`; reason column persists, store writes 'buy' forever; same-item re-add now 409); (2) **zero raw item IDs** member-facing + friendly notification source/delivery labels + display-header facet labels; (3) 9 placement fixes: Inventory nav link, home scope filter → segmented My characters/Guild toggle, DataGrid Filters disclosure + 'Filter this table…', mute-bell cross-link, purpose lines + Admin h1, char-meta↔my-characters cross-links + menu rename 'Set class & level', /bank-coin 'Back to bank' → `/?view=bank` (allowlist-seeded tab), full-width wantlist grids. Gates green (web check 0/0, **306** tests, build; go build/vet/test, TestMigrate_00011 added, 00006/00010 unchanged). **SHIPPED — DEPLOYED LIVE 2026-06-10**: R2 backup → binary swap [.bak kept] → restart [goose **OK 00011** → v11] → live-index verify (reason-free, COALESCE held; dedupe deactivated **0** rows) → web atomic-swap; external verify GREEN (apex 200, fresh JS `text/javascript`, wantlist/search routes 401-gated). 6-item browser-smoke checklist pending human UAT (SUMMARY). Deferred: AssignmentAdminPanel snowflake→username (needs members-list join), /char-meta fold-in. | 2026-06-10 | e082e7c, 9698c57, bf8b31d | [260610-fm5-streamline-web-ui-remove-wantlist-buy-qu](./quick/260610-fm5-streamline-web-ui-remove-wantlist-buy-qu/) |
+| 260610-fm5 | **UI streamline** (user-requested) — (1) wantlist buy/quest **reason removed end-to-end**: add form/grids/API types, Go handler/store/wantmatch/EC-embed ("Why you wanted it" now Note-only), **migration 00011** dedupe-then-reindex (unique key drops reason, KEEPS `COALESCE(character_id,-1)`; reason column persists, store writes 'buy' forever; same-item re-add now 409); (2) **zero raw item IDs** member-facing + friendly notification source/delivery labels + display-header facet labels; (3) 9 placement fixes: Inventory nav link, home scope filter → segmented My characters/Guild toggle, DataGrid Filters disclosure + 'Filter this table…', mute-bell cross-link, purpose lines + Admin h1, char-meta↔my-characters cross-links + menu rename 'Set class & level', /bank-coin 'Back to bank' → `/?view=bank` (allowlist-seeded tab), full-width wantlist grids. Gates green (web check 0/0, **306** tests, build; go build/vet/test, TestMigrate_00011 added, 00006/00010 unchanged). **SHIPPED — DEPLOYED LIVE 2026-06-10**: R2 backup → binary swap [.bak kept] → restart [goose **OK 00011** → v11] → live-index verify (reason-free, COALESCE held; dedupe deactivated **0** rows) → web atomic-swap; external verify GREEN (apex 200, fresh JS `text/javascript`, wantlist/search routes 401-gated). **6-item browser-smoke UAT PASS 2026-06-17 (all 6 items — task fully closed).** Deferred: AssignmentAdminPanel snowflake→username (needs members-list join), /char-meta fold-in. | 2026-06-10 | e082e7c, 9698c57, bf8b31d | [260610-fm5-streamline-web-ui-remove-wantlist-buy-qu](./quick/260610-fm5-streamline-web-ui-remove-wantlist-buy-qu/) |
 
 ---
 

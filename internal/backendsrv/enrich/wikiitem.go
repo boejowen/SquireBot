@@ -47,6 +47,7 @@ type ParsedWikiItem struct {
 	IsQuestItem  bool   // statsblock contains "QUEST ITEM"
 	WikitextSHA1 string // lowercase hex SHA-1 of the UTF-8 wikitext (change detection)
 	IconID       int    // {{Itempage|lucy_img_ID=...}}; the P1999 wiki icon id; 0 = none yet (INV-04 D-01/D-02)
+	Statsblock   string // the cleaned in-game stat block (Slot/AC/STR.../WT/class/race + flags), newline-separated; "" when absent (INV-02 examine stats)
 }
 
 // WikiQuestItemLink is one quest reference harvested from an item's notes (the
@@ -90,6 +91,7 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 		IsQuestItem:  flags["QUEST ITEM"],
 		WikitextSHA1: sha1Hex(wikitext),
 		IconID:       parseIconID(getParam(params, "lucy_img_ID", "")), // INV-04: the wiki icon id; 0 when absent
+		Statsblock:   cleanStatsblock(statsblockRaw),                   // INV-02: the in-game stat block for the examine panel
 	}
 
 	questLinks := harvestQuestLinks(notesRaw, item)
@@ -391,6 +393,38 @@ func extractSummary(notes string) string {
 		cut = cut[:lastSpace]
 	}
 	return strings.TrimSpace(cut) + "…"
+}
+
+// cleanStatsblock turns the raw {{Itempage|statsblock=...}} (HTML-in-wikitext) into a plain
+// newline-separated stat block for the examine panel: <br> → newline, [[links]] → their
+// display text, then HTML tags + leftover {{templates}} stripped, intra-line whitespace
+// collapsed, blank lines dropped. Preserves the wiki's line ORDER, which already matches the
+// in-game examine (flags, Slot, AC, stats, WT/Size, Class, Race). Returns "" for an
+// absent/empty statsblock — the examine then omits the stats line (D-09). INV-02.
+func cleanStatsblock(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	// [[target|display]] → display, [[target]] → target (same rendering as extractSummary).
+	text := summaryLinkRe.ReplaceAllStringFunc(raw, func(m string) string {
+		sub := summaryLinkRe.FindStringSubmatch(m)
+		if sub[2] != "" {
+			return sub[2]
+		}
+		return sub[1]
+	})
+	text = brRe.ReplaceAllString(text, "\n") // the statsblock line separator → a real newline
+	text = htmlTagRe.ReplaceAllString(text, "")
+	text = templateRe.ReplaceAllString(text, "")
+
+	var lines []string
+	for _, ln := range strings.Split(text, "\n") {
+		ln = strings.TrimSpace(wsRe.ReplaceAllString(ln, " ")) // each line has no '\n' here, so \s+ is safe
+		if ln != "" {
+			lines = append(lines, ln)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // harvestQuestLinks emits one WikiQuestItemLink per unique [[wiki link]] target

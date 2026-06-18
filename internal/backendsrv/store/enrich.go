@@ -64,7 +64,8 @@ type ItemMaster struct {
 	IsQuestItem   bool
 	WikitextSHA1  string
 	LastRefreshed string
-	IconID        int // the P1999 wiki icon id (lucy_img_ID); 0 = none yet (INV-04, 00012)
+	IconID        int    // the P1999 wiki icon id (lucy_img_ID); 0 = none yet (INV-04, 00012)
+	Statsblock    string // the cleaned in-game stat block for the examine; "" when absent (INV-02, 00013)
 }
 
 // WikiSpell is the store-local input shape for one wiki_spells row. NormalizedName
@@ -156,13 +157,13 @@ func UpsertPigparsePricesTx(ctx context.Context, tx *sql.Tx, rows []PigparsePric
 }
 
 const itemMasterUpsert = `INSERT INTO item_master
-	(item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed, icon_id)
- VALUES (?,?,?,?,?,?,?,?,?)
+	(item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed, icon_id, statsblock)
+ VALUES (?,?,?,?,?,?,?,?,?,?)
  ON CONFLICT(item_id) DO UPDATE SET
    name=excluded.name, wiki_summary=excluded.wiki_summary, wiki_url=excluded.wiki_url,
    slot=excluded.slot, is_quest_item=excluded.is_quest_item,
    wikitext_sha1=excluded.wikitext_sha1, last_refreshed=excluded.last_refreshed,
-   icon_id=excluded.icon_id`
+   icon_id=excluded.icon_id, statsblock=excluded.statsblock`
 
 // UpsertItemMaster upserts one item_master row (begins + commits its own tx).
 func (s *Store) UpsertItemMaster(ctx context.Context, item ItemMaster) error {
@@ -187,7 +188,7 @@ func UpsertItemMasterTx(ctx context.Context, tx *sql.Tx, item ItemMaster) error 
 	}
 	if _, err := tx.ExecContext(ctx, itemMasterUpsert,
 		item.ItemID, item.Name, item.WikiSummary, item.WikiURL, item.Slot,
-		quest, item.WikitextSHA1, item.LastRefreshed, item.IconID,
+		quest, item.WikitextSHA1, item.LastRefreshed, item.IconID, item.Statsblock,
 	); err != nil {
 		slog.Error("item_master upsert: insert", "item_id", item.ItemID, "err", err)
 		return fmt.Errorf("upsert item_master (item_id=%d): %w", item.ItemID, err)
@@ -212,25 +213,26 @@ func GetItemMasterSHA1Tx(ctx context.Context, tx *sql.Tx, itemID int64) (string,
 	return sha.String, nil // NullString.String is "" when NULL
 }
 
-// GetItemMasterFreshnessTx returns the stored wikitext_sha1 AND icon_id for itemID
-// (sha "" and iconID 0 when the row is absent or the column is NULL). The wiki job's
-// short-circuit compares BOTH: an unchanged wikitext alone is not enough to skip the
-// upsert, because a row written BEFORE the INV-04 icon_id column (migration 00012) has
-// the same SHA-1 yet a 0 icon — skipping on SHA-1 alone would leave its icon permanently
-// unbackfilled. Writing whenever sha OR icon differs backfills those rows and keeps icon
-// changes propagating, while a row whose sha+icon both match is still skipped.
-func GetItemMasterFreshnessTx(ctx context.Context, tx *sql.Tx, itemID int64) (sha string, iconID int64, err error) {
-	var s sql.NullString
+// GetItemMasterFreshnessTx returns the stored wikitext_sha1, icon_id AND statsblock for
+// itemID (zero values when the row is absent or a column is NULL). The wiki job's
+// short-circuit compares ALL THREE: an unchanged wikitext alone is not enough to skip the
+// upsert, because a row written BEFORE the icon_id (00012) or statsblock (00013) columns has
+// the same SHA-1 yet a 0 icon / "" statsblock — skipping on SHA-1 alone would leave those
+// derived fields permanently unbackfilled. Writing whenever sha OR icon OR statsblock differs
+// backfills those rows and keeps changes propagating; a row whose sha+icon+statsblock all
+// match is still skipped.
+func GetItemMasterFreshnessTx(ctx context.Context, tx *sql.Tx, itemID int64) (sha string, iconID int64, statsblock string, err error) {
+	var s, sb sql.NullString
 	var icon sql.NullInt64
 	qerr := tx.QueryRowContext(ctx,
-		`SELECT wikitext_sha1, icon_id FROM item_master WHERE item_id = ?`, itemID).Scan(&s, &icon)
+		`SELECT wikitext_sha1, icon_id, statsblock FROM item_master WHERE item_id = ?`, itemID).Scan(&s, &icon, &sb)
 	switch {
 	case qerr == sql.ErrNoRows:
-		return "", 0, nil
+		return "", 0, "", nil
 	case qerr != nil:
-		return "", 0, fmt.Errorf("read item_master freshness (item_id=%d): %w", itemID, qerr)
+		return "", 0, "", fmt.Errorf("read item_master freshness (item_id=%d): %w", itemID, qerr)
 	}
-	return s.String, icon.Int64, nil // NullX zero-values when NULL
+	return s.String, icon.Int64, sb.String, nil // NullX zero-values when NULL
 }
 
 // UpsertWikiSpellsForClass replaces all wiki_spells rows for class (begins +

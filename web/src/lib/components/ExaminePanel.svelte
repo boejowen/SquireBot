@@ -63,11 +63,14 @@
 			{:else if f.kind === 'price'}
 				<p class="ex-price">{f.text}</p>
 			{:else if f.kind === 'stats'}
+				<!-- The in-game stat block — multi-line (newline-separated); pre-line keeps
+				     each stat on its own row. Plain {} interpolation (Svelte auto-escapes). -->
 				<p class="ex-stats">{f.text}</p>
+			{:else if f.kind === 'notes'}
+				<p class="ex-notes">{f.text}</p>
 			{:else if f.kind === 'lastsynced'}
 				<p class="ex-footer">{f.text}</p>
 			{:else}
-				<!-- slot / dmgdly / ac / wtsize / classrace — plain escaped text rows. -->
 				<p class="ex-line">{f.text}</p>
 			{/if}
 		{/each}
@@ -118,6 +121,7 @@
 	.ex-name,
 	.ex-line,
 	.ex-stats,
+	.ex-notes,
 	.ex-price,
 	.ex-wiki,
 	.ex-footer {
@@ -128,6 +132,7 @@
 	}
 	.ex-line,
 	.ex-stats,
+	.ex-notes,
 	.ex-price,
 	.ex-wiki,
 	.ex-footer {
@@ -137,7 +142,14 @@
 		margin: 4px 0;
 	}
 	.ex-stats {
+		/* The in-game stat block is newline-separated — keep each stat on its own line. */
+		white-space: pre-line;
 		color: var(--status-ok);
+	}
+	.ex-notes {
+		/* The wiki description/lore — dimmed + italic to set it apart from the live stats. */
+		opacity: 0.85;
+		font-style: italic;
 	}
 	.ex-price {
 		color: var(--status-other);

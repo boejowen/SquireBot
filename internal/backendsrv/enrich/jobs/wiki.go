@@ -224,15 +224,15 @@ func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.ItemRef, ite
 	}
 	defer tx.Rollback() // no-op after Commit
 
-	existingSHA, existingIcon, err := store.GetItemMasterFreshnessTx(ctx, tx, ref.ItemID)
+	existingSHA, existingIcon, existingStats, err := store.GetItemMasterFreshnessTx(ctx, tx, ref.ItemID)
 	if err != nil {
 		return false, err
 	}
-	if existingSHA == item.WikitextSHA1 && existingIcon == int64(item.IconID) {
-		// Both the wikitext AND the icon are unchanged — skip the write (the empty tx rolls
-		// back via defer). NOTE: SHA-1 alone is NOT sufficient — a row written before the
-		// INV-04 icon_id column (migration 00012) has the same SHA-1 yet a 0 icon, and must
-		// still be re-written to backfill its icon (INV-04 icon backfill, 2026-06-18).
+	if existingSHA == item.WikitextSHA1 && existingIcon == int64(item.IconID) && existingStats == item.Statsblock {
+		// The wikitext AND the icon AND the statsblock are all unchanged — skip the write (the
+		// empty tx rolls back via defer). NOTE: SHA-1 alone is NOT sufficient — a row written
+		// before the icon_id (00012) or statsblock (00013) columns has the same SHA-1 yet a 0
+		// icon / "" statsblock, and must still be re-written to backfill those derived fields.
 		return false, nil
 	}
 

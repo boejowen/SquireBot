@@ -1,6 +1,6 @@
 // Vitest for the pure examine helper ($lib/examine) — the node-only project (no
-// jsdom / @testing-library). These prove the D-08 examine field ORDER + the D-09
-// field OMISSION the in-game inventory window SHIPS (ExaminePanel.svelte imports
+// jsdom / @testing-library). These prove the examine field ORDER + the D-09 field
+// OMISSION the in-game inventory window SHIPS (ExaminePanel.svelte imports
 // examineFields rather than inlining the order/omission). The panel's DOM render
 // is DOM-blind here (browser-smoke gap closed in 31-04's deploy). Mirrors the
 // roster.test.ts / myview.test.ts factory-fixture + describe/it idiom.
@@ -21,7 +21,9 @@ function slot(over: Partial<InventorySlot> = {}): InventorySlot {
 		price: 4200,
 		last_listed: '2026-05-01T00:00:00Z',
 		wiki_url: 'https://wiki.project1999.com/Cloak_of_Flames',
-		wiki_summary: 'STR +10 · HP +90 · AC 13',
+		// statsblock = the in-game stat block (buffs); wiki_summary = the lore/notes.
+		statsblock: 'MAGIC ITEM\nSlot: BACK\nAC: 13\nSTR: +10 HP: +90\nWT: 0.5 Size: SMALL',
+		wiki_summary: 'A cloak wreathed in everburning flame.',
 		is_quest_item: false,
 		prices: [],
 		children: [],
@@ -30,7 +32,7 @@ function slot(over: Partial<InventorySlot> = {}): InventorySlot {
 	};
 }
 
-/** The ordered `kind` sequence — the load-bearing D-08 assertion target. */
+/** The ordered `kind` sequence — the load-bearing order assertion target. */
 function kinds(fields: ExamineField[]): string[] {
 	return fields.map((f) => f.kind);
 }
@@ -42,9 +44,9 @@ describe('examineFields — name is ALWAYS first and present', () => {
 		expect(fields[0].text).toBe('Cloak of Flames');
 	});
 
-	it('a BARE slot (no flags/stats/price/wiki/last-synced) still renders the name', () => {
+	it('a BARE slot (no flags/stats/notes/price/wiki/last-synced) still renders the name', () => {
 		const bare = slot({
-			canonical_slot: '',
+			statsblock: '',
 			wiki_summary: '',
 			wiki_url: '',
 			price: null,
@@ -62,7 +64,7 @@ describe('examineFields — name is ALWAYS first and present', () => {
 	it('a truly nameless+sourceless slot still renders exactly one name field', () => {
 		const empty = slot({
 			item: '',
-			canonical_slot: '',
+			statsblock: '',
 			wiki_summary: '',
 			wiki_url: '',
 			price: null
@@ -92,33 +94,41 @@ describe('examineFields — D-09 omission (no blank/null rows)', () => {
 		expect(kinds(fields)).not.toContain('lastsynced');
 	});
 
-	it('a blank wiki_summary OMITS the stats field', () => {
-		const fields = examineFields(slot({ wiki_summary: '' }), '');
+	it('a blank statsblock OMITS the stats field', () => {
+		const fields = examineFields(slot({ statsblock: '' }), '');
 		expect(kinds(fields)).not.toContain('stats');
 	});
 
-	it('a blank canonical_slot OMITS the slot field', () => {
-		const fields = examineFields(slot({ canonical_slot: '' }), '');
-		expect(kinds(fields)).not.toContain('slot');
+	it('a present statsblock renders the stat block verbatim', () => {
+		const fields = examineFields(slot({ statsblock: 'Slot: BACK\nAC: 13' }), '');
+		const stats = fields.find((f) => f.kind === 'stats');
+		expect(stats?.text).toBe('Slot: BACK\nAC: 13');
+	});
+
+	it('a blank wiki_summary OMITS the notes field', () => {
+		const fields = examineFields(slot({ wiki_summary: '' }), '');
+		expect(kinds(fields)).not.toContain('notes');
 	});
 
 	it('is_quest_item=false OMITS the flags field; true includes it', () => {
 		expect(kinds(examineFields(slot({ is_quest_item: false }), ''))).not.toContain('flags');
 		expect(kinds(examineFields(slot({ is_quest_item: true }), ''))).toContain('flags');
 	});
+
+	it('never emits a standalone slot row (the stat block carries the slot)', () => {
+		// The old D-08 "Slot:" row is folded into the stat block — no separate slot field.
+		expect(kinds(examineFields(slot(), ''))).not.toContain('slot');
+	});
 });
 
-describe('examineFields — D-08 relative ORDER of present fields', () => {
-	it('a fully-populated slot orders name → flags → slot → stats → price → wiki → lastsynced', () => {
-		const fields = examineFields(
-			slot({ is_quest_item: true }),
-			'2026-06-18T00:00:00Z'
-		);
+describe('examineFields — relative ORDER of present fields', () => {
+	it('a fully-populated slot orders name → flags → stats → notes → price → wiki → lastsynced', () => {
+		const fields = examineFields(slot({ is_quest_item: true }), '2026-06-18T00:00:00Z');
 		expect(kinds(fields)).toEqual([
 			'name',
 			'flags',
-			'slot',
 			'stats',
+			'notes',
 			'price',
 			'wiki',
 			'lastsynced'
@@ -126,22 +136,16 @@ describe('examineFields — D-08 relative ORDER of present fields', () => {
 	});
 
 	it('omitted fields collapse without disturbing the relative order of the rest', () => {
-		// No flags, no price → name → slot → stats → wiki → lastsynced (still in D-08 order).
-		const fields = examineFields(
-			slot({ is_quest_item: false, price: null }),
-			'2026-06-18T00:00:00Z'
-		);
-		expect(kinds(fields)).toEqual(['name', 'slot', 'stats', 'wiki', 'lastsynced']);
+		// No flags, no price → name → stats → notes → wiki → lastsynced.
+		const fields = examineFields(slot({ is_quest_item: false, price: null }), '2026-06-18T00:00:00Z');
+		expect(kinds(fields)).toEqual(['name', 'stats', 'notes', 'wiki', 'lastsynced']);
 	});
 });
 
 describe('examineFields — last-synced uses charLastSeen, NOT slot.last_listed (Pitfall 2)', () => {
 	it('renders the passed charLastSeen and ignores the per-slot last_listed', () => {
 		const charLastSeen = '2026-06-18T12:00:00Z';
-		const fields = examineFields(
-			slot({ last_listed: '2001-01-01T00:00:00Z' }),
-			charLastSeen
-		);
+		const fields = examineFields(slot({ last_listed: '2001-01-01T00:00:00Z' }), charLastSeen);
 		const ls = fields.find((f) => f.kind === 'lastsynced');
 		expect(ls?.text).toBe(`Last synced: ${charLastSeen}`);
 		// The price last-listed date must NOT appear anywhere in the examine.

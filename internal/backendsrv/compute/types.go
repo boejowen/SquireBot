@@ -169,8 +169,9 @@ type InventorySlot struct {
 	WikiSummary   string          `json:"wiki_summary"`
 	IsQuestItem   bool            `json:"is_quest_item"`
 	Prices        []PriceDetail   `json:"prices"`
-	Children      []InventorySlot `json:"children"` // nested bag contents (one level deep); nil when not a container
-	IconID        int64           `json:"icon_id"`  // item_master.icon_id (id-joined); 0 = none yet → colored-tile fallback (INV-04, D-02)
+	Children      []InventorySlot `json:"children"`   // nested bag contents (one level deep); nil when not a container
+	IconID        int64           `json:"icon_id"`    // item_master.icon_id (id-joined); 0 = none yet → colored-tile fallback (INV-04, D-02)
+	Statsblock    string          `json:"statsblock"` // item_master.statsblock (id-joined); the in-game stat block for the examine; "" when none (INV-02)
 }
 
 // CharacterInventory is the per-character structured slot model (INV-05).

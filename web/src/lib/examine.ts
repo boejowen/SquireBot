@@ -23,12 +23,8 @@ export interface ExamineField {
 	kind:
 		| 'name'
 		| 'flags'
-		| 'slot'
-		| 'dmgdly'
-		| 'ac'
-		| 'stats'
-		| 'wtsize'
-		| 'classrace'
+		| 'stats' // the in-game stat block (Slot/AC/STR.../WT/class/race), from statsblock
+		| 'notes' // the wiki description/lore (the former wiki_summary)
 		| 'price'
 		| 'wiki'
 		| 'lastsynced';
@@ -44,37 +40,27 @@ function formatPp(n: number): string {
 	return Math.round(n).toLocaleString('en-US');
 }
 
-/** Title-case-ish display of a canonical slot key for the "Slot:" line
- *  (e.g. "Primary" → "PRIMARY", "Finger1" → "FINGER1"). The canonical_slot is a
- *  trusted compute constant (slotconst.go), so this is presentation only. */
-function slotDisplay(canonicalSlot: string): string {
-	return canonicalSlot.trim().toUpperCase();
-}
-
 /**
  * Build the examine fields for one filled slot in the LOCKED D-08 order, omitting
  * any field whose source is empty (D-09 — never a blank/"null"/"—" row). The NAME
  * is ALWAYS the first field and always present (even for a bare slot). `charLastSeen`
  * is the per-CHARACTER value (CharacterInventory.last_seen) — NOT slot.last_listed.
  *
- * D-08 order (a field is OMITTED when its source is empty):
+ * Order (a field is OMITTED when its source is empty):
  *   1  name        (always)
- *   2  flags       (derived from is_quest_item; omit when none)
- *   3  slot/skill  (canonical_slot; omit when blank)
- *   4  DMG/DLY     (weapons only — not exposed by the current contract → always omitted)
- *   5  AC          (not exposed discretely by the current contract → always omitted)
- *   6  stats       (the stored wiki_summary block; omit when blank)
- *   7  wt/size     (not exposed discretely by the current contract → always omitted)
- *   8  class/race  (not exposed discretely by the current contract → always omitted)
- *   9  PigParse price ("PigParse: {price}pp"; omit when price === null)
- *   10 wiki link   (wiki_url || wikiUrlFor(item); omit only when both are blank)
- *   11 last synced ("Last synced: {charLastSeen}"; omit when "")
+ *   2  flags       (the is_quest_item badge; omit when not a quest item)
+ *   3  stats       (the stored in-game stat block — slot, AC, stat buffs, WT/size,
+ *                   class/race, MAGIC/LORE/NO-DROP flags — from statsblock; omit when blank)
+ *   4  notes       (the wiki description/lore — the former wiki_summary; omit when blank)
+ *   5  PigParse price ("PigParse: {price}pp"; omit when price === null)
+ *   6  wiki link   (wiki_url || wikiUrlFor(item); omit only when both are blank)
+ *   7  last synced ("Last synced: {charLastSeen}"; omit when "")
  *
- * Discrete DMG/DLY/AC/wt-size/class-race rows are NOT in the read contract
- * (InventorySlot exposes wiki_summary as a single prose block, plus price/prices/
- * wiki_url/is_quest_item). Per D-09 "show what's known, never fabricate": the prose
- * summary renders as the single `stats` block and the structured rows are omitted.
- * If the contract later exposes discrete fields, slot them in at their D-08 index.
+ * The D-08 discrete rows (slot/DMG/DLY/AC/wt-size/class-race) are NOT split out: the
+ * wiki statsblock already presents them in the in-game order as a single block, so a
+ * separate "Slot:" line is dropped (it would just duplicate the stat block's first
+ * line, and for a bag it was the noisy inventory position). Per D-09, the stat block
+ * is shown verbatim when present and omitted when blank.
  */
 export function examineFields(slot: InventorySlot, charLastSeen: string): ExamineField[] {
 	const fields: ExamineField[] = [];
@@ -82,42 +68,39 @@ export function examineFields(slot: InventorySlot, charLastSeen: string): Examin
 	// 1. Name — ALWAYS present, always first.
 	fields.push({ kind: 'name', text: slot.item });
 
-	// 2. Flags — the only flag the contract exposes is is_quest_item (D-09: show
-	//    what's known). A future flags string would slot in here.
+	// 2. Flags — the is_quest_item badge (a quick top indicator). The MAGIC/LORE/NO-DROP
+	//    flags live inside the stat block below.
 	if (slot.is_quest_item) {
 		fields.push({ kind: 'flags', text: 'QUEST ITEM' });
 	}
 
-	// 3. Slot / skill — the canonical equipment slot, when known.
-	const cs = slot.canonical_slot?.trim();
-	if (cs) {
-		fields.push({ kind: 'slot', text: `Slot: ${slotDisplay(cs)}` });
+	// 3. Stats — the in-game stat block (Slot/AC/STR.../WT/class/race), straight from the
+	//    stored wiki statsblock: the item's actual buffs + requirements. Omit when blank (D-09).
+	const stats = slot.statsblock?.trim();
+	if (stats) {
+		fields.push({ kind: 'stats', text: stats });
 	}
 
-	// 4 DMG/DLY · 5 AC · 7 wt/size · 8 class/race — not discretely exposed by the
-	//   read contract; omitted entirely (D-09 — never fabricate). The stored prose
-	//   carries any such detail and renders as the `stats` block below.
-
-	// 6. Stats — the stored wiki summary prose, when present.
-	const summary = slot.wiki_summary?.trim();
-	if (summary) {
-		fields.push({ kind: 'stats', text: summary });
+	// 4. Notes — the item's wiki description/lore (the former summary). Omit when blank (D-09).
+	const notes = slot.wiki_summary?.trim();
+	if (notes) {
+		fields.push({ kind: 'notes', text: notes });
 	}
 
-	// 9. PigParse price — omit ENTIRELY when null (D-09; never "PigParse: null").
+	// 5. PigParse price — omit ENTIRELY when null (D-09; never "PigParse: null").
 	if (slot.price !== null && slot.price !== undefined) {
 		fields.push({ kind: 'price', text: `PigParse: ${formatPp(slot.price)}pp` });
 	}
 
-	// 10. Wiki link — the stored wiki_url, else a derived page URL from the item
-	//     name; omit only when both are blank.
+	// 6. Wiki link — the stored wiki_url, else a derived page URL from the item name;
+	//    omit only when both are blank.
 	const href = wikiHref(slot);
 	if (href) {
 		fields.push({ kind: 'wiki', text: `Wiki: ${slot.item} ↗`, href });
 	}
 
-	// 11. Last synced — the per-CHARACTER upload freshness (NOT slot.last_listed);
-	//     omit when unknown.
+	// 7. Last synced — the per-CHARACTER upload freshness (NOT slot.last_listed); omit
+	//    when unknown.
 	const ls = charLastSeen?.trim();
 	if (ls) {
 		fields.push({ kind: 'lastsynced', text: `Last synced: ${ls}` });

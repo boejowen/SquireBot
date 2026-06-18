@@ -89,6 +89,29 @@ func TestParseItempage_ClothCap(t *testing.T) {
 	}
 }
 
+// TestParseItempage_Statsblock proves the INV-02 examine stats (2026-06-18): the in-game
+// stat block is surfaced as a cleaned, newline-separated string — the slot line preserved,
+// all HTML (<br>/<a>) stripped — for the examine panel. (Previously parsed but discarded by
+// the D-8 Sheet-parity scope guard.)
+func TestParseItempage_Statsblock(t *testing.T) {
+	wikitext, title := loadWikitext(t, "wiki-parse-cloth-cap")
+	item, _, ok, _ := ParseItempage(wikitext, title)
+	if !ok {
+		t.Fatal("ParseItempage ok=false")
+	}
+	if item.Statsblock == "" {
+		t.Fatalf("Statsblock empty, want the cleaned in-game stat block")
+	}
+	// The wiki statsblock leads with the slot line; cleanStatsblock preserves it.
+	if !strings.Contains(item.Statsblock, "Slot: HEAD") {
+		t.Errorf("Statsblock missing the slot line: %q", item.Statsblock)
+	}
+	// No HTML survives — it must be plain newline-separated text for the examine.
+	if strings.Contains(item.Statsblock, "<") {
+		t.Errorf("Statsblock leaked an HTML tag (incl. <br>): %q", item.Statsblock)
+	}
+}
+
 func TestParseItempage_Pearl(t *testing.T) {
 	wikitext, title := loadWikitext(t, "wiki-parse-pearl")
 	item, links, ok, _ := ParseItempage(wikitext, title)

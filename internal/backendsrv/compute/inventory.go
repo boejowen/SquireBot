@@ -277,7 +277,8 @@ func slotFromRow(row store.InventoryRow, cat SlotCategory, canonical string) Inv
 		WikiSummary:   row.WikiSummary,
 		IsQuestItem:   row.IsQuestItem,
 		Prices:        prices,
-		IconID:        row.IconID, // id-joined item_master.icon_id; 0 = no icon yet (INV-04, D-02)
+		IconID:        row.IconID,     // id-joined item_master.icon_id; 0 = no icon yet (INV-04, D-02)
+		Statsblock:    row.Statsblock, // id-joined item_master.statsblock; "" = no stats yet (INV-02)
 	}
 }
 

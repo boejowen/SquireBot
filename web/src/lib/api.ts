@@ -191,6 +191,9 @@ export interface InventorySlot {
 	prices: PriceDetail[];
 	children: InventorySlot[];
 	icon_id: number;
+	/** The in-game stat block (Slot/AC/STR.../WT/class/race + flags), newline-separated;
+	 *  "" when the item has no stored wiki stats — the examine omits the line (D-09). */
+	statsblock: string;
 }
 
 /** One character's structured inventory (`GET /api/v1/inventory/{char}`). Empty

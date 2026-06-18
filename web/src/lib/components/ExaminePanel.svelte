@@ -84,6 +84,12 @@
 		position: sticky;
 		top: 60px;
 		min-height: 200px;
+		/* Long wiki summaries must stay INSIDE the box: cap the height and scroll the
+		   overflow rather than spilling past the border (2026-06-18). min-width:0 lets the
+		   panel shrink in its grid column so word-wrap can take effect. */
+		max-height: calc(100vh - 80px);
+		overflow-y: auto;
+		min-width: 0;
 	}
 	.prompt {
 		font-family: var(--font-body);
@@ -108,6 +114,17 @@
 		text-transform: uppercase;
 		color: var(--status-other);
 		margin: 0 0 8px;
+	}
+	.ex-name,
+	.ex-line,
+	.ex-stats,
+	.ex-price,
+	.ex-wiki,
+	.ex-footer {
+		/* Break long unbreakable tokens (URLs, run-on wiki text) so nothing overflows the
+		   290px panel width — pairs with .examine's overflow-y for the vertical case. */
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 	.ex-line,
 	.ex-stats,

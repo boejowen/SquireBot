@@ -39,7 +39,10 @@
 	// Placement per 31-UI-SPEC §E: left column, right column, then the bottom WORN row.
 	const LEFT_SLOTS = ['Ear1', 'Head', 'Face', 'Ear2', 'Neck', 'Shoulders', 'Arms', 'Back'];
 	const RIGHT_SLOTS = ['Wrist1', 'Wrist2', 'Hands', 'Finger1', 'Finger2', 'Chest', 'Legs', 'Feet'];
-	const WORN_SLOTS = ['Charm', 'Primary', 'Secondary', 'Range', 'Ammo', 'Waist', 'Power'];
+	// No Charm or Power Source position: both equipment slots were added in post-Velious
+	// expansions Project 1999 will never implement, so they never hold an item — omit them
+	// from the paperdoll rather than render a permanently-empty tile (2026-06-18).
+	const WORN_SLOTS = ['Primary', 'Secondary', 'Range', 'Ammo', 'Waist'];
 
 	// Index the equipment array by canonical_slot so each paperdoll position maps to
 	// its slot (or null → an empty labelled tile, D-11).
@@ -60,12 +63,13 @@
 		return s !== null && (s.item?.trim() ?? '') !== '';
 	}
 
-	// A slot is an openable container (bag) only when it has capacity AND lives in general
-	// or bank. WORN EQUIPMENT is never a bag: real /outputfile inventory reports a non-zero
-	// Slots (aug-slot) count on equipped items — that must not make a paperdoll tile open
-	// instead of examine (the 2026-06-18 worn-items fix). Keep in lockstep with PaperdollSlot.
+	// A slot is an openable container (bag) only when it actually CONTAINS slots — the data
+	// nested child rows under it. Real /outputfile bags enumerate every slot as a child (even
+	// empty ones, so kids == capacity); a non-bag item with a stray Slots value (worn gear,
+	// boots, a circlet — all Slots=5) has NO children. Children-presence is the reliable signal,
+	// NOT slots > 0 (2026-06-18). Keep in lockstep with PaperdollSlot.isBag.
 	function isContainer(s: InventorySlot | null): boolean {
-		return s !== null && (s.slots ?? 0) > 0 && s.category !== 'equipment';
+		return s !== null && (s.children?.length ?? 0) > 0;
 	}
 
 	// --- pin / open / hover handlers (§G) ---
@@ -440,6 +444,12 @@
 		font-family: var(--font-body);
 		font-size: 16px;
 		line-height: 1.4;
+		/* Keep a long wiki summary inside the floating preview: wrap long tokens and clip the
+		   height (the transient hover is a glance — the pinned panel scrolls the full text). */
+		max-height: 60vh;
+		overflow: hidden;
+		overflow-wrap: anywhere;
+		word-break: break-word;
 	}
 	.pv-name {
 		font-family: var(--font-display);

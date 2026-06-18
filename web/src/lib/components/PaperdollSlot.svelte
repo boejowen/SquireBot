@@ -43,7 +43,11 @@
 	// A filled slot has a non-empty item name (the data foundation keeps empty
 	// equipment slots with item_id 0 / blank name — D-11).
 	let filled = $derived(slot !== null && (slot.item?.trim() ?? '') !== '');
-	let isBag = $derived(filled && (slot?.slots ?? 0) > 0);
+	// A tile is an openable BAG only when it has capacity AND lives in general/bank. WORN
+	// EQUIPMENT is never a bag: real /outputfile inventory reports a non-zero Slots (aug-slot)
+	// count on equipped items, which must NOT make the paperdoll tile openable — it stays a
+	// plain examine tile (click pins, hover previews). 2026-06-18 worn-items-not-clickable fix.
+	let isBag = $derived(filled && (slot?.slots ?? 0) > 0 && slot?.category !== 'equipment');
 	let count = $derived(slot?.count ?? 0);
 	let iconId = $derived(slot?.icon_id ?? 0);
 

@@ -60,6 +60,14 @@
 		return s !== null && (s.item?.trim() ?? '') !== '';
 	}
 
+	// A slot is an openable container (bag) only when it has capacity AND lives in general
+	// or bank. WORN EQUIPMENT is never a bag: real /outputfile inventory reports a non-zero
+	// Slots (aug-slot) count on equipped items — that must not make a paperdoll tile open
+	// instead of examine (the 2026-06-18 worn-items fix). Keep in lockstep with PaperdollSlot.
+	function isContainer(s: InventorySlot | null): boolean {
+		return s !== null && (s.slots ?? 0) > 0 && s.category !== 'equipment';
+	}
+
 	// --- pin / open / hover handlers (§G) ---
 	function pin(s: InventorySlot) {
 		pinned = s;
@@ -87,7 +95,7 @@
 		// Transient preview only for a filled NON-container tile (PaperdollSlot already
 		// suppresses the bag case). pointer-events:none means the floating preview
 		// never steals the next hover/click. Positioned at the cursor entry point.
-		if ((s.slots ?? 0) > 0) return;
+		if (isContainer(s)) return;
 		preview = s;
 		previewPos = { x: e.clientX + 14, y: e.clientY + 14 };
 	}
@@ -176,7 +184,7 @@
 							onleave={hoverLeave}
 							expanded={s ? isOpen(s) : false}
 						/>
-						{#if s && isFilled(s) && (s.slots ?? 0) > 0 && isOpen(s)}
+						{#if s && isFilled(s) && isContainer(s) && isOpen(s)}
 							{@render bagExpand(s)}
 						{/if}
 					</div>
@@ -248,7 +256,7 @@
 						onleave={hoverLeave}
 						expanded={isOpen(s)}
 					/>
-					{#if isFilled(s) && (s.slots ?? 0) > 0 && isOpen(s)}
+					{#if isFilled(s) && isContainer(s) && isOpen(s)}
 						{@render bagExpand(s)}
 					{/if}
 				</div>

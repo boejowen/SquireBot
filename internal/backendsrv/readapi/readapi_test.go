@@ -16,6 +16,7 @@ package readapi_test
 // the verified column layouts in migrations/00001_init.sql + 00003.
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/readapi"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
+	"github.com/boejowen/SquireBot/internal/backendsrv/webauth"
 )
 
 const testOrigin = "https://squirebot.quest"
@@ -389,6 +391,212 @@ func TestCORS_Credentials_OnGETandPreflight(t *testing.T) {
 	}
 	if got := optRec.Header().Get("Access-Control-Allow-Origin"); got == "*" {
 		t.Errorf("preflight Access-Control-Allow-Origin must never be the wildcard with credentials")
+	}
+}
+
+// --- inventory + characters handlers (Phase 31-02) ---------------------------
+
+func seedWebUser(t *testing.T, db *sql.DB, discordUserID, username string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?,?,NULL,0,0)`, discordUserID, username,
+	); err != nil {
+		t.Fatalf("seed web_user %q: %v", discordUserID, err)
+	}
+}
+
+func seedAssignment(t *testing.T, db *sql.DB, charID int64, discordUserID string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO character_assignment (character_id, discord_user_id, assigned_at, assigned_by)
+		 VALUES (?,?,0,'test')`, charID, discordUserID,
+	); err != nil {
+		t.Fatalf("seed character_assignment (char=%d, %s): %v", charID, discordUserID, err)
+	}
+}
+
+// TestInventory_UnknownChar_EmptyNot404 proves the V4/D-11 empty-not-404 contract:
+// an unknown character returns 200 with the CharacterInventory shape whose three
+// slot arrays are empty `[]` (NOT null, NOT a 404), so the client renders
+// "no inventory synced yet".
+func TestInventory_UnknownChar_EmptyNot404(t *testing.T) {
+	h := readapi.NewInventory(seedStore(t))
+	rec := httptest.NewRecorder()
+	// PathValue is populated by the ServeMux {char} pattern in production; set it
+	// explicitly for the direct handler test (Go 1.22+ Request.SetPathValue).
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/inventory/Nobody", nil)
+	req.SetPathValue("char", "Nobody")
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (empty-not-404 for an unknown char)", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	var body struct {
+		Char      string            `json:"char"`
+		Equipment []json.RawMessage `json:"equipment"`
+		General   []json.RawMessage `json:"general"`
+		Bank      []json.RawMessage `json:"bank"`
+		LastSeen  string            `json:"last_seen"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode inventory body: %v (body=%s)", err, rec.Body.String())
+	}
+	// The three arrays must be present + empty (not null). json.RawMessage slices
+	// unmarshal to non-nil empty slices for `[]` and nil for `null`/absent.
+	if body.Equipment == nil || body.General == nil || body.Bank == nil {
+		t.Fatalf("inventory arrays must be [] not null: %s", rec.Body.String())
+	}
+	if len(body.Equipment) != 0 || len(body.General) != 0 || len(body.Bank) != 0 {
+		t.Fatalf("unknown char must have empty inventory: %s", rec.Body.String())
+	}
+}
+
+// TestInventory_KnownChar_RendersSlots proves a seeded char's inventory comes back
+// with its general slots (the seedStore Alpha char holds two general items).
+func TestInventory_KnownChar_RendersSlots(t *testing.T) {
+	h := readapi.NewInventory(seedStore(t))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/inventory/Alpha", nil)
+	req.SetPathValue("char", "Alpha")
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var body struct {
+		Char    string           `json:"char"`
+		General []map[string]any `json:"general"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode inventory body: %v (body=%s)", err, rec.Body.String())
+	}
+	if body.Char != "Alpha" {
+		t.Errorf("char = %q, want Alpha", body.Char)
+	}
+	if len(body.General) == 0 {
+		t.Fatalf("Alpha general slots = 0, want >=1 (seeded two general items)")
+	}
+	// The icon_id contract field (Plan 31-01) is present on each slot.
+	if _, ok := body.General[0]["icon_id"]; !ok {
+		t.Errorf("inventory slot missing \"icon_id\" key; got keys %v", keysOf(body.General[0]))
+	}
+}
+
+func TestInventory_NonGET_405(t *testing.T) {
+	h := readapi.NewInventory(seedStore(t))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/inventory/Alpha", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST /inventory status = %d, want 405", rec.Code)
+	}
+}
+
+// TestCharacters_ViewerFirstRoster proves the roster endpoint returns the
+// viewer-aware roster (the viewer's chars first), session identity read from the
+// request context (RequireSession injects it in production; the test injects it
+// via webauth.WithUser exactly as the gate would).
+func TestCharacters_ViewerFirstRoster(t *testing.T) {
+	db := store.NewTestDB(t)
+	const viewer = "discord-viewer-1"
+	seedWebUser(t, db, viewer, "Viewer")
+
+	// Two non-bank chars: "Zzz" (the viewer's) must sort before "Aaa" (not theirs)
+	// because the viewer's band comes first despite Z > A alphabetically.
+	mine := seedChar(t, db, "owner-m", "Zzz", "Enchanter", 60, false)
+	seedChar(t, db, "owner-o", "Aaa", "Warrior", 55, false)
+	seedAssignment(t, db, mine, viewer)
+
+	h := readapi.NewCharacters(store.NewStore(db))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/characters", nil).
+		WithContext(webauth.WithUser(context.Background(), viewer))
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", ct)
+	}
+	var roster []struct {
+		Name       string `json:"name"`
+		Level      int64  `json:"level"`
+		Race       string `json:"race"`
+		Class      string `json:"class"`
+		IsMine     bool   `json:"is_mine"`
+		IsBankToon bool   `json:"is_bank_toon"`
+		IsGuildBot bool   `json:"is_guild_bot"`
+		LastSeen   string `json:"last_seen"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &roster); err != nil {
+		t.Fatalf("decode characters body as JSON array: %v (body=%s)", err, rec.Body.String())
+	}
+	if len(roster) != 2 {
+		t.Fatalf("roster = %d, want 2: %+v", len(roster), roster)
+	}
+	// Viewer-first: the viewer's "Zzz" sorts before the non-viewer "Aaa".
+	if roster[0].Name != "Zzz" || !roster[0].IsMine {
+		t.Errorf("roster[0] = %+v, want Zzz (the viewer's, is_mine=true) first", roster[0])
+	}
+	if roster[1].Name != "Aaa" || roster[1].IsMine {
+		t.Errorf("roster[1] = %+v, want Aaa (not the viewer's, is_mine=false)", roster[1])
+	}
+	if roster[0].Class != "Enchanter" || roster[0].Level != 60 {
+		t.Errorf("roster[0] meta = {class:%q level:%d}, want Enchanter/60", roster[0].Class, roster[0].Level)
+	}
+}
+
+// TestCharacters_EmptyRoster_ArrayNotNull proves an empty roster encodes as `[]`.
+func TestCharacters_EmptyRoster_ArrayNotNull(t *testing.T) {
+	db := store.NewTestDB(t)
+	h := readapi.NewCharacters(store.NewStore(db))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/characters", nil).
+		WithContext(webauth.WithUser(context.Background(), "discord-x"))
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != "[]" {
+		t.Fatalf("empty roster body = %q, want []", got)
+	}
+}
+
+func TestCharacters_NonGET_405(t *testing.T) {
+	db := store.NewTestDB(t)
+	h := readapi.NewCharacters(store.NewStore(db))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/characters", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST /characters status = %d, want 405", rec.Code)
+	}
+}
+
+// TestNewRoutes_RequireSession_401WithoutCookie proves the BLOCKING T-31-05 gate:
+// BOTH new routes, registered under webauth.RequireSession, return 401 (NOT the
+// inner 200) when the request carries no session cookie — the data-exposure gate
+// is at the API, fail-closed, not just the UI. This exercises the SAME wrap the
+// production registration in cmd/squirebot-server/main.go applies.
+func TestNewRoutes_RequireSession_401WithoutCookie(t *testing.T) {
+	db := store.NewTestDB(t)
+	st := store.NewStore(db)
+
+	routes := map[string]http.Handler{
+		"/api/v1/inventory/Alpha": webauth.RequireSession(db, readapi.NewInventory(st)),
+		"/api/v1/characters":      webauth.RequireSession(db, readapi.NewCharacters(st)),
+	}
+	for path, h := range routes {
+		rec := httptest.NewRecorder()
+		// No sb_session cookie → RequireSession must reject with 401, fail-closed.
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s without a session = %d, want 401 (RequireSession fail-closed)", path, rec.Code)
+		}
 	}
 }
 

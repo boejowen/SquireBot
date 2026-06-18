@@ -350,6 +350,18 @@ func runServe(args []string) int {
 	// (readapi, takes the read-side st):
 	mux.Handle("GET /api/v1/items/search", webauth.RequireSession(db, readapi.NewItemSearch(st)))
 
+	// Characters tab (Phase 31 / CHAR-01/02/03 + INV-01..04) -- LOGIN-ONLY
+	// (RequireSession, NEVER public, NEVER RequireOfficer): both are guild-wide
+	// member reads, so the gate is membership (every signed-in member sees every
+	// character's inventory + the full roster), not per-character ownership
+	// (T-31-05/T-31-07). The {char} path wildcard binds ONLY as a `?` placeholder
+	// inside compute.StructuredInventory -> InventoryForChar (never SQL/log text,
+	// T-31-06); an unknown char returns an empty CharacterInventory (200, not 404 --
+	// D-11). /characters reads the viewer id from the RequireSession context to
+	// order the viewer's chars first (D-10).
+	mux.Handle("GET /api/v1/inventory/{char}", webauth.RequireSession(db, readapi.NewInventory(st)))
+	mux.Handle("GET /api/v1/characters", webauth.RequireSession(db, readapi.NewCharacters(st)))
+
 	// Notifications (Phase 20 / WANT-04 / D-02) — LOGIN-ONLY (RequireSession, NEVER
 	// RequireOfficer): every signed-in member manages their OWN prefs + reads their
 	// OWN inbox; the owner is derived server-side from the Discord session, never the

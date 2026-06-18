@@ -144,6 +144,67 @@ export interface MetaResponse {
 	characters: MetaCharacter[];
 }
 
+// --- Phase 31: Characters tab + in-game inventory window -----------------
+// These mirror the Go snake_case JSON contract from Plan 31-02 (readapi/
+// characters.go rosterChar + compute/types.go CharacterInventory/InventorySlot).
+// The roster + inventory read routes are session-gated (RequireSession, P15) —
+// getJSON carries credentials + typed 401/403 the AuthGate re-routes on. The
+// pure viewer-first sort/filter over RosterCharacter lives in $lib/roster (a
+// node-testable helper, the myview.ts precedent), NOT inlined in a .svelte file.
+
+/** A guild roster row (`GET /api/v1/characters` element). Band flags + viewer-
+ *  ownership (`is_mine`) drive the D-10 viewer-first ordering/search priority;
+ *  level/race/class may be zero/"" when a watcher hasn't reported meta yet (D-11). */
+export interface RosterCharacter {
+	name: string;
+	level: number;
+	race: string;
+	class: string;
+	/** True when this character is assigned to the viewing session (v2.3 character_assignment). */
+	is_mine: boolean;
+	is_bank_toon: boolean;
+	is_guild_bot: boolean;
+	/** ISO timestamp (character.last_seen); "" when never seen. */
+	last_seen: string;
+}
+
+/** One inventory slot in the in-game window (`compute.InventorySlot`). `children`
+ *  is the nested bag/bank-bag contents (D-04/D-05); `slots > 0` marks an openable
+ *  container. `icon_id` is the P1999 wiki icon id (0 = none yet → colored-tile
+ *  fallback, D-02). `last_listed` is the PRICE last-listed date, NOT "last synced"
+ *  (that per-character value rides on CharacterInventory.last_seen). Reuses the
+ *  existing PriceDetail interface for `prices`. */
+export interface InventorySlot {
+	location: string;
+	category: 'equipment' | 'general' | 'bank';
+	canonical_slot: string;
+	item: string;
+	id: number;
+	count: number;
+	slots: number;
+	/** null when no PigParse price resolved — examine omits the line (D-09). */
+	price: number | null;
+	last_listed: string;
+	wiki_url: string;
+	wiki_summary: string;
+	is_quest_item: boolean;
+	prices: PriceDetail[];
+	children: InventorySlot[];
+	icon_id: number;
+}
+
+/** One character's structured inventory (`GET /api/v1/inventory/{char}`). Empty
+ *  arrays (not 404) for an unknown/unsynced char — the client renders "no
+ *  inventory synced yet" (D-11). `last_seen` is the per-character upload freshness
+ *  for the examine "Last synced" footer. */
+export interface CharacterInventory {
+	char: string;
+	last_seen: string;
+	equipment: InventorySlot[];
+	general: InventorySlot[];
+	bank: InventorySlot[];
+}
+
 // --- Fetch core ----------------------------------------------------------
 
 /**
@@ -220,6 +281,19 @@ export function fetchBank(fetchFn: typeof fetch = fetch): Promise<BankResponse> 
 /** GET /api/v1/meta → { characters: [{ name, last_seen }] }. */
 export function fetchMeta(fetchFn: typeof fetch = fetch): Promise<MetaResponse> {
 	return getJSON<MetaResponse>('/api/v1/meta', fetchFn);
+}
+
+/** GET /api/v1/characters → RosterCharacter[] ([] when empty). Session-gated; the
+ *  server returns the viewer-first band-tagged roster (Plan 31-02 RosterFor). */
+export function fetchCharacters(f: typeof fetch = fetch): Promise<RosterCharacter[]> {
+	return getJSON<RosterCharacter[]>('/api/v1/characters', f);
+}
+
+/** GET /api/v1/inventory/{char} → CharacterInventory (empty arrays, not 404, for an
+ *  unknown/unsynced char — D-11). `char` is encodeURIComponent'd: character names
+ *  are guildie-controlled (the server re-binds it as a ? placeholder). */
+export function fetchInventory(char: string, f: typeof fetch = fetch): Promise<CharacterInventory> {
+	return getJSON<CharacterInventory>(`/api/v1/inventory/${encodeURIComponent(char)}`, f);
 }
 
 // --- Write core: postJSON (15-05 Task 1) ---------------------------------

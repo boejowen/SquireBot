@@ -19,6 +19,7 @@ import (
 	"context"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
@@ -32,11 +33,15 @@ import (
 // top-level slot colliding on the container's canonical key (WR-01).
 var subSlotRe = regexp.MustCompile(`(?i)^slot\d+$`)
 
-// generalRe / bankRe match the top-level container tokens case-insensitively
-// (General<N> / Bank<N>), so live data in any case (A5) classifies correctly.
+// generalRe / bankRe / sharedBankRe match the top-level container tokens case-insensitively
+// (General<N> / Bank<N> / SharedBank<N>), so live data in any case (A5) classifies correctly.
+// sharedBankRe is checked BEFORE bankRe: real /outputfile inventory writes the account-wide
+// shared-bank slots as "SharedBank<N>" alongside the personal "Bank<N>"; without its own
+// pattern they fall to the defensive-general default and surface as loose general items.
 var (
-	generalRe = regexp.MustCompile(`(?i)^general\d+$`)
-	bankRe    = regexp.MustCompile(`(?i)^bank\d+$`)
+	generalRe    = regexp.MustCompile(`(?i)^general\d+$`)
+	bankRe       = regexp.MustCompile(`(?i)^bank\d+$`)
+	sharedBankRe = regexp.MustCompile(`(?i)^sharedbank\d+$`)
 )
 
 // classifySlot maps an inventory Location to its category + canonical slot key. It
@@ -45,10 +50,13 @@ var (
 // "Head-Slot1" augment is equipment). Comparison is case-insensitive (A5 / Pitfall 5);
 // the emitted canonical key is Title-case.
 //
-//	^[Gg]eneral\d+  → (general, canonical "GeneralN")
-//	^[Bb]ank\d+     → (bank,    canonical "BankN")
-//	known equip tok → (equipment, the canonical Title-case token)
-//	anything else   → (general, the raw parent) — defensive default, never panics (T-29-05)
+//	^[Gg]eneral\d+   → (general,   canonical "GeneralN")
+//	^sharedbank\d+   → (bank,      canonical "SharedBankN") — account-wide shared bank
+//	^[Bb]ank\d+      → (bank,      canonical "BankN")
+//	known equip tok  → (equipment, the canonical Title-case token)
+//	doubled-slot base→ (equipment, the canonical PREFIX "Ear"/"Finger"/"Wrist" — the
+//	                    occurrence is numbered later in buildStructuredInventory)
+//	anything else    → (general,   the raw parent) — defensive default, never panics (T-29-05)
 func classifySlot(location string) (SlotCategory, string) {
 	parent := location
 	if i := strings.IndexByte(location, '-'); i >= 0 {
@@ -58,12 +66,20 @@ func classifySlot(location string) (SlotCategory, string) {
 	switch {
 	case generalRe.MatchString(parent):
 		return SlotGeneral, canonicalNumbered("General", parent)
+	case sharedBankRe.MatchString(parent):
+		return SlotBank, canonicalNumbered("SharedBank", parent)
 	case bankRe.MatchString(parent):
 		return SlotBank, canonicalNumbered("Bank", parent)
 	}
 
 	if canonical, ok := equipmentSlotsLC[strings.ToLower(parent)]; ok {
 		return SlotEquipment, canonical
+	}
+	// Doubled equipment slot written as its BASE token ("Ear"/"Fingers"/"Wrist", both of a
+	// pair) → equipment with the canonical PREFIX; buildStructuredInventory numbers the two
+	// occurrences into Ear1/Ear2, Finger1/Finger2, Wrist1/Wrist2 (slotconst.go pairedBaseSlots).
+	if prefix, ok := pairedBaseSlots[strings.ToLower(parent)]; ok {
+		return SlotEquipment, prefix
 	}
 
 	// Defensive default (empty token, unknown token, malformed Location): classify as
@@ -77,6 +93,21 @@ func classifySlot(location string) (SlotCategory, string) {
 func canonicalNumbered(prefix, parent string) string {
 	digits := parent[len(prefix):] // len(parent) >= len(prefix); the regex guaranteed prefix+digits
 	return prefix + digits
+}
+
+// numberPairedSlot turns a DOUBLED-equipment base canonical ("Ear"/"Finger"/"Wrist") into
+// its occurrence-numbered canonical — the 1st becomes "<base>1", the 2nd "<base>2" — so each
+// of a paired slot renders in its own paperdoll position (and the two same-named rows no
+// longer collide on an identical Location downstream). Any already-complete canonical
+// (e.g. "Head", "Ear1", "General4") passes through unchanged. seq is the per-character
+// occurrence counter (base → count); the caller seeds one fresh map per inventory.
+func numberPairedSlot(canonical string, seq map[string]int) string {
+	switch canonical {
+	case "Ear", "Finger", "Wrist":
+		seq[canonical]++
+		return canonical + strconv.Itoa(seq[canonical])
+	}
+	return canonical
 }
 
 // StructuredInventory fetches one character's full inventory and builds the INV-05
@@ -132,15 +163,22 @@ func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterI
 	}
 	all := make([]indexed, 0, len(rows))
 	topLevel := make(map[string]bool, len(rows)) // raw Location → is a top-level (non-child) slot
+	pairSeq := make(map[string]int)              // canonical prefix → occurrences, numbering the doubled equipment slots
 
 	for _, row := range rows {
 		cat, canonical := classifySlot(row.Location)
-		slot := slotFromRow(row, cat, canonical)
 
 		parent, isChild := splitChild(row.Location)
 		if !isChild {
 			topLevel[row.Location] = true
+			// Number a doubled-slot base (Ear/Finger/Wrist → Ear1/Ear2, …) by occurrence.
+			// Only TOP-LEVEL equipment rows count; an augment child (e.g. "Ear-Slot1") is
+			// flattened later (it never reaches the paperdoll) and must not consume an ordinal.
+			if cat == SlotEquipment {
+				canonical = numberPairedSlot(canonical, pairSeq)
+			}
 		}
+		slot := slotFromRow(row, cat, canonical)
 		all = append(all, indexed{slot: slot, category: cat, isChild: isChild, parent: parent})
 	}
 

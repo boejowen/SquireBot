@@ -41,6 +41,24 @@ var equipmentSlots = map[string]bool{
 	"Power": true, "Ammo": true,
 }
 
+// pairedBaseSlots maps the lower-cased BASE token that real /outputfile inventory writes
+// for the DOUBLED equipment slots → the canonical slot PREFIX. P99 emits the SAME base
+// token ("Ear"/"Fingers"/"Wrist") for BOTH of a doubled pair — NOT "Ear1"/"Ear2" — so the
+// canonical Ear1/Ear2 lookup in equipmentSlots misses, the two rows fall to the
+// defensive-general default, and they collide on an identical Location in the consumer's
+// keyed grid (the Phase 31 window-render crash, 2026-06-18). The classifier maps these
+// bases to equipment with the PREFIX; buildStructuredInventory numbers the occurrences into
+// Ear1/Ear2, Finger1/Finger2, Wrist1/Wrist2 (each its own paperdoll position). Singular
+// variants ("finger"/"wrists") are tolerated defensively. Already-numbered tokens
+// ("Ear1") still match equipmentSlots directly above this and never reach here.
+var pairedBaseSlots = map[string]string{
+	"ear":     "Ear",
+	"fingers": "Finger",
+	"finger":  "Finger",
+	"wrist":   "Wrist",
+	"wrists":  "Wrist",
+}
+
 // equipmentSlotsLC maps lower(token) → the canonical Title-case token, so the
 // classifier accepts whatever case live data uses (A5) while still EMITTING the
 // canonical key. Built once at package init from equipmentSlots (the single source

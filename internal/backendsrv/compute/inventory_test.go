@@ -524,6 +524,89 @@ func TestStructuredInventory_LastSeen(t *testing.T) {
 	}
 }
 
+// TestStructuredInventory_PairedSlots is the Phase 31 window-crash regression (2026-06-18):
+// real /outputfile inventory writes the BASE token for the DOUBLED equipment slots — the
+// SAME "Ear"/"Fingers"/"Wrist" for BOTH of each pair, NOT "Ear1"/"Ear2". They must classify
+// as EQUIPMENT and be numbered by occurrence into Ear1/Ear2, Finger1/Finger2, Wrist1/Wrist2
+// (each its own paperdoll position), instead of falling to the general default where the two
+// identical Locations collided in the web's keyed grid and froze the inventory window on
+// "Loading…". (The synthetic 29-fixture used the numbered tokens, so this real-data shape
+// was never exercised until the live browser-smoke.)
+func TestStructuredInventory_PairedSlots(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewStore(db)
+	ctx := context.Background()
+
+	char := seedChar(t, db, "owner-a", "Slampeach", "SHM", 60, "TRL", false)
+	// Both ears / both fingers / both wrists share the SAME base Location — exactly what the
+	// live Slampeach dump carries (the rows that triggered each_key_duplicate).
+	seedInvFull(t, db, char, "Ear", "Black Sapphire Electrum Earring", 14701, 1, 0, 1)
+	seedInvFull(t, db, char, "Ear", "Black Sapphire Electrum Earring", 14701, 1, 0, 2)
+	seedInvFull(t, db, char, "Fingers", "Velium Fire Wedding Ring", 30339, 1, 0, 3)
+	seedInvFull(t, db, char, "Fingers", "Velium Fire Wedding Ring", 30339, 1, 0, 4)
+	seedInvFull(t, db, char, "Wrist", "Bracer of Benevolence", 5301, 1, 0, 5)
+	seedInvFull(t, db, char, "Wrist", "Bracer of Benevolence", 5301, 1, 0, 6)
+
+	inv, err := compute.StructuredInventory(ctx, s, "Slampeach")
+	if err != nil {
+		t.Fatalf("StructuredInventory: %v", err)
+	}
+
+	// None fall to General (that was the crash path) — all six are equipment.
+	if len(inv.General) != 0 {
+		t.Errorf("General = %+v, want empty (paired equipment must NOT fall to general)", inv.General)
+	}
+	if len(inv.Equipment) != 6 {
+		t.Fatalf("Equipment = %d slots, want 6: %+v", len(inv.Equipment), inv.Equipment)
+	}
+	// Each pair is numbered into its two distinct canonical positions (the keys the
+	// paperdoll's LEFT/RIGHT/WORN slot lists look up — Ear1/Ear2/Finger1/Finger2/Wrist1/Wrist2).
+	seen := map[string]int{}
+	for i := range inv.Equipment {
+		seen[inv.Equipment[i].CanonicalSlot]++
+	}
+	for _, want := range []string{"Ear1", "Ear2", "Finger1", "Finger2", "Wrist1", "Wrist2"} {
+		if seen[want] != 1 {
+			t.Errorf("canonical %q appeared %d times, want exactly 1: %+v", want, seen[want], inv.Equipment)
+		}
+	}
+}
+
+// TestStructuredInventory_SharedBank: real /outputfile inventory writes the account-wide
+// shared-bank slots as "SharedBank<N>" alongside the personal "Bank<N>". They must classify
+// as bank (render in the bank section), not fall to the general default — and a nested
+// shared-bank-bag child must still nest under its container.
+func TestStructuredInventory_SharedBank(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewStore(db)
+	ctx := context.Background()
+
+	char := seedChar(t, db, "owner-a", "Slampeach", "SHM", 60, "TRL", false)
+	seedInvFull(t, db, char, "SharedBank1", "Rough Diamond", 7002, 3, 0, 1)
+	seedInvFull(t, db, char, "SharedBank2", "Backpack", 17005, 1, 8, 2)
+	seedInvFull(t, db, char, "SharedBank2-Slot1", "Diamond", 1071, 1, 0, 3)
+
+	inv, err := compute.StructuredInventory(ctx, s, "Slampeach")
+	if err != nil {
+		t.Fatalf("StructuredInventory: %v", err)
+	}
+	if len(inv.General) != 0 {
+		t.Errorf("General = %+v, want empty (shared bank must classify as bank)", inv.General)
+	}
+	sb1 := findSlot(inv, "SharedBank1")
+	if sb1 == nil || sb1.Category != compute.SlotBank {
+		t.Errorf("SharedBank1 = %+v, want category bank", sb1)
+	}
+	// The nested child stays nested under SharedBank2 (not surfaced as a phantom top-level slot).
+	sb2 := findSlot(inv, "SharedBank2")
+	if sb2 == nil || len(sb2.Children) != 1 || sb2.Children[0].Item != "Diamond" {
+		t.Errorf("SharedBank2 children = %+v, want 1 (Diamond) nested", sb2)
+	}
+	if findSlot(inv, "SharedBank2-Slot1") != nil {
+		t.Errorf("SharedBank2-Slot1 surfaced as a top-level slot, want nested")
+	}
+}
+
 // seedItemMasterIcon inserts one item_master row with an explicit icon_id (INV-04),
 // so the store→compute icon flow is seedable. The other item_master columns are
 // minimal — only the id-join (item_id) + icon_id matter here.

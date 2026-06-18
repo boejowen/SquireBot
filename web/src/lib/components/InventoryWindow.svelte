@@ -233,7 +233,12 @@
 		<p class="empty-grid">No items here.</p>
 	{:else}
 		<div class="grid">
-			{#each items as s (s.location)}
+			<!-- Key by location+index, not location alone: real /outputfile inventory can write
+			     the SAME base token for two rows (the doubled Ear/Wrist/Finger slots are
+			     numbered upstream now, but the +index guarantees a unique key so no
+			     duplicate-Location data can ever throw each_key_duplicate and freeze the
+			     window — the 2026-06-18 stuck-loading bug). -->
+			{#each items as s, i (s.location + '#' + i)}
 				<div class="cell">
 					<PaperdollSlot
 						slot={s}
@@ -264,7 +269,7 @@
 			<p class="bag-empty">Empty</p>
 		{:else}
 			<div class="grid">
-				{#each kids as k (k.location)}
+				{#each kids as k, i (k.location + '#' + i)}
 					<PaperdollSlot
 						slot={k}
 						onpin={pin}

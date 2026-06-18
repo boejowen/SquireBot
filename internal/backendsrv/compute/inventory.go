@@ -24,10 +24,13 @@ import (
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 )
 
-// subSlotRe matches a bag/augment sub-slot suffix ("Slot1", "Slot12", …). The full
-// Location of a nested item is "<Parent>-Slot<N>"; we split on the FIRST '-' and test
-// the suffix against this. Anchored so only a real "Slot<digits>" suffix nests.
-var subSlotRe = regexp.MustCompile(`^Slot\d+$`)
+// subSlotRe matches a bag/augment sub-slot suffix ("Slot1", "Slot12", "SLOT1", …). The
+// full Location of a nested item is "<Parent>-Slot<N>"; we split on the FIRST '-' and test
+// the suffix against this. Anchored so only a real "Slot<digits>" suffix nests. Match is
+// case-INSENSITIVE (A5), consistent with generalRe/bankRe/equipmentSlotsLC — otherwise
+// uppercase live data ("GENERAL4-SLOT1") would fail to nest and surface as a phantom
+// top-level slot colliding on the container's canonical key (WR-01).
+var subSlotRe = regexp.MustCompile(`(?i)^slot\d+$`)
 
 // generalRe / bankRe match the top-level container tokens case-insensitively
 // (General<N> / Bank<N>), so live data in any case (A5) classifies correctly.
@@ -94,16 +97,25 @@ func StructuredInventory(ctx context.Context, s *store.Store, char string) (Char
 // and group into Equipment/General/Bank. Empty slots (item_id 0) are KEPT (the paperdoll
 // renders empty positions). Rows arrive in row_ordinal order and that order is preserved.
 //
-// Two passes: pass 1 indexes the TOP-LEVEL container slots by raw Location; pass 2 nests
-// the *-Slot* children under their parent container. Augments on equipment (Head-Slot1,
-// A3) are flattened/ignored for the INV-05 paperdoll window. A grandchild (a *-Slot* whose
-// parent is itself a child — A2) is slog.Warn'd (op + the two Locations only, never item
-// content — V7) and flattened to top-level rather than panicking (T-29-05).
+// CR-01 robustness — never retain a pointer into a slice that is later appended to. The
+// nesting is resolved entirely via a side map keyed by parent Location (childrenByParent),
+// never via element pointers into inv.Equipment/General/Bank. We do NOT touch the group
+// slices after Pass A; orphan/grandchild rows that must flatten to top-level are collected
+// into separate slices and appended to the groups only at the very END, after every
+// Children attachment is done — so no append can ever dangle a parent we are still writing.
+//
+// Three steps: (1) classify every row, recording top-level containers and routing
+// *-Slot* children into childrenByParent (or the orphan slices); (2) attach the collected
+// children onto their top-level container by stable Location key; (3) append the flattened
+// orphans onto General/Bank last. Augments on equipment (Head-Slot1, A3) are
+// flattened/ignored for the INV-05 paperdoll window. A grandchild / orphan (a *-Slot* whose
+// parent is itself a child or absent — A2) is slog.Warn'd (op + the two Locations only,
+// never item content — V7) and flattened to top-level rather than panicking (T-29-05).
 func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterInventory {
 	inv := CharacterInventory{Char: char}
 
 	// Build every slot once, remembering which are top-level containers (by raw Location)
-	// so children can find their parent in pass 2.
+	// so children can find their parent.
 	type indexed struct {
 		slot     InventorySlot
 		category SlotCategory
@@ -141,18 +153,12 @@ func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterI
 		}
 	}
 
-	// Index the top-level slots by raw Location AFTER Pass A completes — the group slices
-	// are now stable (no further appends in Pass A), so these element pointers stay valid
-	// while Pass B appends to Children (a different, per-slot slice). Capturing the pointers
-	// mid-append in Pass A would dangle when a later append reallocates the backing array.
-	parentRef := make(map[string]*InventorySlot)
-	for _, group := range []*[]InventorySlot{&inv.Equipment, &inv.General, &inv.Bank} {
-		for i := range *group {
-			parentRef[(*group)[i].Location] = &(*group)[i]
-		}
-	}
-
-	// Pass B: nest children under their parent container.
+	// Pass B: route every child WITHOUT touching the group slices or holding any pointer
+	// into them. Real children accumulate in childrenByParent (keyed by parent Location, a
+	// stable string — immune to slice reallocation); orphans/grandchildren accumulate in
+	// the flatten slices for an end-of-function append.
+	childrenByParent := make(map[string][]InventorySlot)
+	var orphanGeneral, orphanBank []InventorySlot
 	for i := range all {
 		it := &all[i]
 		if !it.isChild {
@@ -163,22 +169,38 @@ func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterI
 		if it.category == SlotEquipment {
 			continue
 		}
-		parent, ok := parentRef[it.parent]
-		if !ok || !topLevel[it.parent] {
+		if !topLevel[it.parent] {
 			// Grandchild or orphan (A2 — bags-in-bags don't exist in classic EQ). Flatten to
 			// top-level rather than panic; log op + the two Locations only (never content, V7).
 			slog.Warn("compute.structured_inventory.orphan_child",
 				"op", "buildStructuredInventory", "child", it.slot.Location, "parent", it.parent)
 			switch it.category {
 			case SlotBank:
-				inv.Bank = append(inv.Bank, it.slot)
+				orphanBank = append(orphanBank, it.slot)
 			default:
-				inv.General = append(inv.General, it.slot)
+				orphanGeneral = append(orphanGeneral, it.slot)
 			}
 			continue
 		}
-		parent.Children = append(parent.Children, it.slot)
+		childrenByParent[it.parent] = append(childrenByParent[it.parent], it.slot)
 	}
+
+	// Step 2: attach the collected children onto their container by stable Location key.
+	// We index by Location now (the group slices will NOT grow again until the orphan
+	// append below, which is the last mutation), and write Children straight onto the
+	// element — no retained cross-step pointer that a later append could invalidate.
+	for _, group := range []*[]InventorySlot{&inv.Equipment, &inv.General, &inv.Bank} {
+		for i := range *group {
+			if kids, ok := childrenByParent[(*group)[i].Location]; ok {
+				(*group)[i].Children = kids
+			}
+		}
+	}
+
+	// Step 3: append the flattened orphans LAST — after every Children write is done, so
+	// this final (re)allocation cannot dangle a parent we still need to mutate.
+	inv.General = append(inv.General, orphanGeneral...)
+	inv.Bank = append(inv.Bank, orphanBank...)
 
 	return inv
 }
@@ -255,8 +277,23 @@ func BankValuationFor(ctx context.Context, s *store.Store) (BankValuation, error
 // each is an independent inventory_item row. Do NOT walk the nesting tree to sum (children
 // are already their own rows; the flat row list IS the valuation scope). An unpriced row
 // contributes 0 value and increments UnpricedCount (the "+N unpriced" annotation).
+//
+// MR-02: PerBank is seeded from the bank-toon list FIRST, so a coin-only bank toon (plat
+// entered but no inventory_item rows yet — freshly flagged, mid-upload, or emptied) still
+// gets a zero-Valuation PerBank entry. Otherwise its platinum would land in TotalPlatinum
+// (via ListBankToons) while its per-bank row silently vanished, so a consumer iterating
+// PerBank to render per-bank lines would drop that toon even though the guild total counts
+// it. The valuation scope (item rows) and the platinum scope (bank toons) now agree on the
+// set of bank toons. Display-vs-valuation note: the structured INV-05 model
+// (buildStructuredInventory) deliberately drops augments + re-homes orphans for the
+// paperdoll, but valuation here sums the FLAT InventoryJoin row list (every real
+// inventory_item row, augments included) — the two are intentionally different scopes
+// (Pitfall 3); a per-character bank value must use this flat list, never the display tree.
 func buildBankValuation(rows []store.InventoryJoinRow, toons []store.BankToon) BankValuation {
-	bv := BankValuation{PerBank: make(map[string]Valuation)}
+	bv := BankValuation{PerBank: make(map[string]Valuation, len(toons))}
+	for _, t := range toons {
+		bv.PerBank[t.Name] = Valuation{} // ensure every live bank toon has a row (MR-02)
+	}
 	for _, r := range rows {
 		price := pickPrice(pricesFromJoin(r)) // reuse view.go's selector + name-joined prices
 		per := bv.PerBank[r.Char]

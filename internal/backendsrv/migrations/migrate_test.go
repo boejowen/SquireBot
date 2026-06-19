@@ -28,6 +28,31 @@ var dimensionTables = []string{
 	"item_master", "pigparse_price", "wiki_spells", "wiki_gear_tier", "quest_items",
 }
 
+// openAtVersion opens a fresh raw DB and applies goose Up only THROUGH version
+// (via migrations.UpTo, the same embedded-FS helper RunMigrations uses), then
+// registers a t.Cleanup close. Migration tests for tables that a LATER migration
+// drops (e.g. wantlist_item, retired by 00014's D-01 clean break) pin to the
+// version where the table still existed — store.NewTestDB always migrates to
+// HEAD, where the table is gone. The historical assertions are unchanged; only
+// the schema version they run against is pinned.
+func openAtVersion(t *testing.T, version int64) *sql.DB {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "pinned.db")
+	db, err := store.Open(path)
+	if err != nil {
+		t.Fatalf("open raw DB pinned at v%d: %v", version, err)
+	}
+	t.Cleanup(func() {
+		if cerr := db.Close(); cerr != nil {
+			t.Errorf("close raw DB pinned at v%d: %v", version, cerr)
+		}
+	})
+	if err := migrations.UpTo(db, version); err != nil {
+		t.Fatalf("UpTo(%d): %v", version, err)
+	}
+	return db
+}
+
 func tableExists(t *testing.T, db *sql.DB, name string) bool {
 	t.Helper()
 	var got string
@@ -328,7 +353,9 @@ var wantlistItemColumns = []string{
 // reject a bad enum (review #5 — DB-level defense-in-depth), a valid-enum insert
 // succeeds, and a second Up is a clean no-op.
 func TestMigrate_00006_AddsWantlist(t *testing.T) {
-	db := store.NewTestDB(t) // Open + goose.Up (00001..00006) + t.Cleanup
+	// Pinned at v6: 00014 (D-01 clean break) DROPs wantlist_item at HEAD, so this
+	// historical test runs against a raw handle stopped at v6 where it still exists.
+	db := openAtVersion(t, 6)
 
 	for _, tbl := range []string{"wantlist_item", "alert_log"} {
 		if !tableExists(t, db, tbl) {
@@ -386,10 +413,11 @@ func TestMigrate_00006_AddsWantlist(t *testing.T) {
 		t.Errorf("expected a valid-enum (reason='buy', priority='high') insert to succeed, got: %v", err)
 	}
 
-	// Forward-only/idempotent: a second RunMigrations over an already-at-00006 DB
-	// returns nil (goose records applied versions).
-	if err := migrations.RunMigrations(db); err != nil {
-		t.Fatalf("second RunMigrations after 00006 should be a no-op, got error: %v", err)
+	// Forward-only/idempotent: a second UpTo(6) over an already-at-00006 DB returns
+	// nil (goose records applied versions). NB: RunMigrations would advance to HEAD
+	// and drop wantlist_item — this test stays pinned at v6.
+	if err := migrations.UpTo(db, 6); err != nil {
+		t.Fatalf("second UpTo(6) after 00006 should be a no-op, got error: %v", err)
 	}
 }
 
@@ -412,7 +440,9 @@ var notifyTables = []string{"notify_prefs", "guild_channel", "monitor_flag"}
 //   - the guild_channel/monitor CHECK rejects a bogus monitor and accepts a valid
 //     one; and a second Up is a clean no-op.
 func TestMigrate_00007_AddsNotify(t *testing.T) {
-	db := store.NewTestDB(t) // Open + goose.Up (00001..00007) + t.Cleanup
+	// Pinned at v7: 00014 (D-01 clean break) DROPs wantlist_item at HEAD, and this
+	// test reads wantlist_item.muted — run against a raw handle stopped at v7.
+	db := openAtVersion(t, 7)
 
 	for _, tbl := range notifyTables {
 		if !tableExists(t, db, tbl) {
@@ -493,10 +523,10 @@ func TestMigrate_00007_AddsNotify(t *testing.T) {
 		t.Errorf("expected a valid monitor='ec_auction' guild_channel insert to succeed, got: %v", err)
 	}
 
-	// Forward-only/idempotent: a second RunMigrations over an already-at-00007 DB
-	// returns nil (goose records applied versions).
-	if err := migrations.RunMigrations(db); err != nil {
-		t.Fatalf("second RunMigrations after 00007 should be a no-op, got error: %v", err)
+	// Forward-only/idempotent: a second UpTo(7) over an already-at-00007 DB returns
+	// nil. NB: RunMigrations would advance to HEAD and drop wantlist_item — pinned at v7.
+	if err := migrations.UpTo(db, 7); err != nil {
+		t.Fatalf("second UpTo(7) after 00007 should be a no-op, got error: %v", err)
 	}
 }
 
@@ -737,7 +767,9 @@ func TestMigrate_00009_CharacterAssignment(t *testing.T) {
 // Backend-only: the watcher never reads/writes wantlist_item, so there is NO
 // WatcherMaxSchemaVersion change. "Schema v10" == goose 00010 applied.
 func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
-	db := store.NewTestDB(t) // Open + goose.Up (00001..00010) + t.Cleanup
+	// Pinned at v10: 00014 (D-01 clean break) DROPs wantlist_item at HEAD — this
+	// historical test seeds + reads wantlist_item, so run against a raw handle at v10.
+	db := openAtVersion(t, 10)
 
 	// character_id column exists on wantlist_item.
 	wlCols := columnSet(t, db, "wantlist_item")
@@ -829,14 +861,15 @@ func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
 		t.Errorf("expected the custom want tagged to charB to succeed (distinct from charA), got: %v", err)
 	}
 
-	// Forward-only/idempotent: a second RunMigrations over an already-at-00010 DB
-	// returns nil AND the goose_db_version row count is unchanged.
+	// Forward-only/idempotent: a second UpTo(10) over an already-at-00010 DB returns
+	// nil AND the goose_db_version row count is unchanged. NB: RunMigrations would
+	// advance to HEAD and drop wantlist_item — pinned at v10.
 	var beforeVersions int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
 		t.Fatalf("count goose_db_version before re-run: %v", err)
 	}
-	if err := migrations.RunMigrations(db); err != nil {
-		t.Fatalf("second RunMigrations after 00010 should be a no-op, got error: %v", err)
+	if err := migrations.UpTo(db, 10); err != nil {
+		t.Fatalf("second UpTo(10) after 00010 should be a no-op, got error: %v", err)
 	}
 	var afterVersions int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
@@ -867,7 +900,11 @@ func TestMigrate_00010_CharacterTaggedWantlist(t *testing.T) {
 // a raw store.Open handle and drives migrations.UpTo (the test-support helper over
 // the SAME embedded FS RunMigrations uses) to v10, seeds, then resumes to v11.
 func TestMigrate_00011_WantlistDropReasonDedup(t *testing.T) {
-	db := store.NewTestDB(t) // Open + goose.Up (00001..00011) + t.Cleanup
+	// Pinned at v11: 00014 (D-01 clean break) DROPs wantlist_item + its unique
+	// indexes at HEAD — parts (a)/(b) read those indexes + seed wantlist_item, so
+	// run against a raw handle stopped at v11. Part (c) already opens its own v10→v11
+	// handle below.
+	db := openAtVersion(t, 11)
 
 	// (a) Index-SQL assert: no 'reason' in either recreated unique index; the
 	// COALESCE(character_id, -1) term is retained.
@@ -1068,6 +1105,119 @@ func TestMigrate_00012_AddsItemIcon(t *testing.T) {
 	}
 	if err := migrations.RunMigrations(db); err != nil {
 		t.Fatalf("second RunMigrations after 00012 should be a no-op, got error: %v", err)
+	}
+	var afterVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
+		t.Fatalf("count goose_db_version after re-run: %v", err)
+	}
+	if beforeVersions != afterVersions {
+		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
+// wishlistItemColumns are the nine columns 00014 creates on wishlist_item
+// (WISH-02/03): the FK identity (discord_user_id, the PERSON), the NOT-NULL
+// character_id + canonical worn-slot, the nullable catalog item_id + snapshot
+// item_name, the default-ON pinged toggle (Pitfall 8), the soft-delete active
+// flag, and the epoch created_at.
+var wishlistItemColumns = []string{
+	"id", "discord_user_id", "character_id", "slot", "item_id", "item_name", "pinged", "active", "created_at",
+}
+
+// TestMigrate_00014_AddsWishlist proves the Phase 34 forward-only migration 00014
+// applied on a fresh DB (NewTestDB runs goose.Up over ALL fourteen migrations) —
+// the D-01 clean break:
+//   - wishlist_item exists with its nine expected columns (columnSet);
+//   - wantlist_item is GONE (the clean break dropped the retired item-centric
+//     table — tableExists returns false);
+//   - alert_log was REBUILT (its FK now targets wishlist_item(id), but the column
+//     name is KEPT wantlist_item_id per Pitfall 6 option B so store/alertlog.go
+//     needs no edit): a NULL-FK alert_log insert still succeeds (the test-alert
+//     path — proves the rebuild kept the column nullable + named wantlist_item_id);
+//   - a real wishlist_item row + an alert_log row that FKs it both insert (proves
+//     the rebuilt FK targets wishlist_item, not the dropped wantlist_item); and
+//   - a second Up is a clean no-op (idempotent — goose_db_version row count
+//     unchanged).
+//
+// Backend-only: the watcher never touches wishlist_item/wantlist_item, so there is
+// NO WatcherMaxSchemaVersion change (that gate does not exist in the off-Google
+// backend). "Schema v14" == goose 00014 applied.
+func TestMigrate_00014_AddsWishlist(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00014) + t.Cleanup
+
+	// wishlist_item exists with its nine columns.
+	if !tableExists(t, db, "wishlist_item") {
+		t.Errorf("expected table %q to exist after 00014, but it does not", "wishlist_item")
+	}
+	wlCols := columnSet(t, db, "wishlist_item")
+	for _, c := range wishlistItemColumns {
+		if !wlCols[c] {
+			t.Errorf("expected wishlist_item to have column %q after 00014 (have: %v)", c, wlCols)
+		}
+	}
+
+	// D-01 clean break: the retired wantlist_item is GONE.
+	if tableExists(t, db, "wantlist_item") {
+		t.Errorf("expected wantlist_item to be DROPPED after 00014 (D-01 clean break), but it still exists")
+	}
+
+	// Seed a web_user + an owner + a character so the FKs hold for the probes.
+	if _, err := db.Exec(
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, "disc-wl", "WishlistProbe"); err != nil {
+		t.Fatalf("seed web_user: %v", err)
+	}
+	wlOwner := mustInsertOwner(t, db, "WishlistOwner", nil)
+	wlChar := mustInsertChar(t, db, wlOwner, "WishlistChar", false, false, false)
+
+	// alert_log was rebuilt: the FK now targets wishlist_item(id) but the column
+	// name is KEPT wantlist_item_id (Pitfall 6 option B). A NULL-FK insert still
+	// succeeds (the test-alert path — proves the rebuild kept the column nullable
+	// + named wantlist_item_id, so store/alertlog.go needs no edit).
+	if _, err := db.Exec(
+		`INSERT INTO alert_log (wantlist_item_id, discord_user_id, source, sent_at, send_status)
+		 VALUES (NULL, ?, 'test', 0, 'sent')`, "disc-wl"); err != nil {
+		t.Errorf("expected a NULL wantlist_item_id alert_log insert (test-alert) to succeed after the 00014 rebuild, got: %v", err)
+	}
+
+	// A real wishlist_item row inserts (pinged + active default-ON via DDL).
+	res, err := db.Exec(
+		`INSERT INTO wishlist_item (discord_user_id, character_id, slot, item_id, item_name, created_at)
+		 VALUES (?, ?, 'Primary', NULL, 'Some Sword', 0)`, "disc-wl", wlChar)
+	if err != nil {
+		t.Fatalf("insert wishlist_item row: %v", err)
+	}
+	wishID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("wishlist_item last insert id: %v", err)
+	}
+	// Its pinged + active default to 1 (the DDL defaults — Pitfall 8 default-ON).
+	var pinged, active int
+	if err := db.QueryRow(
+		`SELECT pinged, active FROM wishlist_item WHERE id = ?`, wishID,
+	).Scan(&pinged, &active); err != nil {
+		t.Fatalf("read wishlist_item defaults: %v", err)
+	}
+	if pinged != 1 || active != 1 {
+		t.Errorf("wishlist_item defaults = pinged=%d active=%d, want both 1 (default-ON, D-04)", pinged, active)
+	}
+
+	// An alert_log row that FKs the real wishlist_item id inserts cleanly (proves
+	// the rebuilt FK targets wishlist_item(id), not the dropped wantlist_item).
+	if _, err := db.Exec(
+		`INSERT INTO alert_log (wantlist_item_id, discord_user_id, source, sent_at, send_status)
+		 VALUES (?, ?, 'ec_auction', 0, 'sent')`, wishID, "disc-wl"); err != nil {
+		t.Errorf("expected an alert_log insert FK'ing a real wishlist_item id to succeed, got: %v", err)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00014 DB
+	// returns nil AND the goose_db_version row count is unchanged.
+	var beforeVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
+		t.Fatalf("count goose_db_version before re-run: %v", err)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00014 should be a no-op, got error: %v", err)
 	}
 	var afterVersions int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {

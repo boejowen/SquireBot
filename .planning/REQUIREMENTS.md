@@ -36,9 +36,9 @@
 - [ ] **ITEM-03** — Selecting an item shows which characters hold it, the inventory slot on each, the quantity, and the last-synced day/time (master-detail, consistent with INV-02).
 
 ### Banks tab (BANK) — "what's in the guild banks?"
-- [ ] **BANK-01** — Lists only guild-bank characters (same ordering style as Characters); each opens its inventory window.
-- [ ] **BANK-02** — Shows the total PigParse value of all items held by bank characters and the total platinum held across the guild banks.
-- [ ] **BANK-03** — Per-item name search across the items held by the guild banks.
+- [x] **BANK-01** — Lists only guild-bank characters (same ordering style as Characters); each opens its inventory window. ✅ Phase 33 (deployed live + browser-smoke PASS 2026-06-19)
+- [x] **BANK-02** — Shows the total PigParse value of all items held by bank characters and the total platinum held across the guild banks. ✅ Phase 33
+- [x] **BANK-03** — Per-item name search across the items held by the guild banks. ✅ Phase 33
 
 ### Wishlist tab (WISH) — "what can I get to improve my characters?" *(reworks v2.2/v2.3 wantlist)*
 - [ ] **WISH-01** — Lists characters (the viewer's first A-Z, then others); excludes guild banks/bots; per-character.
@@ -83,9 +83,9 @@
 | ITEM-01 | Phase 32 | ✅ Done — guild-wide item list (name + qty + holder count + inline PigParse price + Wiki ↗) live at squirebot.quest/inventory over GET /api/v1/items; deployed + 7-point browser-smoke PASS across 5 themes 2026-06-18 |
 | ITEM-02 | Phase 32 | ✅ Done — per-item name search floats the viewer's own characters' items first (server is_mine + pure items.ts viewer-first/filter); deployed + browser-smoke PASS 2026-06-18 |
 | ITEM-03 | Phase 32 | ✅ Done — selecting an item shows holders (char · slot · qty · last-synced) via the reused ExaminePanel + holders table deep-linking to /characters?c=; deployed + browser-smoke PASS 2026-06-18 |
-| BANK-01 | Phase 33 | Pending |
-| BANK-02 | Phase 33 | Pending |
-| BANK-03 | Phase 33 | Pending |
+| BANK-01 | Phase 33 | ✅ Done — banks/bots A-Z list, each opens the reused P31 inventory window; live at squirebot.quest/banks |
+| BANK-02 | Phase 33 | ✅ Done — guild-wide summary (total PigParse value incl. bots + total platinum) via compute.Banks over the shipped BankValuation |
+| BANK-03 | Phase 33 | ✅ Done — item-centric search across bank holders (bank-slice qty), holder-click opens the bank window in-tab |
 | WISH-01 | Phase 34 | Pending |
 | WISH-02 | Phase 34 | Pending |
 | WISH-03 | Phase 34 | Pending |

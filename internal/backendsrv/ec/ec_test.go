@@ -15,6 +15,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -25,6 +26,10 @@ import (
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 	"github.com/boejowen/SquireBot/internal/backendsrv/wantmatch"
 )
+
+// seedCharSeq makes each seedWant's throwaway character.name unique (the column is
+// UNIQUE COLLATE NOCASE) across the multiple seedWant calls a single test makes.
+var seedCharSeq int
 
 // mkAuction builds an enrich.ItemAuctionDetail directly (for the buildEmbed tests,
 // which work on the parsed struct, not the JSON body).
@@ -105,18 +110,33 @@ func seedUser(t *testing.T, ctx context.Context, db *sql.DB, discordID string) {
 	}
 }
 
-// seedWant inserts an active catalog want for itemID and returns its id.
+// seedWant inserts an active, pinged catalog wishlist target for itemID and returns
+// its id (Phase 34 repoint: wantlist_item → wishlist_item; character_id is NOT NULL,
+// so a throwaway character is created under discordID's own upload owner). The DM
+// target stays the wishlist row's discord_user_id (T-28-06) regardless of the char.
 func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, itemID int64) int64 {
 	t.Helper()
-	res, err := db.ExecContext(ctx,
-		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, active, muted, created_at)
-		 VALUES (?, ?, 'Fungus Covered Scale Tunic', 'buy', 'med', 1, 0, 1)`, discordID, itemID)
+	res, err := db.ExecContext(ctx, `INSERT INTO owner (label) VALUES (?)`, "owner-"+discordID)
 	if err != nil {
-		t.Fatalf("seed want: %v", err)
+		t.Fatalf("seed owner: %v", err)
+	}
+	ownerID, _ := res.LastInsertId()
+	seedCharSeq++
+	charName := fmt.Sprintf("Toon-%s-%d", discordID, seedCharSeq) // character.name is UNIQUE — keep it unique per call
+	res, err = db.ExecContext(ctx, `INSERT INTO character (owner_id, name) VALUES (?, ?)`, ownerID, charName)
+	if err != nil {
+		t.Fatalf("seed character: %v", err)
+	}
+	charID, _ := res.LastInsertId()
+	res, err = db.ExecContext(ctx,
+		`INSERT INTO wishlist_item (discord_user_id, character_id, slot, item_id, item_name, pinged, active, created_at)
+		 VALUES (?, ?, 'Chest', ?, 'Fungus Covered Scale Tunic', 1, 1, 1)`, discordID, charID, itemID)
+	if err != nil {
+		t.Fatalf("seed wishlist target: %v", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
-		t.Fatalf("seed want id: %v", err)
+		t.Fatalf("seed wishlist target id: %v", err)
 	}
 	return id
 }
@@ -511,14 +531,13 @@ func fieldByName(e *discordgo.MessageEmbed, name string) *discordgo.MessageEmbed
 
 // TestBuildEmbed_OmitsNullPriceAndSeller: a nil price omits the Price field (never
 // "0pp"); an unresolved seller omits the Seller field; the Title carries the WTS
-// tag, the URL is the wiki link, and "Why you wanted it" reflects the saved Note.
+// tag, the URL is the wiki link, and "Why you wanted it" carries the fixed
+// "on your wishlist" fallback (Phase 34 dropped the wantlist's free-text note).
 func TestBuildEmbed_OmitsNullPriceAndSeller(t *testing.T) {
-	note := "tank twink, save up to 2k"
 	hit := wantmatch.Hit{
 		WantID:        7,
 		DiscordUserID: "alice",
 		ItemName:      "Flowing Black Silk Sash",
-		Note:          &note,
 	}
 	now := time.Date(2026, 6, 6, 2, 3, 0, 0, time.UTC)
 	a := mkAuction(0, "2026-06-06T02:00:00+00:00", nil) // nil price
@@ -538,10 +557,10 @@ func TestBuildEmbed_OmitsNullPriceAndSeller(t *testing.T) {
 	}
 	why := fieldByName(e, "Why you wanted it")
 	if why == nil {
-		t.Fatal("Why-you-wanted-it field missing; want present")
+		t.Fatal("Why-you-wanted-it field missing; want present (the never-empty contract)")
 	}
-	if why.Value != note {
-		t.Errorf("Why = %q; want %q (the saved Note)", why.Value, note)
+	if why.Value != "on your wishlist" {
+		t.Errorf("Why = %q; want %q (the fixed fallback)", why.Value, "on your wishlist")
 	}
 }
 

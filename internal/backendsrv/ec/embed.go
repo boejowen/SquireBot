@@ -90,17 +90,13 @@ func resolveSeller(a enrich.ItemAuctionDetail, players map[string]string) string
 	return ""
 }
 
-// whyWanted composes the "why you wanted it" line from the want's optional saved
-// Note (D-05) — the wantlister's own context. Returns the trimmed note when
-// present, else the "on your wantlist" fallback — NEVER empty, so the embed
-// field is always present (the never-empty contract buildEmbed relies on).
-func whyWanted(hit wantmatch.Hit) string {
-	if hit.Note != nil {
-		if note := strings.TrimSpace(*hit.Note); note != "" {
-			return note
-		}
-	}
-	return "on your wantlist"
+// whyWanted composes the "why you wanted it" embed line. Phase 34 (WISH-05) dropped
+// the wantlist's free-text note from the per-slot wishlist model, so this now always
+// returns the "on your wishlist" fallback — NEVER empty, so the embed field is always
+// present (the never-empty contract buildEmbed relies on). _ keeps the wantmatch.Hit
+// signature for callers/symmetry.
+func whyWanted(_ wantmatch.Hit) string {
+	return "on your wishlist"
 }
 
 // buildEmbed shapes the rich embed for one wantlister's hit on one new WTS auction

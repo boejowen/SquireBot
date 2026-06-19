@@ -73,16 +73,20 @@ type ECPollItem struct {
 	ItemName string
 }
 
-// ECPollSet returns the DISTINCT set of active catalog wants to poll: every
-// wantlist_item with active=1 AND a non-NULL item_id, deduped so a popular item
-// polls once across all users. D-01: reason is NOT filtered (both 'buy' and
-// 'quest' fire). D-03: custom wants (item_id IS NULL) are skipped here — they are
-// name-only and reachable solely via wantmatch.ForName (P22), never an exact-id
-// EC poll. Returns a non-nil (possibly empty) slice.
+// ECPollSet returns the DISTINCT set of active catalog wishlist targets to poll:
+// every wishlist_item with active=1 AND a non-NULL item_id, deduped so a popular
+// item polls once across all users. Phase 34 (WISH-05) repointed this from the
+// retired wantlist_item to wishlist_item (the D-01 clean break) — the ping toggle
+// (pinged) is NOT filtered here (a ping-off target still defines what to POLL; the
+// per-target ping gate is applied downstream at the wantmatch seam, so a temporarily
+// un-pinged target re-alerts immediately when re-pinged without re-polling). Custom/
+// gear-tier targets (item_id IS NULL) are skipped here — they are name-only and
+// reachable solely via wantmatch.ForName (P22), never an exact-id EC poll. Returns a
+// non-nil (possibly empty) slice.
 func (s *Store) ECPollSet(ctx context.Context) ([]ECPollItem, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT DISTINCT item_id, item_name
-		   FROM wantlist_item
+		   FROM wishlist_item
 		  WHERE active = 1 AND item_id IS NOT NULL`)
 	if err != nil {
 		return nil, fmt.Errorf("ec poll set query: %w", err)

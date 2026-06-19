@@ -248,3 +248,30 @@ type ItemHolder struct {
 	IsMine     bool   `json:"is_mine"`
 	IsBank     bool   `json:"is_bank"` // is_bank_toon || is_guild_bot
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 33 (v2.4) — Banks tab valuation contract (APPEND-ONLY)
+// ──────────────────────────────────────────────────────────────────────────────
+// BanksView / BankRowSummary are the BANK-01/02 read-API payload (GET /api/v1/banks):
+// the A-Z bank+bot roster (each with a clean per-bank item count, value, and nullable
+// platinum) plus the guild-wide summary (total item value across bank+bot holdings + total
+// platinum). snake_case tags, append-only — no existing tag is renamed. The item VALUE
+// scope is bank+bot (the guild bot's goods count, D-01/D-02); PLATINUM stays bank-toon-gated
+// (a bot's Plat is nil → contributes 0), so Plat stays *int64 (nil ≠ 0 — the coin discipline).
+
+// BanksView is the GET /api/v1/banks payload — the A-Z bank/bot rows + the guild summary.
+type BanksView struct {
+	Banks         []BankRowSummary `json:"banks"`          // A-Z; one per IsBankToon||IsGuildBot toon
+	GuildValue    float64          `json:"guild_value"`    // GuildTotal.TotalValue over bank+bot rows (D-02)
+	GuildUnpriced int64            `json:"guild_unpriced"` // GuildTotal.UnpricedCount ("+N unpriced")
+	TotalPlatinum int64            `json:"total_platinum"` // Σ bank-toon plat (nil skipped) (D-02/D-04 guild)
+}
+
+// BankRowSummary is one bank/bot's clean list row (D-02) + its D-04 detail-header numbers.
+type BankRowSummary struct {
+	Name      string  `json:"name"`
+	ItemCount int64   `json:"item_count"` // Σ flat inventory rows held by this bank (clean-row count, D-02)
+	Value     float64 `json:"value"`      // PerBank[name].TotalValue (D-04)
+	Unpriced  int64   `json:"unpriced"`   // PerBank[name].UnpricedCount
+	Plat      *int64  `json:"plat"`       // BankToon.Plat; null = never recorded (D-04, nullable discipline)
+}

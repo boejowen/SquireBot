@@ -837,6 +837,96 @@ export function removeWant(id: number, f: typeof fetch = fetch): Promise<{ remov
 	return postJSON<{ removed: boolean }>('/api/v1/wantlist/remove', { id }, f);
 }
 
+// --- Wishlist (34-03 / WISH-02/03/04/05) -----------------------------------
+// The per-character / per-slot wishlist read + the owner-scoped add/remove/ping
+// writes (the v2.4 successor to the wantlist). All login-only, cookie-credentialed
+// via the shared getJSON/postJSON cores — the owner is session-derived server-side
+// (D-02: the add/remove/ping bodies carry NO owner; the server re-authorizes the
+// REQUIRED character_id via IsCharAssignedToTx → 403, T-34-07). The four interfaces
+// MIRROR the Go compute.WishlistView contract (compute/types.go, 34-01) field-for-
+// field in snake_case — do NOT rename a field without updating that Go struct. The
+// per-character search corpus (WISH-07) is the per-character WishlistView the web
+// lazily fetches across non-bank/bot chars (no dedicated guild endpoint). The typed-
+// entry add REUSES searchCatalog (above) over /api/v1/items/search.
+
+/** The per-character wishlist payload (GET /api/v1/wishlist/{char}) — mirrors
+ *  compute.WishlistView. Slots is the fixed 21-worn-slot list in paperdoll order
+ *  (Charm/Power omitted, D-04); the server orders them — the client renders as-given. */
+export interface WishlistView {
+	char: string;
+	slots: WishlistSlot[];
+}
+
+/** One worn slot's wishlist row — mirrors compute.WishlistSlot. `equipped` is the
+ *  currently-equipped item name ("" = empty slot, D-04); `targets` are the viewer's
+ *  active upgrade targets (auto-removal already applied server-side — a held item is
+ *  HIDDEN, D-02); `suggestions` are the class+slot Velious gear-tier picks (WISH-04). */
+export interface WishlistSlot {
+	slot: string;
+	equipped: string;
+	targets: WishlistTarget[];
+	suggestions: WishlistSuggestion[];
+}
+
+/** One viewer-added upgrade target on a slot's wishlist — mirrors compute.WishlistTarget.
+ *  `item_id` is null for a typed/custom (no EC match) or gear-tier target; `pinged` is the
+ *  WISH-05 ping toggle; `pinged_hit` drives the EC-hit badge; `price` is the name-keyed
+ *  pickPrice (null when genuinely unpriced — never 0, the CoinTotals discipline). */
+export interface WishlistTarget {
+	id: number;
+	item_id: number | null;
+	item_name: string;
+	pinged: boolean;
+	pinged_hit: boolean;
+	price: number | null;
+	last_listed: string;
+	wiki_url: string;
+}
+
+/** One class+slot Velious gear-tier suggestion — mirrors compute.WishlistSuggestion.
+ *  `is_raid` (tier == "Velious Raiding") drives the "Raid" tag + not-for-sale; `price`
+ *  is null for a no-price / not-for-sale suggestion. */
+export interface WishlistSuggestion {
+	item_name: string;
+	is_raid: boolean;
+	price: number | null;
+	last_listed: string;
+	wiki_url: string;
+}
+
+/** GET /api/v1/wishlist/{char} → WishlistView (an OBJECT, not a bare array). `char`
+ *  is encodeURIComponent'd: character names are guildie-controlled (the server re-binds
+ *  it as a ? placeholder, T-34-09). Empty-not-404 for an unknown/never-targeted char (D-11). */
+export function fetchWishlist(char: string, f: typeof fetch = fetch): Promise<WishlistView> {
+	return getJSON<WishlistView>('/api/v1/wishlist/' + encodeURIComponent(char), f);
+}
+
+/** POST /api/v1/wishlist → the created WishlistTarget. Body carries NO owner — the
+ *  REQUIRED character_id is session-authorized server-side (IsCharAssignedToTx → 403 on
+ *  a non-owned char, T-34-07). `item_id` null ⇒ a typed/custom or gear-tier target. */
+export function addWishlist(
+	body: { character_id: number; slot: string; item_id: number | null; item_name: string },
+	f: typeof fetch = fetch
+): Promise<WishlistTarget> {
+	return postJSON<WishlistTarget>('/api/v1/wishlist', body, f);
+}
+
+/** POST /api/v1/wishlist/remove → { removed } (false = not the caller's / already
+ *  removed — a silent owner-scoped no-op, not an error). */
+export function removeWishlist(id: number, f: typeof fetch = fetch): Promise<{ removed: boolean }> {
+	return postJSON<{ removed: boolean }>('/api/v1/wishlist/remove', { id }, f);
+}
+
+/** POST /api/v1/wishlist/ping → { pinged } (echoes the persisted ping state; a
+ *  cross-owner id flips no row — a silent owner-scoped no-op). */
+export function setWishlistPing(
+	id: number,
+	pinged: boolean,
+	f: typeof fetch = fetch
+): Promise<{ pinged: boolean }> {
+	return postJSON<{ pinged: boolean }>('/api/v1/wishlist/ping', { id, pinged }, f);
+}
+
 // --- Notifications (20-04 / WANT-04) ---------------------------------------
 // The six login-only /api/v1/notifications endpoints (prefs get/set, inbox,
 // unread-count, mark-read, mark-all-read) backing the /notifications page +

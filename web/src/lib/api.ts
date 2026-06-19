@@ -349,6 +349,43 @@ export function fetchItems(f: typeof fetch = fetch): Promise<ItemRollup[]> {
 	return getJSON<ItemRollup[]>('/api/v1/items', f);
 }
 
+// --- Phase 33: Banks tab (valuation) -------------------------------------
+// Mirrors compute/types.go BanksView/BankRowSummary (snake_case, Plan 33-01,
+// append-only). GET /api/v1/banks returns ONE object (NOT a bare array) — the A-Z
+// bank/bot rows + the guild-wide valuation summary. Item VALUE is bank+bot scope (a
+// guild bot's goods count, D-01/D-02); PLATINUM stays bank-toon-gated, so per-row
+// `plat` is NULLABLE (a bot row is always null; null ≠ 0 — the coin discipline).
+// The BANK-03 item-search REUSES the existing P32 ItemRollup/ItemHolder + fetchItems()
+// above (client-filtered to is_bank holders in $lib/banks) — those are NOT redeclared.
+
+/** One bank/bot's clean list row (D-02) + its D-04 per-bank detail-header numbers.
+ *  `plat` is null when never recorded (a guild bot is always null — bots can't hold
+ *  coin); the D-04 header renders null as "not recorded", NEVER "0 plat" (Pitfall 2). */
+export interface BankRowSummary {
+	name: string;
+	item_count: number;
+	value: number;
+	unpriced: number;
+	plat: number | null;
+}
+
+/** The GET /api/v1/banks payload — the A-Z bank/bot rows + the guild-wide summary
+ *  (total item value across bank+bot holdings + total platinum). `total_platinum`
+ *  is a real integer sum (nil-plat toons skipped) — never a fabricated value. */
+export interface BanksView {
+	banks: BankRowSummary[];
+	guild_value: number;
+	guild_unpriced: number;
+	total_platinum: number;
+}
+
+/** GET /api/v1/banks → BanksView (an OBJECT, not a bare array — it carries the
+ *  guild summary alongside the rows). Session-gated; the server returns the A-Z
+ *  bank+bot roster with per-bank value/plat + the guild-wide totals (Plan 33-01). */
+export function fetchBanks(f: typeof fetch = fetch): Promise<BanksView> {
+	return getJSON<BanksView>('/api/v1/banks', f);
+}
+
 // --- Write core: postJSON (15-05 Task 1) ---------------------------------
 // The mutating sibling of getJSON for the three write forms (eviction / coin /
 // officer-mgmt). It carries the SAME credential + typed-error contract so a 403

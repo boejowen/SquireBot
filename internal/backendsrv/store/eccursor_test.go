@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
@@ -85,23 +86,38 @@ func TestECPollSet_DistinctActiveCatalogWantsOnly(t *testing.T) {
 	insertWebUser(t, ctx, db, "disc-a", "Alice")
 	insertWebUser(t, ctx, db, "disc-b", "Bob")
 
-	// Helper: insert a wantlist_item directly (bypassing the handler — we are
-	// exercising the store read, and AddWantTx isn't needed for raw seeding).
-	insWant := func(disc string, itemID *int64, name, reason string, active int) {
+	// Helper: insert a wishlist_item directly (Phase 34 repoint — ECPollSet now reads
+	// wishlist_item; character_id is NOT NULL, so a throwaway character is created per
+	// call). The old `reason` param is retained but ignored (no buy/quest concept on the
+	// wishlist). active=0 ⇒ excluded by the active=1 gate.
+	var seq int
+	insWant := func(disc string, itemID *int64, name, _ string, active int) {
 		t.Helper()
+		res, err := db.Exec(`INSERT INTO owner (label) VALUES (?)`, "owner-"+name)
+		if err != nil {
+			t.Fatalf("seed owner (%s): %v", name, err)
+		}
+		ownerID, _ := res.LastInsertId()
+		seq++
+		res, err = db.Exec(`INSERT INTO character (owner_id, name) VALUES (?, ?)`,
+			ownerID, fmt.Sprintf("Toon-%s-%d", disc, seq))
+		if err != nil {
+			t.Fatalf("seed character (%s): %v", name, err)
+		}
+		charID, _ := res.LastInsertId()
 		if _, err := db.Exec(
-			`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, note, active, created_at)
-			 VALUES (?,?,?,?,'med',NULL,?,0)`, disc, itemID, name, reason, active); err != nil {
-			t.Fatalf("seed wantlist_item (%s/%s): %v", disc, name, err)
+			`INSERT INTO wishlist_item (discord_user_id, character_id, slot, item_id, item_name, pinged, active, created_at)
+			 VALUES (?, ?, 'Chest', ?, ?, 1, ?, 0)`, disc, charID, itemID, name, active); err != nil {
+			t.Fatalf("seed wishlist_item (%s/%s): %v", disc, name, err)
 		}
 	}
 	id := func(v int64) *int64 { return &v }
 
-	insWant("disc-a", id(100), "Fungus Covered Scale Tunic", "buy", 1)   // active buy catalog
-	insWant("disc-a", id(200), "Rod of Annihilation", "quest", 1)        // active quest catalog (D-01: NOT filtered)
-	insWant("disc-a", nil, "My Custom Thing", "buy", 1)                  // active custom (item_id NULL) — D-03 skip
-	insWant("disc-b", id(300), "Manastone", "buy", 0)                    // INACTIVE catalog — skip
-	insWant("disc-b", id(100), "Fungus Covered Scale Tunic", "buy", 1)   // DUPLICATE item_id across users — dedupe
+	insWant("disc-a", id(100), "Fungus Covered Scale Tunic", "buy", 1) // active catalog
+	insWant("disc-a", id(200), "Rod of Annihilation", "quest", 1)      // active catalog (no reason filter)
+	insWant("disc-a", nil, "My Custom Thing", "buy", 1)                // active custom (item_id NULL) — D-03 skip
+	insWant("disc-b", id(300), "Manastone", "buy", 0)                  // INACTIVE catalog — skip
+	insWant("disc-b", id(100), "Fungus Covered Scale Tunic", "buy", 1) // DUPLICATE item_id across users — dedupe
 
 	got, err := s.ECPollSet(ctx)
 	if err != nil {

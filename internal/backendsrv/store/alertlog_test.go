@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 )
 
@@ -13,19 +14,34 @@ import (
 // RecentAlertExists (the dedup probe — suppresses a recent sent OR dm_blocked,
 // warning 5). Reuses insertWebUser / commitTx (admins_test.go) + NewTestDB.
 
-// seedWant inserts an active wantlist_item and returns its id (the FK target for
-// non-test alerts).
+// alSeedSeq keeps each seedWant's throwaway character.name unique (UNIQUE COLLATE
+// NOCASE) across the multiple seedWant calls a single test makes.
+var alSeedSeq int
+
+// seedWant inserts an active wishlist_item and returns its id (the FK target for
+// non-test alerts). Phase 34 repoint: wantlist_item → wishlist_item, which requires
+// a NOT-NULL character_id, so a throwaway owner+character are created per call.
 func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, itemID int64) int64 {
 	t.Helper()
-	var id int64
-	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
-		v := itemID
-		var e error
-		id, e = AddWantTx(ctx, tx, discordID, &v, "Seed Want", "med", nil, nil, 1)
-		return e
-	}); err != nil {
+	res, err := db.ExecContext(ctx, `INSERT INTO owner (label) VALUES (?)`, "owner-"+discordID)
+	if err != nil {
+		t.Fatalf("seedWant owner(%q): %v", discordID, err)
+	}
+	ownerID, _ := res.LastInsertId()
+	alSeedSeq++
+	res, err = db.ExecContext(ctx, `INSERT INTO character (owner_id, name) VALUES (?, ?)`,
+		ownerID, fmt.Sprintf("Toon-%s-%d", discordID, alSeedSeq))
+	if err != nil {
+		t.Fatalf("seedWant character(%q): %v", discordID, err)
+	}
+	charID, _ := res.LastInsertId()
+	res, err = db.ExecContext(ctx,
+		`INSERT INTO wishlist_item (discord_user_id, character_id, slot, item_id, item_name, pinged, active, created_at)
+		 VALUES (?, ?, 'Chest', ?, 'Seed Want', 1, 1, 1)`, discordID, charID, itemID)
+	if err != nil {
 		t.Fatalf("seedWant(%q, %d): %v", discordID, itemID, err)
 	}
+	id, _ := res.LastInsertId()
 	return id
 }
 

@@ -4,12 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 )
+
+// dmSeedSeq keeps each seedWant's throwaway character.name unique (UNIQUE COLLATE
+// NOCASE) across the multiple seedWant calls a single test makes.
+var dmSeedSeq int
 
 // dm_test.go covers notify.Send's every branch (Phase 20 Task 3) against a fake
 // Sender (no live Discord): send-success, 50007→dm_blocked, generic error, the
@@ -73,13 +78,27 @@ func seedUser(t *testing.T, ctx context.Context, db *sql.DB, discordID string) {
 	}
 }
 
-// seedWant inserts an active catalog want and returns its id (the FK + dedup key
-// for a non-test alert).
+// seedWant inserts an active, pinged catalog wishlist target and returns its id (the
+// FK + dedup key for a non-test alert). Phase 34 repoint: wantlist_item →
+// wishlist_item, which requires a NOT-NULL character_id, so a throwaway owner +
+// character are created per call.
 func seedWant(t *testing.T, ctx context.Context, db *sql.DB, discordID string, itemID int64) int64 {
 	t.Helper()
-	res, err := db.ExecContext(ctx,
-		`INSERT INTO wantlist_item (discord_user_id, item_id, item_name, reason, priority, active, muted, created_at)
-		 VALUES (?, ?, 'Fungi Tunic', 'buy', 'med', 1, 0, 1)`, discordID, itemID)
+	res, err := db.ExecContext(ctx, `INSERT INTO owner (label) VALUES (?)`, "owner-"+discordID)
+	if err != nil {
+		t.Fatalf("seed owner: %v", err)
+	}
+	ownerID, _ := res.LastInsertId()
+	dmSeedSeq++
+	res, err = db.ExecContext(ctx, `INSERT INTO character (owner_id, name) VALUES (?, ?)`,
+		ownerID, fmt.Sprintf("Toon-%s-%d", discordID, dmSeedSeq))
+	if err != nil {
+		t.Fatalf("seed character: %v", err)
+	}
+	charID, _ := res.LastInsertId()
+	res, err = db.ExecContext(ctx,
+		`INSERT INTO wishlist_item (discord_user_id, character_id, slot, item_id, item_name, pinged, active, created_at)
+		 VALUES (?, ?, 'Chest', ?, 'Fungi Tunic', 1, 1, 1)`, discordID, charID, itemID)
 	if err != nil {
 		t.Fatalf("seed want: %v", err)
 	}

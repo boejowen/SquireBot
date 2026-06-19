@@ -26,6 +26,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import StateBlock from '$lib/components/StateBlock.svelte';
 	import ExaminePanel from '$lib/components/ExaminePanel.svelte';
+	import LastSyncedCell from '$lib/components/cells/LastSyncedCell.svelte';
 	import { AUTH_GUARD_KEY, type AuthGuard } from '$lib/components/AuthGate.svelte';
 	import {
 		Unauthenticated,
@@ -270,14 +271,21 @@
 							class="ico ico-lg"
 							style={`--tile-hue: ${hueFor(selectedRollup.name, selectedRollup.icon_id)};`}
 						>
-							{#if selectedRollup.icon_id > 0}
-								<img
-									src={`https://wiki.project1999.com/images/Item_${selectedRollup.icon_id}.png`}
-									alt=""
-									class="icon-img"
-									onerror={onImgError}
-								/>
-							{/if}
+							<!-- {#key} the detail-header icon on the selected item so the shared <img>
+							     node is RECREATED on each selection: onImgError sets display:none
+							     imperatively and Svelte would otherwise keep that stale hide when the
+							     src updates to a NEXT item whose icon loads fine (CR-WR-01). The list
+							     rows are immune (keyed per-name → one <img> each). -->
+							{#key selectedRollup.name}
+								{#if selectedRollup.icon_id > 0}
+									<img
+										src={`https://wiki.project1999.com/images/Item_${selectedRollup.icon_id}.png`}
+										alt=""
+										class="icon-img"
+										onerror={onImgError}
+									/>
+								{/if}
+							{/key}
 						</span>
 						<div class="detail-head-text">
 							<h2 class="detail-name">{selectedRollup.name}</h2>
@@ -313,7 +321,12 @@
 								<span class="col-qty" role="columnheader">Qty</span>
 								<span role="columnheader">Last synced</span>
 							</div>
-							{#each sortHolders(selectedRollup.holders) as h (h.char + h.slot_label)}
+							<!-- Key includes the index: slotLabel collapses every bagged copy to the
+							     literal "Bag", so one char holding the same stackable in two bags yields
+							     two holders with an IDENTICAL {char, slot_label} — keying on that alone
+							     duplicate-keys and crashes the panel (each_key_duplicate, CR-01). The
+							     index disambiguates the two genuine holdings. -->
+							{#each sortHolders(selectedRollup.holders) as h, i (`${h.char} ${h.slot_label} ${i}`)}
 								<a
 									class="holder-row"
 									role="row"
@@ -328,7 +341,11 @@
 									</span>
 									<span class="holder-where" role="cell">{h.slot_label}</span>
 									<span class="holder-qty col-qty" role="cell">×{h.qty}</span>
-									<span class="holder-synced" role="cell">{h.last_synced}</span>
+									<span class="holder-synced" role="cell">
+										<!-- Friendly date + freshness dot (matches view/bank) instead of the
+										     raw ISO string / misleading 00:00:00Z (WR-02). -->
+										<LastSyncedCell lastSynced={h.last_synced} />
+									</span>
 								</a>
 							{/each}
 						</div>

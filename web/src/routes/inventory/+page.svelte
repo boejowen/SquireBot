@@ -291,8 +291,15 @@
 
 					<!-- The examine block (D-03a): REUSED ExaminePanel, UNCHANGED. charLastSeen=""
 					     omits the footer (last-synced is per-holder, in the table below). The single
-					     sanctioned escaped raw-HTML composeItemNote sink lives INSIDE this component. -->
-					<ExaminePanel slot={asSlot} charLastSeen="" />
+					     sanctioned escaped raw-HTML composeItemNote sink lives INSIDE this component.
+					     The .examine-wrap override drops ExaminePanel's sticky positioning IN THIS
+					     TAB ONLY (scoped :global) — here the examine is followed by the holders table
+					     in the SAME scroll column, so a sticky panel slides over the holder rows on
+					     scroll and hides who-holds-it (browser-smoke 2026-06-18). P31's character-
+					     window usage of ExaminePanel keeps its sticky positioning. -->
+					<div class="examine-wrap">
+						<ExaminePanel slot={asSlot} charLastSeen="" />
+					</div>
 
 					<!-- HOLDERS (ITEM-03): one row per holding, deep-linking into /characters?c=. -->
 					<p class="holders-eyebrow">HOLDERS</p>
@@ -561,6 +568,18 @@
 		line-height: 1.4;
 		color: var(--text);
 		opacity: 0.85;
+	}
+
+	/* Drop ExaminePanel's sticky positioning IN THIS TAB ONLY (scoped :global targets the
+	   reused component's internal .examine). Here the examine is stacked ABOVE the holders
+	   table in one scroll column, so `position: sticky` pinned it and it slid over the holder
+	   rows on scroll, hiding who-holds-the-item (browser-smoke 2026-06-18). Static = the
+	   examine scrolls with the page and the holders below it stay reachable. max-height/overflow
+	   reset because the viewport cap was only there to bound the sticky panel. */
+	.examine-wrap :global(.examine) {
+		position: static;
+		max-height: none;
+		overflow: visible;
 	}
 
 	/* --- HOLDERS section (§F.3 / the holders table) --- */

@@ -336,16 +336,19 @@ func runServe(args []string) int {
 	mux.Handle("GET /api/v1/account/codes", webauth.RequireSession(db, webadmin.ListOwnCodesHandler(db)))
 	mux.Handle("POST /api/v1/account/codes/revoke", webauth.RequireSession(db, webadmin.RevokeOwnCodeHandler(db)))
 
-	// Wantlist (Phase 19 / WANT-01/02 / D-02) — LOGIN-ONLY (RequireSession, NEVER
-	// RequireOfficer): every signed-in member manages their OWN wantlist; the owner
-	// is derived server-side from the Discord session, never the request body.
-	mux.Handle("GET /api/v1/wantlist", webauth.RequireSession(db, webadmin.ListOwnWantsHandler(db)))
-	mux.Handle("POST /api/v1/wantlist", webauth.RequireSession(db, webadmin.AddWantHandler(db)))
-	mux.Handle("POST /api/v1/wantlist/remove", webauth.RequireSession(db, webadmin.RemoveOwnWantHandler(db)))
-	// Guildwide wantlist roll-up (Phase 28 / CWANT-03/04) — LOGIN-ONLY (RequireSession,
-	// NOT RequireOfficer): every signed-in member sees the all-members "what does the
-	// guild want" list; the store read excludes the private note (T-28-07).
-	mux.Handle("GET /api/v1/wantlist/guild", webauth.RequireSession(db, webadmin.ListGuildWantsHandler(db)))
+	// Wishlist (Phase 34 / WISH-01..07 / D-02) — LOGIN-ONLY (RequireSession, NEVER
+	// RequireOfficer): every signed-in member manages their OWN per-character/per-slot
+	// wishlist; the owner is derived server-side from the Discord session, never the
+	// request body, and the character tag on a write is authorized in-tx via
+	// IsCharAssignedToTx → 403 (T-34-07). The {char} read binds ONLY as a `?`
+	// placeholder inside compute.WishlistFor (never SQL/log text, T-34-09); an unknown
+	// char returns the 21 empty slots (200, not 404, D-11). The 5 retired
+	// /api/v1/wantlist* routes were REMOVED — the D-01 clean break dropped wantlist_item,
+	// so they would 500 on the missing table (Pitfall 7).
+	mux.Handle("GET /api/v1/wishlist/{char}", webauth.RequireSession(db, readapi.NewWishlist(st)))
+	mux.Handle("POST /api/v1/wishlist", webauth.RequireSession(db, webadmin.AddWishlistHandler(db)))
+	mux.Handle("POST /api/v1/wishlist/remove", webauth.RequireSession(db, webadmin.RemoveOwnWishlistHandler(db)))
+	mux.Handle("POST /api/v1/wishlist/ping", webauth.RequireSession(db, webadmin.SetWishlistPingHandler(db)))
 	// D-10 full-catalog item search — session-gated like the view endpoints
 	// (readapi, takes the read-side st):
 	mux.Handle("GET /api/v1/items/search", webauth.RequireSession(db, readapi.NewItemSearch(st)))
@@ -380,14 +383,14 @@ func runServe(args []string) int {
 	// Notifications (Phase 20 / WANT-04 / D-02) — LOGIN-ONLY (RequireSession, NEVER
 	// RequireOfficer): every signed-in member manages their OWN prefs + reads their
 	// OWN inbox; the owner is derived server-side from the Discord session, never the
-	// request body. 6 notification routes + 1 per-want mute (RequireSession too, D-09).
+	// request body. (The per-want mute route was retired with the wantlist in Phase 34;
+	// the per-target ping toggle now lives at POST /api/v1/wishlist/ping above.)
 	mux.Handle("GET /api/v1/notifications/prefs", webauth.RequireSession(db, webadmin.GetPrefsHandler(db)))
 	mux.Handle("POST /api/v1/notifications/prefs", webauth.RequireSession(db, webadmin.SetPrefsHandler(db)))
 	mux.Handle("GET /api/v1/notifications/inbox", webauth.RequireSession(db, webadmin.ListInboxHandler(db)))
 	mux.Handle("GET /api/v1/notifications/unread-count", webauth.RequireSession(db, webadmin.UnreadCountHandler(db)))
 	mux.Handle("POST /api/v1/notifications/read", webauth.RequireSession(db, webadmin.MarkReadHandler(db)))
 	mux.Handle("POST /api/v1/notifications/read-all", webauth.RequireSession(db, webadmin.MarkAllReadHandler(db)))
-	mux.Handle("POST /api/v1/wantlist/mute", webauth.RequireSession(db, webadmin.MuteWantHandler(db)))
 
 	// Character assignment — MEMBER (Phase 26 / ASSIGN-01/02/03/06) — LOGIN-ONLY
 	// (RequireSession, NEVER RequireOfficer): every signed-in member lists their own

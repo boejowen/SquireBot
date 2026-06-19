@@ -136,8 +136,10 @@ Full details in [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md).
 - [x] **Phase 29: Data Foundation — Inventory Parse + Price/Value Aggregation** — backend: parse `Location`/`Slots` into a slot taxonomy + container nesting (INV-05), name-keyed PigParse price + last-listed joins (DATA-01), bank valuation + total platinum aggregation (DATA-02). No new user surface; powers every v2.4 web tab. ✅ COMPLETE 2026-06-17 (2 plans; verifier PASSED 4/4; code-review clean after BLOCKER+HIGH fixed; `go test ./...` green; compute-on-read, no migration, watcher untouched).
 - [x] **Phase 30: App Shell + 5-Tab Navigation** — the five persistent top tabs (Characters · Inventory · Banks · Wishlist · Settings) with per-tab in-context search; Settings consolidates Theme/Notifications/Watcher Codes/Set Class & Level/My Characters/Admin; notifications + unread badge move onto the Wishlist tab. (NAV-01..04) ✅ COMPLETE 2026-06-18 (2 plans; deployed live to squirebot.quest + browser-smoke 8/8 PASS; verifier PASSED 12/12; web-only, watcher/backend untouched).
 - [x] **Phase 31: Characters Tab + In-Game Inventory Window** — the guild character list (viewer's first A-Z, then others, then banks/bots) + per-character search; selecting a character opens an in-game-style paperdoll inventory window with stacks, bag drill-down, bank-below, real wiki icons, and a click-to-pin right-click examine. (CHAR-01..03, INV-01..04) ✅ COMPLETE 2026-06-18 (4 plans + 8 browser-smoke fix commits; deployed live to squirebot.quest + browser-smoke approved across 5 themes; verifier PASSED 4/4 + 7/7 req IDs; code-review 0 BLOCKER/0 HIGH; web 347 tests + `go test ./...` green; shipped migrations 00012_item_icon + 00013_item_statsblock, both extend-only)
-- [x] **Phase 32: Inventory Tab (Item-Centric)** — a guild-wide item list (name, guild-wide quantity, wiki + PigParse links); selecting an item shows which characters hold it, the slot on each, quantity, and last-synced (master-detail). (ITEM-01..03) (completed 2026-06-19)
-- [x] **Phase 33: Banks Tab + Valuation** — a guild-banks-only list (each opens its inventory window), the total PigParse item value across banks + total platinum, and per-item bank search. (BANK-01..03) (completed 2026-06-19)
+- [x] **Phase 32: Inventory Tab (Item-Centric)** — a guild-wide item list (name, guild-wide quantity, wiki + PigParse links); selecting an item shows which characters hold it, the slot on each, quantity, and last-synced (master-detail). (ITEM-01..03)
+ (completed 2026-06-19)
+- [x] **Phase 33: Banks Tab + Valuation** — a guild-banks-only list (each opens its inventory window), the total PigParse item value across banks + total platinum, and per-item bank search. (BANK-01..03)
+ (completed 2026-06-19)
 - [ ] **Phase 34: Wishlist Rework — Per-Character Per-Slot Upgrades** — reworks the v2.2/v2.3 wantlist into a per-character, per-equipment-slot, open-ended upgrade list with complete Velious `_wiki_gear_tier` suggestions (price + wiki + last-listed; Raid tag for no-drop/raid-only), a Discord ping toggle + EC-hit badge (reusing the shipped EC-monitor + notification spine), the examine tooltip, and wishlist search. (WISH-01..07)
 
 **Execution order:** strict dependency chain **29 → 30 → 31 → 32 → 33 → 34**. Phase 29 (data) unblocks 31/32/33/34; Phase 30 (shell) reframes routing for all four tab phases; the Wishlist (34) additionally depends on Phase 31's equipped-slot detection + the already-shipped notification/EC spine. 32 and 33 are independent of each other once 29+30 land (could parallelize), but numbered sequentially.
@@ -339,7 +341,11 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   3. Per slot, SquireBot suggests upgrades from the complete Velious Pre-raid/Grouping + Raiding lists for that character's class+slot (from the existing `_wiki_gear_tier` data); each suggestion shows its PigParse price, wiki link, and last-listed-for-sale date, with no-drop/raid-only items tagged "Raid" and shown as not-for-sale.
   4. Each wishlisted item has a Discord ping toggle; when SquireBot pings the user (e.g. the item appeared in the EC tunnel via the shipped EC-monitor + notification spine), a badge appears beside that item in the wishlist.
   5. Hovering or tapping any item shows the right-click-style examine (stats, price, wiki, last-synced), and a wishlist search covers all items on any wishlist plus the non-bank/bot characters.
-**Plans**: TBD
+**Plans**: 4 plans
+  - [ ] 34-01-PLAN.md — Backend data foundation: migration 00014 (wishlist_item + alert_log FK rebuild + drop wantlist_item) + owner-scoped store CRUD/ping + compute-on-read WishlistFor (equipped + auto-removal + class+slot suggestions via the slot-vocab bridge)
+  - [ ] 34-02-PLAN.md — Backend matcher repoint (wantmatch -> wishlist_item) + owner-scoped write API (add/remove/ping) + GET /api/v1/wishlist/{char} read route + main.go (register 4 wishlist routes, remove 5 wantlist routes)
+  - [ ] 34-03-PLAN.md — Web /wishlist tab: viewer-first char list (banks/bots excluded) + WISH-07 search + per-slot accordion (equipped + targets + suggestions + ping toggle + EC badge + reused ExaminePanel) + api.ts/wishlist.ts; delete the old WantlistPanel + wantlist/*
+  - [ ] 34-04-PLAN.md — Deploy (goose-run 00014 + web atomic swap; R2 backup BEFORE the restart; NO v* tag) + human browser-smoke across the 5 EQ themes
 **UI hint**: yes
 
 ## Progress
@@ -382,7 +388,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | 31. Characters Tab + In-Game Inventory Window | v2.4 | 0/4 | 🔄 Planned (4 plans / 4 waves; CHAR-01..03, INV-01..04; backend icon enrich + 2 read-API routes + web window; migration 00012; ends in deploy+browser-smoke) | — |
 | 32. Inventory Tab (Item-Centric) | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 33. Banks Tab + Valuation | v2.4 | 3/3 | Complete    | 2026-06-19 |
-| 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 0/TBD | Not started | — |
+| 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 0/4 | 🔄 Planned (4 plans / 4 waves; strict chain 01->02->03->04; WISH-01..07; migration 00014 [wishlist_item + alert_log FK rebuild + drop wantlist_item, schema v14] + wantmatch repoint + owner-scoped write API + per-slot web tab; ends in a goose-run deploy + browser-smoke, NO v* tag) | — |
 
 ## Backlog
 

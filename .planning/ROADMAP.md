@@ -322,7 +322,10 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   1. The Banks tab lists only guild-bank characters (same ordering style as the Characters tab), and selecting one opens its inventory window.
   2. The tab shows the total PigParse value of all items held by bank characters and the total platinum held across the guild banks (from the manual bank-coin entries).
   3. A per-item name search runs across the items held by the guild banks.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 33-01-PLAN.md — Backend: store.InventoryJoinBanksAndBots + ListBankAndBotToons (Option B widen — value includes bots, plat stays bank-toon-gated) + compute.Banks/BanksView/BankRowSummary (per-bank value + nullable plat + item count + guild totals) + GET /api/v1/banks (RequireSession, no viewer id) + main.go registration + tests (BANK-01/02 data)
+  - [ ] 33-02-PLAN.md — Web: api.ts BanksView/BankRowSummary + fetchBanks() + pure banks.ts (A-Z sort + is_bank item-search with bank-slice qty recompute + bankByName) + the /banks master-detail tab (D-02 summary header + list/search toggle + D-04 per-bank header + reused InventoryWindow + in-tab holder deep-link) (BANK-01/02/03 UI)
+  - [ ] 33-03-PLAN.md — Deploy (binary swap to register /api/v1/banks + web atomic swap + R2 backup, NO goose run) + browser-smoke the live tab across all 5 themes (closes BANK-01/02/03)
 **UI hint**: yes
 
 ### Phase 34: Wishlist Rework — Per-Character Per-Slot Upgrades

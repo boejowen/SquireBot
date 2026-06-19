@@ -192,7 +192,32 @@ func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJo
 	// price row per inventory row (no duplicate view rows / inflated bank counts).
 	// item_master stays id-keyed (im.item_id = ii.item_id) — it is the watcher's own
 	// EQ-namespace enrichment, correctly id-matched.
-	const base = `WITH pp_rep AS (
+	// The pp_rep CTE + SELECT/FROM/JOINs + base WHERE live in the shared
+	// inventoryJoinBase const (reused verbatim by the Phase 33 banks+bots twin).
+	base := inventoryJoinBase
+	orderBy := inventoryJoinOrderBy
+
+	// Fixed-string WHERE switch on the bool (NOT a value interpolation).
+	query := base + orderBy
+	if bankOnly {
+		query = base + ` AND c.is_bank_toon = 1` + orderBy
+	}
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query inventory join (bankOnly=%t): %w", bankOnly, err)
+	}
+	defer rows.Close()
+	return scanInventoryJoinRows(rows)
+}
+
+// inventoryJoinBase is the shared name-bridged inventory-join SQL (the pp_rep CTE +
+// SELECT + FROM/JOINs + the base WHERE) reused by InventoryJoin and the Phase 33
+// InventoryJoinBanksAndBots twin. The ONLY difference between the two reads is the
+// bank-set predicate appended to this base (a fixed-string branch — never a value
+// interpolation); the SELECT/scan are byte-identical, so the twin keeps the legacy
+// read's exact shape.
+const inventoryJoinBase = `WITH pp_rep AS (
 	       SELECT lower(trim(name)) AS norm_name, MIN(item_id) AS rep_item_id
 	       FROM pigparse_price
 	       WHERE name IS NOT NULL AND trim(name) <> ''
@@ -208,21 +233,14 @@ func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJo
 	LEFT JOIN pp_rep             ON pp_rep.norm_name = lower(trim(ii.name))
 	LEFT JOIN pigparse_price pp  ON pp.item_id = pp_rep.rep_item_id
 	WHERE c.is_removed = 0 AND ii.item_id IS NOT NULL AND ii.item_id > 0`
-	const orderBy = `
+
+const inventoryJoinOrderBy = `
 	ORDER BY c.name, ii.name, ii.location`
 
-	// Fixed-string WHERE switch on the bool (NOT a value interpolation).
-	query := base + orderBy
-	if bankOnly {
-		query = base + ` AND c.is_bank_toon = 1` + orderBy
-	}
-
-	rows, err := s.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("query inventory join (bankOnly=%t): %w", bankOnly, err)
-	}
-	defer rows.Close()
-
+// scanInventoryJoinRows drains an inventory-join *sql.Rows into []InventoryJoinRow
+// with the nullable-column resolution. Factored out so InventoryJoin and the
+// Phase 33 InventoryJoinBanksAndBots twin share one scan loop (no behavior drift).
+func scanInventoryJoinRows(rows *sql.Rows) ([]InventoryJoinRow, error) {
 	var out []InventoryJoinRow
 	for rows.Next() {
 		var (
@@ -263,6 +281,26 @@ func (s *Store) InventoryJoin(ctx context.Context, bankOnly bool) ([]InventoryJo
 		return nil, fmt.Errorf("iterate inventory join rows: %w", err)
 	}
 	return out, nil
+}
+
+// InventoryJoinBanksAndBots returns the flat name-joined inventory rows for every guild-bank
+// AND guild-bot character (is_bank_toon=1 OR is_guild_bot=1). It mirrors InventoryJoin's body
+// verbatim — the same pp_rep name-bridge CTE, the same SELECT/scan — differing ONLY in the
+// WHERE predicate. Dedicated read (Phase 33 Option B): the shared InventoryJoin(ctx,true)
+// bankOnly branch has two callers (compute.BankValuationFor + the legacy compute.Bank grid at
+// /api/v1/views/bank), so widening it in place would silently pull bots into that legacy grid;
+// this twin leaves it untouched. (BANK-02 — the guild item-value total includes bot holdings.)
+//
+// The bank-set predicate is a compile-time fixed string (no name, no value, no fmt.Sprintf
+// enters the WHERE — V5 / Tampering), matching the InventoryJoin discipline.
+func (s *Store) InventoryJoinBanksAndBots(ctx context.Context) ([]InventoryJoinRow, error) {
+	query := inventoryJoinBase + ` AND (c.is_bank_toon = 1 OR c.is_guild_bot = 1)` + inventoryJoinOrderBy
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query inventory join (banks+bots): %w", err)
+	}
+	defer rows.Close()
+	return scanInventoryJoinRows(rows)
 }
 
 // InventoryForChar returns EVERY inventory_item row for one character — including

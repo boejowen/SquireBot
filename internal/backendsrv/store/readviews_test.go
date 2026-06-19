@@ -237,6 +237,124 @@ func TestReadViews_InventoryJoinAndGrouping(t *testing.T) {
 	})
 }
 
+// TestInventoryJoinBanksAndBots is the Phase 33 (Option B) regression: the dedicated
+// bank+bot flat-row read returns the SAME rows InventoryJoin(ctx,true) returns for a bank
+// toon, PLUS rows held by a guild bot (is_guild_bot=1), and EXCLUDES a plain (non-bank,
+// non-bot) character — and it leaves the legacy InventoryJoin(ctx,true) bankOnly branch
+// (bank-toons-only) untouched (the legacy /views/bank grid's second caller).
+func TestInventoryJoinBanksAndBots(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	_, bankID := seedOwnerChar(t, db, "owner-b", "Banktoon")
+	setCharMeta(t, db, bankID, "WAR", 60, "HUM", true) // is_bank_toon
+	_, botID := seedOwnerChar(t, db, "owner-bo", "Botley")
+	setCharMeta(t, db, botID, "CLR", 60, "HUM", false)
+	if _, err := db.Exec(`UPDATE character SET is_guild_bot = 1 WHERE id = ?`, botID); err != nil {
+		t.Fatalf("set is_guild_bot: %v", err)
+	}
+	_, plainID := seedOwnerChar(t, db, "owner-p", "Plaintoon")
+	setCharMeta(t, db, plainID, "NEC", 60, "HUM", false) // neither bank nor bot
+
+	seedRaw(t, db, bankID, "Bank1", "Bag of Holding", i64ptr(1038), 1)
+	seedRaw(t, db, botID, "General1", "Words of the Spoken", i64ptr(7001), 1)
+	seedRaw(t, db, plainID, "General1", "Rusty Dagger", i64ptr(9001), 1)
+
+	// The widened twin: bank + bot rows, NOT the plain char's.
+	got, err := s.InventoryJoinBanksAndBots(ctx)
+	if err != nil {
+		t.Fatalf("InventoryJoinBanksAndBots: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2 (bank + bot, plain excluded): %+v", len(got), got)
+	}
+	seen := map[string]string{}
+	for _, r := range got {
+		seen[r.Char] = r.ItemName
+	}
+	if seen["Banktoon"] != "Bag of Holding" {
+		t.Errorf("Banktoon row = %q, want Bag of Holding", seen["Banktoon"])
+	}
+	if seen["Botley"] != "Words of the Spoken" {
+		t.Errorf("Botley (guild bot) row = %q, want Words of the Spoken (bot holdings must be included)", seen["Botley"])
+	}
+	if _, ok := seen["Plaintoon"]; ok {
+		t.Errorf("Plaintoon (neither bank nor bot) appeared in the bank+bot read, want excluded")
+	}
+
+	// The legacy bank-toons-only branch is UNCHANGED — only the bank toon's row.
+	legacy, err := s.InventoryJoin(ctx, true)
+	if err != nil {
+		t.Fatalf("InventoryJoin(true): %v", err)
+	}
+	if len(legacy) != 1 || legacy[0].Char != "Banktoon" {
+		t.Errorf("legacy InventoryJoin(true) = %+v, want exactly the bank toon (bot must NOT leak into the legacy grid)", legacy)
+	}
+}
+
+// TestListBankAndBotToons proves the Phase 33 widened toon list (D-01): every live
+// is_bank_toon OR is_guild_bot character appears A-Z, a guild bot carries Plat == nil
+// (coin is bank-toon-gated by SetCoinTx, so a bot can't hold plat), and a plain char is
+// excluded. ListBankToons (the legacy coin-only list) stays bank-toons-only.
+func TestListBankAndBotToons(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	_, bankID := seedOwnerChar(t, db, "owner-b", "Banktoon")
+	setCharMeta(t, db, bankID, "WAR", 60, "HUM", true) // is_bank_toon
+	if _, err := db.Exec(`UPDATE character SET plat = 500 WHERE id = ?`, bankID); err != nil {
+		t.Fatalf("set Banktoon plat: %v", err)
+	}
+	_, botID := seedOwnerChar(t, db, "owner-bo", "Aabot") // sorts before Banktoon (A-Z)
+	setCharMeta(t, db, botID, "CLR", 60, "HUM", false)
+	if _, err := db.Exec(`UPDATE character SET is_guild_bot = 1 WHERE id = ?`, botID); err != nil {
+		t.Fatalf("set is_guild_bot: %v", err)
+	}
+	_, plainID := seedOwnerChar(t, db, "owner-p", "Plaintoon")
+	setCharMeta(t, db, plainID, "NEC", 60, "HUM", false) // excluded
+
+	// A removed bank toon is excluded.
+	_, removedID := seedOwnerChar(t, db, "owner-r", "Oldbank")
+	setCharMeta(t, db, removedID, "WAR", 60, "HUM", true)
+	if _, err := db.Exec(`UPDATE character SET is_removed = 1 WHERE id = ?`, removedID); err != nil {
+		t.Fatalf("mark removed: %v", err)
+	}
+
+	toons, err := ListBankAndBotToons(ctx, db)
+	if err != nil {
+		t.Fatalf("ListBankAndBotToons: %v", err)
+	}
+	if len(toons) != 2 {
+		t.Fatalf("got %d toons, want 2 (bank + bot; plain + removed excluded): %+v", len(toons), toons)
+	}
+	// A-Z (COLLATE NOCASE): "Aabot" before "Banktoon".
+	if toons[0].Name != "Aabot" || toons[1].Name != "Banktoon" {
+		t.Errorf("order = %q,%q, want Aabot,Banktoon (A-Z)", toons[0].Name, toons[1].Name)
+	}
+	byName := map[string]BankToon{}
+	for _, t := range toons {
+		byName[t.Name] = t
+	}
+	// The guild bot carries Plat == nil (bots can't hold coin — bank-toon-gated at SetCoinTx).
+	if bot := byName["Aabot"]; bot.Plat != nil {
+		t.Errorf("guild bot Aabot Plat = %v, want nil (coin is bank-toon-gated; a bot can't hold plat)", bot.Plat)
+	}
+	// The bank toon carries its entered plat.
+	if bank := byName["Banktoon"]; bank.Plat == nil || *bank.Plat != 500 {
+		t.Errorf("Banktoon Plat = %v, want 500", bank.Plat)
+	}
+
+	// The legacy bank-toons-only coin list excludes the bot.
+	legacy, err := ListBankToons(ctx, db)
+	if err != nil {
+		t.Fatalf("ListBankToons: %v", err)
+	}
+	if len(legacy) != 1 || legacy[0].Name != "Banktoon" {
+		t.Errorf("legacy ListBankToons = %+v, want exactly the bank toon (bot must NOT leak in)", legacy)
+	}
+}
+
 // TestReadViews_PriceBridgesByNameAcrossNamespaces is the regression for the
 // view/bank PRICE-COVERAGE bug: the inventory item_id (EQ /outputfile namespace)
 // and the pigparse_price item_id (PigParse catalog namespace) are DIFFERENT, so a

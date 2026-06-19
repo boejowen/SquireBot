@@ -68,6 +68,41 @@ func ListBankToons(ctx context.Context, db *sql.DB) ([]BankToon, error) {
 	return out, nil
 }
 
+// ListBankAndBotToons returns every live guild-bank OR guild-bot character (is_bank_toon=1
+// OR is_guild_bot=1, is_removed=0) A-Z, with its coin. This is the Phase 33 widened toon
+// list (D-01): the Banks-tab ROW list must include guild bots so their holdings count toward
+// the BANK-02 value total (via InventoryJoinBanksAndBots). The value/plat ASYMMETRY is
+// deliberate, not a bug: item VALUE includes bots, but PLATINUM is is_bank_toon-gated at the
+// store — SetCoinTx rejects a non-bank-toon coin write with ErrNotBankToon, so a guild bot
+// CANNOT hold plat today. A bot therefore appears in this list with Plat == nil and
+// contributes 0 to TotalPlatinum (nil plats are skipped). Resolved OQ1 — do NOT change
+// SetCoinTx and do NOT make bot coin enterable (out of Phase 33 scope). Ordered by name
+// COLLATE NOCASE (A-Z). Reuses scanBankToon (the nullable-coin scan).
+func ListBankAndBotToons(ctx context.Context, db *sql.DB) ([]BankToon, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, name, plat, gold, silver, copper
+		   FROM character
+		  WHERE (is_bank_toon = 1 OR is_guild_bot = 1) AND is_removed = 0
+		  ORDER BY name COLLATE NOCASE`)
+	if err != nil {
+		return nil, fmt.Errorf("list bank and bot toons: %w", err)
+	}
+	defer rows.Close()
+
+	var out []BankToon
+	for rows.Next() {
+		bt, scanErr := scanBankToon(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		out = append(out, bt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bank and bot toons: %w", err)
+	}
+	return out, nil
+}
+
 // GetCoin returns one bank-toon's row by id (the form's pre-fill / read-back). A
 // missing character id returns a %w-wrapped sql.ErrNoRows so the caller can
 // errors.Is it. Note this does NOT gate on is_bank_toon — it is a read; the

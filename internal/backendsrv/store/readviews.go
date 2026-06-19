@@ -374,7 +374,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 		r.WikiURL = wikiURL.String
 		r.WikiSummary = wikiSummary.String
 		r.IsQuestItem = isQuest.Int64 != 0
-		r.IconID = iconID.Int64         // 0 when NULL (no icon yet) or no item_master row joined
+		r.IconID = iconID.Int64          // 0 when NULL (no icon yet) or no item_master row joined
 		r.Statsblock = statsblock.String // "" when NULL (no stats yet) or no item_master row joined
 		r.Direction = direction.String
 		r.HasPrice = direction.Valid

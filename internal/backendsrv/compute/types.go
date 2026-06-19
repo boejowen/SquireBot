@@ -232,9 +232,9 @@ type ItemRollup struct {
 	WikiURL     string        `json:"wiki_url"`
 	WikiSummary string        `json:"wiki_summary"`
 	IsQuestItem bool          `json:"is_quest_item"`
-	IconID      int64         `json:"icon_id"`      // 0 → colored-tile fallback (D-02)
-	Statsblock  string        `json:"statsblock"`   // "" → examine omits the stats line (D-09)
-	Holders     []ItemHolder  `json:"holders"`      // one per holding (ITEM-03)
+	IconID      int64         `json:"icon_id"`    // 0 → colored-tile fallback (D-02)
+	Statsblock  string        `json:"statsblock"` // "" → examine omits the stats line (D-09)
+	Holders     []ItemHolder  `json:"holders"`    // one per holding (ITEM-03)
 }
 
 // ItemHolder is one holding of an item (ITEM-03 holders-table row): a character holding it,
@@ -242,7 +242,7 @@ type ItemRollup struct {
 // (= character.last_seen), and the viewer/bank flags for the holder banding + tags.
 type ItemHolder struct {
 	Char       string `json:"char"`
-	SlotLabel  string `json:"slot_label"`  // from classifySlot (P29)
+	SlotLabel  string `json:"slot_label"` // from classifySlot (P29)
 	Qty        int64  `json:"qty"`
 	LastSynced string `json:"last_synced"` // ViewRow.LastSynced (= character.last_seen)
 	IsMine     bool   `json:"is_mine"`

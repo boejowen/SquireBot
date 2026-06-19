@@ -369,6 +369,14 @@ func runServe(args []string) int {
 	// catalog search) — a separate Go 1.22+ ServeMux pattern, no shadowing.
 	mux.Handle("GET /api/v1/items", webauth.RequireSession(db, readapi.NewItems(st)))
 
+	// Banks tab (Phase 33 / BANK-01/02) — LOGIN-ONLY (RequireSession, NEVER public,
+	// NEVER RequireOfficer): the guild-wide bank+bot valuation (A-Z bank/bot roster
+	// with per-bank item count/value/nullable plat + the guild item-value + total
+	// platinum summary). No viewer id, no query param — guild-wide by design (D-01).
+	// DISTINCT from GET /api/v1/views/bank (line 290, the legacy consolidated grid) and
+	// GET /api/v1/coin/bank-toons (line 318, the coin form) — separate ServeMux patterns.
+	mux.Handle("GET /api/v1/banks", webauth.RequireSession(db, readapi.NewBanks(st)))
+
 	// Notifications (Phase 20 / WANT-04 / D-02) — LOGIN-ONLY (RequireSession, NEVER
 	// RequireOfficer): every signed-in member manages their OWN prefs + reads their
 	// OWN inbox; the owner is derived server-side from the Discord session, never the

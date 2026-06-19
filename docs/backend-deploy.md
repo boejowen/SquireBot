@@ -292,7 +292,7 @@ deploy).
 
 **1. Build + package (dev box, PowerShell):**
 ```powershell
-cd web; npm run build           # emits web/build/ (index.html + 200.html + _app/ + assets)
+cd web; npm run build           # emits web/build/ (200.html + robots.txt + _app/ — SPA fallback, NO index.html)
 # tar the CONTENTS of build/ (relative paths, no leading build/). bsdtar's permissive
 # Windows modes don't matter — the swap script chmods on the box.
 tar -czf "$env:TEMP\squirebot-web.tgz" -C .\build .
@@ -307,7 +307,7 @@ set -eu
 NEW=/var/www/squirebot.new
 rm -rf "$NEW"; mkdir -p "$NEW"
 tar -xzf /tmp/squirebot-web.tgz -C "$NEW"
-test -f "$NEW/index.html" && test -d "$NEW/_app" || { echo "EXTRACT_FAILED"; exit 1; }
+test -f "$NEW/200.html" && test -d "$NEW/_app" || { echo "EXTRACT_FAILED"; exit 1; }   # adapter-static SPA emits 200.html, NOT index.html (the `/` route is a client redirect)
 chmod -R u=rwX,go=rX "$NEW"            # dirs 755, files 644; world-readable + traversable
 rm -rf /var/www/squirebot.old
 mv /var/www/squirebot /var/www/squirebot.old   # keep the previous build for rollback

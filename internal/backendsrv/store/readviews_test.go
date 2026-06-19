@@ -662,6 +662,63 @@ func TestGearTierPrices_NameJoin_HitMiss(t *testing.T) {
 	}
 }
 
+// TestPriceByName_RepresentativePerName proves store.PriceByName collapses the WHOLE
+// pigparse_price catalog to ONE representative (MIN(item_id)) row per normalized name —
+// the catalog-wide name-bridge the wishlist target-price resolution uses (WARNING-3 /
+// WISH-04 revision). A name with a fan-out of two catalog rows yields ONE map entry
+// keyed on lower(trim(name)) carrying the MIN(item_id) row's price + last_seen; a
+// distinct-name row yields its own entry; a name with no catalog row has NO entry (the
+// caller resolves nil price). The key is the NORMALIZED name (case/space-folded).
+func TestPriceByName_RepresentativePerName(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	// Fan-out: two catalog rows for the SAME name, different ids + prices. MIN(item_id)
+	// is 5 (a30=200), so the representative entry must carry 200, NOT id-10's 100.
+	seedPigparse(t, db, 10, "Fan Out Item", "0", 100, 3)
+	seedPigparse(t, db, 5, "Fan Out Item", "0", 200, 9)
+	// A distinct-name row with surrounding/upper casing — the key folds to lower(trim).
+	seedPigparse(t, db, 42, "  Solo Item  ", "1", 350, 12)
+
+	got, err := s.PriceByName(ctx)
+	if err != nil {
+		t.Fatalf("PriceByName: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("PriceByName returned nil, want non-nil map")
+	}
+
+	// Exactly two normalized names (the fan-out collapsed to one).
+	if len(got) != 2 {
+		t.Fatalf("PriceByName len = %d, want 2 (fan-out collapses to one entry; have: %v)", len(got), got)
+	}
+
+	fan, ok := got["fan out item"]
+	if !ok {
+		t.Fatalf("PriceByName missing the 'fan out item' entry (have: %v)", got)
+	}
+	if !fan.HasPrice || fan.A30 != 200 {
+		t.Errorf("'fan out item' = {has:%t a30:%v}, want has/200 (MIN(item_id)=5 representative)", fan.HasPrice, fan.A30)
+	}
+	if fan.LastListed != "2026-05-09" {
+		t.Errorf("'fan out item' LastListed = %q, want %q (pigparse_price.last_seen)", fan.LastListed, "2026-05-09")
+	}
+
+	solo, ok := got["solo item"]
+	if !ok {
+		t.Fatalf("PriceByName missing the 'solo item' entry (normalized lower(trim); have: %v)", got)
+	}
+	if !solo.HasPrice || solo.A30 != 350 || solo.Direction != "1" {
+		t.Errorf("'solo item' = {has:%t a30:%v dir:%q}, want has/350/\"1\"", solo.HasPrice, solo.A30, solo.Direction)
+	}
+
+	// A name with no catalog row has NO entry (the caller resolves nil price).
+	if _, ok := got["never listed"]; ok {
+		t.Errorf("PriceByName has an entry for an unlisted name, want none (nil-price resolution path)")
+	}
+}
+
 // seedAssignment assigns charID to discordUserID (the viewer "yours" flag source).
 // character_assignment.discord_user_id has an FK to web_user, so the caller must
 // have seeded the web_user row first (insertWebUser).

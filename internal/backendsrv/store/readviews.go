@@ -128,6 +128,73 @@ type GearTierPriceRow struct {
 	LastListed string  // pigparse_price.last_seen — last-listed-for-sale; "" when no price row
 }
 
+// PriceByNameRow is one pigparse_price catalog row collapsed to its representative
+// (MIN(item_id)) per normalized name, carrying the price columns the wishlist
+// target-price resolution needs. It is the WHOLE-catalog name-keyed analog of
+// GearTierPriceRow's price fields — so a wishlist target whose normalized name
+// matches ANY catalog item (not just a gear-tier row) resolves a price (WISH-04
+// revision / WARNING-3). HasPrice is always true for a returned row (a missing name
+// simply has no map entry). LastListed = pigparse_price.last_seen.
+type PriceByNameRow struct {
+	Direction  string  // pigparse_price.direction (TEXT "0"/"1"/"2")
+	A30        float64 // 30-day average
+	T30        int64   // 30-day transaction count
+	LastListed string  // pigparse_price.last_seen — last-listed-for-sale
+	HasPrice   bool    // always true for a returned row
+}
+
+// PriceByName returns the WHOLE pigparse_price catalog collapsed to ONE representative
+// row per normalized name (lower(trim(name)), MIN(item_id) — the SAME pp_rep fan-out
+// guard GearTierPrices/InventoryJoin use), keyed on that normalized name. The wishlist
+// compute resolves ANY target's price/last-listed by name against this map — the SAME
+// name-bridge the examine uses (pigparse-vs-ingame-item-id-namespaces: join by NAME,
+// NEVER raw item_id). A target with no catalog name-match simply has no map entry (the
+// caller resolves nil price). Always returns a NON-NIL map. The read takes no user
+// param (a full-table catalog read), so there is nothing to bind; slog is silent on the
+// happy path, the error path logs op+err.
+func (s *Store) PriceByName(ctx context.Context) (map[string]PriceByNameRow, error) {
+	const query = `WITH pp_rep AS (
+	       SELECT lower(trim(name)) AS norm_name, MIN(item_id) AS rep_item_id
+	       FROM pigparse_price
+	       WHERE name IS NOT NULL AND trim(name) <> ''
+	       GROUP BY lower(trim(name))
+	)
+	SELECT pp_rep.norm_name, pp.direction, pp.a30, pp.t30, pp.last_seen
+	FROM pp_rep
+	JOIN pigparse_price pp ON pp.item_id = pp_rep.rep_item_id`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query price by name: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[string]PriceByNameRow) // non-nil
+	for rows.Next() {
+		var (
+			normName   string
+			direction  sql.NullString
+			a30        sql.NullFloat64
+			t30        sql.NullInt64
+			lastListed sql.NullString
+		)
+		if err := rows.Scan(&normName, &direction, &a30, &t30, &lastListed); err != nil {
+			return nil, fmt.Errorf("scan price by name row: %w", err)
+		}
+		out[normName] = PriceByNameRow{
+			Direction:  direction.String,
+			A30:        a30.Float64,
+			T30:        t30.Int64,
+			LastListed: lastListed.String,
+			HasPrice:   true,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate price by name rows: %w", err)
+	}
+	return out, nil
+}
+
 // WikiSpellRow is one wiki_spells row. normalized_name is already materialized in
 // the DB as lower(trim(spell_name)) — the same expression spellbook_entry uses —
 // so compute.SpellCheck joins on it directly with no recompute.

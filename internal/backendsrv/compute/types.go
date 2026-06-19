@@ -275,3 +275,53 @@ type BankRowSummary struct {
 	Unpriced  int64   `json:"unpriced"`   // PerBank[name].UnpricedCount
 	Plat      *int64  `json:"plat"`       // BankToon.Plat; null = never recorded (D-04, nullable discipline)
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 34 (v2.4) — per-character / per-slot Wishlist contract (APPEND-ONLY)
+// ──────────────────────────────────────────────────────────────────────────────
+// WishlistView / WishlistSlot / WishlistTarget / WishlistSuggestion are the
+// WISH-02/03/04 read-API payload (GET /api/v1/wishlist/{char}, 34-02). snake_case
+// tags, append-only — no existing tag is renamed. Slots is the fixed 21-worn-slot
+// list in paperdoll order (Charm/Power omitted, D-04); each carries its equipped item
+// + the viewer's active targets (auto-removal applied — a target whose normalized name
+// the char holds anywhere is HIDDEN, D-02) + the class+slot Velious gear-tier
+// suggestions (WISH-04). Price stays *float64 so "unpriced" ≠ "0" (the CoinTotals
+// discipline). Target price/last-listed resolve by NORMALIZED NAME against the full
+// pigparse_price catalog (store.PriceByName), the same name-bridge the examine uses.
+
+// WishlistView is the per-character wishlist payload (WISH-02/03/04).
+type WishlistView struct {
+	Char  string         `json:"char"`
+	Slots []WishlistSlot `json:"slots"`
+}
+
+// WishlistSlot is one worn slot's wishlist row: the currently-equipped item +
+// the viewer's active targets + the class+slot gear-tier suggestions.
+type WishlistSlot struct {
+	Slot        string               `json:"slot"`        // canonical worn-slot ("Head"/"Finger1"/…)
+	Equipped    string               `json:"equipped"`    // currently-equipped item name; "" = empty slot (D-04)
+	Targets     []WishlistTarget     `json:"targets"`     // viewer-added upgrade targets (auto-removal-filtered)
+	Suggestions []WishlistSuggestion `json:"suggestions"` // class+slot Velious gear-tier suggestions (WISH-04)
+}
+
+// WishlistTarget is one viewer-added upgrade target on a slot's wishlist (WISH-03).
+type WishlistTarget struct {
+	ID         int64    `json:"id"`
+	ItemID     *int64   `json:"item_id"`     // null ⇒ typed/custom (no EC match) or gear-tier item
+	ItemName   string   `json:"item_name"`
+	Pinged     bool     `json:"pinged"`      // WISH-05 ping toggle
+	PingedHit  bool     `json:"pinged_hit"`  // WISH-05 EC-hit badge (an alert_log row exists for this id)
+	Price      *float64 `json:"price"`       // name-keyed pickPrice over PriceByName; null when genuinely unpriced (D-09)
+	LastListed string   `json:"last_listed"` // pigparse last_seen; "" when none
+	WikiURL    string   `json:"wiki_url"`
+}
+
+// WishlistSuggestion is one class+slot Velious gear-tier suggestion (WISH-04). The
+// "Raid" tag is the TIER, not a column: IsRaid = (tier == "Velious Raiding") (Pitfall 3).
+type WishlistSuggestion struct {
+	ItemName   string   `json:"item_name"`
+	IsRaid     bool     `json:"is_raid"`     // tier == "Velious Raiding" ⇒ "Raid" tag + not-for-sale (Pitfall 3)
+	Price      *float64 `json:"price"`       // null ⇒ "no price"/"Not for sale"
+	LastListed string   `json:"last_listed"`
+	WikiURL    string   `json:"wiki_url"` // "" when the gear-tier row carries no wiki url
+}

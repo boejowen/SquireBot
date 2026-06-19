@@ -13,22 +13,22 @@
 ## Requirements
 
 ### Navigation & Shell (NAV)
-- [ ] **NAV-01** — The site presents five persistent top-level tabs (Characters, Inventory, Banks, Wishlist, Settings) with the active tab indicated.
-- [ ] **NAV-02** — Each tab has its own in-context search bar scoped to that tab's content.
-- [ ] **NAV-03** — The Settings tab consolidates the existing surfaces: Theme, Notifications prefs, Watcher Codes, Set Class & Level, My Characters, and (officers only) Admin — with a settings search.
-- [ ] **NAV-04** — Notifications belong to the Wishlist tab: the unread-alert badge sits on the Wishlist tab and the alert inbox + per-item ping prefs are reached there (every alert is a wishlist-item ping).
+- [x] **NAV-01** — The site presents five persistent top-level tabs (Characters, Inventory, Banks, Wishlist, Settings) with the active tab indicated. ✅ Plan 30-01 (5-tab strip in SiteShell, path-derived aria-current).
+- [x] **NAV-02** — Each tab has its own in-context search bar scoped to that tab's content. ✅ Pattern-established Plan 30-02 (the WantlistPanel filter is the Wishlist tab's scoped search; the live section-filter is the Settings tab's search); the stub tabs get theirs with content in Phases 31/32/33. Done — deployed live + browser-smoke PASS 2026-06-18.
+- [x] **NAV-03** — The Settings tab consolidates the existing surfaces: Theme, Notifications prefs, Watcher Codes, Set Class & Level, My Characters, and (officers only) Admin — with a settings search. ✅ Plan 30-02 (/settings composes the 6 panels as in-page id'd sections behind an officer-gated Admin section + a live settings search; notifications prefs moved to the Wishlist tab per D-07). Done — deployed live + browser-smoke PASS 2026-06-18.
+- [x] **NAV-04** — Notifications belong to the Wishlist tab: the unread-alert badge sits on the Wishlist tab and the alert inbox + per-item ping prefs are reached there (every alert is a wishlist-item ping). ✅ Chrome Plan 30-01 (badge→Wishlist tab) + inbox/prefs/per-item ping (the WantlistPanel mute bell) Plan 30-02 (/wishlist composes WantlistPanel + NotificationPrefsPanel + NotificationInbox). Done — deployed live + browser-smoke PASS 2026-06-18.
 
 ### Characters tab (CHAR) — "what does character X have?"
-- [ ] **CHAR-01** — Lists all guild characters with name, level, race, class; default order = the viewer's characters first (A-Z), then other guild characters, then guild banks/bots.
-- [ ] **CHAR-02** — Per-character name search that prioritizes the viewer's characters.
-- [ ] **CHAR-03** — Selecting a character (from the list or a search result) opens that character's inventory window.
+- [x] **CHAR-01** — Lists all guild characters with name, level, race, class; default order = the viewer's characters first (A-Z), then other guild characters, then guild banks/bots.
+- [x] **CHAR-02** — Per-character name search that prioritizes the viewer's characters.
+- [x] **CHAR-03** — Selecting a character (from the list or a search result) opens that character's inventory window. ✅ Phase 31
 
 ### Character inventory window (INV)
-- [ ] **INV-01** — A character's inventory renders in an in-game-style window: equipment slots in the EQ paperdoll arrangement, general-inventory slots, and the character's bank items listed below; stacked slots show their count.
-- [ ] **INV-02** — Hovering or tapping an item shows a right-click-style examine: item name + stats (from the stored wiki data), PigParse price, wiki link, and last-synced. (Sketch decision: click-to-pin detail panel.)
-- [ ] **INV-03** — General-inventory containers (bags) can be opened to view their contents, which behave like the inventory grid.
-- [ ] **INV-04** — Item icons render from the P1999 wiki item-icon images.
-- [ ] **INV-05** — *(backend/data)* The watcher's `Location`/`Slots` inventory data is parsed server-side into a slot taxonomy + container nesting that powers INV-01..03. Watcher unchanged.
+- [x] **INV-01** — A character's inventory renders in an in-game-style window: equipment slots in the EQ paperdoll arrangement, general-inventory slots, and the character's bank items listed below; stacked slots show their count. ✅ Phase 31
+- [x] **INV-02** — Hovering or tapping an item shows a right-click-style examine: item name + stats (from the stored wiki data), PigParse price, wiki link, and last-synced. (Sketch decision: click-to-pin detail panel.) ✅ Phase 31
+- [x] **INV-03** — General-inventory containers (bags) can be opened to view their contents, which behave like the inventory grid. ✅ Phase 31
+- [x] **INV-04** — Item icons render from the P1999 wiki item-icon images. ✅ Phase 31
+- [x] **INV-05** — *(backend/data)* The watcher's `Location`/`Slots` inventory data is parsed server-side into a slot taxonomy + container nesting that powers INV-01..03. Watcher unchanged. ✅ Phase 29
 
 ### Inventory tab (ITEM) — "which characters have item X?"
 - [ ] **ITEM-01** — Lists all guild items with name, guild-wide quantity, a wiki link, and a PigParse price that links to PigParse (when applicable).
@@ -50,8 +50,8 @@
 - [ ] **WISH-07** — Wishlist search covers all items on any wishlist plus the non-bank/bot characters.
 
 ### Cross-cutting data (DATA)
-- [ ] **DATA-01** — PigParse price + last-listed-for-sale data joins to wiki/gear-tier items by **normalized name** (gear-tier rows carry no item_id); surfaced on examine, suggestions, and item lists.
-- [ ] **DATA-02** — Bank valuation aggregation (sum of PigParse item value per bank + guild-wide) and total platinum (from the manual bank-coin entries) power BANK-02.
+- [x] **DATA-01** — PigParse price + last-listed-for-sale data joins to wiki/gear-tier items by **normalized name** (gear-tier rows carry no item_id); surfaced on examine, suggestions, and item lists. ✅ Phase 29 (name-keyed `pp_rep` join extended to gear-tier rows via `store.GearTierPrices`)
+- [x] **DATA-02** — Bank valuation aggregation (sum of PigParse item value per bank + guild-wide) and total platinum (from the manual bank-coin entries) power BANK-02. ✅ Phase 29 (`BankValuationFor` Σ pickPrice×count +N unpriced; `TotalPlatinum` literal plat)
 
 ---
 
@@ -68,21 +68,21 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| NAV-01 | Phase 30 | Pending |
-| NAV-02 | Phase 30 | Pending |
-| NAV-03 | Phase 30 | Pending |
-| NAV-04 | Phase 30 | Pending |
-| CHAR-01 | Phase 31 | Pending |
-| CHAR-02 | Phase 31 | Pending |
-| CHAR-03 | Phase 31 | Pending |
-| INV-01 | Phase 31 | Pending |
-| INV-02 | Phase 31 | Pending |
-| INV-03 | Phase 31 | Pending |
-| INV-04 | Phase 31 | Pending |
-| INV-05 | Phase 29 | Pending |
-| ITEM-01 | Phase 32 | Pending |
-| ITEM-02 | Phase 32 | Pending |
-| ITEM-03 | Phase 32 | Pending |
+| NAV-01 | Phase 30 | ✅ Done (Plan 30-01) |
+| NAV-02 | Phase 30 | ✅ Done (Plan 30-02 — wantlist filter + settings search; deployed browser-smoke PASS 2026-06-18) |
+| NAV-03 | Phase 30 | ✅ Done (Plan 30-02 — /settings 6 sections + officer gate + search; deployed browser-smoke PASS 2026-06-18) |
+| NAV-04 | Phase 30 | ✅ Done (Plan 30-01 badge→Wishlist tab + Plan 30-02 inbox/prefs; deployed browser-smoke PASS 2026-06-18) |
+| CHAR-01 | Phase 31 | ✅ Done (31-03: bespoke 3-band viewer-first list — YOUR CHARACTERS/GUILD/BANKS & BOTS, A-Z within band — over the 31-02 GET /api/v1/characters roster; deployed + browser-smoke PASS 2026-06-18) |
+| CHAR-02 | Phase 31 | ✅ Done (31-03: scoped viewer-priority search via the pure node-tested filterRoster, keeps mine→guild→banks ranking among matches; deployed + browser-smoke PASS 2026-06-18) |
+| CHAR-03 | Phase 31 | ✅ Done (31-03 selection + 31-04 window render: row/search click → fetchInventory → InventoryWindow opens; deployed + browser-smoke PASS 2026-06-18) |
+| INV-01 | Phase 31 | ✅ Done (31-04: 21-of-23-slot paperdoll [Charm/Power Source omitted — post-Velious] + general/bank grids + stack counts over StructuredInventory; deployed + browser-smoke PASS 2026-06-18) |
+| INV-02 | Phase 31 | ✅ Done (31-04: hover-preview + click-to-pin ExaminePanel — name/stats/price/wiki/last-synced; statsblock via migration 00013; deployed + browser-smoke PASS 2026-06-18) |
+| INV-03 | Phase 31 | ✅ Done (31-04: inline bag expand — children-based detection — over the Children[] nesting; deployed + browser-smoke PASS 2026-06-18) |
+| INV-04 | Phase 31 | ✅ Done (31-01 icon_id enrichment via migration 00012 + 31-04 PaperdollSlot Item_<iconId>.png with colored-tile onerror fallback; deployed + browser-smoke PASS 2026-06-18) |
+| INV-05 | Phase 29 | ✅ Done |
+| ITEM-01 | Phase 32 | ✅ Done — guild-wide item list (name + qty + holder count + inline PigParse price + Wiki ↗) live at squirebot.quest/inventory over GET /api/v1/items; deployed + 7-point browser-smoke PASS across 5 themes 2026-06-18 |
+| ITEM-02 | Phase 32 | ✅ Done — per-item name search floats the viewer's own characters' items first (server is_mine + pure items.ts viewer-first/filter); deployed + browser-smoke PASS 2026-06-18 |
+| ITEM-03 | Phase 32 | ✅ Done — selecting an item shows holders (char · slot · qty · last-synced) via the reused ExaminePanel + holders table deep-linking to /characters?c=; deployed + browser-smoke PASS 2026-06-18 |
 | BANK-01 | Phase 33 | Pending |
 | BANK-02 | Phase 33 | Pending |
 | BANK-03 | Phase 33 | Pending |
@@ -93,8 +93,8 @@
 | WISH-05 | Phase 34 | Pending |
 | WISH-06 | Phase 34 | Pending |
 | WISH-07 | Phase 34 | Pending |
-| DATA-01 | Phase 29 | Pending |
-| DATA-02 | Phase 29 | Pending |
+| DATA-01 | Phase 29 | ✅ Done |
+| DATA-02 | Phase 29 | ✅ Done |
 
 **Coverage by phase:**
 

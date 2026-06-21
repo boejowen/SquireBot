@@ -1,8 +1,8 @@
 // Default-landing redirect (Phase 30 / D-04). The 4-view consolidated home moved
-// VERBATIM to /guild-views (D-03b); during the stub window `/` resolves to that
-// functional surface, NOT the Characters "coming soon" placeholder (greeting an
-// active user with an empty stub is the worse experience). Once Phase 31 ships the
-// Characters tab, flip this target to /characters (one-line change).
+// VERBATIM to /guild-views (D-03b). Phases 31-34 shipped the full 5-tab UI, so `/`
+// now lands on the Characters tab (the milestone front door, the documented post-
+// Phase-31 flip — v2.4 milestone audit 2026-06-21). The legacy grids remain reachable
+// at /guild-views.
 //
 // ssr=false (inherited) → the load runs client-side; the SvelteKit client router
 // catches the thrown redirect and updates the address bar (verified against
@@ -15,5 +15,5 @@ export const ssr = false;
 export const prerender = false;
 
 export function load() {
-	redirect(307, '/guild-views'); // 307 temporary — flips to /characters post-Phase-31
+	redirect(307, '/characters'); // the 5-tab front door (legacy grids remain at /guild-views)
 }

@@ -8,11 +8,11 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.** Inventory and spell data lands in the sheet automatically; progression, gaps, and prices are computed for them. If everything else fails, this must work.
 
-## Current Milestone: v2.4 — Web UI Revamp (5-Tab Restructure)
+## Shipped: v2.4 — Web UI Revamp (5-Tab Restructure) (2026-06-21)
+
+**Goal (MET):** Reorganized squirebot.quest around five top-level tabs — **Characters · Inventory · Banks · Wishlist · Settings** — each answering one user question, backed by the new data architecture this required. All 6 phases (29–34, 34 plans, 27 requirements) shipped + deployed live + browser-smoke approved across 5 themes; schema v14 (migrations 00012 item_icon / 00013 item_statsblock / 00014 wishlist). Milestone audit PASSED 2026-06-21 (27/27 requirements · 6/6 phases · integration wired · 4/4 E2E flows; the one finding — a stale apex redirect — fixed during the audit). Watcher untouched throughout; NO `v*` tag (would fire the watcher release CI needlessly). Archive: `milestones/v2.4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. Open follow-up: dead wantlist code (api.ts orphaned wrappers + webadmin/wantlist.go twin) — a `/gsd-quick` cleanup.
 
 **Source spec:** `Future Features.txt` (user-authored, 2026-06-17, on the user's desktop) — the authoritative description of the target UX.
-
-**Goal:** Reorganize squirebot.quest around five top-level tabs — **Characters · Inventory · Banks · Wishlist · Settings** — each answering one user question. This spans **backend/data architecture + web** and reworks the just-shipped wantlist; it is NOT web-only (the spec's first line anticipates new data architecture + features).
 
 **The five tabs:**
 - **Characters** ("what does character X have?") — guild character list (own chars first A-Z, then others, then bots/banks) + per-character search; click a character → an **in-game-style inventory window** (real EQ slot layout, stack counts, backpack drill-down, bank-window view, right-click-style item tooltip with wiki stats + PigParse price + wiki link + last-synced).
@@ -27,7 +27,9 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 - Consolidated-views lock **RELAXED** for the web app — per-character master-detail drill-down ALLOWED (one reusable detail view on selection); guild-wide consolidated grids remain. (CLAUDE.md Architecture updated; [[project_consolidated_views]].)
 - Scope spans backend (inventory `Location`→slot-layout parsing + container nesting; bank valuation aggregation; per-slot wishlist data model + wiki-section suggestion engine) + web; watcher untouched (ingest already captures `Location`/`Slots` — this is parsing/surfacing, not new watcher work). Phases continue from v2.3 → v2.4 starts at **Phase 29**.
 
-**Status (2026-06-17):** milestone opened; sketching the 5-tab structure. REQUIREMENTS.md + ROADMAP.md follow the sketch.
+**The five tabs (all live):** Characters (in-game inventory window + examine), Inventory (item-centric "who has X"), Banks (banks-only list + guild valuation/platinum), Wishlist (per-character per-slot upgrade targets + Velious suggestions + Discord ping/EC-badge), Settings (consolidated Theme/Notifications/Watcher-codes/Class&Level/My-characters/Admin). `/` lands on Characters; the legacy consolidated grids remain at `/guild-views`.
+
+**Status:** SHIPPED + archived 2026-06-21. Next milestone undefined — start via `/gsd-new-milestone`.
 
 ## Current State
 
@@ -320,4 +322,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-17 — milestone **v2.4 "Web UI Revamp"** opened (web-only IA/nav + component polish; sketch-first; phases start at 29). Prior: v2.3 (Phases 26–28) SHIPPED + archived 2026-06-09 (schema v10, audit PASSED); quick 260610-fm5 UI streamline closed 2026-06-17 (schema v11). v2.2 Track-2 (Discord pinger WTS/raid monitors) still parked on the Raid Alliance bot invites.*
+*Last updated: 2026-06-21 — milestone **v2.4 "Web UI Revamp"** SHIPPED + archived (6 phases 29–34, 34 plans, 27 reqs; the 5-tab restructure live at squirebot.quest; schema v14; audit PASSED). Prior: v2.3 (Phases 26–28) SHIPPED 2026-06-09 (schema v10). v2.2 Track-2 (Discord pinger WTS/raid monitors, Phases 22–23) still parked on the Raid Alliance bot invites. Next milestone undefined — `/gsd-new-milestone`.*

@@ -732,37 +732,12 @@ export function revokeOwnCode(id: number, f: typeof fetch = fetch): Promise<{ re
 	return postJSON<{ revoked: boolean }>('/api/v1/account/codes/revoke', { id }, f);
 }
 
-// --- Wantlist + catalog search (19-03 / WANT-01/WANT-02) ------------------
-// The four login-only wantlist endpoints (GET list / POST add / POST remove /
-// GET catalog search), all cookie-credentialed via the shared getJSON/postJSON
-// cores (D-02: the owner is session-derived server-side — the add/remove bodies
-// carry NO owner). The in-guild "who holds it" display joins the wantlist rows'
-// stable item_id against the consolidated all-character inventory (fetchView()),
-// client-side, in holdersFor (see $lib/wantlist/holders).
-
-/** One of the caller's own wantlist entries (GET /api/v1/wantlist). */
-export interface WantlistRow {
-	id: number;
-	/** null for a custom text want (excluded from the in-guild join + future alerts, D-04/D-07). */
-	item_id: number | null;
-	item_name: string;
-	priority: 'low' | 'med' | 'high';
-	note: string | null;
-	created_at: number;
-	/**
-	 * D-09 per-want mute state. The backend ListOwnWants (Plan 01 — BLOCKER-3 closed)
-	 * returns `muted` on every row, so this is a DETERMINISTIC interface field (not a
-	 * conditional "add if missing"); WantMuteCell reads it to choose the bell glyph.
-	 */
-	muted: boolean;
-	/**
-	 * CWANT-01 optional character tag. null ⇒ an account-level want; non-null ⇒ scoped
-	 * to that character (mirrors the Go WantlistRow.CharacterID — LEFT JOIN character).
-	 */
-	character_id: number | null;
-	/** CWANT-06 the tagged character's name (LEFT JOIN character.name); null ⇒ account-level (or a removed char). */
-	character_name: string | null;
-}
+// --- Catalog search (19-03 / WANT-02; REUSED by the wishlist typed-entry add) ---
+// The login-only catalog-search endpoint over the PigParse-getall corpus, cookie-
+// credentialed via the shared getJSON core. The dead item-centric wantlist API that
+// once shared this block (fetchOwnWants/fetchGuildWants/addWant/removeWant/muteWant +
+// the WantlistRow/GuildWantRow interfaces) was removed in the v2.4 clean break; this
+// search wrapper survives because the wishlist typed-entry add (WISH-07) REUSES it.
 
 /** A catalog match from the PigParse-getall corpus (GET /api/v1/items/search). */
 export interface CatalogItem {
@@ -772,69 +747,9 @@ export interface CatalogItem {
 	current_avg?: number;
 }
 
-/** GET /api/v1/wantlist → WantlistRow[] ([] when the list is empty). */
-export function fetchOwnWants(f: typeof fetch = fetch): Promise<WantlistRow[]> {
-	return getJSON<WantlistRow[]>('/api/v1/wantlist', f);
-}
-
-/**
- * One active want in the GUILDWIDE roll-up (GET /api/v1/wantlist/guild — CWANT-03/04).
- * Mirrors the Go store.GuildWantRow: it surfaces the owner's username + the OPTIONAL
- * tagged character name, across ALL members.
- *
- * SECURITY (T-28-02 / T-28-12): there is intentionally NO `note` field. The per-want
- * note is private to its owner; the guildwide read MUST NOT expose it (the server's
- * ListGuildWants excludes it). Do NOT add a note field here — the client cannot surface
- * a column the API does not send.
- */
-export interface GuildWantRow {
-	id: number;
-	/** null ⇒ a custom text want (no catalog item_id). */
-	item_id: number | null;
-	item_name: string;
-	priority: 'low' | 'med' | 'high';
-	discord_user_id: string;
-	/** web_user.username — the owner attribution (CWANT-03/04). */
-	owner: string;
-	/** null ⇒ an account-level want. */
-	character_id: number | null;
-	/** the tagged character's name; null ⇒ account-level (or a removed char). */
-	character_name: string | null;
-}
-
-/** GET /api/v1/wantlist/guild → GuildWantRow[] ([] when empty). Login-only; owner + character attribution, NO note. */
-export function fetchGuildWants(f: typeof fetch = fetch): Promise<GuildWantRow[]> {
-	return getJSON<GuildWantRow[]>('/api/v1/wantlist/guild', f);
-}
-
 /** GET /api/v1/items/search?q=… → CatalogItem[] (server returns [] for q<2). */
 export function searchCatalog(q: string, f: typeof fetch = fetch): Promise<CatalogItem[]> {
 	return getJSON<CatalogItem[]>('/api/v1/items/search?q=' + encodeURIComponent(q), f);
-}
-
-/** POST /api/v1/wantlist → the created WantlistRow. Body carries NO owner (session-derived, D-02). */
-export function addWant(
-	body: {
-		item_id: number | null;
-		item_name: string;
-		priority: 'low' | 'med' | 'high';
-		note?: string;
-		/**
-		 * CWANT-01 optional character tag. null/absent ⇒ an account-level want. The
-		 * server authorizes the tag (IsCharAssignedToTx, Plan 02) — a forged char the
-		 * caller does not own is rejected 403; the <select> sourcing options from
-		 * fetchMyCharacters is UX, NOT the gate (T-28-11).
-		 */
-		character_id?: number | null;
-	},
-	f: typeof fetch = fetch
-): Promise<WantlistRow> {
-	return postJSON<WantlistRow>('/api/v1/wantlist', body, f);
-}
-
-/** POST /api/v1/wantlist/remove → { removed } (false = not the caller's / already removed — a no-op, not an error). */
-export function removeWant(id: number, f: typeof fetch = fetch): Promise<{ removed: boolean }> {
-	return postJSON<{ removed: boolean }>('/api/v1/wantlist/remove', { id }, f);
 }
 
 // --- Wishlist (34-03 / WISH-02/03/04/05) -----------------------------------
@@ -934,9 +849,7 @@ export function setWishlistPing(
 // getJSON/postJSON cores (D-02: the owner is session-derived server-side; NO
 // body carries an owner). This block is OWNED by Plan 04; Plan 05 APPENDS its
 // officer-monitor wrappers in a SEPARATE `// --- Monitors (20-05 / WANT-08) ---`
-// block BELOW this one (a different wave — do NOT remove or reorder these). The
-// muteWant wrapper lives here too because /wantlist already lives in this file;
-// Plan 05's WantMuteCell consumes it.
+// block BELOW this one (a different wave — do NOT remove or reorder these).
 //
 // IMPORTANT (P15 epoch-seconds crasher): `sent_at` and `read_at` on AlertLogRow
 // are unix EPOCH SECONDS (NOT milliseconds) — every consumer that builds a Date
@@ -994,15 +907,6 @@ export function markRead(id: number, f: typeof fetch = fetch): Promise<{ read: b
 /** POST /api/v1/notifications/read-all → { count } (rows flipped). Body is {} — owner is session-derived (D-02). */
 export function markAllRead(f: typeof fetch = fetch): Promise<{ count: number }> {
 	return postJSON<{ count: number }>('/api/v1/notifications/read-all', {}, f);
-}
-
-/** POST /api/v1/wantlist/mute → { muted }. Body is {id, muted} only — owner session-derived (D-02). Consumed by Plan 05's WantMuteCell. */
-export function muteWant(
-	id: number,
-	muted: boolean,
-	f: typeof fetch = fetch
-): Promise<{ muted: boolean }> {
-	return postJSON<{ muted: boolean }>('/api/v1/wantlist/mute', { id, muted }, f);
 }
 
 // --- Monitors (20-05 / WANT-08) --------------------------------------------

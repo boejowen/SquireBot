@@ -25,20 +25,13 @@
 import type { ColumnDef, Row } from '@tanstack/table-core';
 import { renderComponent } from '$lib/table';
 import { wikiUrlFor } from '$lib/tooltip/composeNotes';
-import type { ViewRow, GearCheckRow, SpellCheckRow, WantlistRow, GuildWantRow } from '$lib/api';
-import { priorityRank } from '$lib/wantlist/priority';
-import type { Holder } from '$lib/wantlist/holders';
+import type { ViewRow, GearCheckRow, SpellCheckRow } from '$lib/api';
 import StatusCell from '$lib/components/StatusCell.svelte';
 import ItemCell from '$lib/components/cells/ItemCell.svelte';
 import WikiCell from '$lib/components/cells/WikiCell.svelte';
 import PriceCell from '$lib/components/cells/PriceCell.svelte';
 import LastSyncedCell from '$lib/components/cells/LastSyncedCell.svelte';
 import RecommendedCell from '$lib/components/cells/RecommendedCell.svelte';
-import PriorityCell from '$lib/components/cells/PriorityCell.svelte';
-import WantItemCell from '$lib/components/cells/WantItemCell.svelte';
-import InGuildCell from '$lib/components/cells/InGuildCell.svelte';
-import WantRemoveCell from '$lib/components/cells/WantRemoveCell.svelte';
-import WantMuteCell from '$lib/components/cells/WantMuteCell.svelte';
 
 /** Per-column metadata the DataGrid reads to choose a filter control. */
 export interface ColumnFilterMeta {
@@ -166,140 +159,3 @@ export const spellCheckColumns: ColumnDef<SpellCheckRow, unknown>[] = [
 		cell: (ctx) => renderComponent(StatusCell, { status: ctx.row.original.status })
 	}
 ];
-
-// --- wantlist (19-UI-SPEC Grid Contract) ---------------------------------
-// Priority · Item · In guild? · Note · Remove. The 5th DataGrid
-// instantiation — owner-scoped, consolidated, single grid (NEVER per-character).
-// Default sort: priority (high→low) then in_guild status (D-08) — seeded by the
-// panel's defaultSorting `[{ id: 'priority', desc: true }, { id: 'in_guild', desc: false }]`.
-
-/** Custom TanStack sortingFn: order Priority by rank (high=3/med=2/low=1), not alpha. */
-function prioritySort(a: Row<WantlistRow>, b: Row<WantlistRow>): number {
-	return priorityRank(a.original.priority) - priorityRank(b.original.priority);
-}
-
-/**
- * Build the wantlist ColumnDef[] for the DataGrid. A factory (not a const) so the
- * computed In-guild cell can close over the panel's `holdersOf` lookup (the
- * fetchView() join, D-06 — the panel runs holdersFor once per item_id and passes
- * the summed result here) and the Remove cell over the panel's `onRemove` +
- * `removeBusy`. The interactive cells need runtime data the static view columns
- * don't.
- *
- * The In-guild column's accessor returns the COARSE status ('in'/'not'/'na') so
- * the secondary sort (D-08) and the facet filter work; the rich `↳ Char: count`
- * lines render in the cell. `enableGlobalFilter: false` on the computed In-guild
- * column — its raw accessor value diverges from the rendered cell (the
- * columns.ts global-filter caveat), so the global box would otherwise produce
- * phantom matches. (No raw item-ID column — IDs aren't member-facing data.)
- */
-export function wantlistColumns(
-	holdersOf: (row: WantlistRow) => Holder[],
-	onRemove: (row: WantlistRow) => void,
-	removeBusy = false,
-	onMute: (row: WantlistRow) => void = () => {},
-	muteBusy = false
-): ColumnDef<WantlistRow, unknown>[] {
-	return [
-		{
-			id: 'priority',
-			accessorKey: 'priority',
-			header: 'Priority',
-			sortingFn: prioritySort,
-			meta: { filter: 'facet' },
-			cell: (ctx) => renderComponent(PriorityCell, { priority: ctx.row.original.priority })
-		},
-		{
-			id: 'item',
-			accessorKey: 'item_name',
-			header: 'Item',
-			cell: (ctx) => renderComponent(WantItemCell, { row: ctx.row.original })
-		},
-		{
-			id: 'in_guild',
-			// Coarse status backs the secondary sort + facet filter; the rich lines
-			// render in InGuildCell. 'in' < 'na' < 'not' alpha — desc:false floats
-			// "not in guild" up only relative to the other states; the priority key
-			// dominates (D-08).
-			accessorFn: (row) =>
-				row.item_id === null ? 'na' : holdersOf(row).length > 0 ? 'in' : 'not',
-			header: 'In guild?',
-			enableGlobalFilter: false,
-			meta: { filter: 'facet' },
-			cell: (ctx) => renderComponent(InGuildCell, { row: ctx.row.original, holders: holdersOf(ctx.row.original) })
-		},
-		{
-			id: 'note',
-			accessorKey: 'note',
-			header: 'Note',
-			enableSorting: false,
-			cell: (ctx) => ctx.row.original.note ?? ''
-		},
-		{
-			// The per-row mute bell (D-09). A trailing "Alerts" column just before
-			// Remove so it reads as a per-row setting, not a primary action. No sort,
-			// no filter — it's a control, not data.
-			id: 'mute',
-			header: 'Alerts',
-			enableSorting: false,
-			enableColumnFilter: false,
-			enableGlobalFilter: false,
-			cell: (ctx) =>
-				renderComponent(WantMuteCell, { row: ctx.row.original, onMute, busy: muteBusy })
-		},
-		{
-			id: 'remove',
-			header: '',
-			enableSorting: false,
-			enableColumnFilter: false,
-			enableGlobalFilter: false,
-			cell: (ctx) =>
-				renderComponent(WantRemoveCell, { row: ctx.row.original, onRemove, busy: removeBusy })
-		}
-	];
-}
-
-// --- guild wantlist (CWANT-03/04 guildwide roll-up) -----------------------
-// The /wantlist "Guild" toggle grid: EVERY active want across ALL members, with
-// owner (username) + character attribution. Distinct from wantlistColumns: it's
-// read-only (no Remove / Mute — not the caller's rows to mutate), it adds an Owner
-// column and a Character column, and it surfaces NO Note (T-28-12 — the GuildWantRow
-// API shape carries no note; the client cannot render a column the server omits).
-// Still ONE DataGrid (CLAUDE.md consolidated-views LOCK — a client toggle, not a tab).
-
-/** Custom TanStack sortingFn for the guild grid: order Priority by rank, not alpha. */
-function guildPrioritySort(a: Row<GuildWantRow>, b: Row<GuildWantRow>): number {
-	return priorityRank(a.original.priority) - priorityRank(b.original.priority);
-}
-
-/**
- * Build the guildwide wantlist ColumnDef[]. Owner · Character · Priority · Item.
- * Owner + character names render via plain accessor strings (TanStack
- * auto-escapes the text node) — NEVER {@html} (T-28-10). An account-level want shows
- * a blank Character cell. No Note column (private, excluded server-side, T-28-12).
- */
-export function guildWantlistColumns(): ColumnDef<GuildWantRow, unknown>[] {
-	return [
-		{ id: 'owner', accessorKey: 'owner', header: 'Owner', meta: { filter: 'facet' } },
-		{
-			id: 'character',
-			// Account-level wants (character_id null) render a blank Character cell.
-			accessorFn: (row) => row.character_name ?? '',
-			header: 'Character',
-			meta: { filter: 'facet' }
-		},
-		{
-			id: 'priority',
-			accessorKey: 'priority',
-			header: 'Priority',
-			sortingFn: guildPrioritySort,
-			meta: { filter: 'facet' },
-			cell: (ctx) => renderComponent(PriorityCell, { priority: ctx.row.original.priority })
-		},
-		{
-			id: 'item',
-			accessorKey: 'item_name',
-			header: 'Item'
-		}
-	];
-}

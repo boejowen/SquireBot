@@ -23,7 +23,6 @@ import {
 	fetchUnreadCount,
 	markRead,
 	markAllRead,
-	muteWant,
 	fetchMonitors,
 	setMonitorFlag,
 	addGuildChannel,
@@ -208,7 +207,7 @@ describe('17-03 account-code wrappers', () => {
 });
 
 // --- 20-04 notifications wrappers ------------------------------------------
-// Pin the request shape of the six notification endpoints + muteWant: the right
+// Pin the request shape of the six notification endpoints: the right
 // URL/method/credentials and — load-bearing — that NO body carries an owner field
 // (D-02; the owner is session-derived server-side). This block is OWNED by Plan
 // 04; Plan 05 APPENDS its monitor-wrapper assertions in a later wave — do NOT
@@ -290,17 +289,6 @@ describe('20-04 notification wrappers', () => {
 		expect(rec.init()?.method).toBe('POST');
 		expect(rec.init()?.credentials).toBe('include');
 		expect(JSON.parse(rec.init()?.body as string)).toEqual({});
-	});
-
-	it('muteWant POSTs /api/v1/wantlist/mute with {id, muted} and NO owner (D-02)', async () => {
-		const rec = recordingFetch({ muted: true });
-		await expect(muteWant(8, true, rec.fetchFn)).resolves.toEqual({ muted: true });
-		expect(rec.url()).toMatch(/\/api\/v1\/wantlist\/mute$/);
-		expect(rec.init()?.method).toBe('POST');
-		expect(rec.init()?.credentials).toBe('include');
-		const sent = JSON.parse(rec.init()?.body as string);
-		expect(sent).toEqual({ id: 8, muted: true });
-		expect(sent.owner).toBeUndefined();
 	});
 });
 

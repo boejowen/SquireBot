@@ -30,7 +30,7 @@ import (
 // the guild_channel(channel_id, monitor) unique index (the same channel already
 // registered for that monitor). The Plan-03 handler maps it to HTTP 409.
 // Detection is via the modernc driver's extended result code (==2067 /
-// sqliteConstraintUnique, defined in wantlist.go), NOT a string-match.
+// sqliteConstraintUnique, defined in sqliteconstraint.go), NOT a string-match.
 var ErrDuplicateChannel = errors.New("guild_channel: duplicate")
 
 // GuildChannel is one officer-registered source channel (ListGuildChannels). The

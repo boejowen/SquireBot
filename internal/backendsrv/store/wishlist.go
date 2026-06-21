@@ -17,10 +17,10 @@ package store
 //   - AddWishlistTx returns the TYPED ErrDuplicateWishlist on a partial-unique-index
 //     conflict, detected via the modernc driver's EXTENDED result code
 //     (*sqlite.Error.Code() == 2067 == sqliteConstraintUnique, declared in
-//     wantlist.go and REUSED here), NOT by string-matching the driver message.
+//     sqliteconstraint.go and REUSED here), NOT by string-matching the driver message.
 //   - Parameterized ? placeholders ONLY (V5); the item name is NEVER logged (V7).
 //
-// NB: sqliteConstraintUnique and boolToInt are declared in wantlist.go (same
+// NB: sqliteConstraintUnique and boolToInt are declared in sqliteconstraint.go (same
 // package) and REUSED here — a duplicate declaration would not compile.
 
 import (
@@ -159,7 +159,7 @@ func RemoveOwnWishlistTx(ctx context.Context, tx *sql.Tx, wishID int64, discordI
 //     no-op that never leaks the target's existence;
 //   - an already-removed (active=0) own target → RowsAffected=0 → (false, nil).
 //
-// pinged is stored as INTEGER 0/1 (boolToInt, declared in wantlist.go). discordID
+// pinged is stored as INTEGER 0/1 (boolToInt, declared in sqliteconstraint.go). discordID
 // MUST be resolved from the session upstream, never the body.
 func SetPingedTx(ctx context.Context, tx *sql.Tx, wishID int64, discordID string, pinged bool) (bool, error) {
 	res, err := tx.ExecContext(ctx,

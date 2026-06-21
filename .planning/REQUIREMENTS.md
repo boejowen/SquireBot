@@ -41,13 +41,13 @@
 - [x] **BANK-03** — Per-item name search across the items held by the guild banks. ✅ Phase 33
 
 ### Wishlist tab (WISH) — "what can I get to improve my characters?" *(reworks v2.2/v2.3 wantlist)*
-- [ ] **WISH-01** — Lists characters (the viewer's first A-Z, then others); excludes guild banks/bots; per-character.
-- [ ] **WISH-02** — Selecting a character shows its equipped slots (not the in-game window) with the currently-equipped item per slot.
-- [ ] **WISH-03** — Each equipped slot holds an **open-ended** set of user-entered upgrade targets (the slot's wishlist); items are typed or chosen from suggestions; an item leaves the wishlist when SquireBot sees it on that character or the user removes it.
-- [ ] **WISH-04** — Per slot, SquireBot suggests upgrades from the **complete** Velious Pre-raid/Grouping + Raiding lists for that class+slot (from the existing `_wiki_gear_tier` data); each suggestion shows its PigParse price, wiki link, and last-listed-for-sale date; no-drop/raid-only items are tagged "Raid" and shown as not-for-sale (no Group/Raid binary).
-- [ ] **WISH-05** — Each wishlisted item has a Discord ping toggle; when SquireBot pings the user (e.g. the item appeared in the EC tunnel), a badge appears beside that item in the wishlist. Reuses the shipped EC-monitor + notification spine.
-- [ ] **WISH-06** — Hovering or tapping any item shows the right-click-style examine (stats, price, wiki, last-synced).
-- [ ] **WISH-07** — Wishlist search covers all items on any wishlist plus the non-bank/bot characters.
+- [x] **WISH-01** — Lists characters (the viewer's first A-Z, then others); excludes guild banks/bots; per-character. ✅ Phase 34 (34-03: wishlistRoster banks/bots-excluded viewer-first list; code shipped, live deploy 34-04)
+- [x] **WISH-02** — Selecting a character shows its equipped slots (not the in-game window) with the currently-equipped item per slot. ✅ Phase 34 (34-03: the per-slot accordion w/ equipped item per slot over compute.WishlistFor)
+- [x] **WISH-03** — Each equipped slot holds an **open-ended** set of user-entered upgrade targets (the slot's wishlist); items are typed or chosen from suggestions; an item leaves the wishlist when SquireBot sees it on that character or the user removes it. ✅ Phase 34 (34-03: cloned-debounce typed-entry add + suggestion add + ConfirmDialog remove; D-02 auto-hide server-computed)
+- [x] **WISH-04** — Per slot, SquireBot suggests upgrades from the **complete** Velious Pre-raid/Grouping + Raiding lists for that class+slot (from the existing `_wiki_gear_tier` data); each suggestion shows its PigParse price, wiki link, and last-listed-for-sale date; no-drop/raid-only items are tagged "Raid" and shown as not-for-sale (no Group/Raid binary). ✅ Phase 34 (34-03: the suggestion picker — name + price/"Not for sale" + Wiki + last-listed + Raid tag)
+- [x] **WISH-05** — Each wishlisted item has a Discord ping toggle; when SquireBot pings the user (e.g. the item appeared in the EC tunnel), a badge appears beside that item in the wishlist. Reuses the shipped EC-monitor + notification spine. ✅ Phase 34 (34-03: the per-target ping Toggle [server-truth] + the "Seen in EC" pinged_hit badge)
+- [x] **WISH-06** — Hovering or tapping any item shows the right-click-style examine (stats, price, wiki, last-synced). ✅ Phase 34 (34-03: the reused ExaminePanel via the asSlot seam on every target/equipped/suggestion)
+- [x] **WISH-07** — Wishlist search covers all items on any wishlist plus the non-bank/bot characters. ✅ Phase 34 (34-03: the two-group search; the WISHLIST-ITEMS corpus = EVERY non-bank/bot char's wishlist, lazy-fetch + cache, no scope-down)
 
 ### Cross-cutting data (DATA)
 - [x] **DATA-01** — PigParse price + last-listed-for-sale data joins to wiki/gear-tier items by **normalized name** (gear-tier rows carry no item_id); surfaced on examine, suggestions, and item lists. ✅ Phase 29 (name-keyed `pp_rep` join extended to gear-tier rows via `store.GearTierPrices`)
@@ -86,13 +86,13 @@
 | BANK-01 | Phase 33 | ✅ Done — banks/bots A-Z list, each opens the reused P31 inventory window; live at squirebot.quest/banks |
 | BANK-02 | Phase 33 | ✅ Done — guild-wide summary (total PigParse value incl. bots + total platinum) via compute.Banks over the shipped BankValuation |
 | BANK-03 | Phase 33 | ✅ Done — item-centric search across bank holders (bank-slice qty), holder-click opens the bank window in-tab |
-| WISH-01 | Phase 34 | Pending |
-| WISH-02 | Phase 34 | Pending |
-| WISH-03 | Phase 34 | Pending |
-| WISH-04 | Phase 34 | Pending |
-| WISH-05 | Phase 34 | Pending |
-| WISH-06 | Phase 34 | Pending |
-| WISH-07 | Phase 34 | Pending |
+| WISH-01 | Phase 34 | ✅ Code shipped (34-03: wishlistRoster banks/bots-excluded viewer-first list; live deploy 34-04) |
+| WISH-02 | Phase 34 | ✅ Code shipped (34-01 compute.WishlistFor + 34-03 per-slot accordion w/ equipped per slot) |
+| WISH-03 | Phase 34 | ✅ Code shipped (34-01 wishlist_item+CRUD+D-02 auto-removal · 34-02 write API · 34-03 add/remove UI) |
+| WISH-04 | Phase 34 | ✅ Code shipped (34-01 class+slot gear-tier suggestions + name-keyed price · 34-03 suggestion picker + Raid tag) |
+| WISH-05 | Phase 34 | ✅ Code shipped (34-02 matcher repoint · 34-03 ping Toggle [server-truth] + "Seen in EC" badge) |
+| WISH-06 | Phase 34 | ✅ Code shipped (34-03: reused ExaminePanel via the asSlot seam on hover/tap) |
+| WISH-07 | Phase 34 | ✅ Code shipped (34-03: two-group search; items corpus = every non-bank/bot char's wishlist, lazy-fetch+cache) |
 | DATA-01 | Phase 29 | ✅ Done |
 | DATA-02 | Phase 29 | ✅ Done |
 

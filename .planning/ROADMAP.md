@@ -140,7 +140,7 @@ Full details in [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md).
  (completed 2026-06-19)
 - [x] **Phase 33: Banks Tab + Valuation** — a guild-banks-only list (each opens its inventory window), the total PigParse item value across banks + total platinum, and per-item bank search. (BANK-01..03)
  (completed 2026-06-19)
-- [ ] **Phase 34: Wishlist Rework — Per-Character Per-Slot Upgrades** — reworks the v2.2/v2.3 wantlist into a per-character, per-equipment-slot, open-ended upgrade list with complete Velious `_wiki_gear_tier` suggestions (price + wiki + last-listed; Raid tag for no-drop/raid-only), a Discord ping toggle + EC-hit badge (reusing the shipped EC-monitor + notification spine), the examine tooltip, and wishlist search. (WISH-01..07)
+- [x] **Phase 34: Wishlist Rework — Per-Character Per-Slot Upgrades** — reworks the v2.2/v2.3 wantlist into a per-character, per-equipment-slot, open-ended upgrade list with complete Velious `_wiki_gear_tier` suggestions (price + wiki + last-listed; Raid tag for no-drop/raid-only), a Discord ping toggle + EC-hit badge (reusing the shipped EC-monitor + notification spine), the examine tooltip, and wishlist search. (WISH-01..07) (completed 2026-06-21)
 
 **Execution order:** strict dependency chain **29 → 30 → 31 → 32 → 33 → 34**. Phase 29 (data) unblocks 31/32/33/34; Phase 30 (shell) reframes routing for all four tab phases; the Wishlist (34) additionally depends on Phase 31's equipped-slot detection + the already-shipped notification/EC spine. 32 and 33 are independent of each other once 29+30 land (could parallelize), but numbered sequentially.
 
@@ -342,10 +342,10 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   4. Each wishlisted item has a Discord ping toggle; when SquireBot pings the user (e.g. the item appeared in the EC tunnel via the shipped EC-monitor + notification spine), a badge appears beside that item in the wishlist.
   5. Hovering or tapping any item shows the right-click-style examine (stats, price, wiki, last-synced), and a wishlist search covers all items on any wishlist plus the non-bank/bot characters.
 **Plans**: 4 plans
-  - [ ] 34-01-PLAN.md — Backend data foundation: migration 00014 (wishlist_item + alert_log FK rebuild + drop wantlist_item) + owner-scoped store CRUD/ping + compute-on-read WishlistFor (equipped + auto-removal + class+slot suggestions via the slot-vocab bridge)
-  - [ ] 34-02-PLAN.md — Backend matcher repoint (wantmatch -> wishlist_item) + owner-scoped write API (add/remove/ping) + GET /api/v1/wishlist/{char} read route + main.go (register 4 wishlist routes, remove 5 wantlist routes)
-  - [ ] 34-03-PLAN.md — Web /wishlist tab: viewer-first char list (banks/bots excluded) + WISH-07 search + per-slot accordion (equipped + targets + suggestions + ping toggle + EC badge + reused ExaminePanel) + api.ts/wishlist.ts; delete the old WantlistPanel + wantlist/*
-  - [ ] 34-04-PLAN.md — Deploy (goose-run 00014 + web atomic swap; R2 backup BEFORE the restart; NO v* tag) + human browser-smoke across the 5 EQ themes
+  - [x] 34-01-PLAN.md — Backend data foundation: migration 00014 (wishlist_item + alert_log FK rebuild + drop wantlist_item) + owner-scoped store CRUD/ping + compute-on-read WishlistFor (equipped + auto-removal + class+slot suggestions via the slot-vocab bridge) ✅ EXECUTED 2026-06-19 (ea0223a/6f1eea3/00574e9; schema v14; WISH-02/03/04 backend half; migrations+store-wishlist+compute gates green, go build rc=0; the 5 retired-wantlist test packages [wantmatch/webadmin/store/ec/notify] are the EXPECTED 34-02 hand-off)
+  - [x] 34-02-PLAN.md — Backend matcher repoint (wantmatch -> wishlist_item) + owner-scoped write API (add/remove/ping) + GET /api/v1/wishlist/{char} read route + main.go (register 4 wishlist routes, remove 5 wantlist routes) ✅ EXECUTED 2026-06-19 (cbbc208/58587e1/03de8af; WISH-01/05/07; wantmatch+ECPollSet repointed [pinged gate, INNER JOIN, no note], DM-target-is-owner regression ported, owner-scoped webadmin/wishlist.go [in-tx IsCharAssignedToTx 403 / 409 dup / 21-slot 400 / silent IDOR no-op], readapi/wishlist.go, main.go 4-registered/5-removed; the full clean-break test repair → go test ./... GREEN, go vet clean, go build rc=0; 2 Rule-3 auto-fixes [ECPollSet, whyWanted]; NO web/watcher change, NO migration)
+  - [x] 34-03-PLAN.md — Web /wishlist tab: viewer-first char list (banks/bots excluded) + WISH-07 search + per-slot accordion (equipped + targets + suggestions + ping toggle + EC badge + reused ExaminePanel) + api.ts/wishlist.ts; delete the old WantlistPanel + wantlist/* ✅ EXECUTED 2026-06-19 (ab4a2af/18fdd61/0e46d65; WISH-01..07 code-shipped; api.ts WishlistView interfaces+wrappers [mirror the Go contract] · pure node-tested wishlist.ts [banks/bots-excluded viewer-first + WISH-07 cross-wishlist search over the WHOLE lazy-fetched+cached corpus, no scope-down] · /wishlist per-character per-slot master-detail [server-ordered 21-slot accordion, target rows w/ price+Wiki+last-listed+Raid tag+ping Toggle+"Seen in EC" badge+ExaminePanel, cloned-debounce typed-entry add + suggestion picker, server-truth add/remove/ping, ConfirmDialog remove, read-only on non-owned chars] · KEPT the NAV-04 Notifications region · DELETED WantlistPanel+groupByChar, KEPT priority.ts/holders.ts; web check 0/0 [508 files] + npm test 380 [29 files, +15 wishlist] + build green; 0 deviations; NO backend/watcher change, NO deploy [that's 34-04 — node vitest is DOM-blind])
+  - [x] 34-04-PLAN.md — Deploy (goose-run 00014 + web atomic swap; R2 backup BEFORE the restart; NO v* tag) + human browser-smoke across the 5 EQ themes
 **UI hint**: yes
 
 ## Progress
@@ -361,7 +361,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | v2.1 | 2 | 4/4 | ✅ Complete (Phases 17–18 shipped) | 2026-06-02 |
 | v2.2 | 6 | 13/TBD | 🔄 **Track 1 SHIPPED LIVE** (Phases 19–21 deployed 2026-06-06 + Phase 24 quality done); Track 2 (22–23) invite-gated, parked | — |
 | v2.3 | 3 | 7/7 | ✅ Feature-complete — all 3 phases SHIPPED + deployed live (schema v10); pending milestone audit/close | 2026-06-09 |
-| v2.4 | 6 | 3/6 phases | 🔄 In progress — Phases 29 (Data Foundation) + 30 (App Shell + 5-Tab Nav) + 31 (Characters Tab + In-Game Inventory Window) COMPLETE; P30 + P31 deployed live to squirebot.quest + browser-smoke PASS 2026-06-18; P31 verifier PASSED 4/4 + 7/7 req IDs, code-review 0 BLOCKER/0 HIGH, shipped migrations 00012_item_icon + 00013_item_statsblock. Phase 32 (Inventory Tab — item-centric): 32-01 backend + 32-02 web tab CODE-COMPLETE 2026-06-18 (GET /api/v1/items + the master-detail /inventory tab; web gates green); remaining = 32-03 deploy-then-browser-smoke. Next: Phase 32 plan 32-03 | — |
+| v2.4 | 6 | 6/6 phases | ✅ **Feature-complete** — all 6 phases (29 Data Foundation · 30 App Shell · 31 Characters+Window · 32 Inventory · 33 Banks · 34 Wishlist) SHIPPED + DEPLOYED LIVE to squirebot.quest + browser-smoke PASS across 5 themes; schema v14 (migrations 00012/00013/00014). Each phase: verifier PASSED + code-review clean/fixed. Pending: milestone audit/close. | 2026-06-21 |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -388,7 +388,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | 31. Characters Tab + In-Game Inventory Window | v2.4 | 0/4 | 🔄 Planned (4 plans / 4 waves; CHAR-01..03, INV-01..04; backend icon enrich + 2 read-API routes + web window; migration 00012; ends in deploy+browser-smoke) | — |
 | 32. Inventory Tab (Item-Centric) | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 33. Banks Tab + Valuation | v2.4 | 3/3 | Complete    | 2026-06-19 |
-| 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 0/4 | 🔄 Planned (4 plans / 4 waves; strict chain 01->02->03->04; WISH-01..07; migration 00014 [wishlist_item + alert_log FK rebuild + drop wantlist_item, schema v14] + wantmatch repoint + owner-scoped write API + per-slot web tab; ends in a goose-run deploy + browser-smoke, NO v* tag) | — |
+| 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 4/4 | Complete    | 2026-06-21 |
 
 ## Backlog
 

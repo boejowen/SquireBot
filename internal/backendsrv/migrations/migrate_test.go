@@ -1271,10 +1271,13 @@ func mustInsertChar(t *testing.T, db *sql.DB, ownerID int64, name string, isBank
 	return id
 }
 
-// guildSentinelOwnerID is the FIXED reserved "guild" owner id seeded by 00015 — it
-// MUST equal the migration literal AND store.GuildSentinelOwnerID. Duplicated here
-// (not imported) so the migration test is self-contained at the SQL level.
-const guildSentinelOwnerID = 1000000
+// guildSentinelOwnerID is the FIXED reserved "guild" owner id seeded by 00015. It
+// is BOUND to the Go source of truth (store.GuildSentinelOwnerID) rather than a
+// duplicated literal (IN-01) so an accidental edit to the const is caught at compile
+// time here and asserted against the documented contract by
+// TestGuildSentinelOwnerID_MatchesContract. Only the migration .sql literal remains
+// an unavoidable independent copy (SQL cannot import the Go const).
+const guildSentinelOwnerID = store.GuildSentinelOwnerID
 
 // backfillBankOwnerSQL is the EXACT backfill UPDATE 00015 runs. The test re-runs it
 // after seeding rows because NewTestDB migrated over an EMPTY DB, so the in-migration
@@ -1375,5 +1378,70 @@ func TestMigrate_00015_SeedsGuildOwnerAndBackfillsBanks(t *testing.T) {
 	}
 	if beforeVersions != afterVersions {
 		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
+// TestGuildSentinelOwnerID_MatchesContract pins the Go-side sentinel id to the
+// documented contract value (1000000). IN-01: with the migration test now BOUND to
+// store.GuildSentinelOwnerID, an accidental edit to that const would silently change
+// every test alongside it — this single literal assertion catches such a drift
+// against the value the migration .sql literal and PROJECT docs are pinned to.
+func TestGuildSentinelOwnerID_MatchesContract(t *testing.T) {
+	if store.GuildSentinelOwnerID != 1000000 {
+		t.Errorf("store.GuildSentinelOwnerID = %d, want 1000000 (the reserved-sentinel contract; the 00015 .sql literal is pinned to it)", store.GuildSentinelOwnerID)
+	}
+}
+
+// TestMigrate_00015_BackfillRunsOverPreExistingData drives the ACTUAL embedded 00015
+// backfill over pre-existing rows (WR-01) — the highest-stakes correctness claim in
+// the phase (it silently re-homes real guildie-owned banks). It mirrors
+// TestMigrate_00011's part (c): pin a fresh raw handle at v14, seed an owner-bound
+// bank + bot + a normal char while the sentinel does NOT yet exist, then UpTo(15) so
+// the migration's OWN line — `UPDATE character SET owner_id=1000000 WHERE
+// (is_bank_toon=1 OR is_guild_bot=1) AND owner_id<>1000000` — runs against non-empty
+// data. The bank/bot must repoint to the sentinel; the normal char must be UNTOUCHED.
+// This exercises the shipped SQL itself (NOT a hand-copied string), removing the
+// drift risk WR-01 flags in the sibling test's re-run.
+func TestMigrate_00015_BackfillRunsOverPreExistingData(t *testing.T) {
+	// Pin a fresh raw handle at v14 — BEFORE 00015 seeds the sentinel + backfills.
+	raw := openAtVersion(t, 14)
+
+	// Seed a real owner + an owner-bound bank, an owner-bound bot, and a normal char,
+	// ALL bound to the real owner. (At v14 the sentinel owner row does not yet exist.)
+	realOwner := mustInsertOwner(t, raw, "RealGuildie", nil)
+	mustInsertChar(t, raw, realOwner, "Findom", true /*isBank*/, false, false)
+	mustInsertChar(t, raw, realOwner, "Botchar", false, true /*isBot*/, false)
+	mustInsertChar(t, raw, realOwner, "Normalchar", false, false, false)
+
+	// Sanity: pre-migration they all sit under the real owner.
+	if got := ownerIDOfChar(t, raw, "Findom"); got != realOwner {
+		t.Fatalf("pre-00015 Findom owner_id = %d, want realOwner %d", got, realOwner)
+	}
+
+	// Drive the ACTUAL embedded 00015 (seed sentinel + run the backfill) over the
+	// seeded rows — NOT a hand-copied SQL string.
+	if err := migrations.UpTo(raw, 15); err != nil {
+		t.Fatalf("UpTo(15) over the seeded v14 DB: %v", err)
+	}
+
+	// The sentinel owner row now exists (step 1 of 00015) so the FK repoint is valid.
+	var label string
+	if err := raw.QueryRow(`SELECT label FROM owner WHERE id = ?`, guildSentinelOwnerID).Scan(&label); err != nil {
+		t.Fatalf("read sentinel owner after 00015 (id=%d): %v", guildSentinelOwnerID, err)
+	}
+	if label != "guild" {
+		t.Errorf("sentinel owner label = %q, want 'guild'", label)
+	}
+
+	// OWN-04: the embedded backfill repointed the owner-bound bank + bot to the sentinel.
+	if got := ownerIDOfChar(t, raw, "Findom"); got != guildSentinelOwnerID {
+		t.Errorf("after embedded 00015 backfill Findom owner_id = %d, want sentinel %d (OWN-04)", got, guildSentinelOwnerID)
+	}
+	if got := ownerIDOfChar(t, raw, "Botchar"); got != guildSentinelOwnerID {
+		t.Errorf("after embedded 00015 backfill Botchar owner_id = %d, want sentinel %d (OWN-04)", got, guildSentinelOwnerID)
+	}
+	// The normal char is UNCHANGED — the backfill must NOT sweep non-bank/non-bot chars.
+	if got := ownerIDOfChar(t, raw, "Normalchar"); got != realOwner {
+		t.Errorf("after embedded 00015 backfill Normalchar owner_id = %d, want realOwner %d (untouched)", got, realOwner)
 	}
 }

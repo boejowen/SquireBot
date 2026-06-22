@@ -706,3 +706,113 @@ func TestEvictOwnerTx_SelfAttemptingRowIsNotShared(t *testing.T) {
 		t.Errorf("Edgetoon is_removed = %d, want 1 (removed — self-write is not sharing)", isRemoved)
 	}
 }
+
+// removedCharNames returns the set of currently is_removed=1 character names for an
+// owner — used to prove PreviewEviction's list == the cascade's actual remove-set.
+func removedCharNames(t *testing.T, ctx context.Context, db *sql.DB, ownerID int64) map[string]bool {
+	t.Helper()
+	rows, err := db.QueryContext(ctx,
+		`SELECT name FROM character WHERE owner_id = ? AND is_removed = 1`, ownerID)
+	if err != nil {
+		t.Fatalf("read removed char names (owner=%d): %v", ownerID, err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatalf("scan removed name: %v", err)
+		}
+		out[n] = true
+	}
+	return out
+}
+
+// TestPreviewEviction_OmitsSharedChars is THE PARITY PROOF: PreviewEviction(X) lists
+// EXACTLY the chars EvictOwnerTx(X) removes (shared chars omitted), and a subsequent
+// eviction's actual is_removed=1 set is byte-identical to the preview list — they are
+// backed by the SAME sharedCharPredicate so they can never diverge (the CR-01 lesson).
+func TestPreviewEviction_OmitsSharedChars(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	ownerX := insertOwner(t, ctx, db, "Guildie-X")
+	insertChar(t, ctx, db, ownerX, "Soletoon", false)
+	insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
+
+	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
+
+	// The preview lists ONLY the sole-owned char.
+	names, err := PreviewEviction(ctx, db, ownerX)
+	if err != nil {
+		t.Fatalf("PreviewEviction: %v", err)
+	}
+	if len(names) != 1 || names[0] != "Soletoon" {
+		t.Fatalf("PreviewEviction = %v, want exactly [Soletoon] (Sharedtoon omitted)", names)
+	}
+
+	// The cascade's actual remove-set is identical to the preview list.
+	var removedCount int
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		removedCount, _, e = EvictOwnerTx(ctx, tx, ownerX, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+	if removedCount != 1 {
+		t.Errorf("removedCount = %d, want 1", removedCount)
+	}
+	got := removedCharNames(t, ctx, db, ownerX)
+	if len(got) != 1 || !got["Soletoon"] {
+		t.Errorf("cascade removed-set = %v, want exactly {Soletoon} (== the preview list)", got)
+	}
+}
+
+// TestCountPreservedShared_CountsSurvivors covers the survivor count off the SAME
+// predicate: the mixed case (1 shared survivor), the all-shared owner (preview [] +
+// count>0 — the signal the web reads), and the sole-owned-only owner (count 0, both
+// chars previewed). For any owner, len(PreviewEviction) + CountPreservedShared == the
+// live-char count.
+func TestCountPreservedShared_CountsSurvivors(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+
+	// (1) Mixed: one sole-owned + one shared → count 1.
+	mixed := insertOwner(t, ctx, db, "Mixed-Owner")
+	insertChar(t, ctx, db, mixed, "Soletoon", false)
+	insertChar(t, ctx, db, mixed, "Sharedtoon", false)
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, mixed)
+	if n, err := CountPreservedShared(ctx, db, mixed); err != nil || n != 1 {
+		t.Errorf("CountPreservedShared(mixed) = %d, err=%v, want 1/nil", n, err)
+	}
+	if names, _ := PreviewEviction(ctx, db, mixed); len(names) != 1 {
+		t.Errorf("PreviewEviction(mixed) = %v, want len 1 (parity: 1 preview + 1 preserved == 2 live)", names)
+	}
+
+	// (2) All-shared: only one char, shared → preview [] + count 1 (the web signal).
+	allShared := insertOwner(t, ctx, db, "AllShared-Owner")
+	insertChar(t, ctx, db, allShared, "Onlyshared", false)
+	insertCrossOwnerWrite(t, ctx, db, "Onlyshared", ownerY, allShared)
+	if names, err := PreviewEviction(ctx, db, allShared); err != nil || len(names) != 0 {
+		t.Errorf("PreviewEviction(allShared) = %v, err=%v, want []/nil (empty)", names, err)
+	}
+	if n, err := CountPreservedShared(ctx, db, allShared); err != nil || n != 1 {
+		t.Errorf("CountPreservedShared(allShared) = %d, err=%v, want 1/nil", n, err)
+	}
+
+	// (3) Sole-owned only: no cross_owner_write rows → count 0, both chars previewed.
+	sole := insertOwner(t, ctx, db, "Sole-Owner")
+	insertChar(t, ctx, db, sole, "Atoon", false)
+	insertChar(t, ctx, db, sole, "Btoon", false)
+	if n, err := CountPreservedShared(ctx, db, sole); err != nil || n != 0 {
+		t.Errorf("CountPreservedShared(sole) = %d, err=%v, want 0/nil", n, err)
+	}
+	if names, _ := PreviewEviction(ctx, db, sole); len(names) != 2 {
+		t.Errorf("PreviewEviction(sole) = %v, want len 2 (no sharing → both previewed)", names)
+	}
+}

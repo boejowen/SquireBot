@@ -87,10 +87,15 @@ func RestorableListHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// EvictionPreviewHandler (GET ?owner_id=N) returns the owner's live character
-// names + a preview grace_until (now + 30d) — what the confirm-before-commit UI
-// lists. Officer-only at the route. An empty cascade yields characters:[] so the
-// UI shows "No characters found for this guildie."
+// EvictionPreviewHandler (GET ?owner_id=N) returns the chars the eviction will
+// REMOVE (the owner's live, NON-shared characters — OWN-03), a preview grace_until
+// (now + 30d), AND the additive preserved_shared_count: how many of the owner's
+// live chars SURVIVE because they are shared. Officer-only at the route. The
+// remove-set (characters) and the count are computed off the SAME store predicate
+// as the cascade, so they are parity-consistent. An ALL-SHARED owner sends
+// characters:[] + preserved_shared_count>0 so the web Evict button stays enabled
+// (code-only revoke — the BLOCKER fix); an owner with zero live chars sends
+// characters:[] + preserved_shared_count:0. The handler makes TWO store reads now.
 func EvictionPreviewHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -112,11 +117,18 @@ func EvictionPreviewHandler(db *sql.DB) http.HandlerFunc {
 		if names == nil {
 			names = []string{}
 		}
+		preservedShared, err := store.CountPreservedShared(ctx, db, ownerID)
+		if err != nil {
+			slog.Error("eviction preserved-shared count failed", "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal")
+			return
+		}
 		graceUntil := nowUnix() + store.EvictionGraceSeconds
 		writeJSON(w, map[string]any{
-			"owner_id":    ownerID,
-			"characters":  names,
-			"grace_until": graceUntil,
+			"owner_id":               ownerID,
+			"characters":             names,
+			"grace_until":            graceUntil,
+			"preserved_shared_count": preservedShared,
 		})
 	}
 }

@@ -174,12 +174,18 @@ func ListRestorableOwners(ctx context.Context, db *sql.DB, now int64) ([]Restora
 	return out, nil
 }
 
-// PreviewEviction returns the sorted names of the owner's live characters — what
-// the confirm-before-commit UI lists (v1's previewEviction.chars). Read-only.
+// PreviewEviction returns the sorted names of the chars EvictOwnerTx will REMOVE —
+// the owner's live, NON-shared characters (OWN-03). A shared char (another guildie
+// uploads it — sharedCharPredicate) is OMITTED because the cascade preserves it, so
+// the confirm-before-commit UI lists EXACTLY what gets evicted. It embeds the SAME
+// sharedCharPredicate as the cascade (single source of truth), so the preview can
+// never claim a different set than EvictOwnerTx removes (the Phase-35 CR-01 lesson).
+// Read-only. Bind order: ownerID (owner_id = ?), ownerID (the fragment's <> ?).
 func PreviewEviction(ctx context.Context, db *sql.DB, ownerID int64) ([]string, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT name FROM character WHERE owner_id = ? AND is_removed = 0 ORDER BY name COLLATE NOCASE`,
-		ownerID,
+		`SELECT name FROM character WHERE owner_id = ? AND is_removed = 0 AND NOT `+sharedCharPredicate+
+			` ORDER BY name COLLATE NOCASE`,
+		ownerID, ownerID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("preview eviction (owner_id=%d): %w", ownerID, err)
@@ -198,6 +204,26 @@ func PreviewEviction(ctx context.Context, db *sql.DB, ownerID int64) ([]string, 
 		return nil, fmt.Errorf("iterate preview chars: %w", err)
 	}
 	return names, nil
+}
+
+// CountPreservedShared returns how many of the owner's LIVE characters will
+// SURVIVE an eviction because they are SHARED (another guildie uploads them —
+// sharedCharPredicate). It is the inverse complement of PreviewEviction's
+// remove-set, computed off the SAME predicate (so len(PreviewEviction)+this ==
+// the owner's live-char count). The preview handler surfaces it as
+// preserved_shared_count so the web UI can keep an ALL-SHARED owner evictable
+// (characters:[] but preserved_shared_count>0 → code-only revoke, BLOCKER fix).
+// Bind order: ownerID (owner_id = ?), ownerID (the fragment's <> ?).
+func CountPreservedShared(ctx context.Context, db *sql.DB, ownerID int64) (int, error) {
+	var n int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM character
+		  WHERE owner_id = ? AND is_removed = 0 AND `+sharedCharPredicate,
+		ownerID, ownerID,
+	).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count preserved shared (owner_id=%d): %w", ownerID, err)
+	}
+	return n, nil
 }
 
 // EvictOwnerTx evicts a whole guildie inside the caller's tx (D-09/D-10):

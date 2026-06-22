@@ -1270,3 +1270,110 @@ func mustInsertChar(t *testing.T, db *sql.DB, ownerID int64, name string, isBank
 	}
 	return id
 }
+
+// guildSentinelOwnerID is the FIXED reserved "guild" owner id seeded by 00015 — it
+// MUST equal the migration literal AND store.GuildSentinelOwnerID. Duplicated here
+// (not imported) so the migration test is self-contained at the SQL level.
+const guildSentinelOwnerID = 1000000
+
+// backfillBankOwnerSQL is the EXACT backfill UPDATE 00015 runs. The test re-runs it
+// after seeding rows because NewTestDB migrated over an EMPTY DB, so the in-migration
+// backfill touched nothing (the 00009 re-run pattern). The statement is idempotent:
+// the `owner_id <> ?` guard makes a re-run touch zero rows.
+const backfillBankOwnerSQL = `UPDATE character
+   SET owner_id = ?
+ WHERE (is_bank_toon = 1 OR is_guild_bot = 1)
+   AND owner_id <> ?`
+
+// ownerIDOfChar reads a character's owner_id by name.
+func ownerIDOfChar(t *testing.T, db *sql.DB, name string) int64 {
+	t.Helper()
+	var got int64
+	if err := db.QueryRow(`SELECT owner_id FROM character WHERE name = ?`, name).Scan(&got); err != nil {
+		t.Fatalf("read owner_id for char %q: %v", name, err)
+	}
+	return got
+}
+
+// TestMigrate_00015_SeedsGuildOwnerAndBackfillsBanks proves the Phase 35 forward-only
+// migration 00015 (OWN-01/02/04):
+//   - the reserved sentinel owner (id 1000000, label 'guild') is seeded;
+//   - the backfill repoints every is_bank_toon=1 OR is_guild_bot=1 char to the sentinel
+//     EVEN when it was bound to an individual owner before (the Findom->owner 9 case,
+//     OWN-04) — proven by seeding a real-owner bank/bot then re-running the migration's
+//     EXACT backfill UPDATE (NewTestDB migrated over an empty DB, so it backfilled
+//     nothing — the 00009 re-run pattern);
+//   - a NORMAL (non-bank, non-bot) char's owner_id is UNCHANGED by the backfill;
+//   - the backfill is idempotent (the `owner_id <> sentinel` guard) and a second
+//     RunMigrations is a clean no-op (goose_db_version row count unchanged).
+//
+// Backend-only: the watcher never touches owner/character.owner_id directly, so there
+// is NO WatcherMaxSchemaVersion change. "Schema v15" == goose 00015 applied.
+func TestMigrate_00015_SeedsGuildOwnerAndBackfillsBanks(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00015) + t.Cleanup
+
+	// The sentinel owner row exists with label 'guild'.
+	var label string
+	if err := db.QueryRow(`SELECT label FROM owner WHERE id = ?`, guildSentinelOwnerID).Scan(&label); err != nil {
+		t.Fatalf("read sentinel owner (id=%d): %v", guildSentinelOwnerID, err)
+	}
+	if label != "guild" {
+		t.Errorf("sentinel owner label = %q, want 'guild'", label)
+	}
+
+	// Seed a real owner + an owner-bound bank (Findom), bot (Botchar), and a normal char.
+	realOwner := mustInsertOwner(t, db, "RealGuildie", nil)
+	mustInsertChar(t, db, realOwner, "Findom", true /*isBank*/, false, false)
+	mustInsertChar(t, db, realOwner, "Botchar", false, true /*isBot*/, false)
+	mustInsertChar(t, db, realOwner, "Normalchar", false, false, false)
+
+	// Sanity: before the backfill they all sit under realOwner.
+	if got := ownerIDOfChar(t, db, "Findom"); got != realOwner {
+		t.Fatalf("pre-backfill Findom owner_id = %d, want realOwner %d", got, realOwner)
+	}
+
+	// Re-run the migration's EXACT backfill (idempotent; NewTestDB backfilled nothing).
+	if _, err := db.Exec(backfillBankOwnerSQL, guildSentinelOwnerID, guildSentinelOwnerID); err != nil {
+		t.Fatalf("re-run backfill: %v", err)
+	}
+
+	// OWN-04: the owner-bound bank + bot repoint to the sentinel.
+	if got := ownerIDOfChar(t, db, "Findom"); got != guildSentinelOwnerID {
+		t.Errorf("after backfill Findom owner_id = %d, want sentinel %d (OWN-04)", got, guildSentinelOwnerID)
+	}
+	if got := ownerIDOfChar(t, db, "Botchar"); got != guildSentinelOwnerID {
+		t.Errorf("after backfill Botchar owner_id = %d, want sentinel %d (OWN-04)", got, guildSentinelOwnerID)
+	}
+	// The normal char is UNTOUCHED (the backfill must not sweep normal chars).
+	if got := ownerIDOfChar(t, db, "Normalchar"); got != realOwner {
+		t.Errorf("after backfill Normalchar owner_id = %d, want realOwner %d (untouched)", got, realOwner)
+	}
+
+	// Idempotency: a second backfill re-run is harmless (the prior assertions still hold).
+	if _, err := db.Exec(backfillBankOwnerSQL, guildSentinelOwnerID, guildSentinelOwnerID); err != nil {
+		t.Fatalf("second backfill re-run: %v", err)
+	}
+	if got := ownerIDOfChar(t, db, "Findom"); got != guildSentinelOwnerID {
+		t.Errorf("after second backfill Findom owner_id = %d, want sentinel %d", got, guildSentinelOwnerID)
+	}
+	if got := ownerIDOfChar(t, db, "Normalchar"); got != realOwner {
+		t.Errorf("after second backfill Normalchar owner_id = %d, want realOwner %d (still untouched)", got, realOwner)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00015 DB
+	// returns nil AND the goose_db_version row count is unchanged.
+	var beforeVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
+		t.Fatalf("count goose_db_version before re-run: %v", err)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00015 should be a no-op, got error: %v", err)
+	}
+	var afterVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
+		t.Fatalf("count goose_db_version after re-run: %v", err)
+	}
+	if beforeVersions != afterVersions {
+		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}

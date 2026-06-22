@@ -361,3 +361,119 @@ func TestListRestorableOwners(t *testing.T) {
 		t.Errorf("grace_until = %d, want %d (now + 30d)", got.GraceUntil, now+EvictionGraceSeconds)
 	}
 }
+
+// TestListEvictableOwners_ExcludesGuildSentinel proves the guild sentinel owner
+// (GuildSentinelOwnerID, seeded by 00015) is NEVER offered as an evictable guildie,
+// even when it holds live banks/bots — OWN-02: an officer can't pick "evict the guild
+// bank". A normal live owner IS returned.
+func TestListEvictableOwners_ExcludesGuildSentinel(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+
+	// A live sentinel-owned guild bank (the sentinel owner row exists via 00015).
+	insertChar(t, ctx, db, GuildSentinelOwnerID, "Guildbank", true /*isBank*/)
+
+	// A normal live owner + char.
+	normal := insertOwner(t, ctx, db, "Guildie-A")
+	insertChar(t, ctx, db, normal, "Normaltoon", false)
+
+	owners, err := ListEvictableOwners(ctx, db)
+	if err != nil {
+		t.Fatalf("ListEvictableOwners: %v", err)
+	}
+	for _, o := range owners {
+		if o.OwnerID == GuildSentinelOwnerID {
+			t.Errorf("ListEvictableOwners returned the guild sentinel owner %d (OWN-02 — must be excluded)", GuildSentinelOwnerID)
+		}
+	}
+	if len(owners) != 1 || owners[0].OwnerID != normal {
+		t.Errorf("ListEvictableOwners = %+v, want only the normal owner %d", owners, normal)
+	}
+}
+
+// TestListRestorableOwners_ExcludesGuildSentinel proves the guild sentinel owner is
+// NEVER offered as a restorable guildie, even with a sentinel-owned char forced into
+// the in-grace state — the list must never surface the sentinel (OWN-02). A normal
+// in-grace owner IS returned.
+func TestListRestorableOwners_ExcludesGuildSentinel(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	// A sentinel-owned char forced into the in-grace state directly via SQL (it should
+	// never reach this state through the app, but the list must still exclude it).
+	sentChar := insertChar(t, ctx, db, GuildSentinelOwnerID, "Guildbank", true)
+	if _, err := db.ExecContext(ctx,
+		`UPDATE character SET is_removed = 1, grace_until = ?, archived_at = NULL WHERE id = ?`,
+		now+EvictionGraceSeconds, sentChar); err != nil {
+		t.Fatalf("force sentinel char in-grace: %v", err)
+	}
+
+	// A normal in-grace owner (evicted now).
+	normal := insertOwner(t, ctx, db, "Grace-Owner")
+	insertChar(t, ctx, db, normal, "Graceone", false)
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, _, e := EvictOwnerTx(ctx, tx, normal, now)
+		return e
+	}); err != nil {
+		t.Fatalf("evict normal owner: %v", err)
+	}
+
+	owners, err := ListRestorableOwners(ctx, db, now)
+	if err != nil {
+		t.Fatalf("ListRestorableOwners: %v", err)
+	}
+	for _, o := range owners {
+		if o.OwnerID == GuildSentinelOwnerID {
+			t.Errorf("ListRestorableOwners returned the guild sentinel owner %d (OWN-02 — must be excluded)", GuildSentinelOwnerID)
+		}
+	}
+	if len(owners) != 1 || owners[0].OwnerID != normal {
+		t.Errorf("ListRestorableOwners = %+v, want only the normal in-grace owner %d", owners, normal)
+	}
+}
+
+// TestEvictOwnerTx_GuildBankSurvivesEviction is THE OWN-02 PROOF: evicting a real
+// guildie flips is_removed=1 only on THEIR own characters; a sentinel-owned guild bank
+// (owner_id = GuildSentinelOwnerID) is left is_removed=0 with grace_until NULL — it
+// survives the eviction by construction (the cascade is `WHERE owner_id = realOwner`,
+// which never matches the sentinel id). removedCount counts only the real owner's char.
+func TestEvictOwnerTx_GuildBankSurvivesEviction(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	// A real guildie with one normal char + a guild code.
+	realOwner := insertOwner(t, ctx, db, "Guildie-A")
+	normalChar := insertChar(t, ctx, db, realOwner, "Normaltoon", false)
+	insertGuildCode(t, ctx, db, realOwner, "code-A")
+
+	// A sentinel-owned guild bank (the surviving resource).
+	bankChar := insertChar(t, ctx, db, GuildSentinelOwnerID, "Guildbank", true)
+
+	var removedCount int
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		removedCount, _, e = EvictOwnerTx(ctx, tx, realOwner, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+
+	// The cascade flipped ONLY the real owner's char.
+	if removedCount != 1 {
+		t.Errorf("removedCount = %d, want 1 (only the real owner's char, NOT the bank)", removedCount)
+	}
+	if isRemoved, _, _ := charState(t, ctx, db, normalChar); isRemoved != 1 {
+		t.Errorf("real owner's char is_removed = %d, want 1 (cascade worked)", isRemoved)
+	}
+
+	// OWN-02: the sentinel-owned bank SURVIVES — still live, no grace stamp.
+	isRemovedBank, graceBank, _ := charState(t, ctx, db, bankChar)
+	if isRemovedBank != 0 {
+		t.Errorf("guild bank is_removed = %d, want 0 (OWN-02 — bank survives the eviction)", isRemovedBank)
+	}
+	if graceBank.Valid {
+		t.Errorf("guild bank grace_until = %v, want NULL (untouched by the eviction)", graceBank)
+	}
+}

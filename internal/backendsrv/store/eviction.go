@@ -53,14 +53,19 @@ type EvictableOwner struct {
 // ListEvictableOwners returns owners that have >=1 live character, grouped, with
 // the live-character count (v1's getEvictionEmails, owner-keyed here). Owners
 // whose characters are all already removed are excluded. Ordered by label.
+//
+// OWN-02: the guild sentinel owner (store.GuildSentinelOwnerID) holds owner-less
+// banks/bots and must NEVER be offered as an evictable guildie — the `o.id <> ?`
+// exclusion stops an officer from accidentally evicting the whole guild bank.
 func ListEvictableOwners(ctx context.Context, db *sql.DB) ([]EvictableOwner, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT o.id, o.label, COUNT(c.id) AS char_count
 		   FROM owner o
 		   JOIN character c ON c.owner_id = o.id AND c.is_removed = 0
+		  WHERE o.id <> ?
 		  GROUP BY o.id, o.label
 		 HAVING char_count > 0
-		  ORDER BY o.label COLLATE NOCASE`)
+		  ORDER BY o.label COLLATE NOCASE`, GuildSentinelOwnerID)
 	if err != nil {
 		return nil, fmt.Errorf("list evictable owners: %w", err)
 	}
@@ -101,6 +106,11 @@ type RestorableOwner struct {
 // owners are excluded. char_count is the count of still-in-grace characters;
 // grace_until is the soonest (MIN) deadline. Ordered by label. Parameterized `?`
 // only (V5).
+//
+// OWN-02: the guild sentinel owner (store.GuildSentinelOwnerID) holds owner-less
+// banks/bots and must NEVER be offered as a restorable guildie — the `o.id <> ?`
+// exclusion keeps it out of the restore picker (a bank should never reach the
+// in-grace state via the app, but the list must still never surface the sentinel).
 func ListRestorableOwners(ctx context.Context, db *sql.DB, now int64) ([]RestorableOwner, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT o.id, o.label, COUNT(c.id) AS char_count, MIN(c.grace_until) AS grace_until
@@ -110,9 +120,10 @@ func ListRestorableOwners(ctx context.Context, db *sql.DB, now int64) ([]Restora
 		          AND c.grace_until IS NOT NULL
 		          AND c.grace_until > ?
 		          AND c.archived_at IS NULL
+		  WHERE o.id <> ?
 		  GROUP BY o.id, o.label
 		 HAVING char_count > 0
-		  ORDER BY o.label COLLATE NOCASE`, now)
+		  ORDER BY o.label COLLATE NOCASE`, now, GuildSentinelOwnerID)
 	if err != nil {
 		return nil, fmt.Errorf("list restorable owners: %w", err)
 	}

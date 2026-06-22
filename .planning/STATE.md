@@ -30,7 +30,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** Milestone v2.5 — Phase 36 (shared-character-safe eviction, OWN-03) EXECUTING — 2 plans (36-01 backend, 36-02 web); Phase 35 ✅ COMPLETE
+- **Current focus:** Milestone v2.5 — Phase 36 (shared-character-safe eviction, OWN-03) DEPLOYED to prod 2026-06-22, awaiting officer browser-smoke. Phase 35 ✅ COMPLETE. **NOTE: this deploy was the FIRST prod boot of Phase 35's migration 00015 — prod schema went v14→v15; the OWN-04 backfill ran live (Findom + Slowscales repointed to guild sentinel owner 1000000). Backend binary swap + web atomic swap; code-review 0-BLOCKER; R2 backup taken (squirebot-2026-06-22.db.gz). Curl gates GREEN: root/characters 200, JS content-type text/javascript (no blank-screen), API + eviction-preview 401 fail-closed. Remaining: human officer browser-smoke of the Evict form (all-shared owner stays evictable).**
 - **Mode:** yolo
 - **Granularity:** coarse
 

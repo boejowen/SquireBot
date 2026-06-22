@@ -359,6 +359,12 @@ func handleIngestErr(err error, charName, slogNoun, traySuffix string, t *tray.C
 		return true
 	case errors.Is(err, backend.ErrCrossOwner):
 		slog.Warn("cross-owner reject", "char", charName)
+		// Surface the reject on the tray (mirrors the 401 branch above) — a
+		// silent slog-only handling left the icon green/"Connected" while every
+		// upload was being rejected, making the failure invisible. Terminal, no
+		// retry (unchanged): the character is registered to another guildie.
+		t.SetIconHealth(tray.HealthRed)
+		t.SetStatus("Rejected: " + charName + traySuffix + " is registered to another guildie")
 		return true
 	case err != nil:
 		slog.Error("upload "+slogNoun, "char", charName, "err", err)

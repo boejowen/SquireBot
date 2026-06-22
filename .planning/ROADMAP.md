@@ -23,8 +23,8 @@ Promotes backlog 999.35 + 999.36 (deferred from quick `260621-u6j`). Backend-onl
 - [ ] **Phase 35: Owner-less guild banks & bots** — OWN-01, OWN-02, OWN-04
   - **Goal:** a designated bank/bot is guild-held, not tied to whoever uploaded it first. **RESOLVED: Option A — a reserved "guild" sentinel owner row (id 1000000, label `guild`), NOT nullable `owner_id`** (smallest blast radius — `character.owner_id` stays `NOT NULL`, every existing `owner(id)` join keeps working; only 2 production consumers — binding.go + eviction.go).
   - **Success criteria:** (1) an officer designates any char as bank/bot without "claiming"/owning it (DesignateCharTx repoints `owner_id` to the sentinel, gated only by the officer re-check); (2) a designated bank/bot has no individual owner (`owner_id` = sentinel); (3) existing owner-bound banks (e.g. Findom) migrate automatically (00015 backfill, no manual fixup); (4) `go test ./...` green; watcher untouched.
-  - **Plans:** 1 plan
-    - [ ] 35-01-PLAN.md — migration 00015 (seed guild sentinel owner + backfill existing bank/bot chars) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + ListEvictableOwners/ListRestorableOwners sentinel exclusion + the OWN-02 survives-eviction proof (OWN-01/02/04)
+  - **Plans:** 1 plan (complete)
+    - [x] 35-01-PLAN.md — migration 00015 (seed guild sentinel owner + backfill existing bank/bot chars) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + ListEvictableOwners/ListRestorableOwners sentinel exclusion + the OWN-02 survives-eviction proof (OWN-01/02/04) — EXECUTED 2026-06-22 (7a238b8/c8305c2/4d38389); schema v15; build rc=0, vet clean, all backendsrv tests green; watcher untouched, no `v*` tag
 - [ ] **Phase 36: Shared-character-safe eviction** — OWN-03 (depends on Phase 35)
   - **Goal:** eviction removes only the evicted member's own characters — never shared characters or guild banks/bots.
   - **Success criteria:** (1) evicting a member preserves shared characters other guildies play; (2) guild banks/bots are never removed by an eviction; (3) the officer eviction-preview reflects the narrowed set; (4) `go test ./...` green.
@@ -375,8 +375,8 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   4. Existing designated banks/bots bound to an individual owner (e.g. Findom→owner 9) migrate automatically via the 00015 backfill, with no manual fixup; the guild sentinel never appears in the officer eviction picker.
   5. `go test ./internal/backendsrv/...` + `go build ./...` green; watcher untouched; no `v*` tag.
 **Sets up Phase 36 (OWN-03):** with banks parked under a single sentinel owner no eviction targets, banks are eviction-safe by construction — Phase 36 then narrows the cascade purely for shared NON-bank characters.
-**Plans**: 1 plan
-  - [ ] 35-01-PLAN.md — migration 00015 (sentinel-owner seed + bank/bot backfill) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + eviction-list sentinel exclusion + OWN-02 survives-eviction proof (OWN-01/02/04)
+**Plans**: 1 plan (complete)
+  - [x] 35-01-PLAN.md — migration 00015 (sentinel-owner seed + bank/bot backfill) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + eviction-list sentinel exclusion + OWN-02 survives-eviction proof (OWN-01/02/04) — EXECUTED 2026-06-22 (7a238b8/c8305c2/4d38389)
 
 ## Progress
 
@@ -392,6 +392,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | v2.2 | 6 | 13/TBD | 🔄 **Track 1 SHIPPED LIVE** (Phases 19–21 deployed 2026-06-06 + Phase 24 quality done); Track 2 (22–23) invite-gated, parked | — |
 | v2.3 | 3 | 7/7 | ✅ Feature-complete — all 3 phases SHIPPED + deployed live (schema v10); pending milestone audit/close | 2026-06-09 |
 | v2.4 | 6 | 6/6 phases | ✅ **Feature-complete** — all 6 phases (29 Data Foundation · 30 App Shell · 31 Characters+Window · 32 Inventory · 33 Banks · 34 Wishlist) SHIPPED + DEPLOYED LIVE to squirebot.quest + browser-smoke PASS across 5 themes; schema v14 (migrations 00012/00013/00014). Each phase: verifier PASSED + code-review clean/fixed. Pending: milestone audit/close. | 2026-06-21 |
+| v2.5 | 2 | 1/TBD | 🔄 **In progress** — Phase 35 (owner-less guild banks/bots, OWN-01/02/04) COMPLETE (schema v15 via migration 00015; backend-only, no `v*` tag); Phase 36 (shared-character-safe eviction, OWN-03) next | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -419,7 +420,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | 32. Inventory Tab (Item-Centric) | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 33. Banks Tab + Valuation | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 4/4 | Complete    | 2026-06-21 |
-| 35. Owner-less guild banks & bots | v2.5 | 0/1 | 🔄 Planned (1 plan; OWN-01/02/04; migration 00015 sentinel-owner seed + backfill, DesignateCharTx repoint, eviction-list exclusion; backend-only, no tag) | — |
+| 35. Owner-less guild banks & bots | v2.5 | 1/1 | ✅ Complete (35-01 EXECUTED 2026-06-22 — 7a238b8/c8305c2/4d38389; OWN-01/02/04; schema v15 migration 00015 sentinel-owner seed + backfill, DesignateCharTx repoint, eviction-list exclusion, OWN-02 survives-eviction proof; build/vet/tests green; backend-only, no `v*` tag) | 2026-06-22 |
 
 ## Backlog
 

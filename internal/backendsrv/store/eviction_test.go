@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -814,5 +815,97 @@ func TestCountPreservedShared_CountsSurvivors(t *testing.T) {
 	}
 	if names, _ := PreviewEviction(ctx, db, sole); len(names) != 2 {
 		t.Errorf("PreviewEviction(sole) = %v, want len 2 (no sharing → both previewed)", names)
+	}
+}
+
+// ownerOfChar reads the current owner_id of the character named name.
+func ownerOfChar(t *testing.T, ctx context.Context, db *sql.DB, name string) int64 {
+	t.Helper()
+	var id int64
+	if err := db.QueryRowContext(ctx,
+		`SELECT owner_id FROM character WHERE name = ?`, name).Scan(&id); err != nil {
+		t.Fatalf("read owner_id (char=%q): %v", name, err)
+	}
+	return id
+}
+
+// TestEvictOwnerTx_RepointsSurvivingSharedChar proves the D-03 repoint: a surviving
+// shared char still stewarded by the evicted owner X is repointed to the remaining
+// sharer (the cross_owner_write attempting_owner_id <> X). It still survives
+// (is_removed=0) AND its owner_id moves off X to Y.
+func TestEvictOwnerTx_RepointsSurvivingSharedChar(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	ownerX := insertOwner(t, ctx, db, "Guildie-X")
+	sharedChar := insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
+
+	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
+
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, _, e := EvictOwnerTx(ctx, tx, ownerX, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+
+	// Survives.
+	if isRemoved, _, _ := charState(t, ctx, db, sharedChar); isRemoved != 0 {
+		t.Errorf("Sharedtoon is_removed = %d, want 0 (survives)", isRemoved)
+	}
+	// Repointed off X to the remaining sharer Y.
+	if got := ownerOfChar(t, ctx, db, "Sharedtoon"); got != ownerY {
+		t.Errorf("Sharedtoon owner_id = %d, want %d (repointed to the remaining sharer)", got, ownerY)
+	}
+}
+
+// TestEvictOwnerTx_RepointPicksMostRecentSharer proves the repoint picks the
+// MOST-RECENT (highest audit_log.id) other sharer: with two cross_owner_write rows
+// for the char (earlier Y, later Z), the surviving char repoints to Z.
+func TestEvictOwnerTx_RepointPicksMostRecentSharer(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	ownerX := insertOwner(t, ctx, db, "Guildie-X")
+	insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
+	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+	ownerZ := insertOwner(t, ctx, db, "Guildie-Z")
+
+	// Earlier row → Y; later row (higher id) → Z. Both <> X.
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerZ, ownerX)
+
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, _, e := EvictOwnerTx(ctx, tx, ownerX, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+	if got := ownerOfChar(t, ctx, db, "Sharedtoon"); got != ownerZ {
+		t.Errorf("Sharedtoon owner_id = %d, want %d (the most-recent sharer wins)", got, ownerZ)
+	}
+}
+
+// TestRepointSubquery_LocksPredicateToSharedPredicate is the WARNING lock: it pins
+// the load-bearing tokens (event string, COLLATE NOCASE name match, the <> ?
+// exclusion) to identical text across recentOtherSharerSubquery AND
+// sharedCharPredicate, so a future edit cannot silently diverge the repoint subquery
+// from the shared-detection predicate.
+func TestRepointSubquery_LocksPredicateToSharedPredicate(t *testing.T) {
+	tokens := []string{
+		"a.event = 'cross_owner_write'",
+		"a.char_name = character.name COLLATE NOCASE",
+		"a.attempting_owner_id <> ?",
+	}
+	for _, tok := range tokens {
+		if !strings.Contains(recentOtherSharerSubquery, tok) {
+			t.Errorf("recentOtherSharerSubquery missing load-bearing token %q (drift from sharedCharPredicate)", tok)
+		}
+		if !strings.Contains(sharedCharPredicate, tok) {
+			t.Errorf("sharedCharPredicate missing load-bearing token %q", tok)
+		}
 	}
 }

@@ -63,6 +63,24 @@ const sharedCharPredicate = `EXISTS (
        AND a.attempting_owner_id <> ?
 )`
 
+// recentOtherSharerSubquery is the SINGLE source of truth for "the most-recent
+// OTHER guildie who uploaded this char" (OWN-03 / D-03 repoint). It is a scalar
+// subselect — the highest-id (most recent) cross_owner_write attempting_owner_id
+// for character.name that is NOT the evicted owner. It is embedded VERBATIM in
+// BOTH the repoint UPDATE's SET clause AND its IS-NOT-NULL guard so the event
+// string and COLLATE NOCASE match can never drift between the two copies (the
+// plan-checker WARNING fix — the single-const grep gate locks it to one
+// definition). Same correlation rules as sharedCharPredicate: `character.name`
+// resolves against the UPDATE's target, one bound arg (the evicted owner id) at
+// `<> ?`.
+const recentOtherSharerSubquery = `(
+    SELECT a.attempting_owner_id FROM audit_log a
+     WHERE a.event = 'cross_owner_write'
+       AND a.char_name = character.name COLLATE NOCASE
+       AND a.attempting_owner_id <> ?
+     ORDER BY a.id DESC LIMIT 1
+)`
+
 // ErrCannotEvictSentinel is returned by EvictOwnerTx / RestoreOwnerTx when the
 // target is the guild sentinel owner (GuildSentinelOwnerID). OWN-02: the sentinel
 // holds owner-less banks/bots and is NEVER evictable; the destructive WRITE path
@@ -268,6 +286,27 @@ func EvictOwnerTx(ctx context.Context, tx *sql.Tx, ownerID, now int64) (removedC
 		return 0, 0, fmt.Errorf("evict cascade rows-affected (owner_id=%d): %w", ownerID, err)
 	}
 	removedCount = int(n)
+
+	// OWN-03 / D-03: a SURVIVING shared char still stewarded by the evicted owner X is
+	// repointed to a remaining (non-evicted) sharer (recentOtherSharerSubquery — the
+	// most-recent attempting_owner_id <> X). owner_id is a non-binding marker
+	// (binding.go), so this is clean-data polish; the HARD guarantee (the shared char
+	// survives, is_removed=0) is already met by the narrowed cascade above. Chars with
+	// no resolvable other sharer are left as-is (the IS NOT NULL guard skips them —
+	// owner_id is NOT NULL, never set NULL). Same tx as the cascade + code revoke. The
+	// SET value and the guard reuse the SAME recentOtherSharerSubquery const so they
+	// cannot drift (WARNING fix). Bind order: ownerID (SET subselect's <> ?), ownerID
+	// (owner_id = ? target filter), ownerID (guard subselect's <> ?).
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE character
+		    SET owner_id = `+recentOtherSharerSubquery+`
+		  WHERE owner_id = ?
+		    AND is_removed = 0
+		    AND `+recentOtherSharerSubquery+` IS NOT NULL`,
+		ownerID, ownerID, ownerID,
+	); err != nil {
+		return 0, 0, fmt.Errorf("evict repoint surviving shared chars (owner_id=%d): %w", ownerID, err)
+	}
 
 	// D-10: revoke the owner's active guild code(s) in the SAME tx. disabled_at is
 	// TEXT (00001) → datetime('now'); the `disabled_at IS NULL` guard makes a

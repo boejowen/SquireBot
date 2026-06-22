@@ -4,7 +4,8 @@ package ingest_test
 // (httptest + the 11-02 temp-DB fixture + the 11-04 mint), covering the
 // BACKEND-03 round-trip (valid upload → row queryable, shrinking snapshot drops
 // rows) and the BACKEND-04 / threat-register guarantees (401 writes nothing,
-// cross-owner 409, oversized/bad-kind/malformed rejected with no write).
+// cross-owner upload allowed + audited, oversized/bad-kind/malformed rejected
+// with no write).
 //
 // It is an EXTERNAL test package (ingest_test) so it exercises the handler
 // exactly as cmd/squirebot-server does: through the exported New() constructor
@@ -188,9 +189,11 @@ func TestIngest_ShrinkingSnapshot_DropsRows(t *testing.T) {
 	}
 }
 
-// TestIngest_CrossOwner_409: char bound under owner A, then the same name POSTed
-// under owner B's code → 409 AND A's rows are untouched (D-07 / T-11.05-04).
-func TestIngest_CrossOwner_409(t *testing.T) {
+// TestIngest_CrossOwner_AllowedReplaces: char bound under owner A, then the same
+// name POSTed under owner B's code now SUCCEEDS (204) and REPLACES A's rows with
+// B's (shared chars/banks, 260621-u6j — full-snapshot replace), recording one
+// cross_owner_write audit row.
+func TestIngest_CrossOwner_AllowedReplaces(t *testing.T) {
 	h, db := newHandler(t)
 	codeA, err := auth.MintCode(db, "alice")
 	if err != nil {
@@ -206,22 +209,22 @@ func TestIngest_CrossOwner_409(t *testing.T) {
 		t.Fatalf("owner A upload status = %d", rec.Code)
 	}
 
-	// B attempts the same char name.
+	// B uploads the same char name with 1 row → ALLOWED.
 	rec := post(t, h, codeB, invBody("Slampeach", 1))
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("cross-owner status = %d, want 409; body=%q", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusNoContent && rec.Code != http.StatusOK {
+		t.Fatalf("cross-owner status = %d, want 2xx (allowed now); body=%q", rec.Code, rec.Body.String())
 	}
-	// A's rows are untouched (the cross-owner tx rolled back).
-	if got := countInv(t, db, "Slampeach"); got != 3 {
-		t.Errorf("after cross-owner reject rows = %d, want 3 (A untouched)", got)
+	// The character's rows now reflect B's upload (full-snapshot replace).
+	if got := countInv(t, db, "Slampeach"); got != 1 {
+		t.Errorf("after cross-owner write rows = %d, want 1 (B's snapshot replaced A's)", got)
 	}
-	// And an audit row was written (cross_owner_reject — D-07 / V4).
+	// And an audit row was written (cross_owner_write — 260621-u6j).
 	var audits int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM audit_log WHERE event = 'cross_owner_reject'`).Scan(&audits); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM audit_log WHERE event = 'cross_owner_write'`).Scan(&audits); err != nil {
 		t.Fatalf("audit query: %v", err)
 	}
 	if audits != 1 {
-		t.Errorf("audit_log cross_owner_reject rows = %d, want 1", audits)
+		t.Errorf("audit_log cross_owner_write rows = %d, want 1", audits)
 	}
 }
 

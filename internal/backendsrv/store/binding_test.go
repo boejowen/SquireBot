@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"testing"
 )
 
@@ -29,9 +28,9 @@ func bindInTx(t *testing.T, db *sql.DB, charName string, tokenOwnerID int64) (in
 	}
 	charID, bindErr := bindCharacter(ctx, tx, charName, tokenOwnerID)
 	if bindErr != nil {
-		// Commit anyway so the audit row (written in-tx on cross-owner reject) is
-		// durable for assertions — mirrors how 11-05 will persist the audit even
-		// though the ingest itself is rejected.
+		// A non-nil bindErr is now only a real DB failure (cross-owner uploads
+		// are allowed, 260621-u6j). Commit anyway so any in-tx audit row is
+		// durable for assertions, then surface the error.
 		if cerr := tx.Commit(); cerr != nil {
 			t.Fatalf("commit after bind error: %v", cerr)
 		}
@@ -98,9 +97,11 @@ func TestBindCharacter_SameOwnerReturnsExisting(t *testing.T) {
 	}
 }
 
-// TestBindCharacter_CrossOwnerRejects: a bind by a DIFFERENT owner returns
-// ErrCharOwnedByAnother, writes an audit_log row, and does NOT overwrite owner_id.
-func TestBindCharacter_CrossOwnerRejects(t *testing.T) {
+// TestBindCharacter_CrossOwnerWriteAllowed: a bind by a DIFFERENT owner now
+// SUCCEEDS (260621-u6j — shared chars/banks). It returns the EXISTING charID +
+// nil error, leaves owner_id UNCHANGED (the first uploader stays a non-binding
+// steward record), and appends one cross_owner_write audit_log row.
+func TestBindCharacter_CrossOwnerWriteAllowed(t *testing.T) {
 	db := NewTestDB(t)
 	owner1 := seedOwner(t, db, "owner-1")
 	owner2 := seedOwner(t, db, "owner-2")
@@ -111,31 +112,34 @@ func TestBindCharacter_CrossOwnerRejects(t *testing.T) {
 		t.Fatalf("owner1 first sighting: %v", err)
 	}
 
-	// owner2 attempts to bind the same name → reject.
-	_, err = bindInTx(t, db, "Contested", owner2)
-	if !errors.Is(err, ErrCharOwnedByAnother) {
-		t.Fatalf("expected ErrCharOwnedByAnother, got %v", err)
+	// owner2 binds the same name → ALLOWED, returns the SAME charID + nil error.
+	crossID, err := bindInTx(t, db, "Contested", owner2)
+	if err != nil {
+		t.Fatalf("cross-owner bind must succeed now, got err: %v", err)
+	}
+	if crossID != origID {
+		t.Errorf("cross-owner bind charID = %d, want %d (same character)", crossID, origID)
 	}
 
-	// owner_id must be UNCHANGED (still owner1, no overwrite).
+	// owner_id must be UNCHANGED (still owner1 — the non-binding steward guarantee).
 	var gotOwner int64
 	if err := db.QueryRow(`SELECT owner_id FROM character WHERE id = ?`, origID).Scan(&gotOwner); err != nil {
 		t.Fatalf("query owner_id: %v", err)
 	}
 	if gotOwner != owner1 {
-		t.Errorf("owner_id = %d, want %d (cross-owner attempt must NOT overwrite)", gotOwner, owner1)
+		t.Errorf("owner_id = %d, want %d (cross-owner write must NOT overwrite owner_id)", gotOwner, owner1)
 	}
 
-	// An audit_log row recording the cross-owner reject must exist.
+	// An audit_log row recording the cross-owner WRITE must exist.
 	var auditCount int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM audit_log
-		WHERE event = 'cross_owner_reject' AND char_name = ?
+		WHERE event = 'cross_owner_write' AND char_name = ?
 		  AND attempting_owner_id = ? AND current_owner_id = ?`,
 		"Contested", owner2, owner1).Scan(&auditCount); err != nil {
 		t.Fatalf("query audit_log: %v", err)
 	}
 	if auditCount != 1 {
-		t.Errorf("expected 1 cross_owner_reject audit_log row, got %d", auditCount)
+		t.Errorf("expected 1 cross_owner_write audit_log row, got %d", auditCount)
 	}
 }
 

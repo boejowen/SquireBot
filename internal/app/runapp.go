@@ -372,15 +372,12 @@ func handleIngestErr(err error, charName, slogNoun, traySuffix string, t *tray.C
 		slog.Warn("upload 426 — watcher too old", "char", charName)
 		t.SetStatus("Update needed — SquireBot will auto-update")
 		return true
-	case errors.Is(err, backend.ErrCrossOwner):
-		slog.Warn("cross-owner reject", "char", charName)
-		// Surface the reject on the tray (mirrors the 401 branch above) — a
-		// silent slog-only handling left the icon green/"Connected" while every
-		// upload was being rejected, making the failure invisible. Terminal, no
-		// retry (unchanged): the character is registered to another guildie.
-		t.SetIconHealth(tray.HealthRed)
-		t.SetStatus("Rejected: " + charName + traySuffix + " is registered to another guildie")
-		return true
+	// NOTE (260621-u6j): the backend no longer rejects cross-owner uploads (the
+	// guild shares chars/banks), so backend.ErrCrossOwner / a 409 is unreachable
+	// in normal operation. A stray 409 falls through to the default `err != nil`
+	// branch below — still terminal, no-retry, mtime not persisted (the correct
+	// defensive behavior). The backend.ErrCrossOwner mapping in
+	// internal/backend/client.go is left as harmless defensive code.
 	case err != nil:
 		slog.Error("upload "+slogNoun, "char", charName, "err", err)
 		t.SetStatus("Last upload failed: " + charName + traySuffix)

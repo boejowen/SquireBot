@@ -40,6 +40,29 @@ import (
 // days (v1's GRACE_MS = 30*24*60*60*1000 ms). Epoch seconds here.
 const EvictionGraceSeconds int64 = 30 * 24 * 60 * 60 // 2592000
 
+// sharedCharPredicate is the SINGLE source of truth for "this char is shared by
+// another guildie" (OWN-03 / D-01). A character stewarded by the owner being
+// evicted is SHARED iff some OTHER owner has uploaded it — recorded as a
+// `cross_owner_write` audit row (binding.go auditCrossOwnerWrite) whose
+// attempting_owner_id differs from the evicted owner. It is embedded VERBATIM in
+// the EvictOwnerTx cascade, PreviewEviction, AND CountPreservedShared so the
+// officer preview can never claim a different remove-set than the cascade actually
+// removes (the Phase-35 CR-01 lesson — the picker read and the write path must not
+// diverge).
+//
+// It is a fragment, not a full clause: it correlates to the target table
+// `character` (no row alias — SQLite UPDATE has none, and the consuming SELECTs'
+// FROM is `character`, so `character.name` resolves in all of them) and takes ONE
+// bound arg, the evicted owner id, via a positional `?` (mind the `?` order at each
+// splice site). audit_log.char_name is plain TEXT while character.name is UNIQUE
+// COLLATE NOCASE, so the name match is COLLATE NOCASE.
+const sharedCharPredicate = `EXISTS (
+    SELECT 1 FROM audit_log a
+     WHERE a.event = 'cross_owner_write'
+       AND a.char_name = character.name COLLATE NOCASE
+       AND a.attempting_owner_id <> ?
+)`
+
 // ErrCannotEvictSentinel is returned by EvictOwnerTx / RestoreOwnerTx when the
 // target is the guild sentinel owner (GuildSentinelOwnerID). OWN-02: the sentinel
 // holds owner-less banks/bots and is NEVER evictable; the destructive WRITE path
@@ -180,10 +203,17 @@ func PreviewEviction(ctx context.Context, db *sql.DB, ownerID int64) ([]string, 
 // EvictOwnerTx evicts a whole guildie inside the caller's tx (D-09/D-10):
 //   - grace_until = now + EvictionGraceSeconds.
 //   - UPDATE character SET is_removed=1, grace_until=? for the owner's live
-//     characters (RowsAffected → removedCount; an already-fully-removed owner
-//     yields 0).
+//     characters that are NOT SHARED (OWN-03 — a char another guildie also uploads
+//     is preserved via `AND NOT sharedCharPredicate`; see the const). RowsAffected →
+//     removedCount; an already-fully-removed OR all-shared owner yields 0.
+//   - OWN-03 repoint: a SURVIVING shared char still stewarded by the evicted owner
+//     is repointed to a remaining sharer (recentOtherSharerSubquery) so it keeps a
+//     live steward (clean-data polish; the survival itself is guaranteed by the
+//     narrowed cascade above).
 //   - UPDATE guild_code SET disabled_at=datetime('now') for the owner's active
-//     codes (D-10 revoke — the watcher stops uploading), in the SAME tx.
+//     codes (D-10 revoke — the watcher stops uploading), in the SAME tx. The revoke
+//     is UNCONDITIONAL on removedCount: an all-shared owner flips 0 chars but still
+//     has their code revoked.
 //
 // Returns the count of characters flipped and the graceUntil stamp so the 15-03
 // handler can echo them + write the audit_log row in the same tx.
@@ -195,9 +225,14 @@ func EvictOwnerTx(ctx context.Context, tx *sql.Tx, ownerID, now int64) (removedC
 	}
 	graceUntil = now + EvictionGraceSeconds
 
+	// OWN-03: flip is_removed=1 ONLY on the owner's live, NON-shared chars. The
+	// `AND NOT `+sharedCharPredicate excludes any char another guildie has uploaded
+	// (a cross_owner_write row with attempting_owner_id <> ownerID). Bind order:
+	// graceUntil (SET), ownerID (owner_id = ?), ownerID (the fragment's <> ?).
 	res, err := tx.ExecContext(ctx,
-		`UPDATE character SET is_removed = 1, grace_until = ? WHERE owner_id = ? AND is_removed = 0`,
-		graceUntil, ownerID,
+		`UPDATE character SET is_removed = 1, grace_until = ?
+		   WHERE owner_id = ? AND is_removed = 0 AND NOT `+sharedCharPredicate,
+		graceUntil, ownerID, ownerID,
 	)
 	if err != nil {
 		return 0, 0, fmt.Errorf("evict cascade (owner_id=%d): %w", ownerID, err)

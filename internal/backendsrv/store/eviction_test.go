@@ -56,6 +56,33 @@ func insertGuildCode(t *testing.T, ctx context.Context, db *sql.DB, ownerID int6
 	}
 }
 
+// insertCrossOwnerWrite appends a cross_owner_write audit row — the SHARING
+// signal Phase 36 reads (OWN-03 / D-01): another guildie (attemptingOwner)
+// uploaded charName whose recorded steward at write time was currentOwner. A char
+// is SHARED iff some such row exists with attempting_owner_id <> the evicted owner.
+func insertCrossOwnerWrite(t *testing.T, ctx context.Context, db *sql.DB, charName string, attemptingOwner, currentOwner int64) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO audit_log (event, char_name, attempting_owner_id, current_owner_id)
+		 VALUES ('cross_owner_write', ?, ?, ?)`,
+		charName, attemptingOwner, currentOwner); err != nil {
+		t.Fatalf("insert cross_owner_write (char=%q): %v", charName, err)
+	}
+}
+
+// ownerCodeDisabled reports whether the owner's guild_code has been revoked
+// (disabled_at set). Used by the all-shared-owner edge-case test. (Distinct from
+// linking_test.go's label-keyed codeDisabled.)
+func ownerCodeDisabled(t *testing.T, ctx context.Context, db *sql.DB, ownerID int64) bool {
+	t.Helper()
+	var disabled sql.NullString
+	if err := db.QueryRowContext(ctx,
+		`SELECT disabled_at FROM guild_code WHERE owner_id = ?`, ownerID).Scan(&disabled); err != nil {
+		t.Fatalf("read code disabled_at (owner=%d): %v", ownerID, err)
+	}
+	return disabled.Valid && disabled.String != ""
+}
+
 // charState reads is_removed, grace_until, archived_at for a character id.
 func charState(t *testing.T, ctx context.Context, db *sql.DB, charID int64) (isRemoved int, grace, archived sql.NullInt64) {
 	t.Helper()
@@ -556,5 +583,126 @@ func TestRestoreOwnerTx_RefusesSentinel(t *testing.T) {
 	}
 	if !grace.Valid {
 		t.Errorf("sentinel char grace_until = %v, want non-NULL (restore refused — left as-is)", grace)
+	}
+}
+
+// TestEvictOwnerTx_SharedCharSurvives is THE OWN-03 PROOF: evicting a guildie X who
+// stewards both a SOLE-OWNED char and a SHARED char (another guildie Y has a
+// cross_owner_write row for it) removes ONLY the sole-owned char — the shared char
+// stays is_removed=0 with grace_until NULL (it survives because Y still plays it).
+// removedCount counts only the flipped sole-owned char; X's guild_code is still revoked.
+func TestEvictOwnerTx_SharedCharSurvives(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	ownerX := insertOwner(t, ctx, db, "Guildie-X")
+	soleChar := insertChar(t, ctx, db, ownerX, "Soletoon", false)
+	sharedChar := insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
+	insertGuildCode(t, ctx, db, ownerX, "code-X")
+
+	// A second guildie Y who also uploads Sharedtoon → the cross_owner_write row.
+	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
+
+	var removedCount int
+	var graceUntil int64
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		removedCount, graceUntil, e = EvictOwnerTx(ctx, tx, ownerX, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+
+	// removedCount counts ONLY the sole-owned char.
+	if removedCount != 1 {
+		t.Errorf("removedCount = %d, want 1 (only the sole-owned char, NOT the shared one)", removedCount)
+	}
+
+	// The sole-owned char is removed + grace-stamped exactly as before.
+	if isRemoved, grace, _ := charState(t, ctx, db, soleChar); isRemoved != 1 || !grace.Valid || grace.Int64 != graceUntil {
+		t.Errorf("Soletoon state = (is_removed=%d, grace=%v), want (1, %d)", isRemoved, grace, graceUntil)
+	}
+
+	// OWN-03: the SHARED char SURVIVES — still live, no grace stamp.
+	isRemovedShared, graceShared, _ := charState(t, ctx, db, sharedChar)
+	if isRemovedShared != 0 {
+		t.Errorf("Sharedtoon is_removed = %d, want 0 (OWN-03 — shared char survives the eviction)", isRemovedShared)
+	}
+	if graceShared.Valid {
+		t.Errorf("Sharedtoon grace_until = %v, want NULL (shared char untouched)", graceShared)
+	}
+
+	// X's guild_code is still revoked (the watcher stops uploading regardless).
+	if !ownerCodeDisabled(t, ctx, db, ownerX) {
+		t.Errorf("owner X guild_code not revoked, want disabled_at set")
+	}
+}
+
+// TestEvictOwnerTx_AllSharedOwnerStillRevokesCode is the D-04 edge case: an owner
+// whose ONLY live char is shared flips 0 chars (removedCount=0) but STILL has their
+// guild_code revoked — the code revoke is unconditional on removedCount, so a
+// departing all-shared member still has their watcher silenced.
+func TestEvictOwnerTx_AllSharedOwnerStillRevokesCode(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	ownerX := insertOwner(t, ctx, db, "Guildie-X")
+	sharedChar := insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
+	insertGuildCode(t, ctx, db, ownerX, "code-X")
+
+	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
+
+	var removedCount int
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		removedCount, _, e = EvictOwnerTx(ctx, tx, ownerX, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+
+	if removedCount != 0 {
+		t.Errorf("removedCount = %d, want 0 (every live char is shared)", removedCount)
+	}
+	if isRemoved, _, _ := charState(t, ctx, db, sharedChar); isRemoved != 0 {
+		t.Errorf("Sharedtoon is_removed = %d, want 0 (untouched)", isRemoved)
+	}
+	if !ownerCodeDisabled(t, ctx, db, ownerX) {
+		t.Errorf("owner X guild_code not revoked, want disabled_at set (revoke is unconditional on removedCount)")
+	}
+}
+
+// TestEvictOwnerTx_SelfAttemptingRowIsNotShared pins the predicate's `<> X` guard: a
+// cross_owner_write row whose attempting_owner_id == X (a same-owner self-write) must
+// NOT mark the char shared — it is still removed on eviction.
+func TestEvictOwnerTx_SelfAttemptingRowIsNotShared(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	ownerX := insertOwner(t, ctx, db, "Guildie-X")
+	edgeChar := insertChar(t, ctx, db, ownerX, "Edgetoon", false)
+	insertGuildCode(t, ctx, db, ownerX, "code-X")
+
+	// A cross_owner_write row attributed to X itself — NOT a sharing signal.
+	insertCrossOwnerWrite(t, ctx, db, "Edgetoon", ownerX, ownerX)
+
+	var removedCount int
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		removedCount, _, e = EvictOwnerTx(ctx, tx, ownerX, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+	if removedCount != 1 {
+		t.Errorf("removedCount = %d, want 1 (a row attributed only to X does NOT make the char shared)", removedCount)
+	}
+	if isRemoved, _, _ := charState(t, ctx, db, edgeChar); isRemoved != 1 {
+		t.Errorf("Edgetoon is_removed = %d, want 1 (removed — self-write is not sharing)", isRemoved)
 	}
 }

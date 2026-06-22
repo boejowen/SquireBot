@@ -15,6 +15,15 @@
 -- targets the ingest API), so there is NO _meta.schema_version bump and NO
 -- WatcherMaxSchemaVersion change (that gate does not exist in the off-Google backend).
 -- "Schema v15" == goose migration 00015 applied (goose_db_version is the record).
+--
+-- IRREVERSIBLE (WR-02): step 2's backfill OVERWRITES character.owner_id for every
+-- bank/bot, DISCARDING the original first-uploader binding. That pre-backfill owner_id
+-- is the ONLY state this migration destroys, and it is NOT recoverable from the DB:
+-- the Down step is the project's forward-only `SELECT 1;` no-op (mirrors 00004-00014),
+-- so `goose down` does NOT restore the old binding — it only moves goose_db_version
+-- backward while the overwritten owner_ids stay overwritten. Recovery of a
+-- mis-designated bank's original owner is "restore from the R2 backup taken before the
+-- 00015 deploy", NOT `goose down`. Do not trust `down` to roll this back.
 
 -- 1. Seed the reserved guild sentinel owner (replay-safe on the PK). Do NOT set
 --    discord_user_id: the sentinel maps to no Discord user — 00005's partial-unique
@@ -32,5 +41,7 @@ UPDATE character
    AND owner_id <> 1000000;
 
 -- +goose Down
--- Forward-only in practice (mirrors 00004-00014): explicit no-op.
+-- Forward-only in practice (mirrors 00004-00014): explicit no-op. NOTE this is NOT a
+-- rollback — see the IRREVERSIBLE note in the Up header: the original first-uploader
+-- owner_id is gone after the Up backfill and is NOT restored here (recovery = R2 backup).
 SELECT 1;

@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.5
 milestone_name: — Ownership Cleanup
-status: executing
-last_updated: "2026-06-22T19:34:36.000Z"
+status: in_progress
+last_updated: "2026-06-22T20:30:00.000Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 2
@@ -13,7 +13,7 @@ progress:
   percent: 50
 ---
 
-> **v2.5 "Ownership Cleanup" — MILESTONE OPENED 2026-06-22 (Phases 35–36; OWN-01..04).** Promotes backlog 999.35 (owner-less / eviction-safe guild banks & bots → Phase 35: OWN-01/02/04) + 999.36 (shared-character-safe eviction → Phase 36: OWN-03), both deferred from quick `260621-u6j` (which dropped the single-owner write gate). Backend-only; ~1 schema migration (`character.owner_id` is NOT NULL today); watcher untouched → NO `v*` tag (consistent with v2.3/v2.4); research SKIPPED (well-understood internal mechanics). Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (OWN-01..04) + ROADMAP.md (phases 35–36). **Next: `/gsd-plan-phase 35`.**
+> **v2.5 "Ownership Cleanup" — MILESTONE OPENED 2026-06-22 (Phases 35–36; OWN-01..04).** Promotes backlog 999.35 (owner-less / eviction-safe guild banks & bots → Phase 35: OWN-01/02/04) + 999.36 (shared-character-safe eviction → Phase 36: OWN-03), both deferred from quick `260621-u6j` (which dropped the single-owner write gate). Backend-only; ~1 schema migration (`character.owner_id` is NOT NULL today); watcher untouched → NO `v*` tag (consistent with v2.3/v2.4); research SKIPPED (well-understood internal mechanics). Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (OWN-01..04) + ROADMAP.md (phases 35–36). **Phase 35 (OWN-01/02/04) ✅ COMPLETE 2026-06-22 — sentinel-owner model shipped (schema v15); next `/gsd-plan-phase 36` for OWN-03.**
 >
 > _Prior milestone:_ **v2.4 "Web UI Revamp — 5-Tab Restructure" — ROADMAP CREATED 2026-06-17 (6 phases, 29–34; 27/27 requirements mapped).** Reorganize squirebot.quest around five tabs — **Characters · Inventory · Banks · Wishlist · Settings** (source spec: `Future Features.txt` on the user's desktop). **Spans backend/data architecture + web** (NOT web-only — corrected 2026-06-17 after reading the spec); reworks the just-shipped wantlist into a per-character per-slot wishlist; watcher untouched. **Consolidated-views lock RELAXED** — per-character master-detail drill-down now allowed (CLAUDE.md updated). **Approach = sketch-first:** currently mocking the 5-tab structure + in-game inventory window + per-slot wishlist via `/gsd-sketch` → user picks → requirements → roadmap. Backend/data work this implies: inventory `Location`→slot-layout parsing + container nesting, bank valuation aggregation, per-slot wishlist model + wiki-section suggestion engine. Phases continue from v2.3 (last = 28) → v2.4 starts at **29**.
 >
@@ -29,13 +29,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** Milestone v2.5 — Phase 35 (owner-less guild banks & bots)
+- **Current focus:** Milestone v2.5 — Phase 35 ✅ COMPLETE; next = Phase 36 (shared-character-safe eviction, OWN-03)
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: 35 (milestone v2.5 — Ownership Cleanup) — ✅ COMPLETE (1/1 plan)
+Phase: 35 (milestone v2.5 — Ownership Cleanup) — ✅ COMPLETE + VERIFIED + CODE-REVIEWED (1/1 plan)
+**Close-out gates (2026-06-22):** code-review (`35-REVIEW.md`, standard depth, 7 files) found **1 BLOCKER — CR-01**: the OWN-02 invariant was bypassable because the sentinel was excluded only from the eviction *picker reads* (ListEvictableOwners/ListRestorableOwners) but the *destructive write path* (`EvictOwnerTx`) had no guard — an officer POSTing `{"owner_id":1000000}` would evict the whole guild bank. The plan's Task-3 explicit "leave EvictOwnerTx unchanged (the sentinel id is simply never passed)" premise was WRONG — `EvictHandler` decodes an arbitrary body `owner_id`. **Fixed-forward** (`11ebcc6`): typed `ErrCannotEvictSentinel` + a top-of-function guard in BOTH `EvictOwnerTx` and `RestoreOwnerTx`, mapped to HTTP 403 in `webadmin/eviction.go`, with store + handler tests (`TestEvictOwnerTx_RefusesSentinel`, `TestRestoreOwnerTx_RefusesSentinel`, `TestEvict_RefusesGuildSentinel`). Plus **WR-01/IN-01** test hardening (`62acc78`: a real `UpTo(14)→seed→UpTo(15)` migration test driving the ACTUAL embedded backfill, not a hand-copied SQL string; test const rebound to `store.GuildSentinelOwnerID`) and **WR-02** doc note (`96ea4ad`: 00015's owner_id backfill is irreversible — recovery = R2 restore, not `goose down`). **IN-02** (label-bridge could resolve the reserved `'guild'` label — pre-existing, out of scope, requires a guildie literally named "guild") DEFERRED to backlog. Verifier (`35-VERIFICATION.md`): **PASSED 6/6 must-haves + 3/3 req IDs (OWN-01/02/04)**, full `go test ./internal/backendsrv/...` all 18 packages green, watcher untouched, no `v*` tag. **NO deploy** (migration 00015 applies on next backend boot — a future step the user drives via the ssh-agent prod-deploy workaround; goose-run needed since a migration ships).
 Plan: 35-01 EXECUTED 2026-06-22 (commits `7a238b8` + `c8305c2` + `4d38389`, backend-only, all on master). Design = Option A: reserved "guild" sentinel owner (id `1000000`, label `guild`) — NOT nullable owner_id (only 2 production owner_id consumers: binding.go + eviction.go). **3 tasks shipped:** (1) migration `00015_guild_owner.sql` (schema v15) — `INSERT OR IGNORE` seed of the sentinel + an idempotent backfill (`owner_id <> 1000000` guard) repointing every `is_bank_toon=1 OR is_guild_bot=1` char to it (OWN-04, the Findom case auto-migrates); `TestMigrate_00015`. (2) `store/owner.go` `const GuildSentinelOwnerID int64 = 1000000` (== migration literal) + `DesignateCharTx` repoints `owner_id` to the sentinel inside the SAME officer-gated tx on bank/bot (OWN-01/02); `DesignateNeither` leaves owner_id untouched; 4 owner_test.go cases. (3) `ListEvictableOwners`/`ListRestorableOwners` add `o.id <> ?` (GuildSentinelOwnerID) so the sentinel is never offered in the evict/restore picker; cascade (`EvictOwnerTx WHERE owner_id=?`) UNCHANGED — never receives the sentinel id; the OWN-02 proof `TestEvictOwnerTx_GuildBankSurvivesEviction` (a sentinel-owned bank stays is_removed=0/grace NULL when its first uploader's owner is evicted). Gates GREEN: `go build ./...` rc=0, `go vet ./internal/backendsrv/{store,migrations}/...` clean, full `go test ./internal/backendsrv/...` all 18 packages green. 0 deviations (plan executed exactly as written). Watcher tree UNTOUCHED (git status clean under internal/app/, internal/eqfind/, internal/sheet/, cmd/squirebot/); NO `v*` tag created (latest stays `v2.1.2`). NO deploy (migration 00015 applies on next backend boot — a future step). See `35-01-SUMMARY.md`.
 Next: plan + execute Phase 36 — shared-character-safe eviction (OWN-03; reuses the sentinel model — banks are now eviction-safe by construction, so 36 narrows the `WHERE owner_id=?` cascade purely for shared NON-bank chars) → `/gsd-plan-phase 36`. (v2.4 SHIPPED + closed 2026-06-21; the long 34-xx narrative below is historical.)
 

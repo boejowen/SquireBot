@@ -12,7 +12,7 @@
 - 🔄 **v2.2** — Wantlist + Discord Pinger — Phases 19–25 (**Track 1 SHIPPED LIVE 2026-06-06** — Phases 19–21 deployed to api.squirebot.quest; Phases 24–25 quality/platform shipped; **Track 2 (Phases 22–23) PARKED — invite-gated** on the 3 Raid Alliance bot invites, not abandoned; milestone held open, **no tag** until Track 2 lands)
 - ✅ **v2.3** — Character Assignment & Per-Character Wantlists — Phases 26–28 (shipped 2026-06-09) — archive: [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md)
 - ✅ **v2.4** — Web UI Revamp (5-Tab Restructure) — Phases 29–34 (shipped 2026-06-21; backend/data parse + web; watcher untouched; no tag) — reorganized squirebot.quest around five top tabs (Characters · Inventory · Banks · Wishlist · Settings)
-- 🔄 **v2.5** — Ownership Cleanup — Phases 35–36 (opened 2026-06-22; promotes backlog 999.35/36; owner-less guild banks/bots + shared-character-safe eviction; backend-only, no tag) — OWN-01..04
+- 🔄 **v2.5** — Ownership Cleanup — Phases 35–36 (opened 2026-06-22; promotes backlog 999.35/36; owner-less guild banks/bots + shared-character-safe eviction; backend-only, no tag) — OWN-01..04 — **Phase 35 ✅ COMPLETE 2026-06-22 (OWN-01/02/04); Phase 36 (OWN-03) remaining**
 
 ## Phases
 
@@ -20,11 +20,11 @@
 
 Promotes backlog 999.35 + 999.36 (deferred from quick `260621-u6j`). Backend-only; one schema migration; watcher untouched → no `v*` tag.
 
-- [ ] **Phase 35: Owner-less guild banks & bots** — OWN-01, OWN-02, OWN-04
+- [x] **Phase 35: Owner-less guild banks & bots** — OWN-01, OWN-02, OWN-04 — ✅ COMPLETE 2026-06-22 (verifier PASSED 6/6 must-haves + 3/3 req IDs; code-review found 1 BLOCKER [CR-01: sentinel guarded in the picker reads but NOT the destructive evict write path] fixed-forward `11ebcc6` + WR-01/IN-01 test hardening `62acc78` + WR-02 doc `96ea4ad`; IN-02 label-bridge collision deferred to backlog; schema v15; `go test ./internal/backendsrv/...` all 18 packages green; watcher untouched, no `v*` tag)
   - **Goal:** a designated bank/bot is guild-held, not tied to whoever uploaded it first. **RESOLVED: Option A — a reserved "guild" sentinel owner row (id 1000000, label `guild`), NOT nullable `owner_id`** (smallest blast radius — `character.owner_id` stays `NOT NULL`, every existing `owner(id)` join keeps working; only 2 production consumers — binding.go + eviction.go).
   - **Success criteria:** (1) an officer designates any char as bank/bot without "claiming"/owning it (DesignateCharTx repoints `owner_id` to the sentinel, gated only by the officer re-check); (2) a designated bank/bot has no individual owner (`owner_id` = sentinel); (3) existing owner-bound banks (e.g. Findom) migrate automatically (00015 backfill, no manual fixup); (4) `go test ./...` green; watcher untouched.
   - **Plans:** 1 plan (complete)
-    - [x] 35-01-PLAN.md — migration 00015 (seed guild sentinel owner + backfill existing bank/bot chars) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + ListEvictableOwners/ListRestorableOwners sentinel exclusion + the OWN-02 survives-eviction proof (OWN-01/02/04) — EXECUTED 2026-06-22 (7a238b8/c8305c2/4d38389); schema v15; build rc=0, vet clean, all backendsrv tests green; watcher untouched, no `v*` tag
+    - [x] 35-01-PLAN.md — migration 00015 (seed guild sentinel owner + backfill existing bank/bot chars) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + ListEvictableOwners/ListRestorableOwners sentinel exclusion + the OWN-02 survives-eviction proof + EvictOwnerTx/RestoreOwnerTx sentinel write-path guard (CR-01 fix) (OWN-01/02/04) — EXECUTED 2026-06-22 (7a238b8/c8305c2/4d38389 + fixes 11ebcc6/62acc78/96ea4ad); schema v15; build rc=0, vet clean, all backendsrv tests green; watcher untouched, no `v*` tag
 - [ ] **Phase 36: Shared-character-safe eviction** — OWN-03 (depends on Phase 35)
   - **Goal:** eviction removes only the evicted member's own characters — never shared characters or guild banks/bots.
   - **Success criteria:** (1) evicting a member preserves shared characters other guildies play; (2) guild banks/bots are never removed by an eviction; (3) the officer eviction-preview reflects the narrowed set; (4) `go test ./...` green.

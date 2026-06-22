@@ -8,10 +8,10 @@
 
 ### Ownership (OWN)
 
-- [ ] **OWN-01** — An officer can designate any character as a guild bank or bot without first "owning" it; designation is decoupled from upload-ownership (no "claim" step).
-- [ ] **OWN-02** — A designated guild bank/bot is owner-less (guild-held) and is NOT removed or archived when the member who first uploaded it is evicted.
+- [x] **OWN-01** — An officer can designate any character as a guild bank or bot without first "owning" it; designation is decoupled from upload-ownership (no "claim" step). ✅ Phase 35
+- [x] **OWN-02** — A designated guild bank/bot is owner-less (guild-held) and is NOT removed or archived when the member who first uploaded it is evicted. ✅ Phase 35
 - [ ] **OWN-03** — Evicting a guildie removes only that member's own characters, not shared characters that other guildies also play and upload.
-- [ ] **OWN-04** — Existing designated banks/bots bound to an individual owner (e.g. `Findom` → owner 9) migrate to the owner-less model automatically, with no manual fixup.
+- [x] **OWN-04** — Existing designated banks/bots bound to an individual owner (e.g. `Findom` → owner 9) migrate to the owner-less model automatically, with no manual fixup. ✅ Phase 35
 
 ## Future Requirements (deferred)
 
@@ -27,9 +27,9 @@
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| OWN-01 | 35 | Pending |
-| OWN-02 | 35 | Pending |
-| OWN-04 | 35 | Pending |
+| OWN-01 | 35 | Complete (2026-06-22) |
+| OWN-02 | 35 | Complete (2026-06-22) |
+| OWN-04 | 35 | Complete (2026-06-22) |
 | OWN-03 | 36 | Pending |
 
 *Created 2026-06-22 for milestone v2.5 (promotes backlog 999.35 / 999.36).*

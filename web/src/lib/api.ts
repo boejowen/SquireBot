@@ -542,6 +542,14 @@ export interface EvictionPreview {
 	characters: string[];
 	/** Unix epoch SECONDS (mirrors the Go side: nowUnix()+EvictionGraceSeconds). NOT a string. */
 	grace_until: number;
+	/**
+	 * Count of the owner's live characters that SURVIVE the eviction because they
+	 * are SHARED — another guildie also uploads them (36-01 `preserved_shared_count`,
+	 * snake_case mirror of the Go field). Additive. Drives the all-shared-owner Evict
+	 * gate (D-06): when `characters` is empty BUT this is > 0, the Evict button stays
+	 * ENABLED so the officer can still perform the code-only revoke.
+	 */
+	preserved_shared_count: number;
 }
 
 /** The `POST /api/v1/admin/evict` reply. */

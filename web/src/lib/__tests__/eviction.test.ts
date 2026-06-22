@@ -8,8 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { graceDate, restoreResultMessage } from '../eviction';
-import type { RestoreResult } from '../api';
+import { canEvictPreview, evictPreviewSummary, graceDate, restoreResultMessage } from '../eviction';
+import type { EvictionPreview, RestoreResult } from '../api';
 
 // Source-inspect the form the way AuthGate.test.ts / ConfirmDialog.test.ts do
 // (node-only; the repo runs vitest with NO jsdom / @testing-library — see the file
@@ -92,6 +92,69 @@ describe('restoreResultMessage — WR-01/WR-02 success copy (close G-1)', () => 
 			// The copy points at the server-side retrieval path, not an in-band secret.
 			expect(msg).toContain('mint-code');
 		}
+	});
+});
+
+describe('eviction preview gating + framing (D-06)', () => {
+	// These helpers only read `characters` + `preserved_shared_count`; the
+	// owner_id/grace_until fields are placeholders (the EvictionPreview literal
+	// must still satisfy the interface field-for-field).
+	const cascade: EvictionPreview = {
+		owner_id: 7,
+		characters: ['Soletoon'],
+		grace_until: 1782789805,
+		preserved_shared_count: 0
+	};
+	const allShared: EvictionPreview = {
+		owner_id: 8,
+		characters: [],
+		grace_until: 1782789805,
+		preserved_shared_count: 2
+	};
+	const empty: EvictionPreview = {
+		owner_id: 9,
+		characters: [],
+		grace_until: 1782789805,
+		preserved_shared_count: 0
+	};
+
+	describe('canEvictPreview — the Evict-button preview-shape gate', () => {
+		it('cascade (sole-owned chars to remove) → true', () => {
+			expect(canEvictPreview(cascade)).toBe(true);
+		});
+
+		it('all-shared (characters:[] but preserved_shared_count>0) → true (code-only revoke)', () => {
+			// The BLOCKER fix: an all-shared departing member stays evictable so their
+			// guild code can still be revoked even though nothing is removed.
+			expect(canEvictPreview(allShared)).toBe(true);
+		});
+
+		it('zero live chars (characters:[] AND preserved_shared_count==0) → false (unchanged disable)', () => {
+			expect(canEvictPreview(empty)).toBe(false);
+		});
+	});
+
+	describe('evictPreviewSummary — the three render cases', () => {
+		it('cascade → {kind:"cascade"} (the form renders its own char list)', () => {
+			expect(evictPreviewSummary(cascade)).toEqual({ kind: 'cascade' });
+		});
+
+		it('all-shared → kind:"code-only" with the "0 removed; N preserved; code revoked" framing', () => {
+			const s = evictPreviewSummary(allShared);
+			expect(s.kind).toBe('code-only');
+			if (s.kind !== 'code-only') throw new Error('expected code-only');
+			expect(s.message).toContain('0 characters removed');
+			// The preserved count is surfaced verbatim.
+			expect(s.message).toContain('2');
+			expect(s.message.toLowerCase()).toContain('guild code will be revoked');
+		});
+
+		it('empty → kind:"empty" with the existing "No characters found" copy', () => {
+			const s = evictPreviewSummary(empty);
+			expect(s.kind).toBe('empty');
+			if (s.kind !== 'empty') throw new Error('expected empty');
+			expect(s.message).toContain('No characters found');
+		});
 	});
 });
 

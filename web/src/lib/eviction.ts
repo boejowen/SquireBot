@@ -10,7 +10,7 @@
 // value (~1.78e9) yields ~20 days after 1970-01-01 ("Wed Jan 21 1970") instead of
 // the intended ~30-days-from-now date. The seconds→ms multiply below is the fix.
 
-import type { RestoreResult } from '$lib/api';
+import type { EvictionPreview, RestoreResult } from '$lib/api';
 
 /**
  * Format a unix epoch-SECONDS grace deadline as a human date string (e.g.
@@ -47,4 +47,40 @@ export function restoreResultMessage(res: RestoreResult, label: string): string 
 		return `Restored ${label}, but re-minting the guild code failed — re-issue it on the server with \`mint-code\`.`;
 	}
 	return `Restored ${label}. A fresh guild code was minted on the SERVER (read it from the server logs / re-run \`mint-code\`) and hand it to them — it is not shown here.`;
+}
+
+/**
+ * Decide whether an eviction preview has anything to act on — the Evict-button
+ * gate's PREVIEW-shape half (D-06, the BLOCKER fix). True iff there is a cascade
+ * (characters to remove) OR the owner still has live PRESERVED-SHARED chars (a
+ * code-only revoke of an all-shared departing member). False ONLY for a genuine
+ * zero-live-chars owner. The form ANDs this with !floorBlocked/!evicting/selectedOwner.
+ */
+export function canEvictPreview(preview: EvictionPreview): boolean {
+	return preview.characters.length > 0 || preview.preserved_shared_count > 0;
+}
+
+type EvictPreviewSummary =
+	| { kind: 'cascade' }
+	| { kind: 'code-only'; message: string }
+	| { kind: 'empty'; message: string };
+
+/**
+ * Classify an eviction preview into the three render cases (D-06). 'cascade' →
+ * the form renders its "Characters affected (N)" list. 'code-only' (all-shared
+ * owner: nothing removed but live shared chars remain) → the explicit "0
+ * characters removed; {N} shared character(s) preserved; guild code will be
+ * revoked" framing so the officer understands the code-only revoke. 'empty' (no
+ * live chars at all) → the existing "No characters found" copy; the button stays
+ * disabled. Pure / DOM-free / label-free (formats counts only) — node-testable.
+ */
+export function evictPreviewSummary(preview: EvictionPreview): EvictPreviewSummary {
+	if (preview.characters.length > 0) return { kind: 'cascade' };
+	if (preview.preserved_shared_count > 0) {
+		return {
+			kind: 'code-only',
+			message: `0 characters removed; ${preview.preserved_shared_count} shared character(s) preserved; guild code will be revoked.`
+		};
+	}
+	return { kind: 'empty', message: 'No characters found for this guildie.' };
 }

@@ -21,8 +21,10 @@
 Promotes backlog 999.35 + 999.36 (deferred from quick `260621-u6j`). Backend-only; one schema migration; watcher untouched → no `v*` tag.
 
 - [ ] **Phase 35: Owner-less guild banks & bots** — OWN-01, OWN-02, OWN-04
-  - **Goal:** a designated bank/bot is guild-held (reserved sentinel "guild" owner OR nullable `owner_id` + migration), not tied to whoever uploaded it first.
-  - **Success criteria:** (1) an officer designates any char as bank/bot without "claiming"/owning it; (2) a designated bank/bot has no individual owner; (3) existing owner-bound banks (e.g. Findom) migrate automatically; (4) `go test ./...` green; watcher untouched.
+  - **Goal:** a designated bank/bot is guild-held, not tied to whoever uploaded it first. **RESOLVED: Option A — a reserved "guild" sentinel owner row (id 1000000, label `guild`), NOT nullable `owner_id`** (smallest blast radius — `character.owner_id` stays `NOT NULL`, every existing `owner(id)` join keeps working; only 2 production consumers — binding.go + eviction.go).
+  - **Success criteria:** (1) an officer designates any char as bank/bot without "claiming"/owning it (DesignateCharTx repoints `owner_id` to the sentinel, gated only by the officer re-check); (2) a designated bank/bot has no individual owner (`owner_id` = sentinel); (3) existing owner-bound banks (e.g. Findom) migrate automatically (00015 backfill, no manual fixup); (4) `go test ./...` green; watcher untouched.
+  - **Plans:** 1 plan
+    - [ ] 35-01-PLAN.md — migration 00015 (seed guild sentinel owner + backfill existing bank/bot chars) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + ListEvictableOwners/ListRestorableOwners sentinel exclusion + the OWN-02 survives-eviction proof (OWN-01/02/04)
 - [ ] **Phase 36: Shared-character-safe eviction** — OWN-03 (depends on Phase 35)
   - **Goal:** eviction removes only the evicted member's own characters — never shared characters or guild banks/bots.
   - **Success criteria:** (1) evicting a member preserves shared characters other guildies play; (2) guild banks/bots are never removed by an eviction; (3) the officer eviction-preview reflects the narrowed set; (4) `go test ./...` green.
@@ -360,6 +362,22 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   - [x] 34-04-PLAN.md — Deploy (goose-run 00014 + web atomic swap; R2 backup BEFORE the restart; NO v* tag) + human browser-smoke across the 5 EQ themes
 **UI hint**: yes
 
+### Phase 35: Owner-less guild banks & bots
+**Goal**: A designated guild bank/bot is GUILD-HELD, not tied to whoever uploaded it first. Designating a character as bank/bot must not require "claiming"/owning it, and a guild bank/bot must survive any individual member's eviction.
+**Milestone**: v2.5
+**Depends on**: Nothing new (builds on the live backend; the cross-owner write-gate relaxation `260621-u6j` already shipped). **Watcher untouched.**
+**Requirements**: OWN-01, OWN-02, OWN-04
+**Resolved design (Option A — sentinel owner):** a reserved owner row (id `1000000`, label `guild`) seeded by migration 00015 holds designated banks/bots, so `character.owner_id` stays `NOT NULL` and every existing `owner(id)` join works unchanged. Rejected Option B (nullable `owner_id`) — it would force a SQLite table rebuild to drop NOT NULL and make every `owner_id` consumer handle NULL. Grep confirmed only two production consumers of `character.owner_id`: `store/binding.go` (first-sighting bind, untouched) + `store/eviction.go` (the cascade + owner lists).
+**Success Criteria** (what must be TRUE):
+  1. An officer can designate any character as a guild bank/bot WITHOUT first owning it — `DesignateCharTx` repoints `owner_id` to the guild sentinel and is gated only by the in-tx officer re-check (no claim step).
+  2. A designated bank/bot is owner-less (guild-held): its `character.owner_id` equals the reserved sentinel id, not any individual guildie.
+  3. A designated bank/bot is NOT removed when its first-uploader is evicted — `EvictOwnerTx` (`WHERE owner_id = realOwner`) never touches the sentinel-owned bank.
+  4. Existing designated banks/bots bound to an individual owner (e.g. Findom→owner 9) migrate automatically via the 00015 backfill, with no manual fixup; the guild sentinel never appears in the officer eviction picker.
+  5. `go test ./internal/backendsrv/...` + `go build ./...` green; watcher untouched; no `v*` tag.
+**Sets up Phase 36 (OWN-03):** with banks parked under a single sentinel owner no eviction targets, banks are eviction-safe by construction — Phase 36 then narrows the cascade purely for shared NON-bank characters.
+**Plans**: 1 plan
+  - [ ] 35-01-PLAN.md — migration 00015 (sentinel-owner seed + bank/bot backfill) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + eviction-list sentinel exclusion + OWN-02 survives-eviction proof (OWN-01/02/04)
+
 ## Progress
 
 **Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently). v2.3: 26 → 27 → 28 (complete). v2.4: 29 → 30 → 31 → 32 → 33 → 34 (29 data foundation first; 30 shell; then the four tab surfaces; 34 wishlist last).
@@ -401,6 +419,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | 32. Inventory Tab (Item-Centric) | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 33. Banks Tab + Valuation | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 4/4 | Complete    | 2026-06-21 |
+| 35. Owner-less guild banks & bots | v2.5 | 0/1 | 🔄 Planned (1 plan; OWN-01/02/04; migration 00015 sentinel-owner seed + backfill, DesignateCharTx repoint, eviction-list exclusion; backend-only, no tag) | — |
 
 ## Backlog
 

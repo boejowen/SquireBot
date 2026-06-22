@@ -79,7 +79,7 @@
 
 <div class="site-shell">
 	<header class="shell-header">
-		<a href="/" class="wordmark">SquireBot</a>
+		<span class="wordmark">SquireBot</span>
 		<div class="shell-controls">
 			{#if session?.authenticated}
 				<!-- Top-right identity + Sign out (Phase 30 / D-06). The hidden-from-anon
@@ -156,11 +156,6 @@
 		line-height: 1.2;
 		color: var(--accent);
 		letter-spacing: 0.02em;
-		text-decoration: none; /* it's an <a href="/"> home link — no underline */
-	}
-	.wordmark:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 2px;
 	}
 	.shell-controls {
 		display: inline-flex;

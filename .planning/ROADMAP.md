@@ -28,6 +28,9 @@ Promotes backlog 999.35 + 999.36 (deferred from quick `260621-u6j`). Backend-onl
 - [ ] **Phase 36: Shared-character-safe eviction** — OWN-03 (depends on Phase 35)
   - **Goal:** eviction removes only the evicted member's own characters — never shared characters or guild banks/bots.
   - **Success criteria:** (1) evicting a member preserves shared characters other guildies play; (2) guild banks/bots are never removed by an eviction; (3) the officer eviction-preview reflects the narrowed set; (4) `go test ./...` green.
+  - **Plans:** 2 plans (backend + web; the web change depends on the backend preview contract — wave 2)
+    - [ ] 36-01-PLAN.md (wave 1) — narrow EvictOwnerTx cascade + PreviewEviction via a single shared `cross_owner_write` predicate (shared chars survive; preview parity; surviving-shared owner repoint via a drift-locked subquery const) + a new additive `preserved_shared_count` preview field — OWN-03; no migration (schema v15); watcher untouched
+    - [ ] 36-02-PLAN.md (wave 2, depends_on 36-01) — mirror `preserved_shared_count` in api.ts + keep an all-shared owner evictable in EvictionForm.svelte (code-only revoke framing) via pure node-tested helpers + deploy (web atomic-swap) + browser-smoke — OWN-03; no migration; no `v*` tag; watcher untouched
 
 <details>
 <summary>✅ v1.0 — Watcher + Workbook + Onboarding (Phases 1–5) — SHIPPED 2026-05-11</summary>

@@ -30,6 +30,6 @@
 | OWN-01 | 35 | Complete (2026-06-22) |
 | OWN-02 | 35 | Complete (2026-06-22) |
 | OWN-04 | 35 | Complete (2026-06-22) |
-| OWN-03 | 36 | In progress — backend (36-01) ✅ shipped 2026-06-22 (cascade narrowed; `preserved_shared_count` contract); web (36-02) + deploy remaining |
+| OWN-03 | 36 | Code-complete — backend (36-01) ✅ shipped 2026-06-22 (cascade narrowed; `preserved_shared_count` contract); web (36-02) ✅ code-complete 2026-06-22 (`b1aab94`/`8c77086`; all-shared owner stays evictable with code-only-revoke framing; gates green). **OUTSTANDING: the prod deploy (backend binary swap + web atomic-swap) + officer browser-smoke is the blocking checkpoint — once it PASSES, OWN-03 is fully met.** |
 
 *Created 2026-06-22 for milestone v2.5 (promotes backlog 999.35 / 999.36).*

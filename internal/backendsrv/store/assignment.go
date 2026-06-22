@@ -418,9 +418,13 @@ const (
 // bank toons (multiple guild banks allowed — the single-bank invariant is relaxed). When
 // designating bank OR bot (a SHARED char), in the SAME tx it DELETEs any existing
 // character_assignment for the char AND marks its pending assignment_requests denied
-// (D-02 exemption, Pitfall 6 — bidirectional). Designating 'neither' clears the flags
-// and performs no assignment/request cleanup (the char becomes a normal claimable char).
-// A missing/removed char → ErrCharNotFound (the UPDATE affected 0 rows).
+// (D-02 exemption, Pitfall 6 — bidirectional) AND repoints character.owner_id to the
+// reserved guild sentinel owner (GuildSentinelOwnerID, seeded by 00015) so the char is
+// GUILD-HELD and the per-owner eviction cascade can never sweep it (OWN-01/OWN-02).
+// Designating 'neither' clears the flags and performs no assignment/request cleanup AND
+// does NOT touch owner_id (a former bank stays sentinel-owned — clearing does not
+// re-home it to any individual guildie). A missing/removed char → ErrCharNotFound
+// (the UPDATE affected 0 rows, BEFORE the repoint).
 func DesignateCharTx(ctx context.Context, tx *sql.Tx, characterID int64, mode DesignateMode, callerID string, now int64) error {
 	ok, err := isOfficerTx(ctx, tx, callerID) // authorize UNDER the tx (WR-04)
 	if err != nil {
@@ -463,6 +467,17 @@ func DesignateCharTx(ctx context.Context, tx *sql.Tx, characterID int64, mode De
 			now, callerID, characterID,
 		); err != nil {
 			return fmt.Errorf("designate: deny pending requests (character_id=%d): %w", characterID, err)
+		}
+		// OWN-01/OWN-02: a designated bank/bot is GUILD-HELD, not tied to its first
+		// uploader. Repoint owner_id to the reserved guild sentinel owner (seeded by
+		// migration 00015) so the per-owner eviction cascade (EvictOwnerTx, WHERE
+		// owner_id=?) can never sweep it away. The first uploader's steward marker is
+		// intentionally discarded — designation is decoupled from ownership (no claim).
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE character SET owner_id = ? WHERE id = ?`,
+			GuildSentinelOwnerID, characterID,
+		); err != nil {
+			return fmt.Errorf("designate: repoint owner to guild sentinel (character_id=%d): %w", characterID, err)
 		}
 	}
 	return nil

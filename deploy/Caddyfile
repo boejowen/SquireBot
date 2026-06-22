@@ -1,3 +1,31 @@
+# SquireBot Caddy config (Hetzner VPS). Two sites on one box:
+#   api.squirebot.quest — reverse-proxy to the Go backend (loopback :8090)
+#   squirebot.quest     — the static SvelteKit site (adapter-static), SPA-fallback to 200.html
+#
+# NOTE: keep the api block header-free — the Go app emits its own CORS header;
+# a Caddy `header` here would duplicate it. Cache-Control lives ONLY on the
+# static apex block below.
+
 api.squirebot.quest {
     reverse_proxy localhost:8090
+}
+
+squirebot.quest {
+    root * /var/www/squirebot
+    encode gzip
+
+    # Content-hashed build assets (/_app/immutable/*) never change for a given
+    # hash — cache them for a year so repeat visits are instant.
+    @immutable path /_app/immutable/*
+    header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+    # Everything else is the HTML app shell (200.html, robots.txt, …). It must
+    # ALWAYS revalidate so a new deploy is picked up immediately instead of a
+    # stale shell pinning an old client bundle (e.g. an old apex redirect). The
+    # ETag/Last-Modified make revalidation a cheap 304 when nothing changed.
+    @html not path /_app/immutable/*
+    header @html Cache-Control "no-cache"
+
+    try_files {path} /200.html
+    file_server
 }

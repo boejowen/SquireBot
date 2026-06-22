@@ -14,12 +14,17 @@ package ingest
 //	[2] decode + validate    DecodeAndValidate → 4xx on malformed/bad-kind   (V5)
 //	[3] parse content        parse.Parse / ParseSpellbook (UTF-8, A1)        (D-03)
 //	[4] ONE transaction:     BeginTx (BEGIN IMMEDIATE) →
-//	      store.BindCharacter (first-sighting bind; cross-owner ⇒ 409 + audit, rollback)
+//	      store.BindCharacter (first-sighting bind; cross-owner ⇒ allow + audit row)
 //	      store.Replace*Tx    (atomic full-snapshot replace for the bound charID)
 //	      Commit              → 204 No Content
 //
+// CROSS-OWNER (260621-u6j): the guild shares chars/banks, so a cross-owner upload
+// is ALLOWED (no more 409). BindCharacter returns the existing charID + a
+// `cross_owner_write` audit row (owner_id untouched) and the replace + audit row
+// commit together. The only ingest error left is a real failure ⇒ 500.
+//
 // SINGLE-TRANSACTION REUSE (the load-bearing constraint, 11-05 WARNING-3 fix):
-// the atomic-replace + cross-owner-reject logic is OWNED by 11-03's *sql.Tx-
+// the atomic-replace + cross-owner bind logic is OWNED by 11-03's *sql.Tx-
 // based BindCharacter / ReplaceInventoryTx / ReplaceSpellbookTx. This handler
 // calls those EXACT functions over ONE *sql.Tx — it authors NO inline
 // DELETE/INSERT/character SQL. 11-03's store tests remain the single coverage
@@ -135,19 +140,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// [4] ONE transaction: first-sighting bind + atomic replace, committed
-	// together (a cross-owner reject or a replace failure rolls BOTH back).
+	// together. A cross-owner upload is ALLOWED now (260621-u6j): BindCharacter
+	// returns the existing charID + a cross_owner_write audit row, so any error
+	// here is a real server-side failure (DB error, etc.) — a replace failure
+	// rolls BOTH the bind and the partial replace back.
 	status, err := h.bindAndReplace(r, ownerID, env, rows)
 	if err != nil {
-		if errors.Is(err, store.ErrCharOwnedByAnother) {
-			// Cross-owner upload (D-07 / V4 / T-11.05-04): 409, already audited
-			// in BindCharacter; the tx rolled back so the original owner's rows
-			// are untouched.
-			slog.Warn("ingest rejected", "reason", "cross_owner", "char", env.Character, "status", http.StatusConflict)
-			http.Error(w, "character is owned by another guildie", http.StatusConflict)
-			return
-		}
-		// Anything else is a server-side failure (DB error, etc.) — 500. Never
-		// echo content or token material (V7).
+		// Server-side failure (DB error, etc.) — 500. Never echo content or
+		// token material (V7).
 		slog.Error("ingest failed", "char", env.Character, "kind", env.Kind, "err", err, "status", http.StatusInternalServerError)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
@@ -189,14 +189,14 @@ func parseContent(env Envelope) ([][]string, error) {
 // bindAndReplace runs the first-sighting bind and the atomic full-snapshot
 // replace in ONE *sql.Tx (BEGIN IMMEDIATE via the _txlock=immediate DSN), then
 // commits. It returns the HTTP success status (204 No Content) on commit, or an
-// error the caller maps to 409 (ErrCharOwnedByAnother) / 500.
+// error the caller maps to 500.
 //
 // This is the SINGLE place the handler touches SQL — and it does so only through
 // 11-03's exported Tx functions (BindCharacter, ReplaceInventoryTx,
 // ReplaceSpellbookTx). It authors NO DELETE/INSERT/character SQL of its own (the
 // "no second SQL path" constraint). bind and replace share ONE tx so a cross-
-// owner reject rolls the (no-op) work back cleanly and the replace sees the
-// just-bound charID.
+// owner write's audit row and the replaced rows commit together, and the replace
+// sees the resolved charID. A real DB failure rolls everything back.
 func (h *Handler) bindAndReplace(r *http.Request, ownerID int64, env Envelope, rows [][]string) (int, error) {
 	ctx := r.Context()
 
@@ -205,27 +205,14 @@ func (h *Handler) bindAndReplace(r *http.Request, ownerID int64, env Envelope, r
 		return 0, err
 	}
 
-	// First-sighting bind. On a cross-owner attempt, BindCharacter writes an
-	// append-only audit_log row INSIDE this tx and returns ErrCharOwnedByAnother
-	// (owner_id is never overwritten — binding.go). That audit record is the
-	// durable trace of a takeover attempt (D-07 / V4 / T-11.03-05), so we must
-	// COMMIT the tx to persist it even though the ingest is refused — mirroring
-	// 11-03's own bindInTx test helper ("commit anyway so the audit row is
-	// durable … even though the ingest itself is rejected"). A plain rollback
-	// here would silently discard the audit trail, which is the bug this path
-	// guards against. Since the cross-owner branch performs NO character/row
-	// mutation (only the audit INSERT), committing it is safe.
+	// First-sighting bind. On a cross-owner upload (260621-u6j: shared
+	// chars/banks), BindCharacter appends a `cross_owner_write` audit_log row
+	// INSIDE this tx and returns the EXISTING charID (owner_id is never
+	// overwritten — binding.go), so the upload proceeds and the audit row commits
+	// together with the replaced rows below. The only error here is a real DB
+	// failure: roll back and map to 500.
 	charID, err := store.BindCharacter(ctx, tx, env.Character, ownerID)
 	if err != nil {
-		if errors.Is(err, store.ErrCharOwnedByAnother) {
-			if cerr := tx.Commit(); cerr != nil {
-				// If the audit commit itself fails, surface that (and the tx is
-				// already broken); the caller maps a non-409 error to 500.
-				return 0, cerr
-			}
-			return 0, err // 409; audit row persisted
-		}
-		// Any other bind error (e.g. DB failure): roll back, map to 500.
 		_ = tx.Rollback()
 		return 0, err
 	}

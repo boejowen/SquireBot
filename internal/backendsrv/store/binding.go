@@ -1,20 +1,28 @@
 package store
 
 // binding.go is the SQLite port of the v1 watcher's identity policy
-// (internal/sheet/owner.go UpsertCharOwner — first-write-wins), TIGHTENED for
-// the backend. In v1, ~12 racing watchers each wrote to the shared Sheet and an
-// OAuth email was advisory, so a cross-owner mismatch was logged-but-ALLOWED
-// (slog.Warn + an _audit row, the write itself ungated). In v2 the BACKEND — not
-// racing watchers — owns the write, so that race class disappears and a
-// cross-owner upload is REJECTED (ErrCharOwnedByAnother) instead of merely
-// warned (D-07 / V4). owner_id is NEVER overwritten on a mismatch; the attempt
-// is recorded in audit_log (append-only) so a takeover attempt leaves a trace
-// (T-11.03-05). Reassignment is a P15 admin action.
+// (internal/sheet/owner.go UpsertCharOwner — first-write-wins). In v1, ~12 racing
+// watchers each wrote to the shared Sheet and an OAuth email was advisory, so a
+// cross-owner mismatch was logged-but-ALLOWED (slog.Warn + an _audit row, the
+// write itself ungated). v2 originally TIGHTENED this: with the BACKEND (not
+// racing watchers) owning the write, a cross-owner upload was REJECTED
+// (D-07 / V4) instead of merely warned.
+//
+// As of 2026-06-21 (quick 260621-u6j) that rejection is REVERSED. This guild
+// shares P99 logins (multiple guildies playing the same character) and runs guild
+// banks with no real owner, so first-uploader-wins broke legitimate uploads (the
+// Kim/Aenriel and lern41/Findom incidents). The model is now: ANY valid
+// (non-revoked) guild code may upload ANY character. A cross-owner write is
+// ALLOWED — it does NOT overwrite owner_id (the first uploader stays as a
+// NON-BINDING steward record) and is recorded in audit_log (append-only) as a
+// `cross_owner_write` event for traceability. owner_id is a first-sighting
+// steward marker, NOT a write gate; there is no anti-overwrite guard (accepted
+// trade-off for a trusted ~12-person guild).
 //
 // bindCharacter takes a *sql.Tx (not *sql.DB) on purpose: 11-05 composes the
 // first-sighting bind and the atomic ReplaceInventory/ReplaceSpellbook in ONE
-// transaction, so a rejected upload rolls back cleanly and a successful one
-// commits the bind + the rows together.
+// transaction, so the cross-owner audit row and the replaced rows commit together
+// and a real DB failure rolls back cleanly.
 
 import (
 	"context"
@@ -24,30 +32,28 @@ import (
 	"log/slog"
 )
 
-// ErrCharOwnedByAnother is returned by bindCharacter when a character name is
-// already bound to a DIFFERENT owner than the uploading token's. The ingest
-// handler (11-05) maps it to HTTP 409 with a clear message.
-var ErrCharOwnedByAnother = errors.New("character owned by another owner")
-
 // BindCharacter is the exported entry point to the first-sighting owner bind,
 // called by the ingest handler (11-05, a different package) INSIDE the same
 // *sql.Tx as the atomic replace. It delegates UNCHANGED to bindCharacter (the
 // package-internal implementation that 11-03's binding_test.go covers directly),
-// so there is one tested bind/cross-owner-reject SQL path. It returns the
-// resolved charID on a first-sighting INSERT or same-owner match, and
-// ErrCharOwnedByAnother (after writing the audit_log row) on a cross-owner
-// attempt — which the handler maps to 409, rolling the tx back.
+// so there is one tested bind SQL path. It returns the resolved charID on a
+// first-sighting INSERT, a same-owner match, OR a cross-owner write (which the
+// handler then replaces for; owner_id is left untouched and a cross_owner_write
+// audit row is appended). The only non-nil error is a real DB failure.
 func BindCharacter(ctx context.Context, tx *sql.Tx, charName string, tokenOwnerID int64) (charID int64, err error) {
 	return bindCharacter(ctx, tx, charName, tokenOwnerID)
 }
 
 // bindCharacter resolves the character named charName for the uploading token's
-// owner (tokenOwnerID), enforcing the first-sighting single-owner policy:
+// owner (tokenOwnerID). Cross-owner uploads are ALLOWED (shared chars/banks,
+// 260621-u6j) — the only gate is the bearer guard upstream in the handler:
 //
 //   - name unseen   → INSERT a character bound to tokenOwnerID; return the new id.
 //   - name owned by tokenOwnerID → return the existing id (no insert, no error).
-//   - name owned by a DIFFERENT owner → write an audit_log row and return
-//     ErrCharOwnedByAnother (owner_id is NOT overwritten).
+//   - name owned by a DIFFERENT owner → append a `cross_owner_write` audit row and
+//     return the EXISTING id (owner_id is NOT overwritten — the first uploader
+//     stays as a non-binding steward record). The handler then replaces the rows
+//     for this charID in the same tx.
 //
 // Lookup is a single indexed SELECT by NAME (the name column is UNIQUE COLLATE
 // NOCASE, so the match is case-insensitive) — never a linear scan, never by row
@@ -70,28 +76,33 @@ func bindCharacter(ctx context.Context, tx *sql.Tx, charName string, tokenOwnerI
 		return charID, nil
 	case err != nil:
 		return 0, fmt.Errorf("lookup character %q: %w", charName, err)
-	case ownerID != tokenOwnerID: // CROSS-OWNER → reject + audit (v2 tightens v1's warn-and-allow)
-		if aerr := auditCrossOwnerReject(ctx, tx, charName, tokenOwnerID, ownerID); aerr != nil {
+	case ownerID != tokenOwnerID: // CROSS-OWNER → allow + audit (shared chars/banks, 260621-u6j)
+		if aerr := auditCrossOwnerWrite(ctx, tx, charName, tokenOwnerID, ownerID); aerr != nil {
 			return 0, aerr
 		}
 		// Never log the bearer token (V7); char name + owner ids only.
-		slog.Warn("cross-owner upload rejected",
+		slog.Info("cross-owner upload allowed (shared character)",
 			"char_name", charName, "attempting_owner_id", tokenOwnerID, "current_owner_id", ownerID)
-		return 0, ErrCharOwnedByAnother // handler (11-05) maps to 409 + clear message
+		// owner_id is NOT overwritten: the first uploader stays as a non-binding
+		// steward record. Return the existing charID so the handler replaces its
+		// rows in the same tx.
+		return charID, nil
 	default: // owner matches → proceed with the existing charID
 		return charID, nil
 	}
 }
 
-// auditCrossOwnerReject appends a durable record of a cross-owner upload attempt
-// to audit_log (append-only). Written inside the same transaction as the bind so
-// it commits with the rejection record even though the ingest is refused.
-func auditCrossOwnerReject(ctx context.Context, tx *sql.Tx, charName string, attemptingOwner, currentOwner int64) error {
+// auditCrossOwnerWrite appends a durable record of a cross-owner upload to
+// audit_log (append-only). Written inside the same transaction as the bind so it
+// commits together with the replaced rows. The event string is `cross_owner_write`
+// (renamed from the pre-260621-u6j `cross_owner_reject` — same columns); the write
+// is ALLOWED now, the row is purely a traceability marker.
+func auditCrossOwnerWrite(ctx context.Context, tx *sql.Tx, charName string, attemptingOwner, currentOwner int64) error {
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO audit_log (event, char_name, attempting_owner_id, current_owner_id)
-		 VALUES ('cross_owner_reject', ?, ?, ?)`,
+		 VALUES ('cross_owner_write', ?, ?, ?)`,
 		charName, attemptingOwner, currentOwner); err != nil {
-		return fmt.Errorf("write cross_owner_reject audit row (char=%q): %w", charName, err)
+		return fmt.Errorf("write cross_owner_write audit row (char=%q): %w", charName, err)
 	}
 	return nil
 }

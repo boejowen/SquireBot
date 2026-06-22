@@ -1,19 +1,21 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.4
-milestone_name: — Web UI Revamp
-status: executing
-last_updated: "2026-06-21T23:32:26.476Z"
-last_activity: 2026-06-21
+milestone: v2.5
+milestone_name: — Ownership Cleanup
+status: planning
+last_updated: "2026-06-22T00:00:00.000Z"
+last_activity: 2026-06-22
 progress:
-  total_phases: 13
-  completed_phases: 11
-  total_plans: 34
-  completed_plans: 34
-  percent: 100
+  total_phases: 2
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
-> **v2.4 "Web UI Revamp — 5-Tab Restructure" — ROADMAP CREATED 2026-06-17 (6 phases, 29–34; 27/27 requirements mapped).** Reorganize squirebot.quest around five tabs — **Characters · Inventory · Banks · Wishlist · Settings** (source spec: `Future Features.txt` on the user's desktop). **Spans backend/data architecture + web** (NOT web-only — corrected 2026-06-17 after reading the spec); reworks the just-shipped wantlist into a per-character per-slot wishlist; watcher untouched. **Consolidated-views lock RELAXED** — per-character master-detail drill-down now allowed (CLAUDE.md updated). **Approach = sketch-first:** currently mocking the 5-tab structure + in-game inventory window + per-slot wishlist via `/gsd-sketch` → user picks → requirements → roadmap. Backend/data work this implies: inventory `Location`→slot-layout parsing + container nesting, bank valuation aggregation, per-slot wishlist model + wiki-section suggestion engine. Phases continue from v2.3 (last = 28) → v2.4 starts at **29**.
+> **v2.5 "Ownership Cleanup" — MILESTONE OPENED 2026-06-22 (Phases 35–36; OWN-01..04).** Promotes backlog 999.35 (owner-less / eviction-safe guild banks & bots → Phase 35: OWN-01/02/04) + 999.36 (shared-character-safe eviction → Phase 36: OWN-03), both deferred from quick `260621-u6j` (which dropped the single-owner write gate). Backend-only; ~1 schema migration (`character.owner_id` is NOT NULL today); watcher untouched → NO `v*` tag (consistent with v2.3/v2.4); research SKIPPED (well-understood internal mechanics). Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (OWN-01..04) + ROADMAP.md (phases 35–36). **Next: `/gsd-plan-phase 35`.**
+>
+> _Prior milestone:_ **v2.4 "Web UI Revamp — 5-Tab Restructure" — ROADMAP CREATED 2026-06-17 (6 phases, 29–34; 27/27 requirements mapped).** Reorganize squirebot.quest around five tabs — **Characters · Inventory · Banks · Wishlist · Settings** (source spec: `Future Features.txt` on the user's desktop). **Spans backend/data architecture + web** (NOT web-only — corrected 2026-06-17 after reading the spec); reworks the just-shipped wantlist into a per-character per-slot wishlist; watcher untouched. **Consolidated-views lock RELAXED** — per-character master-detail drill-down now allowed (CLAUDE.md updated). **Approach = sketch-first:** currently mocking the 5-tab structure + in-game inventory window + per-slot wishlist via `/gsd-sketch` → user picks → requirements → roadmap. Backend/data work this implies: inventory `Location`→slot-layout parsing + container nesting, bank valuation aggregation, per-slot wishlist model + wiki-section suggestion engine. Phases continue from v2.3 (last = 28) → v2.4 starts at **29**.
 >
 > _Prior:_ **v2.3 SHIPPED + ARCHIVED 2026-06-09** (P26→28 live, schema v10, audit PASSED 14/14; no git tag — watcher unchanged; archived `.planning/milestones/v2.3-*`). Quick task 260610-fm5 UI streamline fully closed 2026-06-17 (schema v11; browser-smoke PASS all 6). Carry-forwards: 999.33 fixed+deployed, 999.34 cosmetics backlogged. **v2.2 Track 2** (Discord pinger WTS/raid, P22-23) still parked on the Raid Alliance invites — independent.
 
@@ -27,15 +29,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** Phase 34 — wishlist-rework-per-character-per-slot-upgrades
+- **Current focus:** Milestone v2.5 — Phase 35 (owner-less guild banks & bots)
 - **Mode:** yolo
 - **Granularity:** coarse
 
 ## Current Position
 
-Phase: 34
+Phase: 35 (milestone v2.5 — Ownership Cleanup)
 Plan: Not started
-Next: Phase 34 plan 34-04 (DEPLOY the web build to squirebot.quest + run the 14-point browser-smoke checklist across the 5 EQ themes — node vitest is DOM-blind: the list/search/accordion/target-row/ping/suggestion/remove/examine/auto-hide-when-held DOM render, the WISH-07 cross-char item search [smoke #10: an item on a DIFFERENT char's wishlist than the selected one], the server-truth writes, the owner-scoped read-only render). After 34-04, v2.4 is feature-complete → `/gsd-audit-milestone` → `/gsd-complete-milestone`. → `/gsd-execute-phase 34` (plan 34-04) or `/gsd-plan-phase 34` if 34-04 is not yet written.
+Next: Plan Phase 35 — owner-less guild banks & bots (OWN-01/02/04; reserved "guild" sentinel owner OR nullable owner_id + migration; decouple the designate flow from ownership) → `/gsd-plan-phase 35`. Then Phase 36 — shared-character-safe eviction (OWN-03). (v2.4 SHIPPED + closed 2026-06-21; the long 34-xx narrative below is historical.)
 
 **34-03 EXECUTED 2026-06-19** (commits `ab4a2af` + `18fdd61` + `0e46d65`, web-only, all on master): the SvelteKit Wishlist tab — the user-facing surface that closes WISH-01..07. **api.ts:** the 4 `WishlistView`/`WishlistSlot`/`WishlistTarget`/`WishlistSuggestion` interfaces MIRROR `compute/types.go` field-for-field (snake_case; `price: number | null`, `item_id: number | null`) + `fetchWishlist` (OBJECT generic, char `encodeURIComponent`'d) / `addWishlist` (body carries NO owner — session-derived) / `removeWishlist` / `setWishlistPing`; `searchCatalog` REUSED unchanged for the typed-entry add. **Pure node-tested `web/src/lib/wishlist/wishlist.ts`:** `wishlistBandOf` (two non-bank bands) + `wishlistRoster` (drops every `is_bank_toon || is_guild_bot` row EVEN when `is_mine`, then mine→guild A-Z, a NEW array — WISH-01) + `filterWishlistRoster` (banks/bots-excluded name filter preserving order) + `searchWishlistItems` (the WISH-07 cross-wishlist group-by-item-name over the WHOLE passed-in corpus, listing each (char, slot) — NEVER scopes or fetches; the caller owns the corpus). 15 node cases, RED-verified (module-missing) before GREEN. **`/wishlist/+page.svelte` REWRITTEN** (replaces the P30 WantlistPanel placeholder): LEFT = the scoped search + the two-band viewer-first char list; on a query the left column toggles to two groups — CHARACTERS (`filterWishlistRoster`) + WISHLIST ITEMS (`searchWishlistItems` over the FULL **lazily-fetched + cached** corpus of EVERY non-bank/bot char's wishlist — `ensureCorpus()` fetches each not-yet-cached char on the first query [a 401/403 → authGuard; a per-char error → skip], with a "Searching all wishlists…" affordance; a selected char also seeds the cache from its already-fetched view; NO scope-to-loaded escape hatch). RIGHT = the detail header + a single pinned reused `<ExaminePanel slot={examineSlot} charLastSeen="">` (the asSlot seam, the `.examine-wrap` static override) + the D-01 "No targets yet" block + the 21-slot **server-ordered** accordion: each slot = an `aria-expanded` collapsible header (default-open iff ≥1 target) + the EQUIPPED line (examine-able) + the target rows (name + `{price}pp` + Wiki↗ + `LastSyncedCell` last-listed + "Raid" tag + ping `Toggle` + "Seen in EC" `pinged_hit` badge + `--destructive` Remove→`ConfirmDialog`) + (OWNED chars only) the **cloned** WantAddForm debounce/seq-guard typed-entry add (page-level `addSlot`/`addQuery` state — cloned NOT imported, so deleting WantlistPanel doesn't break the add) + the suggestion picker (name + `{price}pp`/"Not for sale" + Wiki + last-listed + "Raid" tag + Add). **Server-truth (T-34-15):** every add/remove/ping awaits the POST then `await loadWishlist(selected)` — NEVER optimistic; the corpus cache refreshes from the re-fetched view. A NON-owned char's wishlist renders READ-ONLY (`ownsSelected = selectedChar.is_mine` — presentation only; the server re-authorizes, T-34-14). The add body's REQUIRED `character_id` (RosterCharacter has no id) maps via `fetchMyCharacters()` name→id (loaded in the onMount `Promise.all`). KEEPS the P30 Notifications region (NotificationPrefsPanel + NotificationInbox, NAV-04) below the two-pane; does NOT import/mutate the badge store. Names via plain `{}`; **NO new `{@html}` sink** (grep: the only `@html` token is the doc-comment naming the rule — the reused ExaminePanel's escaped `composeItemNote` is the single sink); `?c=` `encodeURIComponent`'d. **Deletions (Pitfall 7, narrow):** `git rm` `WantlistPanel.svelte` (unmounted after the rewrite) + `groupByChar.ts`/`groupByChar.test.ts` (only importer was WantlistPanel); **KEPT** `priority.ts` (priorityRank→columns.ts; noteRuneCount→WantAddForm) + `holders.ts` (type Holder→columns.ts + InGuildCell) — deleting them breaks check+build; the api.ts wantlist wrappers LEFT in place (searchCatalog reused; fetchGuildWants/GuildWantRow/WantlistRow consumed by columns.ts/guild-views); the `/wantlist`→`/wishlist` 308 redirect confirmed intact (verify-only). All 4 STRIDE mitigations (T-34-13..16) verified. Web gates GREEN: `npm run check` **0/0** (508 files, down 3), `npm test` **380 passed (29 files)** incl. the 15 new wishlist cases, `npm run build` ok (adapter-static); grep-clean (no WantlistPanel/groupByChar import). 0 deviations (plan executed exactly as written). REQUIREMENTS WISH-01..07 marked code-shipped (the visible tab; the live deploy is 34-04). **The list/search/accordion/writes/examine/auto-hide DOM is NOT browser-verified (node vitest is DOM-blind) — deferred to 34-04's deploy-then-browser-smoke across the 5 EQ themes.** NO backend/watcher change; NO new migration; NO deploy. See `34-03-SUMMARY.md`.
 

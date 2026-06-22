@@ -8,6 +8,16 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.** Inventory and spell data lands in the sheet automatically; progression, gaps, and prices are computed for them. If everything else fails, this must work.
 
+## Current Milestone: v2.5 — Ownership Cleanup
+
+**Goal:** Reconcile character-ownership semantics for a guild that shares P99 logins — make guild banks/bots owner-less, and stop eviction from over-deleting shared characters.
+
+**Target features:**
+- Owner-less / eviction-safe guild banks & bots — designating a bank/bot no longer requires "claiming" it, and a guild bank survives any individual member's eviction (999.35 → OWN-01/02/04).
+- Shared-character-safe eviction — evicting a guildie removes only their own characters, not shared characters others play (999.36 → OWN-03).
+
+**Key context:** Backend-only follow-up to quick `260621-u6j` (which dropped the single-owner write gate so any guildie can upload any character). Likely one schema migration (`character.owner_id` is `NOT NULL REFERENCES owner(id)` today). Watcher untouched → no `v*` tag (consistent with v2.3/v2.4). Phases continue from v2.4 → v2.5 starts at **Phase 35** (35 = owner-less banks/bots, 36 = shared-safe eviction). See `.planning/REQUIREMENTS.md`.
+
 ## Shipped: v2.4 — Web UI Revamp (5-Tab Restructure) (2026-06-21)
 
 **Goal (MET):** Reorganized squirebot.quest around five top-level tabs — **Characters · Inventory · Banks · Wishlist · Settings** — each answering one user question, backed by the new data architecture this required. All 6 phases (29–34, 34 plans, 27 requirements) shipped + deployed live + browser-smoke approved across 5 themes; schema v14 (migrations 00012 item_icon / 00013 item_statsblock / 00014 wishlist). Milestone audit PASSED 2026-06-21 (27/27 requirements · 6/6 phases · integration wired · 4/4 E2E flows; the one finding — a stale apex redirect — fixed during the audit). Watcher untouched throughout; NO `v*` tag (would fire the watcher release CI needlessly). Archive: `milestones/v2.4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. Open follow-up: dead wantlist code (api.ts orphaned wrappers + webadmin/wantlist.go twin) — a `/gsd-quick` cleanup.
@@ -322,4 +332,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-21 — milestone **v2.4 "Web UI Revamp"** SHIPPED + archived (6 phases 29–34, 34 plans, 27 reqs; the 5-tab restructure live at squirebot.quest; schema v14; audit PASSED). Prior: v2.3 (Phases 26–28) SHIPPED 2026-06-09 (schema v10). v2.2 Track-2 (Discord pinger WTS/raid monitors, Phases 22–23) still parked on the Raid Alliance bot invites. Next milestone undefined — `/gsd-new-milestone`.*
+*Last updated: 2026-06-22 — milestone **v2.5 "Ownership Cleanup"** opened (Phases 35–36; OWN-01..04; promotes backlog 999.35/36; backend-only, no `v*` tag). Prior: milestone **v2.4 "Web UI Revamp"** SHIPPED + archived (6 phases 29–34, 34 plans, 27 reqs; the 5-tab restructure live at squirebot.quest; schema v14; audit PASSED). Prior: v2.3 (Phases 26–28) SHIPPED 2026-06-09 (schema v10). v2.2 Track-2 (Discord pinger WTS/raid monitors, Phases 22–23) still parked on the Raid Alliance bot invites. Next milestone undefined — `/gsd-new-milestone`.*

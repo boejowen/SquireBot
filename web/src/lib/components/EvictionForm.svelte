@@ -33,7 +33,7 @@
 		type EvictionPreview,
 		type RestorableOwner
 	} from '$lib/api';
-	import { graceDate, restoreResultMessage } from '$lib/eviction';
+	import { canEvictPreview, evictPreviewSummary, graceDate, restoreResultMessage } from '$lib/eviction';
 
 	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
 
@@ -66,10 +66,14 @@
 	let restoreErrorMsg = $state('');
 
 	let selectedOwner = $derived(owners.find((o) => String(o.owner_id) === selectedId) ?? null);
-	let cascadeEmpty = $derived(!!preview && preview.characters.length === 0);
-	// Evict is enabled only with a non-empty preview, not floor-blocked, idle.
+	// The pure preview-shape classification (D-06) — drives both the gate and the
+	// render branch so the two can never drift. 'cascade' / 'code-only' / 'empty'.
+	let previewSummary = $derived(preview ? evictPreviewSummary(preview) : null);
+	// Evict is enabled when the preview has something to act on (a cascade OR an
+	// all-shared code-only revoke — D-06), and not floor-blocked / mid-evict. A
+	// genuine zero-live-chars owner (canEvictPreview === false) stays disabled.
 	let canEvict = $derived(
-		!!selectedOwner && !!preview && !cascadeEmpty && !floorBlocked && !evicting
+		!!selectedOwner && !!preview && canEvictPreview(preview) && !floorBlocked && !evicting
 	);
 
 	// graceDate (the human grace-deadline string) is the pure $lib/eviction helper
@@ -232,17 +236,22 @@
 
 		{#if previewing}
 			<p class="hint" aria-live="polite">Loading preview…</p>
-		{:else if preview}
+		{:else if preview && previewSummary}
 			<div class="preview">
-				{#if cascadeEmpty}
-					<p class="cascade-empty">No characters found for this guildie.</p>
-				{:else}
+				{#if previewSummary.kind === 'cascade'}
 					<p class="preview-heading">Characters affected ({preview.characters.length}):</p>
 					<ul class="char-list">
 						{#each preview.characters as c (c)}
 							<li class="char">{c}</li>
 						{/each}
 					</ul>
+				{:else}
+					<!-- 'code-only' (all-shared owner: nothing removed but the code is still
+					     revoked — the button stays ENABLED) and 'empty' (zero live chars —
+					     the button stays DISABLED) both render the helper's plain-text
+					     message via auto-escaping {} (never the raw-HTML directive, T-15-28).
+					     The button state is the only difference and canEvict already reflects it. -->
+					<p class="cascade-empty">{previewSummary.message}</p>
 				{/if}
 				<p class="grace">Grace expires: {graceDate(preview.grace_until)} (30 days from today).</p>
 				<div class="consequence" role="note">

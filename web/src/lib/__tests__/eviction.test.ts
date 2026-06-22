@@ -176,4 +176,13 @@ describe('EvictionForm Restore section is wired (source inspection, close G-1)',
 		// No raw-HTML directive anywhere in the form — every user/Discord string is {}.
 		expect(EVICTION_FORM_SOURCE).not.toContain('{@html');
 	});
+
+	it('gates Evict via the pure canEvictPreview/evictPreviewSummary helpers, not an inline re-derived boolean (D-06)', () => {
+		// The all-shared-owner gate lives in the pure node-tested helpers; the form is
+		// a thin renderer over them (not a re-implemented gate that could drift).
+		expect(EVICTION_FORM_SOURCE).toContain('canEvictPreview');
+		expect(EVICTION_FORM_SOURCE).toContain('evictPreviewSummary');
+		// The standalone cascadeEmpty derivation is replaced by the helper-backed gate.
+		expect(EVICTION_FORM_SOURCE).not.toContain('cascadeEmpty');
+	});
 });

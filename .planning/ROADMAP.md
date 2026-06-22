@@ -28,8 +28,8 @@ Promotes backlog 999.35 + 999.36 (deferred from quick `260621-u6j`). Backend-onl
 - [ ] **Phase 36: Shared-character-safe eviction** — OWN-03 (depends on Phase 35)
   - **Goal:** eviction removes only the evicted member's own characters — never shared characters or guild banks/bots.
   - **Success criteria:** (1) evicting a member preserves shared characters other guildies play; (2) guild banks/bots are never removed by an eviction; (3) the officer eviction-preview reflects the narrowed set; (4) `go test ./...` green.
-  - **Plans:** 2 plans (backend + web; the web change depends on the backend preview contract — wave 2)
-    - [ ] 36-01-PLAN.md (wave 1) — narrow EvictOwnerTx cascade + PreviewEviction via a single shared `cross_owner_write` predicate (shared chars survive; preview parity; surviving-shared owner repoint via a drift-locked subquery const) + a new additive `preserved_shared_count` preview field — OWN-03; no migration (schema v15); watcher untouched
+  - **Plans:** 2 plans (backend + web; the web change depends on the backend preview contract — wave 2) — **1/2 complete**
+    - [x] 36-01-PLAN.md (wave 1) ✅ EXECUTED 2026-06-22 (`652f6d2` + `6969080` + `a1d0861`, backend-only) — narrowed EvictOwnerTx cascade + PreviewEviction via the single shared `sharedCharPredicate` `cross_owner_write` const (shared chars survive; preview==cascade parity; surviving-shared repoint via the drift-locked `recentOtherSharerSubquery` const) + the additive `preserved_shared_count` preview field + `CountPreservedShared` — OWN-03; no migration (schema v15); watcher + web untouched; no `v*` tag. Gates green (build/vet/full backendsrv test suite). See `36-01-SUMMARY.md`.
     - [ ] 36-02-PLAN.md (wave 2, depends_on 36-01) — mirror `preserved_shared_count` in api.ts + keep an all-shared owner evictable in EvictionForm.svelte (code-only revoke framing) via pure node-tested helpers + deploy (web atomic-swap) + browser-smoke — OWN-03; no migration; no `v*` tag; watcher untouched
 
 <details>
@@ -395,7 +395,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | v2.2 | 6 | 13/TBD | 🔄 **Track 1 SHIPPED LIVE** (Phases 19–21 deployed 2026-06-06 + Phase 24 quality done); Track 2 (22–23) invite-gated, parked | — |
 | v2.3 | 3 | 7/7 | ✅ Feature-complete — all 3 phases SHIPPED + deployed live (schema v10); pending milestone audit/close | 2026-06-09 |
 | v2.4 | 6 | 6/6 phases | ✅ **Feature-complete** — all 6 phases (29 Data Foundation · 30 App Shell · 31 Characters+Window · 32 Inventory · 33 Banks · 34 Wishlist) SHIPPED + DEPLOYED LIVE to squirebot.quest + browser-smoke PASS across 5 themes; schema v14 (migrations 00012/00013/00014). Each phase: verifier PASSED + code-review clean/fixed. Pending: milestone audit/close. | 2026-06-21 |
-| v2.5 | 2 | 1/TBD | 🔄 **In progress** — Phase 35 (owner-less guild banks/bots, OWN-01/02/04) COMPLETE (schema v15 via migration 00015; backend-only, no `v*` tag); Phase 36 (shared-character-safe eviction, OWN-03) next | — |
+| v2.5 | 2 | 2/3 plans | 🔄 **In progress** — Phase 35 (owner-less guild banks/bots, OWN-01/02/04) COMPLETE (schema v15 via migration 00015); Phase 36 (shared-character-safe eviction, OWN-03) EXECUTING — 36-01 backend ✅ (cascade narrowed; `preserved_shared_count` contract shipped; no migration); 36-02 web next (then milestone close). Backend-only, no `v*` tag | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|

@@ -30,6 +30,6 @@
 | OWN-01 | 35 | Complete (2026-06-22) |
 | OWN-02 | 35 | Complete (2026-06-22) |
 | OWN-04 | 35 | Complete (2026-06-22) |
-| OWN-03 | 36 | Pending |
+| OWN-03 | 36 | In progress — backend (36-01) ✅ shipped 2026-06-22 (cascade narrowed; `preserved_shared_count` contract); web (36-02) + deploy remaining |
 
 *Created 2026-06-22 for milestone v2.5 (promotes backlog 999.35 / 999.36).*

@@ -133,13 +133,28 @@ func RunApp(ctx context.Context, cfg *config.Config, baseURL, version string, t 
 //   - a code is present but no EQ folder configured → just pickAndSaveEQFolder.
 //   - already fully configured → nil (nothing to do).
 //
+// force (the `--reconfigure` path, item #2 of quick 260621-td4) overrides the
+// "already configured → no-op" behavior: when true RunSetup ALWAYS re-runs
+// onboarding (re-prompt + re-validate + re-store the code) AND re-picks the EQ
+// folder, regardless of existing config — so a guildie can re-point the folder
+// or re-enter a code without manually moving config.json aside. runOnboarding
+// only prompts for the folder when none is configured, so on a forced run we
+// re-pick it explicitly afterward.
+//
 // On Linux the prompts are CLI stdin (onboarding.dialog_other.go); there is NO
 // browser/loopback surface anywhere in this path (carried HARD CONSTRAINT).
-func RunSetup(ctx context.Context, cfg *config.Config, baseURL, version string, t *tray.Controller) error {
+func RunSetup(ctx context.Context, cfg *config.Config, baseURL, version string, t *tray.Controller, force bool) error {
 	code, err := credstore.Read()
-	if err != nil || code == "" {
-		_, oErr := runOnboarding(ctx, cfg, baseURL, version, t)
-		return oErr
+	if force || err != nil || code == "" {
+		if _, oErr := runOnboarding(ctx, cfg, baseURL, version, t); oErr != nil {
+			return oErr
+		}
+		// A forced reconfigure also re-points the EQ folder — runOnboarding only
+		// prompts for it when none is configured, so do it explicitly here.
+		if force {
+			return pickAndSaveEQFolder(ctx, cfg, t)
+		}
+		return nil
 	}
 	if !hasEQFolder(cfg) {
 		return pickAndSaveEQFolder(ctx, cfg, t)

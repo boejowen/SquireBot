@@ -154,10 +154,12 @@ func main() {
 	// Phase 25 / LNX-04 (D-02): headless Linux CLI subcommands. These are
 	// dispatched AFTER logging.Setup + config.Load (they need config) and run
 	// synchronously to completion + os.Exit — they NEVER enter the watcher loop.
-	// SCOPE: --setup/--status are LINUX-path deliverables this phase; on Windows
-	// onboarding stays wizard/tray-driven (a console --setup would pop the Win32
-	// dialog — out of scope/untested here). The tray controller used for --setup
-	// is the build-tagged no-op on Linux (tray_other.go).
+	// SCOPE: --setup/--reconfigure/--status are LINUX-path deliverables; on
+	// Windows onboarding stays wizard/tray-driven (a console --setup would pop the
+	// Win32 dialog — out of scope/untested here). --reconfigure (quick 260621-td4)
+	// is --setup with force=true: it always re-onboards even when already
+	// configured. The tray controller used for --setup is the build-tagged no-op
+	// on Linux (tray_other.go).
 	if len(os.Args) >= 2 && os.Args[1] == "--status" {
 		// Phase 25 / CR-01 (LNX-05, D-06): the exit code is the machine-readable
 		// half of --status. install.sh keys its first-run onboarding branch on
@@ -171,7 +173,14 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	if len(os.Args) >= 2 && os.Args[1] == "--setup" {
+	if len(os.Args) >= 2 && (os.Args[1] == "--setup" || os.Args[1] == "--reconfigure") {
+		// --reconfigure (quick 260621-td4 item #2) forces a full re-onboard even
+		// when already configured: plain --setup is a no-op once a guild code AND
+		// an EQ folder are set, so a guildie could not re-point the folder or
+		// re-enter a code without manually moving config.json aside. force=true
+		// threads through app.RunSetup to always re-prompt + re-pick.
+		force := os.Args[1] == "--reconfigure"
+
 		// WR-05: install a SIGINT/SIGTERM → cancel handler for the setup path too
 		// (mirrors run_other.go's runMainLoop). The stdin prompts themselves are
 		// inherently blocking reads, but cancelling setupCtx unwinds any hung
@@ -182,8 +191,10 @@ func main() {
 		defer setupCancel()
 		setupTray := tray.NewController(tray.Config{LogDir: logDir})
 		// Best-effort EQ-folder auto-discovery (WINE scan on Linux) to pre-fill
-		// config so onboarding can skip the folder prompt when it succeeds.
-		if !hasAnyEQFolder(cfg) {
+		// config so onboarding can skip the folder prompt when it succeeds. SKIP
+		// it on a forced reconfigure so the user re-points the folder explicitly
+		// (auto-discovery would otherwise mask a deliberate re-point).
+		if !force && !hasAnyEQFolder(cfg) {
 			if found, derr := eqfind.Discover(); derr == nil && found != "" {
 				cfg.EQFolder = found
 				cfg.EQFolders = []string{found}
@@ -194,11 +205,15 @@ func main() {
 				}
 			}
 		}
-		if err := app.RunSetup(setupCtx, cfg, baseURL, Version, setupTray); err != nil {
+		if err := app.RunSetup(setupCtx, cfg, baseURL, Version, setupTray, force); err != nil {
 			fmt.Fprintf(os.Stderr, "setup did not complete: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Fprintln(os.Stderr, "SquireBot setup complete.")
+		if force {
+			fmt.Fprintln(os.Stderr, "SquireBot reconfigured.")
+		} else {
+			fmt.Fprintln(os.Stderr, "SquireBot setup complete.")
+		}
 		os.Exit(0)
 	}
 

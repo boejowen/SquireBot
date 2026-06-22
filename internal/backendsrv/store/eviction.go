@@ -32,12 +32,20 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
 // EvictionGraceSeconds is the post-eviction grace window before hard archive: 30
 // days (v1's GRACE_MS = 30*24*60*60*1000 ms). Epoch seconds here.
 const EvictionGraceSeconds int64 = 30 * 24 * 60 * 60 // 2592000
+
+// ErrCannotEvictSentinel is returned by EvictOwnerTx / RestoreOwnerTx when the
+// target is the guild sentinel owner (GuildSentinelOwnerID). OWN-02: the sentinel
+// holds owner-less banks/bots and is NEVER evictable; the destructive WRITE path
+// guards against it (not just the picker list) because the endpoint accepts an
+// untrusted owner_id. The webadmin handler maps this to a clean refusal.
+var ErrCannotEvictSentinel = errors.New("cannot_evict_sentinel")
 
 // EvictableOwner is one row of the eviction picker (ListEvictableOwners): an
 // owner with at least one live (is_removed=0) character. Label is owner.label —
@@ -180,6 +188,11 @@ func PreviewEviction(ctx context.Context, db *sql.DB, ownerID int64) ([]string, 
 // Returns the count of characters flipped and the graceUntil stamp so the 15-03
 // handler can echo them + write the audit_log row in the same tx.
 func EvictOwnerTx(ctx context.Context, tx *sql.Tx, ownerID, now int64) (removedCount int, graceUntil int64, err error) {
+	// OWN-02: the guild sentinel holds owner-less banks/bots and is NEVER evictable;
+	// guard the WRITE path, not just the picker list (the endpoint accepts an untrusted owner_id).
+	if ownerID == GuildSentinelOwnerID {
+		return 0, 0, ErrCannotEvictSentinel
+	}
 	graceUntil = now + EvictionGraceSeconds
 
 	res, err := tx.ExecContext(ctx,
@@ -214,6 +227,11 @@ func EvictOwnerTx(ctx context.Context, tx *sql.Tx, ownerID, now int64) (removedC
 // removed. Re-minting a guild code is a separate CLI action (not done here).
 // Returns the count of characters restored.
 func RestoreOwnerTx(ctx context.Context, tx *sql.Tx, ownerID, now int64) (restoredCount int, err error) {
+	// OWN-02: the guild sentinel holds owner-less banks/bots and is NEVER evictable;
+	// guard the WRITE path, not just the picker list (the endpoint accepts an untrusted owner_id).
+	if ownerID == GuildSentinelOwnerID {
+		return 0, ErrCannotEvictSentinel
+	}
 	res, err := tx.ExecContext(ctx,
 		`UPDATE character SET is_removed = 0, grace_until = NULL
 		  WHERE owner_id = ? AND is_removed = 1 AND archived_at IS NULL`,

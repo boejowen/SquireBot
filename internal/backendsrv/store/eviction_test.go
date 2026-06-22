@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 )
 
@@ -475,5 +476,85 @@ func TestEvictOwnerTx_GuildBankSurvivesEviction(t *testing.T) {
 	}
 	if graceBank.Valid {
 		t.Errorf("guild bank grace_until = %v, want NULL (untouched by the eviction)", graceBank)
+	}
+}
+
+// TestEvictOwnerTx_RefusesSentinel is the CR-01 fix proof: targeting the guild
+// sentinel owner DIRECTLY (the directly-POST-able owner_id=1000000 path) is refused
+// at the destructive WRITE boundary with ErrCannotEvictSentinel — the picker-list
+// exclusion alone was bypassable. The sentinel-owned bank must be left untouched
+// (is_removed=0, grace NULL) and NO characters flipped.
+func TestEvictOwnerTx_RefusesSentinel(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	// A live sentinel-owned guild bank (the sentinel owner row exists via 00015).
+	bankChar := insertChar(t, ctx, db, GuildSentinelOwnerID, "Guildbank", true /*isBank*/)
+
+	var removedCount int
+	var graceUntil int64
+	err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		removedCount, graceUntil, e = EvictOwnerTx(ctx, tx, GuildSentinelOwnerID, now)
+		return e
+	})
+	if !errors.Is(err, ErrCannotEvictSentinel) {
+		t.Fatalf("EvictOwnerTx(sentinel): err = %v, want ErrCannotEvictSentinel (OWN-02 write-path guard)", err)
+	}
+	if removedCount != 0 || graceUntil != 0 {
+		t.Errorf("EvictOwnerTx(sentinel) returned removedCount=%d graceUntil=%d, want 0/0 (no write)", removedCount, graceUntil)
+	}
+
+	// The bank is untouched: still live, no grace stamp.
+	isRemoved, grace, _ := charState(t, ctx, db, bankChar)
+	if isRemoved != 0 {
+		t.Errorf("guild bank is_removed = %d, want 0 (sentinel evict refused — bank survives)", isRemoved)
+	}
+	if grace.Valid {
+		t.Errorf("guild bank grace_until = %v, want NULL (sentinel evict refused — untouched)", grace)
+	}
+}
+
+// TestRestoreOwnerTx_RefusesSentinel is the symmetric CR-01 fix proof for the restore
+// write path: targeting the sentinel owner directly is refused with
+// ErrCannotEvictSentinel (return 0 restored, no write). Even a sentinel-owned char
+// forced into the in-grace state (which should never happen via the app) is NOT
+// touched by a sentinel-targeted restore.
+func TestRestoreOwnerTx_RefusesSentinel(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	// Force a sentinel-owned char into the in-grace state directly via SQL (it should
+	// never reach this state through the app; the guard must still refuse the restore).
+	sentChar := insertChar(t, ctx, db, GuildSentinelOwnerID, "Guildbank", true)
+	if _, err := db.ExecContext(ctx,
+		`UPDATE character SET is_removed = 1, grace_until = ?, archived_at = NULL WHERE id = ?`,
+		now+EvictionGraceSeconds, sentChar); err != nil {
+		t.Fatalf("force sentinel char in-grace: %v", err)
+	}
+
+	var restored int
+	err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		var e error
+		restored, e = RestoreOwnerTx(ctx, tx, GuildSentinelOwnerID, now+100)
+		return e
+	})
+	if !errors.Is(err, ErrCannotEvictSentinel) {
+		t.Fatalf("RestoreOwnerTx(sentinel): err = %v, want ErrCannotEvictSentinel (OWN-02 write-path guard)", err)
+	}
+	if restored != 0 {
+		t.Errorf("RestoreOwnerTx(sentinel) restored=%d, want 0 (no write)", restored)
+	}
+
+	// The forced-in-grace sentinel char is unchanged (still is_removed=1, grace set):
+	// the guard short-circuits before the UPDATE.
+	isRemoved, grace, _ := charState(t, ctx, db, sentChar)
+	if isRemoved != 1 {
+		t.Errorf("sentinel char is_removed = %d, want 1 (restore refused — left as-is)", isRemoved)
+	}
+	if !grace.Valid {
+		t.Errorf("sentinel char grace_until = %v, want non-NULL (restore refused — left as-is)", grace)
 	}
 }

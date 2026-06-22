@@ -316,6 +316,11 @@ func mapEvictionErr(w http.ResponseWriter, err error, op string) {
 	switch {
 	case errors.Is(err, store.ErrNotAuthorized):
 		writeJSONError(w, http.StatusForbidden, "not_authorized")
+	case errors.Is(err, store.ErrCannotEvictSentinel):
+		// OWN-02: the guild sentinel is NEVER evictable/restorable. Refuse the
+		// destructive write even when an untrusted owner_id targets it directly —
+		// 403 mirrors the not_authorized guard convention for this mapper.
+		writeJSONError(w, http.StatusForbidden, "cannot_evict_sentinel")
 	case errors.Is(err, errGraceExpired):
 		writeJSONError(w, http.StatusConflict, "grace_expired")
 	default:

@@ -358,6 +358,53 @@ func TestRestore_AfterArchive_GraceExpired(t *testing.T) {
 	}
 }
 
+// --- sentinel write-path guard (CR-01 / OWN-02) -----------------------------
+
+// TestEvict_RefusesGuildSentinel is the CR-01 end-to-end proof: an officer POSTing
+// owner_id = the guild sentinel (1000000) directly — bypassing the picker list,
+// which only excludes the sentinel from the UI — is REFUSED at the write boundary,
+// and the sentinel-owned guild bank survives (is_removed=0, no audit row). The
+// floor seeded by seedFloorAndUsers is the bootstrap officer, so the call clears
+// the in-tx officer re-check and actually reaches EvictOwnerTx where the guard lives.
+func TestEvict_RefusesGuildSentinel(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	seedFloorAndUsers(t, ctx, db, floor, nil)
+
+	// A live sentinel-owned guild bank (the sentinel owner row exists via 00015).
+	var bankChar int64
+	res, err := db.ExecContext(ctx,
+		`INSERT INTO character (owner_id, name, is_bank_toon) VALUES (?, 'Guildbank', 1)`,
+		store.GuildSentinelOwnerID)
+	if err != nil {
+		t.Fatalf("insert sentinel bank char: %v", err)
+	}
+	if bankChar, err = res.LastInsertId(); err != nil {
+		t.Fatalf("sentinel bank last insert id: %v", err)
+	}
+
+	h := withCaller(floor, EvictHandler(db))
+	rec := postJSON(t, h, `{"owner_id":`+jsonNumber(store.GuildSentinelOwnerID)+`}`)
+	if rec.Code == http.StatusOK {
+		t.Fatalf("status = 200 — the guild sentinel was evictable via a direct owner_id POST (CR-01/OWN-02 bypass); body=%s", rec.Body.String())
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (sentinel evict refused); body=%s", rec.Code, rec.Body.String())
+	}
+	if got := decodeErr(t, rec); got != "cannot_evict_sentinel" {
+		t.Errorf("error = %q, want cannot_evict_sentinel", got)
+	}
+
+	// The guild bank SURVIVES, and no eviction audit row was written (tx rolled back).
+	if charIsRemoved(t, ctx, db, bankChar) != 0 {
+		t.Errorf("guild bank is_removed = 1 — the sentinel-evict bypass removed the bank (OWN-02 failed)")
+	}
+	if c := auditCount(t, ctx, db, "eviction"); c != 0 {
+		t.Errorf("eviction audit rows = %d, want 0 (refused write writes no audit)", c)
+	}
+}
+
 // --- archive job idempotency (W-3) ------------------------------------------
 
 func TestArchiveJob_Idempotent(t *testing.T) {

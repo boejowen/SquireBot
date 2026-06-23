@@ -210,4 +210,43 @@ Known deferred items at close: deferred HUMAN-UAT smokes for P12/P14/P15 (see ST
 
 ---
 
-*This file accumulates one entry per shipped milestone. Next entry: the post-v2.3 milestone (next milestone undefined; v2.2 Track 2 — the Discord pinger WTS/raid monitors, Phases 22–23 — remains parked on the 3 Raid Alliance bot invites) — start via `/gsd-new-milestone`.*
+## v2.4 — Web UI Revamp (5-Tab Restructure)
+
+**Shipped:** 2026-06-21
+**Archive:** [`milestones/v2.4-ROADMAP.md`](milestones/v2.4-ROADMAP.md) · [`milestones/v2.4-REQUIREMENTS.md`](milestones/v2.4-REQUIREMENTS.md) · [`milestones/v2.4-MILESTONE-AUDIT.md`](milestones/v2.4-MILESTONE-AUDIT.md)
+
+> _(Bridge entry added retroactively on the v2.5 close — the v2.4 close archived the roadmap/requirements/audit but did not append here.)_
+
+**Stats:** 6 phases (29–34) · 27/27 requirements · schema **v14** (migrations `00012` item_icon / `00013` item_statsblock / `00014` wishlist) · deployed live to squirebot.quest, browser-smoke PASS × 5 themes · backend + web (watcher UNTOUCHED, **no `v*` tag**). Reorganized the site around five top tabs — **Characters · Inventory · Banks · Wishlist · Settings** — with an in-game-style paperdoll inventory window, item-centric inventory, bank valuation, and a per-character per-slot wishlist (reworking the v2.2/v2.3 wantlist via a clean-break migration). Milestone audit PASSED (the one finding — a stale apex redirect — fixed during the audit). Closed via `/gsd-complete-milestone v2.4` (commit `c9f0079`). Open follow-up: code-review MD-01 (orphaned `api.ts` wantlist wrappers).
+
+---
+
+## v2.5 — Ownership Cleanup
+
+**Shipped:** 2026-06-22
+**Archive:** [`milestones/v2.5-ROADMAP.md`](milestones/v2.5-ROADMAP.md) · [`milestones/v2.5-REQUIREMENTS.md`](milestones/v2.5-REQUIREMENTS.md)
+
+**Stats:** 2 phases · 3 plans (35: 1, 36: 2) · same-day timeline (2026-06-22) · 4/4 requirements satisfied (OWN-01..04) · schema **v15** (`00015`, P35; P36 is compute-on-read, no migration) · 8 feature commits, 13 files / +1324/−32 · deployed live to `squirebot.quest` + officer browser-smoke approved · backend + web (the Go **watcher is UNTOUCHED** → **no `v*` tag**)
+
+| Phase | Name | Outcome | Date |
+|-------|------|---------|------|
+| 35 | Owner-less guild banks & bots | Live, schema v15 (`00015`); verifier 6/6; CR-01 fixed-forward | 2026-06-22 |
+| 36 | Shared-character-safe eviction | Live (backend + web), no migration; verifier 13/13; browser-smoke PASS | 2026-06-22 |
+
+**Key accomplishments:**
+
+1. **Guild banks/bots are now owner-less** — a reserved "guild" sentinel owner (id `1000000`) holds every designated bank/bot. An officer can designate any character as a bank/bot without owning it, and the bank can never be swept away when its first-uploader is evicted (OWN-01/02). `00015` auto-migrated the two live prod banks (Findom + Slowscales) with no manual fixup (OWN-04).
+2. **Eviction now spares shared characters** — the per-owner cascade is narrowed via the existing `audit_log` `cross_owner_write` trail (its first reader): a character uploaded by more than one guildie survives its first-uploader's eviction (OWN-03). The evicted member's guild code is still revoked.
+3. **Preview/action parity by construction** — one shared `sharedCharPredicate` const backs both the eviction cascade and the officer preview, so what the officer sees is exactly what gets removed (the direct application of Phase 35's CR-01 lesson).
+4. **All-shared owner stays evictable (the web fix)** — an additive `preserved_shared_count` preview field + the `EvictionForm` gating keep a departing member who only stewards shared chars evictable (code-only revoke: "0 removed, code revoked"), so their watcher is still cut off.
+5. **Two adversarial gate catches before ship** — code-review caught a BLOCKER (the sentinel was guarded in the eviction picker but not the destructive write path — an officer POST could've wiped the bank) and the plan-checker caught a BLOCKER (the narrowed preview disabled the Evict button for all-shared owners); both fixed before close.
+
+**Requirements coverage:** 4/4 (OWN-01/02/04 → P35 · OWN-03 → P36) — all satisfied + live + browser-smoke approved.
+
+**Status:** SHIPPED. No formal milestone audit run (both phases independently verified this session — gsd-verifier 6/6 + 13/13 against actual code, code-review 0-BLOCKER after the CR-01 fix, live deploy + officer browser-smoke; pre-close artifact audit clean). No `v*` tag (watcher untouched — same convention as v2.3/v2.4).
+
+**Known deferred items (backlog):** P36 WR-01 (preview guard asymmetry, pre-existing) · P36 WR-02 (cosmetic repoint-to-evicted-steward) · P35 IN-02 (label-bridge 'guild' collision, astronomically unlikely) · v2.4 MD-01 (orphaned wantlist api wrappers, carried).
+
+---
+
+*This file accumulates one entry per shipped milestone. Next: next milestone undefined — start via `/gsd-new-milestone`. (v2.2 Track 2 — the Discord pinger WTS/raid monitors, Phases 22–23 — remains parked on the 3 Raid Alliance bot invites.)*

@@ -8,15 +8,17 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.** Inventory and spell data lands in the sheet automatically; progression, gaps, and prices are computed for them. If everything else fails, this must work.
 
-## Current Milestone: v2.5 — Ownership Cleanup
+## Shipped: v2.5 — Ownership Cleanup (2026-06-22)
 
-**Goal:** Reconcile character-ownership semantics for a guild that shares P99 logins — make guild banks/bots owner-less, and stop eviction from over-deleting shared characters.
+**Goal (MET):** Reconciled character-ownership semantics for a guild that shares P99 logins — guild banks/bots are now owner-less, and eviction no longer over-deletes shared characters. Both phases (35–36, 3 plans, OWN-01..04) shipped + deployed live to squirebot.quest + officer browser-smoke approved; **backend + web, watcher UNTOUCHED → NO `v*` tag**. Schema **v15** (migration `00015`, Phase 35; Phase 36 is compute-on-read, no migration). Prod schema went v14→v15 on the Phase-36 deploy boot (the first prod application of `00015`).
 
-**Target features:**
-- Owner-less / eviction-safe guild banks & bots — designating a bank/bot no longer requires "claiming" it, and a guild bank survives any individual member's eviction (999.35 → OWN-01/02/04).
-- Shared-character-safe eviction — evicting a guildie removes only their own characters, not shared characters others play (999.36 → OWN-03).
+**What shipped:**
+- **Owner-less guild banks/bots (OWN-01/02/04)** — a reserved "guild" sentinel owner (id `1000000`) holds every designated bank/bot; designation no longer requires "claiming" the char, and a bank survives any individual member's eviction (the sentinel is never an eviction target + a destructive-write-path guard). Migration `00015` auto-migrated the two live prod banks (Findom + Slowscales) with no manual fixup.
+- **Shared-character-safe eviction (OWN-03)** — the per-owner eviction cascade is narrowed via the existing `audit_log` `cross_owner_write` trail (Phase 36 is its first reader): a character uploaded by more than one guildie survives its first-uploader's eviction; the evicted member's guild code is still revoked. An "all-shared owner" stays evictable (code-only revoke) via an additive `preserved_shared_count` preview field + the `EvictionForm` web fix. One shared SQL predicate backs both the cascade and the preview so they can't diverge.
 
-**Key context:** Backend-only follow-up to quick `260621-u6j` (which dropped the single-owner write gate so any guildie can upload any character). Likely one schema migration (`character.owner_id` is `NOT NULL REFERENCES owner(id)` today). Watcher untouched → no `v*` tag (consistent with v2.3/v2.4). Phases continue from v2.4 → v2.5 starts at **Phase 35** (35 = owner-less banks/bots, 36 = shared-safe eviction). See `.planning/REQUIREMENTS.md`.
+**Gate catches (both fixed before close):** code review caught a BLOCKER (the sentinel was guarded in the eviction picker but not the destructive write path — an officer POST could've wiped the bank); the plan-checker caught a BLOCKER (the narrowed preview disabled the Evict button for all-shared owners). Verifiers PASSED 6/6 + 13/13.
+
+**Status:** SHIPPED + archived 2026-06-22 (`milestones/v2.5-{ROADMAP,REQUIREMENTS}.md`). No formal milestone audit (both phases independently verified + live browser-smoke this session). No `v*` tag (watcher untouched). Backlog follow-ups: P36 WR-01/WR-02, P35 IN-02, v2.4 MD-01. Next milestone undefined — start via `/gsd-new-milestone`.
 
 ## Shipped: v2.4 — Web UI Revamp (5-Tab Restructure) (2026-06-21)
 
@@ -332,4 +334,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-22 — milestone **v2.5 "Ownership Cleanup"** opened (Phases 35–36; OWN-01..04; promotes backlog 999.35/36; backend-only, no `v*` tag). Prior: milestone **v2.4 "Web UI Revamp"** SHIPPED + archived (6 phases 29–34, 34 plans, 27 reqs; the 5-tab restructure live at squirebot.quest; schema v14; audit PASSED). Prior: v2.3 (Phases 26–28) SHIPPED 2026-06-09 (schema v10). v2.2 Track-2 (Discord pinger WTS/raid monitors, Phases 22–23) still parked on the Raid Alliance bot invites. Next milestone undefined — `/gsd-new-milestone`.*
+*Last updated: 2026-06-22 — milestone **v2.5 "Ownership Cleanup"** SHIPPED + archived (Phases 35–36, 3 plans, OWN-01..04; owner-less guild banks/bots + shared-character-safe eviction; deployed live, schema v15, watcher untouched, no `v*` tag). Prior: **v2.4 "Web UI Revamp"** SHIPPED + archived (6 phases 29–34, 34 plans, 27 reqs; 5-tab restructure live; schema v14; audit PASSED). Prior: v2.3 (Phases 26–28) SHIPPED 2026-06-09 (schema v10). v2.2 Track-2 (Discord pinger WTS/raid monitors, Phases 22–23) still parked on the Raid Alliance bot invites. Next milestone undefined — `/gsd-new-milestone`.*

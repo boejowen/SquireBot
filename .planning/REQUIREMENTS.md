@@ -10,7 +10,7 @@
 
 - [x] **OWN-01** — An officer can designate any character as a guild bank or bot without first "owning" it; designation is decoupled from upload-ownership (no "claim" step). ✅ Phase 35
 - [x] **OWN-02** — A designated guild bank/bot is owner-less (guild-held) and is NOT removed or archived when the member who first uploaded it is evicted. ✅ Phase 35
-- [ ] **OWN-03** — Evicting a guildie removes only that member's own characters, not shared characters that other guildies also play and upload.
+- [x] **OWN-03** — Evicting a guildie removes only that member's own characters, not shared characters that other guildies also play and upload. ✅ Phase 36 (deployed + browser-smoke approved)
 - [x] **OWN-04** — Existing designated banks/bots bound to an individual owner (e.g. `Findom` → owner 9) migrate to the owner-less model automatically, with no manual fixup. ✅ Phase 35
 
 ## Future Requirements (deferred)
@@ -30,6 +30,6 @@
 | OWN-01 | 35 | Complete (2026-06-22) |
 | OWN-02 | 35 | Complete (2026-06-22) |
 | OWN-04 | 35 | Complete (2026-06-22) |
-| OWN-03 | 36 | Code-complete — backend (36-01) ✅ shipped 2026-06-22 (cascade narrowed; `preserved_shared_count` contract); web (36-02) ✅ code-complete 2026-06-22 (`b1aab94`/`8c77086`; all-shared owner stays evictable with code-only-revoke framing; gates green). **OUTSTANDING: the prod deploy (backend binary swap + web atomic-swap) + officer browser-smoke is the blocking checkpoint — once it PASSES, OWN-03 is fully met.** |
+| OWN-03 | 36 | Complete (2026-06-22) — backend cascade narrowed (one shared `cross_owner_write` predicate; preview parity) + `preserved_shared_count` web fix (all-shared owner stays evictable, code-only-revoke); DEPLOYED LIVE (prod schema v15) + officer browser-smoke APPROVED; verifier 13/13. |
 
 *Created 2026-06-22 for milestone v2.5 (promotes backlog 999.35 / 999.36).*

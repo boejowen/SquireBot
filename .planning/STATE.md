@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.5
 milestone_name: — Ownership Cleanup
-status: in_progress
-last_updated: "2026-06-22T21:14:00.000Z"
+status: feature_complete
+last_updated: "2026-06-22T23:10:00.000Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 3
-  completed_plans: 2
-  percent: 67
-  note: "36-02 code-complete (commits b1aab94, 8c77086) — deploy + browser-smoke is the OUTSTANDING blocking checkpoint; not counted complete until deployed."
+  completed_plans: 3
+  percent: 100
+  note: "v2.5 FEATURE-COMPLETE — Phases 35+36 shipped + DEPLOYED LIVE (prod schema v15); browser-smoke approved. Ready for /gsd-complete-milestone v2.5 (no v* tag — watcher untouched)."
 ---
 
 > **v2.5 "Ownership Cleanup" — MILESTONE OPENED 2026-06-22 (Phases 35–36; OWN-01..04).** Promotes backlog 999.35 (owner-less / eviction-safe guild banks & bots → Phase 35: OWN-01/02/04) + 999.36 (shared-character-safe eviction → Phase 36: OWN-03), both deferred from quick `260621-u6j` (which dropped the single-owner write gate). Backend-only; ~1 schema migration (`character.owner_id` is NOT NULL today); watcher untouched → NO `v*` tag (consistent with v2.3/v2.4); research SKIPPED (well-understood internal mechanics). Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (OWN-01..04) + ROADMAP.md (phases 35–36). **Phase 35 (OWN-01/02/04) ✅ COMPLETE 2026-06-22 — sentinel-owner model shipped (schema v15); next `/gsd-plan-phase 36` for OWN-03.**
@@ -30,7 +30,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-06-02 after v2.1 shipped)
 
 - **Core value:** Every guildie can answer "what does my character still need, and where in the guild is it?" — delivered via the self-hosted website (squirebot.quest).
-- **Current focus:** Milestone v2.5 — Phase 36 (shared-character-safe eviction, OWN-03) DEPLOYED to prod 2026-06-22, awaiting officer browser-smoke. Phase 35 ✅ COMPLETE. **NOTE: this deploy was the FIRST prod boot of Phase 35's migration 00015 — prod schema went v14→v15; the OWN-04 backfill ran live (Findom + Slowscales repointed to guild sentinel owner 1000000). Backend binary swap + web atomic swap; code-review 0-BLOCKER; R2 backup taken (squirebot-2026-06-22.db.gz). Curl gates GREEN: root/characters 200, JS content-type text/javascript (no blank-screen), API + eviction-preview 401 fail-closed. Remaining: human officer browser-smoke of the Evict form (all-shared owner stays evictable).**
+- **Current focus:** Milestone v2.5 "Ownership Cleanup" ✅ FEATURE-COMPLETE 2026-06-22 — both phases (35 + 36) shipped, DEPLOYED LIVE, verified, browser-smoke approved. NEXT: `/gsd-complete-milestone v2.5` (audit + archive; no `v*` tag — watcher untouched). Phase 35 ✅ COMPLETE; Phase 36 ✅ COMPLETE + LIVE. **NOTE: this deploy was the FIRST prod boot of Phase 35's migration 00015 — prod schema went v14→v15; the OWN-04 backfill ran live (Findom + Slowscales repointed to guild sentinel owner 1000000). Backend binary swap + web atomic swap; code-review 0-BLOCKER; R2 backup taken (squirebot-2026-06-22.db.gz). Curl gates GREEN: root/characters 200, JS content-type text/javascript (no blank-screen), API + eviction-preview 401 fail-closed. Remaining: human officer browser-smoke of the Evict form (all-shared owner stays evictable).**
 - **Mode:** yolo
 - **Granularity:** coarse
 

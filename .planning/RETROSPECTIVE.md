@@ -222,6 +222,39 @@ Self-service watcher linking on top of the v2.0 "Off Google" backend. A signed-i
 
 ---
 
+## Milestone: v2.5 — Ownership Cleanup
+
+**Shipped:** 2026-06-22
+**Phases:** 2 (35–36) | **Plans:** 3
+
+> _(Retrospective sections for v2.2 / v2.3 / v2.4 were skipped during their closes — this resumes the habit at v2.5.)_
+
+### What Was Built
+Owner-less guild banks/bots via a reserved "guild" sentinel owner (id 1000000; migration 00015 seed + backfill) so designation is decoupled from ownership and banks survive eviction (OWN-01/02/04); shared-character-safe eviction by narrowing the per-owner cascade through the existing `audit_log` `cross_owner_write` trail, with a one-shared-predicate cascade/preview parity + an all-shared-owner web fix (OWN-03). Backend + a small web change; deployed live (prod schema v15); watcher untouched, no `v*` tag.
+
+### What Worked
+- **Adversarial gates caught two real BLOCKERs before ship.** Code-review caught that the Phase-35 sentinel was guarded in the eviction *picker* but not the destructive *write path* (an officer POST could've wiped the guild bank). The plan-checker caught that narrowing the Phase-36 preview disabled the Evict button for an all-shared owner (so their code couldn't be revoked). Both were premise errors the implementer/planner missed but a fresh adversarial reader found.
+- **Reusing the existing audit trail** (`cross_owner_write`) as the sharing signal kept Phase 36 migration-free.
+- **One shared SQL predicate for cascade + preview** made the read/write divergence (the Phase-35 CR-01 class of bug) structurally impossible in Phase 36 — applying a lesson within the same milestone.
+
+### What Was Inefficient
+- The `--auto` discuss over-specified an edge case ("all-shared owner stays evictable") as load-bearing, which then forced a mid-plan scope expansion (backend-only → backend + web) once the plan-checker proved it couldn't be met backend-only. Surfacing that coupling in discuss would have scoped it as backend+web from the start.
+
+### Patterns Established
+- **Sentinel-row over nullable-column** for "owner-less / system-owned" semantics when the FK column is `NOT NULL` — keeps every join working, smallest blast radius.
+- **Derive a fact from the existing audit trail** before adding a table — the `cross_owner_write` log was already the sharing record.
+
+### Key Lessons
+- A `--auto` discuss can manufacture a load-bearing requirement the codebase can't satisfy in the intended scope — the plan-checker is the backstop that surfaces it; budget for a possible scope ratification.
+- When a phase narrows what a destructive action *does*, audit every UI gate that reads the *old* shape (the `EvictionForm` `cascadeEmpty` gate was invisible until the plan-checker traced it).
+
+### Cost Observations
+- Model mix: ~100% opus (single continuous Opus 4.8 1M session: execute P35 → review-fix → auto-advance P36 discuss→plan→execute → Claude-driven prod deploy → browser-smoke → milestone close).
+- Sessions: 1 continuous session spanning two phases + a live deploy + the milestone archive.
+- Notable: the adversarial-gate cost (2 code-reviews + 2 plan-checks + 2 verifiers) paid for itself by catching 2 ship-blocking BLOCKERs.
+
+---
+
 ## Cross-Milestone Trends
 
 *This section accumulates as more milestones close. After v2.1 it has four data points — v1.0 (5 phases, 11 days, 31 plans, foundation), v1.0.1 (3 phases, 2 days, 12 plans, patch), v2.0 (6 phases, 4 days, 29 plans, replatform), and v2.1 (2 phases, 2 days, 4 plans, compose-existing-infra feature). Trend: once the platform exists, feature milestones get dramatically cheaper — v2.1 shipped a full self-service feature in 2 days by wiring together v2.0 primitives.*
@@ -303,4 +336,4 @@ If 2+ of these bound break, it's a "minor milestone" (v1.1-style) or larger. v1.
 
 ---
 
-*Last appended: 2026-05-31 during `/gsd-complete-milestone v2.0`.*
+*Last appended: 2026-06-22 during `/gsd-complete-milestone v2.5`. (Note: per-milestone retrospective sections for v2.2 / v2.3 / v2.4 were skipped at their closes; the v2.5 entry resumes the habit. The Cross-Milestone Trends tables below were last refreshed at v2.1 and do not yet include v2.2–v2.5.)*

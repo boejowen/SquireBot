@@ -25,6 +25,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 )
 
 // upsertOwner returns the id of the owner row labeled label, creating it on
@@ -35,7 +37,12 @@ import (
 // ? placeholders only (V5).
 func upsertOwner(db *sql.DB, label string) (int64, error) {
 	var id int64
-	err := db.QueryRow(`SELECT id FROM owner WHERE label = ?`, label).Scan(&id)
+	// IN-02: the reserved sentinel owner (store.GuildSentinelOwnerID, label 'guild') is
+	// NEVER reused by a mint — `mint-code --owner guild` for a real guildie must not bind
+	// their codes to the guild-held bank/bot owner. Exclude it by id so a literal "guild"
+	// label falls through to the INSERT (a fresh, distinct owner row).
+	err := db.QueryRow(`SELECT id FROM owner WHERE label = ? AND id <> ?`,
+		label, store.GuildSentinelOwnerID).Scan(&id)
 	switch {
 	case err == nil:
 		return id, nil

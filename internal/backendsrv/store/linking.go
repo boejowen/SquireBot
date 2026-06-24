@@ -94,8 +94,12 @@ func ResolveOrCreateOwnerByDiscordTx(ctx context.Context, tx *sql.Tx, callerDisc
 
 	// (c) Label-bridge: scan ALL owners whose label matches the username, trimmed +
 	// case-insensitive (the existing WR-05 bridge — eviction.go:372). Parameterized.
+	// IN-02: the reserved sentinel owner (GuildSentinelOwnerID, label 'guild') is NEVER a
+	// link target — a guildie whose Discord username is literally "guild" must not adopt
+	// the guild-held bank/bot owner. Exclude it by id.
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id, discord_user_id FROM owner WHERE TRIM(label) = TRIM(?) COLLATE NOCASE`, username)
+		`SELECT id, discord_user_id FROM owner WHERE TRIM(label) = TRIM(?) COLLATE NOCASE AND id <> ?`,
+		username, GuildSentinelOwnerID)
 	if err != nil {
 		return 0, fmt.Errorf("scan label matches for %q: %w", username, err)
 	}

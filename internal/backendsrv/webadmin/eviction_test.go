@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
@@ -402,6 +403,107 @@ func TestEvict_RefusesGuildSentinel(t *testing.T) {
 	}
 	if c := auditCount(t, ctx, db, "eviction"); c != 0 {
 		t.Errorf("eviction audit rows = %d, want 0 (refused write writes no audit)", c)
+	}
+}
+
+// --- preview guard parity (WR-01) -------------------------------------------
+
+// getPreview issues a GET /?owner_id=N against an EvictionPreviewHandler.
+func getPreview(t *testing.T, handler http.Handler, ownerID int64) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/?owner_id="+itoa(ownerID), nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestEvictionPreview_OfficerSeesRoster is the happy path: an officer previewing an
+// ordinary owner gets the live, non-shared roster (the guards added for WR-01 must not
+// break the normal case).
+func TestEvictionPreview_OfficerSeesRoster(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	seedFloorAndUsers(t, ctx, db, floor, nil)
+
+	ownerID := evInsertOwner(t, ctx, db, "Guildie-A")
+	evInsertChar(t, ctx, db, ownerID, "Charone")
+
+	h := withCaller(floor, EvictionPreviewHandler(db))
+	rec := getPreview(t, h, ownerID)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Characters           []string `json:"characters"`
+		PreservedSharedCount int      `json:"preserved_shared_count"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode preview resp: %v", err)
+	}
+	if len(resp.Characters) != 1 || resp.Characters[0] != "Charone" {
+		t.Errorf("characters = %v, want [Charone]", resp.Characters)
+	}
+	if resp.PreservedSharedCount != 0 {
+		t.Errorf("preserved_shared_count = %d, want 0", resp.PreservedSharedCount)
+	}
+}
+
+// TestEvictionPreview_RefusesGuildSentinel proves the preview mirrors the action's
+// sentinel guard (WR-01): a direct owner_id = the guild sentinel is refused, so the
+// read-only preview cannot enumerate the guild bank's roster.
+func TestEvictionPreview_RefusesGuildSentinel(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	seedFloorAndUsers(t, ctx, db, floor, nil)
+
+	h := withCaller(floor, EvictionPreviewHandler(db))
+	rec := getPreview(t, h, store.GuildSentinelOwnerID)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (sentinel preview refused); body=%s", rec.Code, rec.Body.String())
+	}
+	if got := decodeErr(t, rec); got != "cannot_evict_sentinel" {
+		t.Errorf("error = %q, want cannot_evict_sentinel", got)
+	}
+}
+
+// TestEvictionPreview_PeerCannotPreviewFloorData proves the preview mirrors the D-09
+// owner-floor guard (WR-01): a peer officer cannot use the preview to enumerate the
+// maintainer's floor-protected roster (the info-disclosure asymmetry the action already
+// closes).
+func TestEvictionPreview_PeerCannotPreviewFloorData(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	floor := "111111111111111111"
+	peer := "222222222222222222"
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, floor, "MaintainerLabel"); err != nil {
+		t.Fatalf("seed floor web_user: %v", err)
+	}
+	if err := store.SetOwnerFloor(ctx, db, floor, 1700000000); err != nil {
+		t.Fatalf("SetOwnerFloor: %v", err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO web_user (discord_user_id, username, avatar, first_seen, last_login)
+		 VALUES (?, ?, NULL, 0, 0)`, peer, "PeerOfficer"); err != nil {
+		t.Fatalf("seed peer web_user: %v", err)
+	}
+	if err := commitTxHelper(t, ctx, db, peer, floor); err != nil {
+		t.Fatalf("promote peer: %v", err)
+	}
+
+	floorOwnerID := evInsertOwner(t, ctx, db, "MaintainerLabel")
+	evInsertChar(t, ctx, db, floorOwnerID, "Floortoon")
+
+	h := withCaller(peer, EvictionPreviewHandler(db))
+	rec := getPreview(t, h, floorOwnerID)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (peer preview of floor data refused); body=%s", rec.Code, rec.Body.String())
+	}
+	if got := decodeErr(t, rec); got != "owner_floor_protected" {
+		t.Errorf("error = %q, want owner_floor_protected", got)
 	}
 }
 

@@ -108,6 +108,29 @@ func EvictionPreviewHandler(db *sql.DB) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, "invalid_input")
 			return
 		}
+
+		// WR-01: the preview must mirror the guards EvictHandler/EvictOwnerTx enforce, so a
+		// peer cannot use the read-only preview to enumerate a floor-protected owner's (or
+		// the guild sentinel's) roster — the action refuses these, the preview must too.
+		//
+		// Sentinel guard (OWN-02): the guild-held sentinel is never evictable, so its roster
+		// is never an eviction preview. Refuse before any read.
+		if ownerID == store.GuildSentinelOwnerID {
+			writeJSONError(w, http.StatusForbidden, "cannot_evict_sentinel")
+			return
+		}
+		// Owner-floor guard (D-09): a peer may not preview the maintainer's protected data.
+		protected, err := callerMayNotEvictFloor(ctx, db, ownerID, caller(ctx))
+		if err != nil {
+			slog.Error("eviction preview floor-protection check failed", "err", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal")
+			return
+		}
+		if protected {
+			writeJSONError(w, http.StatusForbidden, "owner_floor_protected")
+			return
+		}
+
 		names, err := store.PreviewEviction(ctx, db, ownerID)
 		if err != nil {
 			slog.Error("eviction preview failed", "err", err)
@@ -405,7 +428,11 @@ func callerMayNotEvictFloor(ctx context.Context, db *sql.DB, targetOwnerID int64
 	// stored leading/trailing whitespace on either column does not defeat the match.
 	var floorOwnerID int64
 	err = db.QueryRowContext(ctx,
-		`SELECT id FROM owner WHERE TRIM(label) = TRIM(?) COLLATE NOCASE`, floorUsername,
+		// IN-02: never resolve the floor's protected owner to the reserved sentinel
+		// (store.GuildSentinelOwnerID, label 'guild') even if the floor's username is
+		// literally "guild" — the sentinel is guild-held, not a maintainer's data.
+		`SELECT id FROM owner WHERE TRIM(label) = TRIM(?) COLLATE NOCASE AND id <> ?`,
+		floorUsername, store.GuildSentinelOwnerID,
 	).Scan(&floorOwnerID)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Floor seeded + has a username, but no owner.label matches it ⇒ the

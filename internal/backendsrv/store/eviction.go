@@ -64,20 +64,32 @@ const sharedCharPredicate = `EXISTS (
 )`
 
 // recentOtherSharerSubquery is the SINGLE source of truth for "the most-recent
-// OTHER guildie who uploaded this char" (OWN-03 / D-03 repoint). It is a scalar
-// subselect — the highest-id (most recent) cross_owner_write attempting_owner_id
-// for character.name that is NOT the evicted owner. It is embedded VERBATIM in
-// BOTH the repoint UPDATE's SET clause AND its IS-NOT-NULL guard so the event
-// string and COLLATE NOCASE match can never drift between the two copies (the
-// plan-checker WARNING fix — the single-const grep gate locks it to one
-// definition). Same correlation rules as sharedCharPredicate: `character.name`
-// resolves against the UPDATE's target, one bound arg (the evicted owner id) at
-// `<> ?`.
+// OTHER guildie who uploaded this char AND is still a live steward" (OWN-03 / D-03
+// repoint, WR-02 hardened). It is a scalar subselect — the highest-id (most recent)
+// cross_owner_write attempting_owner_id for character.name that is NOT the evicted
+// owner AND who still owns at least one live (is_removed=0) character. It is embedded
+// VERBATIM in BOTH the repoint UPDATE's SET clause AND its IS-NOT-NULL guard so the
+// event string, COLLATE NOCASE match, and live-steward filter can never drift between
+// the two copies (the plan-checker WARNING fix — the single-const grep gate locks it
+// to one definition). Same correlation rules as sharedCharPredicate: `character.name`
+// resolves against the UPDATE's target, one bound arg (the evicted owner id) at `<> ?`.
+//
+// WR-02 (the live-steward EXISTS clause): the bare "most-recent other sharer" could be
+// an owner who is THEMSELVES already evicted (all their chars is_removed=1), so a
+// surviving shared char would be repointed onto a dead steward — the stale-attribution
+// outcome D-03 means to avoid. The `AND EXISTS (… is_removed = 0)` skips any candidate
+// with no live char; if no candidate qualifies the subselect is NULL and the IS-NOT-NULL
+// guard leaves the char on its current steward (harmless — owner_id is non-binding and
+// the char's survival is already guaranteed by the narrowed cascade). This is the ONE
+// intentional divergence from sharedCharPredicate (which decides survival, not stewardship,
+// and must NOT apply this filter); the drift-lock test locks both the shared tokens and
+// this clause.
 const recentOtherSharerSubquery = `(
     SELECT a.attempting_owner_id FROM audit_log a
      WHERE a.event = 'cross_owner_write'
        AND a.char_name = character.name COLLATE NOCASE
        AND a.attempting_owner_id <> ?
+       AND EXISTS (SELECT 1 FROM character c2 WHERE c2.owner_id = a.attempting_owner_id AND c2.is_removed = 0)
      ORDER BY a.id DESC LIMIT 1
 )`
 

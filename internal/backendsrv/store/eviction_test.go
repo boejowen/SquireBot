@@ -842,6 +842,9 @@ func TestEvictOwnerTx_RepointsSurvivingSharedChar(t *testing.T) {
 	sharedChar := insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
 
 	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+	// Y is a LIVE steward (owns a live char of their own) so the WR-02 live-steward
+	// filter keeps Y as a valid repoint target.
+	insertChar(t, ctx, db, ownerY, "Ymain", false)
 	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
 
 	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
@@ -873,6 +876,10 @@ func TestEvictOwnerTx_RepointPicksMostRecentSharer(t *testing.T) {
 	insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
 	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
 	ownerZ := insertOwner(t, ctx, db, "Guildie-Z")
+	// Both candidate sharers are LIVE stewards (own a live char) so the WR-02 filter
+	// keeps them eligible — this test isolates the most-recent-wins ordering.
+	insertChar(t, ctx, db, ownerY, "Ymain", false)
+	insertChar(t, ctx, db, ownerZ, "Zmain", false)
 
 	// Earlier row → Y; later row (higher id) → Z. Both <> X.
 	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
@@ -889,11 +896,63 @@ func TestEvictOwnerTx_RepointPicksMostRecentSharer(t *testing.T) {
 	}
 }
 
+// TestEvictOwnerTx_RepointSkipsEvictedSharer is the WR-02 proof: the repoint must
+// skip a more-recent OTHER sharer who is THEMSELVES already evicted (owns no live
+// char) and fall back to an earlier sharer who is still a live steward. Without the
+// live-steward EXISTS filter the survivor would be repointed onto a dead steward.
+//
+// Setup: X owns Sharedtoon. Y (earlier cross_owner_write) is LIVE (owns Ymain). Z
+// (later cross_owner_write — the most-recent, which the bare ORDER BY id DESC would
+// pick) is EVICTED (their only char is is_removed=1). Evicting X must repoint
+// Sharedtoon to Y, skipping the more-recent-but-dead Z.
+func TestEvictOwnerTx_RepointSkipsEvictedSharer(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	now := int64(1700000000)
+
+	ownerX := insertOwner(t, ctx, db, "Guildie-X")
+	insertChar(t, ctx, db, ownerX, "Sharedtoon", false)
+
+	ownerY := insertOwner(t, ctx, db, "Guildie-Y")
+	insertChar(t, ctx, db, ownerY, "Ymain", false) // Y is a live steward.
+
+	ownerZ := insertOwner(t, ctx, db, "Guildie-Z")
+	zChar := insertChar(t, ctx, db, ownerZ, "Zmain", false)
+	// Z is evicted: their only char is removed, so Z owns no live char.
+	if _, err := db.ExecContext(ctx,
+		`UPDATE character SET is_removed = 1 WHERE id = ?`, zChar); err != nil {
+		t.Fatalf("evict Z's char: %v", err)
+	}
+
+	// Earlier row → Y (live); later row (higher id) → Z (evicted). The bare subquery
+	// would pick Z; the live-steward filter must skip Z and pick Y.
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerY, ownerX)
+	insertCrossOwnerWrite(t, ctx, db, "Sharedtoon", ownerZ, ownerX)
+
+	if err := commitTx(t, ctx, db, func(tx *sql.Tx) error {
+		_, _, e := EvictOwnerTx(ctx, tx, ownerX, now)
+		return e
+	}); err != nil {
+		t.Fatalf("EvictOwnerTx: %v", err)
+	}
+	if got := ownerOfChar(t, ctx, db, "Sharedtoon"); got != ownerY {
+		t.Errorf("Sharedtoon owner_id = %d, want %d (skip the evicted most-recent sharer Z, pick live Y)", got, ownerY)
+	}
+}
+
 // TestRepointSubquery_LocksPredicateToSharedPredicate is the WARNING lock: it pins
-// the load-bearing tokens (event string, COLLATE NOCASE name match, the <> ?
+// the COMMON load-bearing tokens (event string, COLLATE NOCASE name match, the <> ?
 // exclusion) to identical text across recentOtherSharerSubquery AND
-// sharedCharPredicate, so a future edit cannot silently diverge the repoint subquery
-// from the shared-detection predicate.
+// sharedCharPredicate, so a future edit cannot silently diverge the SHARED part of the
+// repoint subquery from the shared-detection predicate.
+//
+// WR-02 re-scope: recentOtherSharerSubquery now intentionally carries ONE extra clause
+// the predicate must NOT have — the live-steward EXISTS filter (don't repoint onto an
+// evicted steward). sharedCharPredicate decides SURVIVAL (a char is shared regardless of
+// whether the other sharer is still live), so it must stay filter-free. The test therefore
+// (a) keeps the shared tokens locked in both and (b) separately locks the live-steward
+// clause into the repoint subquery only — so neither the shared part nor the WR-02 fix can
+// silently regress.
 func TestRepointSubquery_LocksPredicateToSharedPredicate(t *testing.T) {
 	tokens := []string{
 		"a.event = 'cross_owner_write'",
@@ -907,5 +966,16 @@ func TestRepointSubquery_LocksPredicateToSharedPredicate(t *testing.T) {
 		if !strings.Contains(sharedCharPredicate, tok) {
 			t.Errorf("sharedCharPredicate missing load-bearing token %q", tok)
 		}
+	}
+
+	// WR-02: the live-steward filter is locked into the repoint subquery (so it cannot be
+	// dropped) but must NOT leak into the survival predicate (which must count even an
+	// evicted other sharer as making the char shared).
+	const liveStewardClause = "AND EXISTS (SELECT 1 FROM character c2 WHERE c2.owner_id = a.attempting_owner_id AND c2.is_removed = 0)"
+	if !strings.Contains(recentOtherSharerSubquery, liveStewardClause) {
+		t.Errorf("recentOtherSharerSubquery missing the WR-02 live-steward clause %q", liveStewardClause)
+	}
+	if strings.Contains(sharedCharPredicate, liveStewardClause) {
+		t.Errorf("sharedCharPredicate must NOT carry the live-steward filter (it decides survival, not stewardship)")
 	}
 }

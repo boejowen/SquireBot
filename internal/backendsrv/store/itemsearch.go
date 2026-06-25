@@ -52,21 +52,59 @@ func escapeLike(s string) string {
 	return s
 }
 
+// flagUnion is the name-keyed flag source for the Phase 39 catalog facets: the
+// item_master (held, EQ-id-keyed) ∪ catalog_enrichment (catalog-only, norm_name-keyed)
+// is_clicky/has_haste columns, joined to pigparse_price by lower(trim(name)). It mirrors
+// CatalogIconCoverage (store/itemids.go:193-205), swapping icon_id for the two flag columns.
+// A held name is NEVER in catalog_enrichment (the write-path dedup, itemids.go:177-191), so
+// the plain UNION ALL counts each name once — NO precedence/COALESCE-between-tables logic.
+// item_id is NEVER the join key (PigParse vs EQ namespace — Pitfall 1 / memory
+// pigparse-vs-ingame-item-id-namespaces). Added to the query ONLY when a facet is active so
+// the no-facet path stays byte-identical to the original single-table search (Pitfall 3 —
+// the join is LEFT and conditional, never an unconditional/always-on join that would drop
+// unenriched catalog rows when no facet is active).
+const flagUnion = `
+  LEFT JOIN (
+    SELECT lower(trim(name)) AS norm, is_clicky, has_haste FROM item_master
+    UNION ALL
+    SELECT norm_name          AS norm, is_clicky, has_haste FROM catalog_enrichment
+  ) f ON f.norm = lower(trim(pigparse_price.name))`
+
 // SearchCatalog returns up to `limit` pigparse_price catalog items whose name
 // contains q (case-insensitively) OR whose item_id equals q, ranked prefix-first.
+// The optional clicky/haste facets (Phase 39, SEARCH-04/05) AND-narrow the result to
+// rows whose name carries the matching flag in the item_master ∪ catalog_enrichment
+// name-keyed union (joined by lower(trim(name)), NEVER item_id). With NEITHER facet active
+// the query is byte-identical to the original single-table search (the LEFT JOIN is absent).
 // q is bound through ? placeholders ONLY (never concatenated); the LIKE wildcards
-// are built in Go and bound as values with ESCAPE so a user-typed %/_ is literal.
-// Always returns a non-nil slice (possibly empty). A NULL-name row is scanned
-// safely (sql.NullString → "") so an id-match on it never errors (review WORTH-FIX 4).
-func (s *Store) SearchCatalog(ctx context.Context, q string, limit int) ([]CatalogItem, error) {
+// are built in Go and bound as values with ESCAPE so a user-typed %/_ is literal. The facet
+// bools select a FIXED predicate fragment — no user string reaches SQL. Always returns a
+// non-nil slice (possibly empty). A NULL-name row is scanned safely (sql.NullString → "")
+// so an id-match on it never errors (review WORTH-FIX 4). Resolved-default Open Q1: the
+// prefix-first ORDER BY is kept for catalog scope (NOT re-sorted viewer-first).
+func (s *Store) SearchCatalog(ctx context.Context, q string, clicky, haste bool, limit int) ([]CatalogItem, error) {
 	like := "%" + escapeLike(q) + "%"
 	prefix := escapeLike(q) + "%"
-	rows, err := s.db.QueryContext(ctx,
-		"SELECT item_id, name, current_avg FROM pigparse_price "+
-			"WHERE name LIKE ? ESCAPE '\\' OR CAST(item_id AS TEXT) = ? "+
-			"ORDER BY (name LIKE ? ESCAPE '\\') DESC, length(name), name COLLATE NOCASE "+
-			"LIMIT ?",
-		like, q, prefix, limit)
+
+	var facet strings.Builder
+	if clicky {
+		facet.WriteString(" AND COALESCE(f.is_clicky,0) = 1")
+	}
+	if haste {
+		facet.WriteString(" AND COALESCE(f.has_haste,0) = 1")
+	}
+
+	query := "SELECT pigparse_price.item_id, pigparse_price.name, pigparse_price.current_avg " +
+		"FROM pigparse_price"
+	if clicky || haste {
+		query += flagUnion // join ONLY when a facet is active (keep the no-facet path identical)
+	}
+	query += " WHERE (pigparse_price.name LIKE ? ESCAPE '\\' OR CAST(pigparse_price.item_id AS TEXT) = ?)" +
+		facet.String() +
+		" ORDER BY (pigparse_price.name LIKE ? ESCAPE '\\') DESC, length(pigparse_price.name), pigparse_price.name COLLATE NOCASE" +
+		" LIMIT ?"
+
+	rows, err := s.db.QueryContext(ctx, query, like, q, prefix, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search catalog (len=%d): %w", len(q), err)
 	}

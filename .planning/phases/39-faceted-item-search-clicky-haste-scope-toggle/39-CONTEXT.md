@@ -72,13 +72,18 @@ wishlist-pin action from catalog search (D-04 — NOT this phase). The watcher i
   is SERVER-side: `SearchCatalog` (and/or a faceted full-catalog read) gains optional
   `clicky`/`haste` filter params (the corpus is large + LIMIT-capped). Planner confirms the
   exact split.
-- **The catalog ↔ `item_master` join for the facet fields (the load-bearing technical
-  detail):** `pigparse_price.item_id` is the PigParse namespace; `item_master` is keyed by
-  EQ id for held items and (post-Phase-38, Option A) by PigParse id for catalog-only items.
-  The robust join to read `is_clicky`/`has_haste` for a catalog row is by **normalized name**
-  (the Phase 29 DATA-01 name bridge / the P38 `lower(trim(name))` dedup), NEVER raw item_id.
-  The researcher/planner MUST resolve this join (reuse the existing name-normalization helper)
-  so a catalog facet filters on the right item's flags.
+- **The catalog ↔ flags join for the facet fields (the load-bearing technical detail):**
+  `pigparse_price.item_id` is the PigParse namespace. **⚠ Phase 38 shipped NAME-KEYED
+  (deployed 2026-06-25) — NOT the originally-sketched "Option A id-keyed `item_master`":**
+  `item_master` stayed **held-only, keyed by EQ id** (P37 migration 00016 added
+  `is_clicky`/`has_haste` there); catalog-only flags live in a SEPARATE **`catalog_enrichment`**
+  table (migration 00017), keyed by **`norm_name` = `lower(trim(name))`**
+  (`internal/backendsrv/store/catalogenrich.go`). So a catalog row's `is_clicky`/`has_haste`
+  is read from **`item_master` (held) ∪ `catalog_enrichment` (catalog-only)**, joined to
+  `pigparse_price` by **normalized name** — the shipped `CatalogIconCoverage` UNION-ALL in
+  `internal/backendsrv/store/itemids.go` is the exact precedent (swap `icon_id` for the two
+  booleans). NEVER raw item_id. Name-keying makes this join clean end-to-end; the
+  namespace-bridge hazard is gone.
 - Exact query shapes, the facet param plumbing through `readapi`/`compute`/`api.ts`, the
   toggle/persistence state model in the Svelte Inventory tab, and the catalog-row render
   (reuse `ExaminePanel` + the holders display) — planner/UI-spec decide. **UI phase →
@@ -100,8 +105,10 @@ wishlist-pin action from catalog search (D-04 — NOT this phase). The watcher i
   meaning), D-02 (`is_clicky`+`clicky_effect`, `has_haste`+`haste_pct`); the discrete fields
   this phase filters on.
 - `.planning/phases/38-catalog-wide-enrichment-icon-coverage/38-CONTEXT.md` +
-  `38-RESEARCH.md` — D-04 Option A (catalog-only `item_master` rows keyed by PigParse id; the
-  normalized-name bridge) — the basis for the catalog↔`item_master` facet join.
+  `38-RESEARCH.md` — ⚠ D-04 was REVERSED to NAME-KEYED (shipped 2026-06-25): catalog-only
+  enrichment lives in `catalog_enrichment` keyed by `norm_name` (migration 00017); `item_master`
+  stayed held-only by EQ id. The basis for the catalog↔flags facet join (read `item_master` ∪
+  `catalog_enrichment` by normalized name — see the join note under Claude's Discretion).
 
 ### The search being extended
 - `internal/backendsrv/store/itemsearch.go` — `SearchCatalog` over `pigparse_price` (name/id

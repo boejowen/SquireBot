@@ -448,7 +448,9 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   2. A user can filter item search to show only Haste items, and the result set excludes non-haste items.
   3. A user can toggle the search scope between guild holdings ("who has one") and the full P99 catalog ("what exists"); the holdings scope answers from items guildies hold and the catalog scope answers from the full enriched catalog.
   4. The held-items faceting (Clicky/Haste over holdings) works on its own even if the full-catalog scope is still filling in — the holdings path does not block on the catalog crawl completing.
-**Plans**: TBD
+**Plans**: 2 plans (2 waves; backend contract first, web UI second)
+  - [ ] 39-01-PLAN.md (wave 1) — backend: widen IconStats/ItemRollup with is_clicky/has_haste (client holdings facet, SC-4); add clicky/haste params to SearchCatalog via the name-keyed item_master ∪ catalog_enrichment union; parse ?clicky=/?haste= on /api/v1/items/search (guard+LIMIT+V7 preserved). No migration; watcher untouched (SEARCH-04/05/06)
+  - [ ] 39-02-PLAN.md (wave 2, depends_on 39-01) — web: pure facetItems() helper + api.ts contract mirror; FacetBar.svelte chips; Inventory-tab Holdings↔Catalog .seg scope toggle (D-03 lens-not-reset) + catalog-row ExaminePanel reuse + holders-by-name (D-04); wishlist add-form facets (D-01, catalog-only); browser-smoke checkpoint (SEARCH-04/05/06)
 **UI hint**: yes
 
 ### Phase 40: Item display polish — flag outlines + named quest links

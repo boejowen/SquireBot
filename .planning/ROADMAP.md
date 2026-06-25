@@ -29,7 +29,7 @@
 
 **Phase checklist:**
 
-- [ ] **Phase 37: Item enrichment backbone — flags + effects** — re-enable the dropped wiki stat-block parse so LORE/NO-DROP/MAGIC/TEMPORARY flags + click-effect (Clicky) + Haste land in discrete, queryable columns (new migration + the enrich freshness short-circuit updated so existing rows backfill). ENRICH-12, ENRICH-13. **Foundational** — gates P39's facets + P40's outlines.
+- [~] **Phase 37: Item enrichment backbone — flags + effects** — re-enable the dropped wiki stat-block parse so LORE/NO-DROP/MAGIC/TEMPORARY flags + click-effect (Clicky) + Haste land in discrete, queryable columns (new migration + the enrich freshness short-circuit updated so existing rows backfill). ENRICH-12, ENRICH-13. **Foundational** — gates P39's facets + P40's outlines.  _(2 plans planned 2026-06-24)_
 - [ ] **Phase 38: Catalog-wide enrichment + icon coverage** — widen enrichment beyond held items to the full PigParse Blue catalog (politefetch-paced) and backfill icons for every item whose wiki page provides one, with a maintainer-visible coverage diagnostic for the residue. ENRICH-14, ENRICH-15. The "missing item images" bug + the full-catalog data the SEARCH-06 toggle reads.
 - [ ] **Phase 39: Faceted item search (Clicky / Haste + scope toggle)** — filter item search to Clicky-only or Haste-only, and toggle scope between guild holdings and the full P99 catalog. SEARCH-04, SEARCH-05, SEARCH-06. Depends on P37's parsed effects (facets) + P38's catalog coverage (full-catalog scope).
 - [ ] **Phase 40: Item display polish — flag outlines + named quest links** — color-coded flag outlines (No-Drop red / Lore gold / Magic blue) on inventory/bank/paper-doll tiles, and the named "used in quest X" links surfaced on the modern Characters/Inventory/Wishlist tabs (not just the yes/no QUEST-ITEM badge). ITEMUI-01 (depends on P37 flags), ITEMUI-02 (independent — plumbs the already-harvested `quest_links`).
@@ -417,7 +417,9 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   2. An item's click-effect (Clicky) and Haste are stored as discrete queryable fields — an item with a click effect is marked as a Clicky and a haste item is marked as Haste, both distinguishable in a query without re-parsing text.
   3. Items already enriched under the old (flag-discarding) parse are backfilled with the new fields on the next enrichment pass — the migration + the freshness short-circuit re-trigger a re-parse rather than leaving existing rows blank forever.
   4. The new columns ship as an extend-only goose migration (added at the right edge, no break to existing reads) and `go test ./...` + `go build ./...` are green; watcher untouched, no `v*` tag.
-**Plans**: TBD
+**Plans**: 2 plans / 2 waves
+- [ ] 37-01-PLAN.md — Extend the wiki-item parser to surface flags + Clicky/Haste (parser-only; no DB)
+- [ ] 37-02-PLAN.md — Migration 00016 + discrete columns + no-network statsblock backfill + freshness self-heal + job wiring
 
 ### Phase 38: Catalog-wide enrichment + icon coverage
 **Goal**: Item enrichment stops being limited to items some character currently holds — it covers the full PigParse Blue catalog (politefetch-paced) — which both fixes most of the "not all items have images" bug and provides the full-catalog data the faceted-search scope toggle (Phase 39) will read; a maintainer can also see exactly which items remain genuinely icon-less.

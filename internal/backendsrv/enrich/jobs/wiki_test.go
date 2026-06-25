@@ -317,10 +317,13 @@ func seedCatalogItem(t *testing.T, db *sql.DB, itemID int64, name string) {
 }
 
 // TestRunWiki_EnrichesUnheldCatalogItem is the ENRICH-14/15 win condition (Phase
-// 38): the widened crawl iterates the held∪catalog union, so an UNHELD pigparse_price
-// catalog item whose wiki page carries a lucy_img_ID gets an item_master row with a
-// non-zero icon_id — even though no character holds it. A junk catalog name with no
-// wiki page must NOT abort the run (it lands in the icon-less residue, Pitfall 3).
+// 38, name-keyed Option B): the widened crawl iterates the held∪catalog union, so an
+// UNHELD pigparse_price catalog item whose wiki page carries a lucy_img_ID gets a
+// catalog_enrichment row keyed by its normalized name with a non-zero icon_id — even
+// though no character holds it — and is ABSENT from item_master (Pitfall 2: a catalog
+// ref must route to the name-keyed store, never the held EQ-id store). A junk catalog
+// name with no wiki page must NOT abort the run (it lands in the icon-less residue,
+// Pitfall 3).
 func TestRunWiki_EnrichesUnheldCatalogItem(t *testing.T) {
 	restore := setWikiSleepNoop()
 	defer restore()
@@ -349,23 +352,31 @@ func TestRunWiki_EnrichesUnheldCatalogItem(t *testing.T) {
 		t.Fatalf("RunWiki: %v", err)
 	}
 
-	// The unheld catalog item now has an item_master row. It is keyed by its PigParse
-	// id, so look it up by normalized name (the held∪catalog bridge), not by id.
-	var icon, gotID int64
+	// The unheld catalog item now lands in catalog_enrichment keyed by its normalized
+	// name (NOT item_master — name-keyed Option B; the EQ namespace is held-only).
+	var icon int64
 	var name string
 	if err := db.QueryRow(
-		`SELECT item_id, name, icon_id FROM item_master WHERE lower(trim(name)) = lower(trim(?))`,
+		`SELECT name, icon_id FROM catalog_enrichment WHERE norm_name = lower(trim(?))`,
 		"Cloak of Flames",
-	).Scan(&gotID, &name, &icon); err != nil {
-		t.Fatalf("unheld catalog item Cloak of Flames has no item_master row after the widened crawl: %v", err)
+	).Scan(&name, &icon); err != nil {
+		t.Fatalf("unheld catalog item Cloak of Flames has no catalog_enrichment row after the widened crawl: %v", err)
 	}
 	if icon == 0 {
 		t.Errorf("Cloak of Flames icon_id = 0 after enrichment, want > 0 (ENRICH-15 icon backfill — its fixture carries a lucy_img_ID)")
 	}
-	// Option A id-keying: the catalog-only row is keyed by its PigParse catalog id,
-	// not a synthesized/EQ id — proving the namespace-agnostic upsert carried it through.
-	if gotID != cofCatalogID {
-		t.Errorf("unheld Cloak of Flames item_master row keyed by item_id %d, want PigParse catalog id %d (Option A id-keying)", gotID, cofCatalogID)
+
+	// Pitfall 2: a catalog-only ref must NOT route to the held store. Assert NO item_master
+	// row exists for Cloak of Flames (by name — it has no EQ id).
+	var imN int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM item_master WHERE lower(trim(name)) = lower(trim(?))`,
+		"Cloak of Flames",
+	).Scan(&imN); err != nil {
+		t.Fatalf("count item_master Cloak of Flames: %v", err)
+	}
+	if imN != 0 {
+		t.Errorf("unheld Cloak of Flames leaked into item_master (%d rows) — a catalog ref must write catalog_enrichment, not item_master (Pitfall 2)", imN)
 	}
 
 	// The held item is still enriched (the held arm is preserved).

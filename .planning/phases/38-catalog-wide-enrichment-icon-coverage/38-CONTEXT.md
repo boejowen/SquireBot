@@ -1,7 +1,9 @@
 # Phase 38: Catalog-wide enrichment + icon coverage - Context
 
 **Gathered:** 2026-06-25
-**Status:** Ready for planning
+**Status:** RE-PLANNING — D-04 reversed to name-keyed 2026-06-25 (Option A shipped but the
+pre-deploy prod probe found 43 dropped catalog items vs. research's ≈0; deploy held). See
+the ⚠ D-04 REVERSED block under Implementation Decisions.
 
 <domain>
 ## Phase Boundary
@@ -90,6 +92,58 @@ SET of items that parse runs over + the icon backfill.
      + the catalog, deduped by normalized name (so an item is fetched once whether held
      or catalog-only), and how that interacts with the per-item `item_id` the upsert
      needs.
+
+> **⚠ D-04 REVERSED → NAME-KEYED (ratified 2026-06-25). The original delegated
+> research picked id-keyed Option A; it is now REJECTED. Re-plan MUST be name-keyed.**
+>
+> **What happened:** Phase 38 first shipped (code-complete, verifier 5/5, code-review
+> 0-blocker — NOT deployed) with **Option A: admit catalog-only rows into `item_master`
+> keyed by their PigParse `item_id`, with an `item_id NOT IN (SELECT item_id FROM
+> item_master)` collision guard** so a PigParse id numerically equal to a held EQ id
+> could never overwrite the held row. The research `[ASSUMED]` (A2) that such collisions
+> were "rare … ≈0" and that excluding them was harmless.
+>
+> **The pre-deploy prod probe disproved that ≈0.** Against the live DB (`item_master`
+> = 953 rows, `pigparse_price` = 4,343): **60 raw PigParse↔EQ id collisions**, of which
+> **43 are genuinely-unheld catalog items** the Option-A guard silently DROPS from
+> enrichment (the held item they numerically collide with is correctly protected — the
+> guard works; but those 43 real catalog items, e.g. *Cured Silk Gi*, *Ancient Tarnished
+> Breastplate*, *Etched Velium Brawl Stick*, get NO icon/flags). ~1% of the catalog, no
+> correctness risk, but a permanent coverage hole that the icon-less residue can never
+> close. The plan's own STOP-at-~20 gate fired; the finding was surfaced and the user
+> chose to **hold the deploy and re-plan name-keyed** rather than ship the gap.
+>
+> **NEW CONSTRAINT for the re-plan (binding — researcher + planner):**
+> - Catalog enrichment MUST be stored **keyed by normalized name** (`lower(trim(name))`)
+>   so **ALL ~4,343 catalog items — including the 43 — are covered with NO collision
+>   drop**. The id-keyed-`item_master` storage of catalog-only rows (Option A) and any
+>   synthetic/offset-id scheme are REJECTED.
+> - Adopt the **Option B family** from `38-RESEARCH.md`: a separate name-keyed
+>   enrichment store (e.g. `catalog_enrichment(norm_name TEXT PRIMARY KEY, icon_id,
+>   statsblock, flags_json, is_clicky, has_haste, …)`) joined by normalized name;
+>   `item_master` stays **held-only, keyed by EQ `item_id`** exactly as today. Migration
+>   footprint → **00017** (new additive table; extend-only; goose-on-boot; no `v*` tag).
+> - **Re-verify the held-reader blast radius is ZERO.** Phases 31/32/37 read
+>   `item_master` by EQ `item_id`; held items stay in `item_master`, so those readers
+>   MUST be byte-for-byte unaffected. The name-keyed `catalog_enrichment` holds ONLY
+>   unheld items — no existing held reader needs it.
+> - **Define the Phase-39 catalog-scope read contract:** "what exists" = held
+>   (`item_master` by EQ id) ∪ unheld (`catalog_enrichment` by name), COALESCE'd /
+>   deduped by normalized name so each item appears ONCE and a held item keeps its
+>   holders (catalog = superset). This is the join Phase 39's facets read — get it right
+>   here (it also makes Phase 39's catalog↔enrichment facet join name-keyed throughout,
+>   removing the namespace-bridge hazard).
+> - The crawl still iterates the held∪catalog-by-name set (the existing
+>   `store.DistinctEnrichmentRefs` union is reusable for the FETCH set), but the
+>   **WRITE path branches by held-ness**: held name → `item_master` by EQ id (today's
+>   `UpsertItemMasterTx`); catalog-only name → `catalog_enrichment` by norm_name (new
+>   upsert + a per-name freshness getter for the weekly ETag re-validation). Drop the
+>   Option-A `item_id NOT IN (SELECT item_id FROM item_master)` collision guard — it is
+>   no longer needed once catalog rows are name-keyed in a separate table.
+> - Keep everything else from D-01/D-01a/D-02/D-03 (cadence, catalog scope, the `slog`
+>   coverage diagnostic). The `ItemMasterIconCoverage` diagnostic must be re-pointed to
+>   read the name-keyed store's true coverage (it must reflect the catalog_enrichment
+>   rows, not just `item_master`).
 - Migration mechanics (next number after 00016 → **00017** if a new table/column is
   needed; may be none if a name-keyed read suffices); whether `WatcherMaxSchemaVersion`
   needs a bump (backend-only, watcher off the read path — almost certainly not; confirm

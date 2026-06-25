@@ -69,3 +69,31 @@
 - Maintainer-triggered re-crawl button (manual kickoff from Admin) — automatic weekly job suffices.
 - Officer Admin "Item coverage" panel / queryable coverage report — richer residue surfaces than the log line; revisit only if needed.
 - Search facets + the SEARCH-06 UI — Phase 39, not here.
+
+---
+
+## D-04 reversal — id-keyed Option A → name-keyed (2026-06-25, post-execution)
+
+> Audit entry for the storage-model reversal. The decision was DELEGATED above; research
+> resolved it to id-keyed Option A; the pre-deploy prod probe invalidated that choice and
+> the user re-decided. Binding constraint is recorded in CONTEXT.md (⚠ D-04 REVERSED block).
+
+| Option | Description | Originally | Now |
+|--------|-------------|-----------|-----|
+| A — id-keyed `item_master` (PigParse id) + collision guard | Catalog-only rows go into `item_master` keyed by PigParse `item_id`; an `item_id NOT IN item_master` guard drops any PigParse id that numerically equals a held EQ id. Zero migration, zero held-reader blast radius — but drops the colliding catalog names. | ✓ (research pick) | ✗ REJECTED |
+| B — name-keyed `catalog_enrichment` table | Separate table keyed by `lower(trim(name))` for unheld items; `item_master` stays held-only. +1 migration (00017) + a parallel store/freshness layer; Phase 39 COALESCEs held∪unheld by name. Covers ALL catalog items, no drop. | (rejected for blast radius) | ✓ SELECTED |
+
+**Why the reversal.** Research Assumption A2 held that a PigParse id numerically equal to a
+held EQ id for a *different* item was "rare … ≈0", so Option A's guard would drop ~nothing.
+The pre-deploy prod probe (live DB: `item_master`=953, `pigparse_price`=4,343) found **60
+raw collisions / 43 genuinely-unheld catalog items dropped** (e.g. *Cured Silk Gi*, *Ancient
+Tarnished Breastplate*, *Etched Velium Brawl Stick*) — ~1% of the catalog, no correctness
+risk (the guard correctly protects held rows), but a permanent coverage hole. The plan's
+STOP-at-~20 gate fired; surfaced to the user, who chose to **hold the deploy and re-plan
+name-keyed** (cover all 4,343, no drop) over shipping the gap. Significant rework accepted:
+re-architects the storage D-04 deliberately avoided, +migration 00017, held-reader blast
+radius re-verified (stays zero — held items remain in `item_master`).
+
+**Bonus:** name-keying makes Phase 39's catalog↔enrichment facet join name-keyed end-to-end,
+dissolving the namespace-bridge hazard flagged in 39-CONTEXT.md (the catalog scope reads the
+same `lower(trim(name))` key throughout).

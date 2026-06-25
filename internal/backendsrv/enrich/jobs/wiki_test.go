@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/boejowen/SquireBot/internal/backendsrv/enrich"
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich/politefetch"
 	"github.com/boejowen/SquireBot/internal/backendsrv/store"
 )
@@ -390,6 +391,64 @@ func TestRunWiki_EnrichesUnheldCatalogItem(t *testing.T) {
 
 	// The junk catalog name did NOT abort the run; the job completed "ok".
 	assertJobStatus(t, db, "wiki_weekly", "ok")
+}
+
+// TestUpsertItemAndQuests_CatalogKeyedByRefName is the 38-REVIEW WR-01/WR-02 regression:
+// a catalog-only enrichment row MUST key catalog_enrichment by the PigParse name
+// (ref.Name) — the SAME name the union's held-name exclusion (itemids.go) and Phase 39's
+// catalog↔enrichment join normalize on — NOT the wiki-parsed item.ItemName, which can
+// diverge (&redirects=true / the itemname= template param). Keying on the wiki name would
+// (WR-01) let a catalog row land under a HELD norm_name, breaking the
+// "catalog_enrichment never holds a held name" invariant CatalogIconCoverage and the
+// Phase-39 COALESCE rely on, or (WR-02) collide two distinct catalog rows via
+// ON CONFLICT(norm_name). The wiki name is kept only as the display Name column.
+func TestUpsertItemAndQuests_CatalogKeyedByRefName(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+
+	// The PigParse auction name (ref.Name) and the wiki-parsed name (item.ItemName)
+	// deliberately DIVERGE — the exact condition WR-01/WR-02 is about.
+	const pigName = "Short Sword of Ykesha"
+	const wikiName = "Short Sword of the Ykesha"
+	ref := store.EnrichmentRef{ItemID: 90951, Name: pigName, Held: false}
+	item := enrich.ParsedWikiItem{ItemName: wikiName, WikitextSHA1: "deadbeef", IconID: 42}
+
+	wrote, err := upsertItemAndQuests(ctx, db, ref, item, nil, "2026-06-25T00:00:00Z")
+	if err != nil {
+		t.Fatalf("upsertItemAndQuests: %v", err)
+	}
+	if !wrote {
+		t.Fatalf("didWrite=false, want true (a fresh catalog row must be written)")
+	}
+
+	// The row is keyed by the normalized PigParse name (ref.Name) ...
+	var gotName string
+	var gotIcon int64
+	if err := db.QueryRow(
+		`SELECT name, icon_id FROM catalog_enrichment WHERE norm_name = lower(trim(?))`,
+		pigName,
+	).Scan(&gotName, &gotIcon); err != nil {
+		t.Fatalf("catalog_enrichment row not keyed by the PigParse name %q (WR-01/WR-02 regression): %v", pigName, err)
+	}
+	if gotIcon != 42 {
+		t.Errorf("icon_id = %d, want 42", gotIcon)
+	}
+	// ... and the divergent wiki name is the DISPLAY column, not the key.
+	if gotName != wikiName {
+		t.Errorf("display name = %q, want the wiki name %q (item.ItemName is kept as the display column)", gotName, wikiName)
+	}
+
+	// The row must NOT be keyed by the divergent wiki name (the pre-fix behavior).
+	var n int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM catalog_enrichment WHERE norm_name = lower(trim(?))`,
+		wikiName,
+	).Scan(&n); err != nil {
+		t.Fatalf("count by wiki name: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("catalog_enrichment has %d row(s) keyed by the wiki name %q — a catalog row must key on the PigParse ref.Name, not item.ItemName (WR-01/WR-02)", n, wikiName)
+	}
 }
 
 func TestRunWiki_304SkipsResource(t *testing.T) {

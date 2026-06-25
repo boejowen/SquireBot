@@ -297,7 +297,15 @@ func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.EnrichmentRe
 		// (quest_items is held-only / EQ-namespace, T-38-08). The 4-field freshness
 		// short-circuit is the name-keyed parallel of the held path: a row written
 		// before icon/statsblock/flags backfills on the next pass (the same self-heal).
-		norm := strings.ToLower(strings.TrimSpace(item.ItemName))
+		// Key by the PigParse name (ref.Name) — the SAME name the union's held-name
+		// exclusion (itemids.go DistinctEnrichmentRefs) and Phase 39's catalog↔enrichment
+		// join normalize on — NOT the wiki-parsed item.ItemName. The two can diverge
+		// (&redirects=true / the itemname= template param), and keying on the wiki name
+		// would (WR-01) let a catalog row land under a HELD norm_name — breaking the
+		// "catalog_enrichment never holds a held name" invariant CatalogIconCoverage and
+		// the Phase-39 COALESCE rely on — or (WR-02) collide two distinct catalog rows via
+		// ON CONFLICT(norm_name) (38-REVIEW). item.ItemName is kept as the display Name below.
+		norm := strings.ToLower(strings.TrimSpace(ref.Name))
 		existingSHA, existingIcon, existingStats, existingFlagsJSON, ferr := store.GetCatalogEnrichmentFreshnessTx(ctx, tx, norm)
 		if ferr != nil {
 			return false, ferr

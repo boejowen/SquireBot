@@ -36,6 +36,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/boejowen/SquireBot/internal/backendsrv/enrich"
@@ -197,12 +198,11 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 			continue
 		}
 
-		// Phase 38 (Plan 01): DistinctEnrichmentRefs now returns EnrichmentRef (with a
-		// Held flag). Plan 02 (Wave 2) branches the write on ref.Held (held → item_master,
-		// catalog-only → catalog_enrichment by norm_name). Until then this adapts the ref to
-		// the unchanged held-path upsertItemAndQuests (ItemRef), preserving the prior runtime
-		// behavior so the build + the held-path tests stay green.
-		didWrite, werr := upsertItemAndQuests(ctx, db, store.ItemRef{ItemID: ref.ItemID, Name: ref.Name}, item, questLinks, nowStr)
+		// Phase 38 (Plan 02): upsertItemAndQuests branches the write on ref.Held —
+		// held → item_master (by EQ id) + quest_items (unchanged); catalog-only →
+		// catalog_enrichment (by norm_name), no quest write. ref is the EnrichmentRef
+		// the loop ranges over (DistinctEnrichmentRefs), so it flows through unchanged.
+		didWrite, werr := upsertItemAndQuests(ctx, db, ref, item, questLinks, nowStr)
 		if werr != nil {
 			// A per-item DB error is logged + skipped (the run marches on).
 			slog.Warn(wikiJobName+": item write failed", "item_id", ref.ItemID, "err", werr)
@@ -225,10 +225,11 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 	}
 
 	// D-03 (ENRICH-15): one structured coverage summary per pass, read from the CURRENT
-	// item_master state (NOT per-pass deltas) so a maintainer can grep which items remain
-	// icon-less every weekly run — even in steady state when most pages 304-skip and a
-	// delta count would collapse toward zero while hundreds of items still render the
-	// colored tile.
+	// state across BOTH enrichment stores (item_master held ∪ catalog_enrichment unheld,
+	// via CatalogIconCoverage) — NOT per-pass deltas — so a maintainer can grep which items
+	// remain icon-less every weekly run, across the whole ~4,343-item catalog (not just the
+	// ~953 held rows), even in steady state when most pages 304-skip and a delta count would
+	// collapse toward zero while hundreds of items still render the colored tile.
 	cov, cerr := s.CatalogIconCoverage(ctx, residueSampleCap)
 	if cerr != nil {
 		slog.Warn(wikiJobName+": items coverage query failed", "err", cerr)
@@ -243,43 +244,109 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 const residueSampleCap = 50
 
 // logItemsCoverage emits the D-03 coverage summary (ENRICH-15). union_size/written/
-// unchanged describe THIS pass's activity; item_master_total/icon_covered/icon_less +
-// the BOUNDED residue sample describe the CURRENT whole-table state (store.IconCoverage).
-// The residue sample is PUBLIC item NAMES only — NEVER statsblock/wikitext bodies
-// (V7 / T-38-03).
+// unchanged describe THIS pass's activity; total/icon_covered/icon_less + the BOUNDED
+// residue sample describe the CURRENT whole-catalog state ACROSS BOTH stores
+// (item_master ∪ catalog_enrichment, via store.IconCoverage) — `total` (not
+// item_master_total) for honesty now that coverage spans both. The residue sample is
+// PUBLIC item NAMES only — NEVER statsblock/wikitext bodies (V7 / T-38-07).
 func logItemsCoverage(unionSize, written, unchanged int, cov store.IconCoverage) {
 	slog.Info(wikiJobName+": items coverage",
 		"union_size", unionSize,
 		"written", written,
 		"unchanged", unchanged,
-		"item_master_total", cov.Total,
+		"total", cov.Total,
 		"icon_covered", cov.IconCovered,
 		"icon_less", cov.IconLess,
 		"residue_sample", cov.ResidueSample,
 	)
 }
 
-// upsertItemAndQuests applies the SHA-1 short-circuit then, if changed, writes
-// item_master + quest_items for ref in ONE tx. Returns didWrite=false (and no
-// error) when the wikitext SHA-1 is unchanged (the upsert is skipped, mirroring
-// the Sheet's readItemMasterSha early-return).
-func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.ItemRef, item enrich.ParsedWikiItem, questLinks []enrich.WikiQuestItemLink, nowStr string) (didWrite bool, err error) {
+// upsertItemAndQuests applies the 4-field freshness short-circuit then, if changed,
+// writes the parsed wiki item to the store BRANCHED on ref.Held (Phase 38, D-04
+// name-keyed):
+//
+//   - ref.Held == true  → HELD path, UNCHANGED: item_master (by EQ item_id) +
+//     quest_items, exactly as before this phase (byte-for-byte the prior body).
+//   - ref.Held == false → CATALOG-ONLY path: catalog_enrichment (by norm_name =
+//     lower(trim(name))), and NO quest_items write — quest_items is the EQ-inventory
+//     namespace and stays HELD-ONLY (RESEARCH §"Quest links for catalog-only items" /
+//     T-38-08: a PigParse id must never be written into the EQ-namespace quest table).
+//
+// The branch is STRICTLY on ref.Held — NOT on whether a row already exists (Pitfall
+// 2): a catalog-only ref must always route to catalog_enrichment, never to item_master,
+// even if a held item_master row happens to share its id. Returns didWrite=false (and no
+// error) when all four freshness fields are unchanged (the upsert is skipped, the empty
+// tx rolls back via defer).
+func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.EnrichmentRef, item enrich.ParsedWikiItem, questLinks []enrich.WikiQuestItemLink, nowStr string) (didWrite bool, err error) {
 	tx, err := db.BeginTx(ctx, nil) // BEGIN IMMEDIATE (single-writer DSN)
 	if err != nil {
 		return false, fmt.Errorf("begin item tx (item_id=%d): %w", ref.ItemID, err)
 	}
 	defer tx.Rollback() // no-op after Commit
 
-	existingSHA, existingIcon, existingStats, existingFlagsJSON, err := store.GetItemMasterFreshnessTx(ctx, tx, ref.ItemID)
-	if err != nil {
-		return false, err
-	}
 	// parsedFlagsJSON is the freshly-parsed flag set encoded by the SAME canonical
 	// helper the upsert + backfill use (NOT a local json.Marshal), so a flagless
 	// item's "[]" byte-equals the stored "[]" and is NOT re-written every pass (D-06
 	// idempotency). A pre-00016 row's NULL flags_json reads "" here, which differs
-	// from this value and so correctly re-writes once to backfill.
+	// from this value and so correctly re-writes once to backfill. Shared by both
+	// branches (held + catalog) — the ONE canonical MarshalFlags string (D-06 / T-38-06).
 	parsedFlagsJSON := store.MarshalFlags(item.Flags)
+
+	if !ref.Held {
+		// CATALOG-ONLY — write catalog_enrichment by norm_name; NO quest_items write
+		// (quest_items is held-only / EQ-namespace, T-38-08). The 4-field freshness
+		// short-circuit is the name-keyed parallel of the held path: a row written
+		// before icon/statsblock/flags backfills on the next pass (the same self-heal).
+		norm := strings.ToLower(strings.TrimSpace(item.ItemName))
+		existingSHA, existingIcon, existingStats, existingFlagsJSON, ferr := store.GetCatalogEnrichmentFreshnessTx(ctx, tx, norm)
+		if ferr != nil {
+			return false, ferr
+		}
+		if existingSHA == item.WikitextSHA1 && existingIcon == int64(item.IconID) &&
+			existingStats == item.Statsblock && existingFlagsJSON == parsedFlagsJSON {
+			// sha AND icon AND statsblock AND flags all unchanged — skip the write
+			// (the icon/flags are already compared here, so the backfill rides for free).
+			return false, nil
+		}
+		if uerr := store.UpsertCatalogEnrichmentTx(ctx, tx, store.CatalogEnrichment{
+			NormName:      norm,
+			Name:          item.ItemName,
+			ItemID:        int(ref.ItemID), // representative PigParse id (examine/icon URL); NOT a key
+			WikiSummary:   item.Summary,
+			WikiURL:       item.WikiURL,
+			Slot:          item.Slot,
+			IsQuestItem:   item.IsQuestItem,
+			WikitextSHA1:  item.WikitextSHA1,
+			LastRefreshed: nowStr,
+			IconID:        item.IconID,
+			Statsblock:    item.Statsblock,
+			IsLore:        item.IsLore,
+			IsNoDrop:      item.IsNoDrop,
+			IsMagic:       item.IsMagic,
+			IsTemporary:   item.IsTemporary,
+			IsClicky:      item.IsClicky,
+			ClickyEffect:  item.ClickyEffect,
+			HasHaste:      item.HasHaste,
+			HastePct:      item.HastePct,
+			FlagsJSON:     parsedFlagsJSON,
+		}); uerr != nil {
+			return false, uerr
+		}
+		// NO ReplaceQuestItemsForIDTx — quest_items is the EQ namespace, held-only
+		// (RESEARCH §"Quest links for catalog-only items" / T-38-08). The catalog branch
+		// parses the page but deliberately does not consume questLinks.
+		_ = questLinks
+		if cerr := tx.Commit(); cerr != nil {
+			return false, fmt.Errorf("commit catalog_enrichment tx (norm_name=%q): %w", norm, cerr)
+		}
+		return true, nil
+	}
+
+	// HELD — UNCHANGED: item_master (by EQ id) + quest_items (the prior body, verbatim).
+	existingSHA, existingIcon, existingStats, existingFlagsJSON, err := store.GetItemMasterFreshnessTx(ctx, tx, ref.ItemID)
+	if err != nil {
+		return false, err
+	}
 	if existingSHA == item.WikitextSHA1 && existingIcon == int64(item.IconID) &&
 		existingStats == item.Statsblock && existingFlagsJSON == parsedFlagsJSON {
 		// The wikitext AND the icon AND the statsblock AND the flag set are all unchanged —

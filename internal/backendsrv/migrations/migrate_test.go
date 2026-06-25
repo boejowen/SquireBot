@@ -1203,6 +1203,105 @@ func TestMigrate_00016_AddsItemFlagsEffects(t *testing.T) {
 	}
 }
 
+// catalogEnrichmentColumns are the 20 columns 00017 creates on the NEW
+// catalog_enrichment table (Phase 38 ENRICH-14/15, D-04 name-keyed): the
+// norm_name PK (the cross-namespace key), the representative name + PigParse
+// item_id, and the full item_master enrichment column set re-keyed on the name.
+// A column-name typo (e.g. is_nodrop vs is_no_drop) is caught here in CI, not at
+// runtime in the catalog upsert.
+var catalogEnrichmentColumns = []string{
+	"norm_name", "name", "item_id", "wiki_summary", "wiki_url", "slot", "is_quest_item",
+	"wikitext_sha1", "icon_id", "statsblock", "is_lore", "is_no_drop", "is_magic",
+	"is_temporary", "is_clicky", "clicky_effect", "has_haste", "haste_pct",
+	"flags_json", "last_refreshed",
+}
+
+// TestMigrate_00017_AddsCatalogEnrichment proves the Phase 38 forward-only migration
+// 00017 applied on a fresh DB (NewTestDB runs goose.Up over ALL seventeen migrations):
+//   - the NEW catalog_enrichment table exists (additive — no ALTER of item_master);
+//   - it carries ALL 20 columns (columnSet) — the assertion that catches a mistyped
+//     column name before it reaches the catalog upsert;
+//   - it is created EMPTY (the crawl populates it; nothing is seeded by the migration);
+//   - norm_name is the PK: a second insert with the SAME norm_name conflicts on the PK
+//     (ON CONFLICT(norm_name) is the upsert grain the store relies on), keeping one row;
+//   - a second Up is a clean no-op (idempotent — goose_db_version row count unchanged).
+//
+// Backend-only additive table — the watcher never reads/writes catalog_enrichment, so there
+// is NO WatcherMaxSchemaVersion change (that gate does not exist in the off-Google backend).
+// "Schema v17" == goose 00017 applied.
+func TestMigrate_00017_AddsCatalogEnrichment(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00017) + t.Cleanup
+
+	// The new table exists.
+	if !tableExists(t, db, "catalog_enrichment") {
+		t.Errorf("expected table %q to exist after 00017, but it does not", "catalog_enrichment")
+	}
+
+	// All 20 columns exist on catalog_enrichment.
+	cols := columnSet(t, db, "catalog_enrichment")
+	for _, c := range catalogEnrichmentColumns {
+		if !cols[c] {
+			t.Errorf("expected catalog_enrichment to have column %q after 00017 (have: %v)", c, cols)
+		}
+	}
+
+	// Created empty (the weekly crawl populates it — the migration seeds nothing).
+	var initial int
+	if err := db.QueryRow(`SELECT count(*) FROM catalog_enrichment`).Scan(&initial); err != nil {
+		t.Fatalf("count catalog_enrichment (post-migration): %v", err)
+	}
+	if initial != 0 {
+		t.Errorf("expected catalog_enrichment to be created empty, got %d rows", initial)
+	}
+
+	// norm_name is the PK: a second insert with the same norm_name must conflict on the
+	// PK (ON CONFLICT(norm_name) is the upsert grain the store relies on) — proven here
+	// by an INSERT ... ON CONFLICT(norm_name) DO UPDATE keeping exactly one row.
+	if _, err := db.Exec(
+		`INSERT INTO catalog_enrichment (norm_name, name, item_id, icon_id, flags_json) VALUES (?,?,?,?,?)`,
+		"cloak of flames", "Cloak of Flames", int64(1234), int64(567), "[]"); err != nil {
+		t.Fatalf("first catalog_enrichment insert: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO catalog_enrichment (norm_name, name, item_id, icon_id, flags_json) VALUES (?,?,?,?,?)
+		 ON CONFLICT(norm_name) DO UPDATE SET icon_id=excluded.icon_id`,
+		"cloak of flames", "Cloak of Flames", int64(1234), int64(890), "[]"); err != nil {
+		t.Fatalf("catalog_enrichment upsert: %v", err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM catalog_enrichment`).Scan(&n); err != nil {
+		t.Fatalf("count catalog_enrichment after upsert: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected exactly 1 catalog_enrichment row after upsert on the PK, got %d", n)
+	}
+	// The conflict UPDATE took effect (icon_id 567 → 890).
+	var gotIcon int64
+	if err := db.QueryRow(`SELECT icon_id FROM catalog_enrichment WHERE norm_name = ?`, "cloak of flames").Scan(&gotIcon); err != nil {
+		t.Fatalf("read catalog_enrichment icon_id after upsert: %v", err)
+	}
+	if gotIcon != 890 {
+		t.Errorf("catalog_enrichment icon_id = %d after ON CONFLICT(norm_name) update, want 890", gotIcon)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00017 DB
+	// returns nil AND the goose_db_version row count is unchanged.
+	var beforeVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
+		t.Fatalf("count goose_db_version before re-run: %v", err)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00017 should be a no-op, got error: %v", err)
+	}
+	var afterVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
+		t.Fatalf("count goose_db_version after re-run: %v", err)
+	}
+	if beforeVersions != afterVersions {
+		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
 // wishlistItemColumns are the nine columns 00014 creates on wishlist_item
 // (WISH-02/03): the FK identity (discord_user_id, the PERSON), the NOT-NULL
 // character_id + canonical worn-slot, the nullable catalog item_id + snapshot

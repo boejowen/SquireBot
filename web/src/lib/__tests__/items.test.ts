@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { ItemRollup, ItemHolder } from '../api';
-import { viewerFirstItems, filterItems, sortHolders } from '../items';
+import { viewerFirstItems, filterItems, sortHolders, facetItems } from '../items';
 
 function item(over: Partial<ItemRollup> = {}): ItemRollup {
 	return {
@@ -24,6 +24,8 @@ function item(over: Partial<ItemRollup> = {}): ItemRollup {
 		is_quest_item: false,
 		icon_id: 0,
 		statsblock: '',
+		is_clicky: false,
+		has_haste: false,
 		holders: [],
 		...over
 	};
@@ -124,6 +126,60 @@ describe('filterItems — viewer-priority case-insensitive search (ITEM-02 / D-0
 		const before = rows.map((r) => r.name);
 		filterItems(rows, 'cloak');
 		expect(rows.map((r) => r.name)).toEqual(before);
+	});
+});
+
+describe('facetItems — AND-combined Clicky/Haste facet (D-02)', () => {
+	// A mixed set: one clicky-only, one haste-only, one both, one neither.
+	const rows = [
+		item({ name: 'Reaper of the Dead', is_clicky: true, has_haste: false }),
+		item({ name: 'Robe of the Lost Circle', is_clicky: false, has_haste: true }),
+		item({ name: 'Jade Reaver', is_clicky: true, has_haste: true }),
+		item({ name: 'Bone Chips', is_clicky: false, has_haste: false })
+	];
+
+	it('neither flag set → pass-through (the full set; no facet filter)', () => {
+		expect(facetItems(rows, { clicky: false, haste: false }).map((r) => r.name)).toEqual([
+			'Reaper of the Dead',
+			'Robe of the Lost Circle',
+			'Jade Reaver',
+			'Bone Chips'
+		]);
+	});
+
+	it('clicky-only → only is_clicky rows', () => {
+		expect(facetItems(rows, { clicky: true, haste: false }).map((r) => r.name)).toEqual([
+			'Reaper of the Dead',
+			'Jade Reaver'
+		]);
+	});
+
+	it('haste-only → only has_haste rows', () => {
+		expect(facetItems(rows, { clicky: false, haste: true }).map((r) => r.name)).toEqual([
+			'Robe of the Lost Circle',
+			'Jade Reaver'
+		]);
+	});
+
+	it('both flags set → the intersection (rows that are BOTH clicky AND haste)', () => {
+		expect(facetItems(rows, { clicky: true, haste: true }).map((r) => r.name)).toEqual([
+			'Jade Reaver'
+		]);
+	});
+
+	it('an empty AND-combination (a set with no row that is both) returns []', () => {
+		const noBoth = [
+			item({ name: 'Clicky Only', is_clicky: true, has_haste: false }),
+			item({ name: 'Haste Only', is_clicky: false, has_haste: true })
+		];
+		expect(facetItems(noBoth, { clicky: true, haste: true })).toEqual([]);
+	});
+
+	it('returns a NEW array (does not mutate the input)', () => {
+		const before = rows.map((r) => r.name);
+		const out = facetItems(rows, { clicky: true, haste: false });
+		expect(out).not.toBe(rows);
+		expect(rows.map((r) => r.name)).toEqual(before); // input untouched
 	});
 });
 

@@ -247,6 +247,8 @@ export interface ItemRollup {
 	is_quest_item: boolean;
 	icon_id: number;
 	statsblock: string;
+	is_clicky: boolean; // Phase 39 — mirrors compute.ItemRollup (item_master); client holdings facet
+	has_haste: boolean; // Phase 39
 	holders: ItemHolder[];
 }
 
@@ -753,11 +755,23 @@ export interface CatalogItem {
 	name: string;
 	/** The recent average price in pp, when known. */
 	current_avg?: number;
+	is_clicky?: boolean; // Phase 39 — optional; the server only joins flags when a facet is active. UI tolerates undefined.
+	has_haste?: boolean; // Phase 39
 }
 
-/** GET /api/v1/items/search?q=… → CatalogItem[] (server returns [] for q<2). */
-export function searchCatalog(q: string, f: typeof fetch = fetch): Promise<CatalogItem[]> {
-	return getJSON<CatalogItem[]>('/api/v1/items/search?q=' + encodeURIComponent(q), f);
+/** GET /api/v1/items/search?q=…[&clicky=1][&haste=1] → CatalogItem[] (server returns
+ *  [] for q<2 even with a facet active — Plan 01 Open-Q2). The `facets` arg defaults
+ *  to `{}` so the existing wishlist add-search call (`searchCatalog(q)`) stays
+ *  compiling; the "1" param encoding mirrors the Plan 01 handler (Assumption A1). */
+export function searchCatalog(
+	q: string,
+	facets: { clicky?: boolean; haste?: boolean } = {},
+	f: typeof fetch = fetch
+): Promise<CatalogItem[]> {
+	const p = new URLSearchParams({ q });
+	if (facets.clicky) p.set('clicky', '1');
+	if (facets.haste) p.set('haste', '1');
+	return getJSON<CatalogItem[]>('/api/v1/items/search?' + p.toString(), f);
 }
 
 // --- Wishlist (34-03 / WISH-02/03/04/05) -----------------------------------

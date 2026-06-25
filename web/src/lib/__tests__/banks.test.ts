@@ -47,6 +47,8 @@ function item(over: Partial<ItemRollup> = {}): ItemRollup {
 		is_quest_item: false,
 		icon_id: 0,
 		statsblock: '',
+		is_clicky: false,
+		has_haste: false,
 		holders: [],
 		...over
 	};

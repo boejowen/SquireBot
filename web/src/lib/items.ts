@@ -35,6 +35,20 @@ export function filterItems(rows: ItemRollup[], query: string): ItemRollup[] {
 	return viewerFirstItems(matched);
 }
 
+/** AND-combined Clicky/Haste facet (Phase 39 / D-02): neither set → pass-through
+ *  (the full set, today's behavior); one set → that flag only; both set → the
+ *  intersection (rows that are BOTH clicky AND haste). Pure; returns a NEW array
+ *  (never mutates the input). Lives here (not in .svelte) so node vitest covers the
+ *  facet LOGIC — the DOM render/scope toggle is browser-smoked (vitest is DOM-blind).
+ *  The Inventory tab composes it AFTER the name filter:
+ *  `facetItems(filterItems(items, query), { clicky, haste })`. */
+export function facetItems(
+	rows: ItemRollup[],
+	f: { clicky: boolean; haste: boolean }
+): ItemRollup[] {
+	return rows.filter((r) => (!f.clicky || r.is_clicky) && (!f.haste || r.has_haste));
+}
+
 /** Holders-table viewer-first band order (UI-SPEC §F): the viewer's own characters
  *  first (band 0), then other guild characters (1), then banks/bots (2) — A-Z by
  *  char (case-insensitive) within each band. is_mine WINS the tie-break over

@@ -422,6 +422,153 @@ func TestParseItempage_NewFieldsSurfaced(t *testing.T) {
 	}
 }
 
+// TestParseItempage_FlagsAndEffects drives three real fixtures as a table,
+// proving ENRICH-12 (the four queried flags + the full Flags set) and ENRICH-13
+// (clicky-vs-worn classification + haste %) end-to-end through ParseItempage:
+//   - Cloak of Flames: MAGIC + Haste:+36%, NOT a clicky (a haste cloak is worn).
+//   - Fungus tunic:    LORE + Effect (Worn) — the (Worn) effect is NOT a click.
+//   - Staff of Temperate Flux: MAGIC + LORE + Effect (Click from Inventory) — the
+//     clicky-positive case (ClickyEffect == the spell name, links/qualifier stripped).
+func TestParseItempage_FlagsAndEffects(t *testing.T) {
+	cases := []struct {
+		fixture      string
+		isMagic      bool
+		isLore       bool
+		isNoDrop     bool
+		isTemporary  bool
+		isClicky     bool
+		clickyEffect string
+		hasHaste     bool
+		hastePct     int
+		wantFlags    []string // a subset that MUST be present in the full set
+	}{
+		{
+			fixture:   "wiki-parse-cloak-of-flames",
+			isMagic:   true,
+			isLore:    false,
+			isNoDrop:  false,
+			isClicky:  false, // a Haste cloak is worn, NOT an activatable clicky
+			hasHaste:  true,
+			hastePct:  36,
+			wantFlags: []string{"MAGIC ITEM"},
+		},
+		{
+			fixture:      "wiki-parse-fungus-covered-scale-tunic",
+			isMagic:      false,
+			isLore:       true,
+			isClicky:     false, // the (Worn) effect is NOT a click
+			clickyEffect: "",
+			hasHaste:     false,
+			wantFlags:    []string{"LORE ITEM"},
+		},
+		{
+			fixture:      "wiki-parse-staff-of-temperate-flux",
+			isMagic:      true,
+			isLore:       true,
+			isClicky:     true, // (Click from Inventory) IS a clicky
+			clickyEffect: "Shock of Frost",
+			hasHaste:     false,
+			wantFlags:    []string{"MAGIC ITEM", "LORE ITEM"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.fixture, func(t *testing.T) {
+			wikitext, title := loadWikitext(t, c.fixture)
+			item, _, ok, reason := ParseItempage(wikitext, title)
+			if !ok {
+				t.Fatalf("ParseItempage ok=false reason=%q", reason)
+			}
+			if item.IsMagic != c.isMagic {
+				t.Errorf("IsMagic = %v, want %v", item.IsMagic, c.isMagic)
+			}
+			if item.IsLore != c.isLore {
+				t.Errorf("IsLore = %v, want %v", item.IsLore, c.isLore)
+			}
+			if item.IsNoDrop != c.isNoDrop {
+				t.Errorf("IsNoDrop = %v, want %v", item.IsNoDrop, c.isNoDrop)
+			}
+			if item.IsTemporary != c.isTemporary {
+				t.Errorf("IsTemporary = %v, want %v", item.IsTemporary, c.isTemporary)
+			}
+			if item.IsClicky != c.isClicky {
+				t.Errorf("IsClicky = %v, want %v", item.IsClicky, c.isClicky)
+			}
+			if item.ClickyEffect != c.clickyEffect {
+				t.Errorf("ClickyEffect = %q, want %q", item.ClickyEffect, c.clickyEffect)
+			}
+			if item.HasHaste != c.hasHaste {
+				t.Errorf("HasHaste = %v, want %v", item.HasHaste, c.hasHaste)
+			}
+			if item.HastePct != c.hastePct {
+				t.Errorf("HastePct = %d, want %d", item.HastePct, c.hastePct)
+			}
+			got := map[string]bool{}
+			for _, f := range item.Flags {
+				got[f] = true
+			}
+			for _, want := range c.wantFlags {
+				if !got[want] {
+					t.Errorf("Flags missing %q (got %v)", want, item.Flags)
+				}
+			}
+		})
+	}
+}
+
+// TestParseClicky is the D-01 classification unit suite: only an activatable
+// (Click...) qualifier yields a clicky; (Worn) passives and (Combat) procs do
+// not. The effect NAME has its [[wiki-link]] brackets stripped and the trailing
+// "(...)" qualifier removed. Empty / no-qualifier input → (false, "").
+func TestParseClicky(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        string
+		wantClick bool
+		wantName  string
+	}{
+		{"click bare", "[[Shock of Frost]] (Click)", true, "Shock of Frost"},
+		{"click from inventory", "[[Shock of Frost]] (Click from Inventory)", true, "Shock of Frost"},
+		{"worn is not a click", "[[Fungal Regrowth]] (Worn)", false, ""},
+		{"combat is not a click", "[[Lifetap]] (Combat)", false, ""},
+		{"empty", "", false, ""},
+		{"no qualifier", "[[Some Effect]]", false, ""},
+		{"display-text link", "[[Spell Page|Frost Bolt]] (Click)", true, "Frost Bolt"},
+	}
+	for _, c := range cases {
+		gotClick, gotName := parseClicky(c.in)
+		if gotClick != c.wantClick || gotName != c.wantName {
+			t.Errorf("parseClicky(%q) = (%v, %q), want (%v, %q) [%s]",
+				c.in, gotClick, gotName, c.wantClick, c.wantName, c.name)
+		}
+	}
+}
+
+// TestParseHastePct is the haste-% parse unit suite: "+36%"/"21%" → the integer
+// magnitude; blank/garbage → (false, 0). Defensive like parseIconID (T-37-02).
+func TestParseHastePct(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        string
+		wantHaste bool
+		wantPct   int
+	}{
+		{"signed percent", "+36%", true, 36},
+		{"bare percent", "21%", true, 21},
+		{"whitespace-wrapped", "  +10%  ", true, 10},
+		{"no percent sign", "15", true, 15},
+		{"empty", "", false, 0},
+		{"non-numeric", "abc", false, 0},
+		{"percent only", "%", false, 0},
+	}
+	for _, c := range cases {
+		gotHaste, gotPct := parseHastePct(c.in)
+		if gotHaste != c.wantHaste || gotPct != c.wantPct {
+			t.Errorf("parseHastePct(%q) = (%v, %d), want (%v, %d) [%s]",
+				c.in, gotHaste, gotPct, c.wantHaste, c.wantPct, c.name)
+		}
+	}
+}
+
 // isHex40 reports whether s is exactly 40 lowercase hex chars.
 func isHex40(s string) bool {
 	if len(s) != 40 {

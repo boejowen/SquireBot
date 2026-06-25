@@ -2,17 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.6
 milestone_name: — Item Detail & Polish
-status: planning
-last_updated: "2026-06-24T00:00:00.000Z"
+status: in_progress
+last_updated: "2026-06-25T00:00:00.000Z"
 last_activity: 2026-06-24
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
-  total_plans_phase37: 2
-  note: "v2.6 ROADMAP CREATED 2026-06-24 (Phases 37–42; 13/13 requirements mapped). PHASE 37 DISCUSSED + PLANNED 2026-06-24: 37-CONTEXT (D-01..06 locked), 2 plans (37-01 parser, 37-02 migration 00016 + no-network backfill), plan-checker PASSED 0 blockers (3 advisory warnings folded in). Ready to execute via /gsd-execute-phase 37. Then: 38 catalog-wide enrichment + icon coverage → 39 faceted Clicky/Haste search → 40 flag outlines + named quest links → 41 paper-doll compaction + photo → 42 wishlist compaction + sub-Velious tiers. Backend + web, watcher untouched, no v* tag planned."
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 17
+  note: "v2.6 in progress (1/6 phases). PHASE 37 ✅ COMPLETE 2026-06-24 (item enrichment backbone — flags + effects): 2 plans EXECUTED, verifier PASSED 8/8 goal-backward, code-review 0 BLOCKER/0 HIGH (MD-01 raw/cleaned flag-divergence fixed-forward; 4 LOW/NIT → backlog 999.41). Migration 00016 (9 additive cols → schema bump), no-network statsblock backfill + freshness self-heal; go build/vet/test ./... green; watcher untouched, no v* tag. NOT yet deployed. NEXT: /gsd-discuss-phase 38 (or /gsd-plan-phase 38) — catalog-wide enrichment + icon coverage (the 'missing images' bug; the biggest/riskiest phase — widens enrichment beyond held items to the full ~4,300 PigParse catalog). Then 39 faceted search → 40 outlines+quest links → 41 paper-doll+photo → 42 wishlist+sub-Velious tiers."
 ---
 
 > **v2.6 "Item Detail & Polish" — ROADMAP CREATED 2026-06-24 (Phases 37–42; 13/13 requirements mapped).** Source spec `Future Features.txt` (2026-06-24): 1 bug (missing item images), 4 tweaks (wishlist compaction + sub-Velious tiers · paper-doll compaction + per-character photo · named quest links on modern tabs · flag-coded item outlines), 1 feature (faceted search by item type — Clicky/Haste, holdings↔catalog toggle). Shared backbone = re-enabling the dropped stat-block parse (`wikiitem.go` D-8 guard) for flags + effects (Phase 37); full-catalog search/icons require widening enrichment beyond held items (Phase 38). Phase map: **37** ENRICH-12/13 (flags+effects backbone) → **38** ENRICH-14/15 (catalog-wide enrichment + icon coverage/diagnostic) → **39** SEARCH-04/05/06 (Clicky/Haste facets + holdings↔catalog toggle) → **40** ITEMUI-01/02 (flag outlines + named quest links) → **41** CHARUI-01/02 (paper-doll compaction + portrait photo) → **42** WISHUI-01/02 (wishlist compaction + sub-Velious tiers). Dependency chain 37→38→39, then 40·41·42 independent. Backend + web; watcher UNTOUCHED → no `v*` tag (consistent with v2.3/v2.4/v2.5). Research SKIPPED (extends well-understood subsystems; codebase-mapped 2026-06-24). Locked: paper-doll both compact+photo · named quests (no epic model) · Clicky+Haste facets · flags No-Drop red/Lore gold/Magic blue · sub-Velious tiers included. Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (ENRICH-12.. / SEARCH-04.. / ITEMUI-01.. / CHARUI-01.. / WISHUI-01.. + Traceability) + ROADMAP.md (Phases 37–42 appended; all prior history + the 999.x backlog preserved). **Phase 37 ready to plan → `/gsd-plan-phase 37`.**

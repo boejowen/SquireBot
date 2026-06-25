@@ -237,6 +237,70 @@ func TestRunWiki_BackfillsStaleIcon(t *testing.T) {
 	}
 }
 
+// TestRunWiki_BackfillsStaleFlags is the ENRICH-12/13 flags-backfill regression (Phase
+// 37): a row written BEFORE the flags_json column (migration 00016) has the correct
+// wikitext SHA-1 + icon + statsblock but a NULL flags_json. The freshness short-circuit
+// must NOT skip such a row on SHA-1 alone — it must re-write and backfill the flag/effect
+// columns even though the wikitext is unchanged (exactly the icon-backfill argument, one
+// more field). Mirrors TestRunWiki_BackfillsStaleIcon. (The one-time production backfill +
+// the weekly freshness pass both heal these rows; this test exercises the weekly path.)
+func TestRunWiki_BackfillsStaleFlags(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	seedAllItemRefs(t, db)
+	srv := newWikiFixtureServer(t, wikiServerOpts{})
+
+	// Run 1 populates item_master incl. flags_json from the Cloak of Flames fixture
+	// (MAGIC ITEM + Haste +36%).
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #1: %v", err)
+	}
+	const cofID = 18950 // Cloak of Flames — its fixture carries MAGIC ITEM + Haste
+	var flags0 string
+	var magic0 int
+	if err := db.QueryRow(`SELECT flags_json, is_magic FROM item_master WHERE item_id=?`, cofID).
+		Scan(&flags0, &magic0); err != nil {
+		t.Fatalf("read flags after run 1: %v", err)
+	}
+	if magic0 != 1 || flags0 == "" || flags0 == "[]" {
+		t.Fatalf("precondition: Cloak of Flames is_magic=%d flags_json=%q after run 1 — fixture lacks flags", magic0, flags0)
+	}
+
+	// Simulate a pre-00016 row: same wikitext SHA-1 + icon + statsblock, but NULL
+	// flags_json (and 0 is_magic). Clear etag_cache so the page re-fetches (the
+	// production backfill clears it for exactly this reason).
+	if _, err := db.Exec(`UPDATE item_master SET flags_json=NULL, is_magic=0, has_haste=0, haste_pct=0 WHERE item_id=?`, cofID); err != nil {
+		t.Fatalf("null the flags: %v", err)
+	}
+	if _, err := db.Exec(`DELETE FROM etag_cache`); err != nil {
+		t.Fatalf("clear etag_cache: %v", err)
+	}
+
+	// Run 2: identical fixtures → unchanged SHA-1 → the OLD (SHA-1-only) skip would have
+	// left flags_json NULL; the fix must re-write and backfill the flag/effect columns.
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki #2: %v", err)
+	}
+	var flags1 string
+	var magic1, haste1, hastePct1 int
+	if err := db.QueryRow(`SELECT flags_json, is_magic, has_haste, haste_pct FROM item_master WHERE item_id=?`, cofID).
+		Scan(&flags1, &magic1, &haste1, &hastePct1); err != nil {
+		t.Fatalf("read flags after run 2: %v", err)
+	}
+	if flags1 != flags0 {
+		t.Errorf("flags_json after backfill run = %q, want %q (an unchanged-SHA1 row must still backfill its flags)", flags1, flags0)
+	}
+	if magic1 != 1 {
+		t.Errorf("is_magic after backfill run = %d, want 1 (the flag must re-derive)", magic1)
+	}
+	if haste1 != 1 || hastePct1 != 36 {
+		t.Errorf("has_haste/haste_pct after backfill run = %d/%d, want 1/36 (Cloak of Flames Haste +36%%)", haste1, hastePct1)
+	}
+}
+
 func TestRunWiki_304SkipsResource(t *testing.T) {
 	restore := setWikiSleepNoop()
 	defer restore()

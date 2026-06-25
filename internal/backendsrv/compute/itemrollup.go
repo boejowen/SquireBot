@@ -79,6 +79,8 @@ func buildItemRollups(viewRows []ViewRow, roster []store.RosterRow, iconStats ma
 				IsQuestItem: vr.IsQuestItem,
 				IconID:      ic.IconID,
 				Statsblock:  ic.Statsblock,
+				IsClicky:    ic.IsClicky, // Phase 39 — holdings facet (SC-4), id-correct from item_master
+				HasHaste:    ic.HasHaste, // Phase 39
 			}
 			byName[key] = roll
 			order = append(order, key)

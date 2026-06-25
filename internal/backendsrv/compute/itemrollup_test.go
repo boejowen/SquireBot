@@ -53,6 +53,25 @@ func setItemIconStats(t *testing.T, db *sql.DB, itemID, iconID int64, statsblock
 	}
 }
 
+// setItemFlags stamps the Phase 37 (00016) is_clicky/has_haste booleans onto an
+// already-seeded item_master row (seedItemMaster leaves both NULL). 1 = true, 0 = false;
+// these are the columns the Phase 39 holdings facet reads through the ItemRollup.
+func setItemFlags(t *testing.T, db *sql.DB, itemID int64, clicky, haste bool) {
+	t.Helper()
+	bit := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	if _, err := db.Exec(
+		`UPDATE item_master SET is_clicky = ?, has_haste = ? WHERE item_id = ?`,
+		bit(clicky), bit(haste), itemID,
+	); err != nil {
+		t.Fatalf("set flags on %d: %v", itemID, err)
+	}
+}
+
 // TestItems_GroupsByNameWithHoldersAndFlags is the end-to-end ITEM-01..03 proof over a
 // seeded DB: the SAME item held by two chars in different slots collapses to ONE rollup
 // (summed_qty = Σ, holder_count = distinct chars), an unpriced item has nil Price, a
@@ -76,6 +95,7 @@ func TestItems_GroupsByNameWithHoldersAndFlags(t *testing.T) {
 	// in Bank1) → ONE rollup, summed_qty = 2, holder_count = 2, is_mine = true (Apple).
 	seedItemMaster(t, db, 1001, "Jade Reaver", "A fine blade.", "https://wiki/Jade", false)
 	setItemIconStats(t, db, 1001, 560, "MAGIC ITEM\nDMG: 14")
+	setItemFlags(t, db, 1001, true, false) // Phase 39: is_clicky=1, has_haste=0 → rollup booleans propagate
 	seedPigparse(t, db, 9001, "Jade Reaver", "0", 1500, 7) // WTS, name-bridged (catalog id 9001 != EQ 1001)
 	seedInv(t, db, apple, "Primary", "Jade Reaver", 1001, 1)
 	seedInv(t, db, bank, "Bank1", "Jade Reaver", 1001, 1)
@@ -125,6 +145,10 @@ func TestItems_GroupsByNameWithHoldersAndFlags(t *testing.T) {
 	if jade.IconID != 560 || jade.Statsblock != "MAGIC ITEM\nDMG: 14" {
 		t.Errorf("Jade Reaver icon/stats = {%d, %q}, want 560 / the stat block", jade.IconID, jade.Statsblock)
 	}
+	// Phase 39: the holdings-facet booleans propagate from item_master (00016) through the rollup.
+	if !jade.IsClicky || jade.HasHaste {
+		t.Errorf("Jade Reaver flags = {clicky:%t haste:%t}, want clicky / not-haste (is_clicky=1, has_haste=0)", jade.IsClicky, jade.HasHaste)
+	}
 	if len(jade.Holders) != 2 {
 		t.Fatalf("Jade Reaver holders = %d, want 2: %+v", len(jade.Holders), jade.Holders)
 	}
@@ -173,5 +197,9 @@ func TestItems_GroupsByNameWithHoldersAndFlags(t *testing.T) {
 	}
 	if trinket.IsMine {
 		t.Errorf("Worthless Trinket is_mine = true, want false (only the bank toon holds it)")
+	}
+	// Phase 39: a never-flagged (NULL is_clicky/has_haste) row scans to false, false.
+	if trinket.IsClicky || trinket.HasHaste {
+		t.Errorf("Worthless Trinket flags = {clicky:%t haste:%t}, want false/false (NULL flag columns)", trinket.IsClicky, trinket.HasHaste)
 	}
 }

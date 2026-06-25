@@ -759,6 +759,8 @@ func (s *Store) CharFreshness(ctx context.Context) ([]CharFreshness, error) {
 type IconStats struct {
 	IconID     int64
 	Statsblock string
+	IsClicky   bool // Phase 39 — item_master.is_clicky (00016), EQ-namespace correct here
+	HasHaste   bool // Phase 39 — item_master.has_haste (00016)
 }
 
 // ItemMasterIconStats returns icon_id + statsblock per item_id (P31 schema v13 columns
@@ -768,7 +770,8 @@ type IconStats struct {
 // (no untrusted input); a NULL icon_id maps to 0 and a NULL statsblock to "" (the
 // nullable-scan idiom at InventoryForChar).
 func (s *Store) ItemMasterIconStats(ctx context.Context) (map[int64]IconStats, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT item_id, icon_id, statsblock FROM item_master`)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT item_id, icon_id, statsblock, is_clicky, has_haste FROM item_master`)
 	if err != nil {
 		return nil, fmt.Errorf("query item_master icon/stats: %w", err)
 	}
@@ -780,11 +783,18 @@ func (s *Store) ItemMasterIconStats(ctx context.Context) (map[int64]IconStats, e
 			id    int64
 			icon  sql.NullInt64
 			stats sql.NullString
+			clk   sql.NullInt64 // Phase 39 — NULL/0 → false (a pre-00016 / un-flagged row)
+			hst   sql.NullInt64
 		)
-		if err := rows.Scan(&id, &icon, &stats); err != nil {
+		if err := rows.Scan(&id, &icon, &stats, &clk, &hst); err != nil {
 			return nil, fmt.Errorf("scan item_master icon/stats row: %w", err)
 		}
-		out[id] = IconStats{IconID: icon.Int64, Statsblock: stats.String} // NULL → 0 / ""
+		out[id] = IconStats{ // NULL → 0 / "" / false
+			IconID:     icon.Int64,
+			Statsblock: stats.String,
+			IsClicky:   clk.Int64 != 0, // the established NullInt64 → bool idiom
+			HasHaste:   hst.Int64 != 0,
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate item_master icon/stats rows: %w", err)

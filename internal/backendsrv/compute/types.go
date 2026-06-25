@@ -234,6 +234,8 @@ type ItemRollup struct {
 	IsQuestItem bool          `json:"is_quest_item"`
 	IconID      int64         `json:"icon_id"`    // 0 → colored-tile fallback (D-02)
 	Statsblock  string        `json:"statsblock"` // "" → examine omits the stats line (D-09)
+	IsClicky    bool          `json:"is_clicky"`  // Phase 39 — from item_master (00016); client holdings facet (SC-4)
+	HasHaste    bool          `json:"has_haste"`  // Phase 39 — from item_master (00016)
 	Holders     []ItemHolder  `json:"holders"`    // one per holding (ITEM-03)
 }
 

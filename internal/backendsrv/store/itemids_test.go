@@ -210,3 +210,101 @@ func TestDistinctEnrichmentRefs(t *testing.T) {
 		}
 	}
 }
+
+// TestDistinctEnrichmentRefs_HeldVsHeldSameName documents (and pins) the held-arm
+// behavior the docstring calls out: two DISTINCT held EQ ids that share a normalized
+// name each yield a ref — the pre-existing DistinctInventoryItemIDs (GROUP BY item_id)
+// behavior, NOT deduped by name. Only the CATALOG arm is name-deduped against the held
+// set; the held arm is unchanged from the held-only crawl (so this is not a Phase 38
+// regression). This is the case the "fetched ONCE across the held/catalog boundary"
+// docstring deliberately scopes itself away from.
+func TestDistinctEnrichmentRefs_HeldVsHeldSameName(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	_, charA := seedOwnerChar(t, db, "owner-a", "Aragorn")
+	// Two held rows, SAME normalized name, DIFFERENT EQ ids (an unusual but possible
+	// "same item under two /outputfile IDs" case).
+	seedRaw(t, db, charA, "General1", "Worn Note", i64ptr(2001), 1)
+	seedRaw(t, db, charA, "Bank1", "worn note", i64ptr(2002), 2)
+
+	refs, err := s.DistinctEnrichmentRefs(ctx)
+	if err != nil {
+		t.Fatalf("DistinctEnrichmentRefs: %v", err)
+	}
+	n := 0
+	for _, r := range refs {
+		if normEnrich(r.Name) == "worn note" {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("held-vs-held same normalized name yielded %d refs, want 2 (held arm groups by item_id, mirroring DistinctInventoryItemIDs — not a Phase 38 regression)", n)
+	}
+}
+
+// TestItemMasterIconCoverage verifies the D-03 maintainer diagnostic reads the CURRENT
+// whole-table icon state (ENRICH-15) — total / icon-covered / icon-less + a bounded,
+// name-ordered residue sample with blank names excluded and the count independent of
+// the sample cap.
+func TestItemMasterIconCoverage(t *testing.T) {
+	db := NewTestDB(t)
+	s := NewStore(db)
+	ctx := context.Background()
+
+	// 5 enriched rows: 2 icon-covered (102,103), 3 icon-less — NULL (101), 0 (104),
+	// and a blank-name NULL-icon row (105) that is counted but EXCLUDED from the sample.
+	seedItemMaster(t, db, 101, "Alpha Cap", "s", "u", false)    // icon_id NULL → icon-less
+	seedItemMaster(t, db, 102, "Bravo Cloak", "s", "u", false)  // → covered below
+	seedItemMaster(t, db, 103, "Charlie Ring", "s", "u", false) // → covered below
+	seedItemMaster(t, db, 104, "Delta Boots", "s", "u", false)  // → icon 0 below
+	if _, err := db.Exec(
+		`INSERT INTO item_master (item_id, name, is_quest_item, icon_id, last_refreshed) VALUES (?,?,?,?,datetime('now'))`,
+		105, "", 0, nil,
+	); err != nil {
+		t.Fatalf("seed blank-name icon-less row: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE item_master SET icon_id = 555 WHERE item_id IN (102, 103)`); err != nil {
+		t.Fatalf("set covered icons: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE item_master SET icon_id = 0 WHERE item_id = 104`); err != nil {
+		t.Fatalf("zero an icon: %v", err)
+	}
+
+	cov, err := s.ItemMasterIconCoverage(ctx, 50)
+	if err != nil {
+		t.Fatalf("ItemMasterIconCoverage: %v", err)
+	}
+	if cov.Total != 5 {
+		t.Errorf("Total = %d, want 5", cov.Total)
+	}
+	if cov.IconCovered != 2 {
+		t.Errorf("IconCovered = %d, want 2 (102,103)", cov.IconCovered)
+	}
+	if cov.IconLess != 3 {
+		t.Errorf("IconLess = %d, want 3 (NULL 101, 0 104, blank 105)", cov.IconLess)
+	}
+	// Residue sample = icon-less PUBLIC names, ordered, blank-name (105) EXCLUDED.
+	want := []string{"Alpha Cap", "Delta Boots"}
+	if len(cov.ResidueSample) != len(want) {
+		t.Fatalf("ResidueSample = %v, want %v", cov.ResidueSample, want)
+	}
+	for i, w := range want {
+		if cov.ResidueSample[i] != w {
+			t.Errorf("ResidueSample[%d] = %q, want %q (name-ordered, blank excluded)", i, cov.ResidueSample[i], w)
+		}
+	}
+
+	// sampleCap honored: cap 1 trims the name list but NOT the counts.
+	capped, err := s.ItemMasterIconCoverage(ctx, 1)
+	if err != nil {
+		t.Fatalf("ItemMasterIconCoverage(cap=1): %v", err)
+	}
+	if len(capped.ResidueSample) != 1 || capped.ResidueSample[0] != "Alpha Cap" {
+		t.Errorf("cap=1 sample = %v, want [Alpha Cap]", capped.ResidueSample)
+	}
+	if capped.IconLess != 3 {
+		t.Errorf("cap=1 IconLess = %d, want 3 (count is independent of the sample cap)", capped.IconLess)
+	}
+}

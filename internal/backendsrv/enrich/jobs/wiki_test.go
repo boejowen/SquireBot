@@ -351,16 +351,21 @@ func TestRunWiki_EnrichesUnheldCatalogItem(t *testing.T) {
 
 	// The unheld catalog item now has an item_master row. It is keyed by its PigParse
 	// id, so look it up by normalized name (the held∪catalog bridge), not by id.
-	var icon int64
+	var icon, gotID int64
 	var name string
 	if err := db.QueryRow(
-		`SELECT name, icon_id FROM item_master WHERE lower(trim(name)) = lower(trim(?))`,
+		`SELECT item_id, name, icon_id FROM item_master WHERE lower(trim(name)) = lower(trim(?))`,
 		"Cloak of Flames",
-	).Scan(&name, &icon); err != nil {
+	).Scan(&gotID, &name, &icon); err != nil {
 		t.Fatalf("unheld catalog item Cloak of Flames has no item_master row after the widened crawl: %v", err)
 	}
 	if icon == 0 {
 		t.Errorf("Cloak of Flames icon_id = 0 after enrichment, want > 0 (ENRICH-15 icon backfill — its fixture carries a lucy_img_ID)")
+	}
+	// Option A id-keying: the catalog-only row is keyed by its PigParse catalog id,
+	// not a synthesized/EQ id — proving the namespace-agnostic upsert carried it through.
+	if gotID != cofCatalogID {
+		t.Errorf("unheld Cloak of Flames item_master row keyed by item_id %d, want PigParse catalog id %d (Option A id-keying)", gotID, cofCatalogID)
 	}
 
 	// The held item is still enriched (the held arm is preserved).

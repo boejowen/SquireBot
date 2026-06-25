@@ -66,10 +66,17 @@ func (s *Store) DistinctInventoryItemIDs(ctx context.Context) ([]ItemRef, error)
 // DistinctEnrichmentRefs returns the WIDENED set of items the weekly wiki pass
 // enriches (Phase 38, ENRICH-14): the held EQ-id refs (exactly what
 // DistinctInventoryItemIDs returns) UNIONed with the catalog-only PigParse refs
-// from pigparse_price, deduped by normalized name lower(trim(name)) so each wiki
-// page is fetched EXACTLY ONCE — held and catalog rows for the same item share a
-// name but live in DIFFERENT id namespaces (the EQ /outputfile ID vs the PigParse
-// catalog id; the catalog↔inventory bridge is the name, never the raw item_id).
+// from pigparse_price, deduped by normalized name lower(trim(name)) ACROSS the
+// held/catalog boundary so a name that is BOTH held and in the catalog is fetched
+// ONCE (held wins) — held and catalog rows for the same item share a name but live
+// in DIFFERENT id namespaces (the EQ /outputfile ID vs the PigParse catalog id; the
+// catalog↔inventory bridge is the name, never the raw item_id).
+//
+// The held arm itself groups by item_id (identical to DistinctInventoryItemIDs), so
+// two DISTINCT held EQ ids that happen to share a normalized name still yield two
+// refs — the pre-existing held-only crawl behavior, NOT a Phase 38 regression. Only
+// the catalog arm is name-deduped against the held set; this is exercised by
+// TestDistinctEnrichmentRefs_HeldVsHeldSameName.
 //
 // For a held name ItemID is its EQ id (the MIN(name) representative, unchanged so
 // every held reader's item_master row keeps its EQ-id keying); for a catalog-only
@@ -132,4 +139,59 @@ func (s *Store) DistinctEnrichmentRefs(ctx context.Context) ([]ItemRef, error) {
 		return nil, fmt.Errorf("iterate enrichment item refs: %w", err)
 	}
 	return refs, nil
+}
+
+// IconCoverage is the CURRENT icon-coverage state of item_master for the D-03
+// maintainer diagnostic (ENRICH-15): Total enriched rows, how many carry a wiki
+// icon (IconCovered), how many are still icon-less (IconLess = icon_id NULL or 0 →
+// the client renders the colored-tile fallback), and a bounded, name-ordered sample
+// of those icon-less names so a maintainer can SEE which items still lack an icon.
+type IconCoverage struct {
+	Total         int
+	IconCovered   int
+	IconLess      int
+	ResidueSample []string
+}
+
+// ItemMasterIconCoverage reads the WHOLE item_master table (not per-pass deltas) so
+// the icon-less residue stays visible on EVERY weekly run — even in steady state
+// when most pages 304-skip and a delta-based count would collapse toward zero while
+// hundreds of items still render the colored tile. sampleCap bounds the residue name
+// list (the slog self-DoS guard, T-38-04); only PUBLIC item names are read (never
+// statsblock/wikitext bodies, V7). Read side: a count query (fixed projection) plus
+// one bounded-LIMIT sample query (the limit is the sole ? parameter).
+func (s *Store) ItemMasterIconCoverage(ctx context.Context, sampleCap int) (IconCoverage, error) {
+	var cov IconCoverage
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT count(*),
+		        COALESCE(SUM(CASE WHEN icon_id IS NOT NULL AND icon_id > 0 THEN 1 ELSE 0 END), 0)
+		 FROM item_master`,
+	).Scan(&cov.Total, &cov.IconCovered); err != nil {
+		return IconCoverage{}, fmt.Errorf("query item_master icon coverage: %w", err)
+	}
+	cov.IconLess = cov.Total - cov.IconCovered
+
+	if sampleCap <= 0 || cov.IconLess == 0 {
+		return cov, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT name FROM item_master
+		 WHERE (icon_id IS NULL OR icon_id = 0) AND name IS NOT NULL AND trim(name) <> ''
+		 ORDER BY name
+		 LIMIT ?`, sampleCap)
+	if err != nil {
+		return IconCoverage{}, fmt.Errorf("query item_master icon-less sample: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return IconCoverage{}, fmt.Errorf("scan icon-less name: %w", err)
+		}
+		cov.ResidueSample = append(cov.ResidueSample, n)
+	}
+	if err := rows.Err(); err != nil {
+		return IconCoverage{}, fmt.Errorf("iterate icon-less names: %w", err)
+	}
+	return cov, nil
 }

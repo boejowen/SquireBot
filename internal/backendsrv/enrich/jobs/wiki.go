@@ -224,15 +224,23 @@ func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.ItemRef, ite
 	}
 	defer tx.Rollback() // no-op after Commit
 
-	existingSHA, existingIcon, existingStats, err := store.GetItemMasterFreshnessTx(ctx, tx, ref.ItemID)
+	existingSHA, existingIcon, existingStats, existingFlagsJSON, err := store.GetItemMasterFreshnessTx(ctx, tx, ref.ItemID)
 	if err != nil {
 		return false, err
 	}
-	if existingSHA == item.WikitextSHA1 && existingIcon == int64(item.IconID) && existingStats == item.Statsblock {
-		// The wikitext AND the icon AND the statsblock are all unchanged — skip the write (the
-		// empty tx rolls back via defer). NOTE: SHA-1 alone is NOT sufficient — a row written
-		// before the icon_id (00012) or statsblock (00013) columns has the same SHA-1 yet a 0
-		// icon / "" statsblock, and must still be re-written to backfill those derived fields.
+	// parsedFlagsJSON is the freshly-parsed flag set encoded by the SAME canonical
+	// helper the upsert + backfill use (NOT a local json.Marshal), so a flagless
+	// item's "[]" byte-equals the stored "[]" and is NOT re-written every pass (D-06
+	// idempotency). A pre-00016 row's NULL flags_json reads "" here, which differs
+	// from this value and so correctly re-writes once to backfill.
+	parsedFlagsJSON := store.MarshalFlags(item.Flags)
+	if existingSHA == item.WikitextSHA1 && existingIcon == int64(item.IconID) &&
+		existingStats == item.Statsblock && existingFlagsJSON == parsedFlagsJSON {
+		// The wikitext AND the icon AND the statsblock AND the flag set are all unchanged —
+		// skip the write (the empty tx rolls back via defer). NOTE: SHA-1 alone is NOT
+		// sufficient — a row written before the icon_id (00012), statsblock (00013) or
+		// flags_json (00016) columns has the same SHA-1 yet a 0 icon / "" statsblock / NULL
+		// flags_json, and must still be re-written to backfill those derived fields.
 		return false, nil
 	}
 
@@ -247,6 +255,17 @@ func upsertItemAndQuests(ctx context.Context, db *sql.DB, ref store.ItemRef, ite
 		LastRefreshed: nowStr,
 		IconID:        item.IconID,     // INV-04: carry the parsed lucy_img_ID into item_master.icon_id
 		Statsblock:    item.Statsblock, // INV-02: carry the cleaned stat block into item_master.statsblock
+
+		// Phase 37 (ENRICH-12/13, 00016): carry the parsed flag/effect fields.
+		IsLore:       item.IsLore,
+		IsNoDrop:     item.IsNoDrop,
+		IsMagic:      item.IsMagic,
+		IsTemporary:  item.IsTemporary,
+		IsClicky:     item.IsClicky,
+		ClickyEffect: item.ClickyEffect,
+		HasHaste:     item.HasHaste,
+		HastePct:     item.HastePct,
+		FlagsJSON:    parsedFlagsJSON, // the ONE canonical MarshalFlags string (D-06)
 	}); err != nil {
 		return false, err
 	}

@@ -110,6 +110,26 @@ func TestUpsertPigparsePrices_PersistsAllPriceColumnsAndUpserts(t *testing.T) {
 
 // --- item_master ------------------------------------------------------------
 
+// TestMarshalFlags pins the canonical flags-array encoder's contract (00016 / D-06):
+// a nil OR empty slice → the literal "[]" (NEVER null/""), and a non-empty slice →
+// a deterministic JSON array. The empty→"[]" rule is the load-bearing one: the
+// upsert, the boot backfill, and the weekly job's freshness compare ALL produce
+// flags_json through this one helper, so a flagless item is written exactly once
+// (an empty set encoded as null at one site and "[]" at another would re-write the
+// row on every weekly pass forever).
+func TestMarshalFlags(t *testing.T) {
+	if got := MarshalFlags(nil); got != "[]" {
+		t.Errorf(`MarshalFlags(nil) = %q, want "[]" (never null/"" — D-06 idempotency)`, got)
+	}
+	if got := MarshalFlags([]string{}); got != "[]" {
+		t.Errorf(`MarshalFlags([]string{}) = %q, want "[]" (never null/"" — D-06 idempotency)`, got)
+	}
+	// A non-empty (already-sorted) slice round-trips to a deterministic 2-element array.
+	if got := MarshalFlags([]string{"LORE ITEM", "MAGIC ITEM"}); got != `["LORE ITEM","MAGIC ITEM"]` {
+		t.Errorf(`MarshalFlags(["LORE ITEM","MAGIC ITEM"]) = %q, want ["LORE ITEM","MAGIC ITEM"]`, got)
+	}
+}
+
 func TestUpsertItemMaster_AndSHA1Getter(t *testing.T) {
 	db := NewTestDB(t)
 	s := NewStore(db)

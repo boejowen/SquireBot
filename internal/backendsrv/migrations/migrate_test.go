@@ -1115,6 +1115,94 @@ func TestMigrate_00012_AddsItemIcon(t *testing.T) {
 	}
 }
 
+// itemFlagsEffectsColumns are the nine discrete flag/effect columns 00016 adds to
+// item_master (ENRICH-12 + ENRICH-13): the four queried flags, the clicky boolean +
+// name, the haste boolean + %, and the full-flag-set JSON array. A column-name typo
+// (e.g. is_nodrop vs is_no_drop) is caught here in CI, not at runtime in the upsert.
+var itemFlagsEffectsColumns = []string{
+	"is_lore", "is_no_drop", "is_magic", "is_temporary",
+	"is_clicky", "clicky_effect", "has_haste", "haste_pct", "flags_json",
+}
+
+// TestMigrate_00016_AddsItemFlagsEffects proves the Phase 37 forward-only migration
+// 00016 applied on a fresh DB (NewTestDB runs goose.Up over ALL sixteen migrations):
+//   - item_master gained ALL NINE discrete flag/effect columns (columnSet) — the
+//     assertion that catches a mistyped column name before it reaches the store upsert;
+//   - a row inserted WITHOUT the new columns reads NULL flags_json (the extend-only
+//     ADD COLUMN default — that NULL is the boot backfill's idempotency key, D-05);
+//   - a row inserted WITH the new columns round-trips them (is_magic=1, haste_pct=36,
+//     flags_json the stored array); and
+//   - a second Up is a clean no-op (idempotent — goose_db_version row count unchanged).
+//
+// Backend-only additive columns — the watcher never reads/writes item_master, so there
+// is NO WatcherMaxSchemaVersion change (that gate does not exist in the off-Google
+// backend). "Schema v16" == goose 00016 applied.
+func TestMigrate_00016_AddsItemFlagsEffects(t *testing.T) {
+	db := store.NewTestDB(t) // Open + goose.Up (00001..00016) + t.Cleanup
+
+	// All nine new columns exist on item_master.
+	cols := columnSet(t, db, "item_master")
+	for _, c := range itemFlagsEffectsColumns {
+		if !cols[c] {
+			t.Errorf("expected item_master to have column %q after 00016 (have: %v)", c, cols)
+		}
+	}
+
+	// A row inserted WITHOUT the new columns reads NULL flags_json (extend-only ADD
+	// COLUMN, no DEFAULT) — the not-yet-backfilled marker the boot backfill keys on.
+	if _, err := db.Exec(
+		`INSERT INTO item_master (item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+		int64(2000), "Pre-00016 Item", "", "", "", 0, "sha-pre16"); err != nil {
+		t.Fatalf("insert item_master without the new columns: %v", err)
+	}
+	var flagsNull sql.NullString
+	if err := db.QueryRow(`SELECT flags_json FROM item_master WHERE item_id = ?`, int64(2000)).Scan(&flagsNull); err != nil {
+		t.Fatalf("read flags_json (pre-00016 row): %v", err)
+	}
+	if flagsNull.Valid {
+		t.Errorf("item_master.flags_json for a row inserted without it = %q, want NULL (extend-only default / backfill key)", flagsNull.String)
+	}
+
+	// A row inserted WITH the new columns round-trips them.
+	if _, err := db.Exec(
+		`INSERT INTO item_master (item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed,
+		    is_lore, is_no_drop, is_magic, is_temporary, is_clicky, clicky_effect, has_haste, haste_pct, flags_json)
+		 VALUES (?,?,?,?,?,?,?,datetime('now'),?,?,?,?,?,?,?,?,?)`,
+		int64(2001), "Cloak of Flames", "", "", "BACK", 0, "sha-cof16",
+		0, 0, 1, 0, 0, "", 1, 36, `["MAGIC ITEM"]`); err != nil {
+		t.Fatalf("insert item_master with the new columns: %v", err)
+	}
+	var isMagic, hasHaste, hastePct int
+	var flagsJSON string
+	if err := db.QueryRow(
+		`SELECT is_magic, has_haste, haste_pct, flags_json FROM item_master WHERE item_id = ?`, int64(2001),
+	).Scan(&isMagic, &hasHaste, &hastePct, &flagsJSON); err != nil {
+		t.Fatalf("read flag/effect columns (flagged row): %v", err)
+	}
+	if isMagic != 1 || hasHaste != 1 || hastePct != 36 || flagsJSON != `["MAGIC ITEM"]` {
+		t.Errorf("flag/effect round-trip = is_magic=%d has_haste=%d haste_pct=%d flags_json=%q, want 1/1/36/[\"MAGIC ITEM\"]",
+			isMagic, hasHaste, hastePct, flagsJSON)
+	}
+
+	// Forward-only/idempotent: a second RunMigrations over an already-at-00016 DB
+	// returns nil AND the goose_db_version row count is unchanged.
+	var beforeVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&beforeVersions); err != nil {
+		t.Fatalf("count goose_db_version before re-run: %v", err)
+	}
+	if err := migrations.RunMigrations(db); err != nil {
+		t.Fatalf("second RunMigrations after 00016 should be a no-op, got error: %v", err)
+	}
+	var afterVersions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goose_db_version`).Scan(&afterVersions); err != nil {
+		t.Fatalf("count goose_db_version after re-run: %v", err)
+	}
+	if beforeVersions != afterVersions {
+		t.Fatalf("goose_db_version row count changed on re-run: before=%d after=%d (not idempotent)", beforeVersions, afterVersions)
+	}
+}
+
 // wishlistItemColumns are the nine columns 00014 creates on wishlist_item
 // (WISH-02/03): the FK identity (discord_user_id, the PERSON), the NOT-NULL
 // character_id + canonical worn-slot, the nullable catalog item_id + snapshot

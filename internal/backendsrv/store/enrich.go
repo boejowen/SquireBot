@@ -25,10 +25,39 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 )
+
+// MarshalFlags is the SINGLE canonical encoder for the item_master.flags_json
+// column — the only place a flags array becomes the stored string. Three call
+// sites depend on it producing byte-identical output for the same input: the
+// upsert (via the job literal), the boot backfill, and the weekly job's freshness
+// compare. CONTRACT:
+//   - the input is assumed already SORTED (enrich.ParsedWikiItem.Flags is sorted),
+//     so MarshalFlags itself does not re-sort — it just encodes;
+//   - a nil OR empty slice marshals to the literal "[]" (NEVER `null`, NEVER ""),
+//     so a flagless item stores a real empty JSON array that byte-equals the
+//     freshly-marshaled "[]" — without this, an empty set encoded as `null` at one
+//     site and "[]" at another would re-write the row on EVERY weekly pass forever
+//     (D-06 idempotency);
+//   - a non-empty slice marshals to json.Marshal's deterministic array form.
+//
+// json.Marshal of a []string never errors (the only failure modes — unsupported
+// types, cyclic refs — cannot arise for a string slice), so the error is dropped
+// after the empty short-circuit; a defensive "[]" is returned if it ever did.
+func MarshalFlags(flags []string) string {
+	if len(flags) == 0 {
+		return "[]"
+	}
+	b, err := json.Marshal(flags)
+	if err != nil {
+		return "[]" // unreachable for []string; defensive (never store null/"")
+	}
+	return string(b)
+}
 
 // PigparsePrice is the store-local input shape for one pigparse_price row. The
 // daily job hands these in after parsing PigParse's getall response and applying
@@ -52,9 +81,9 @@ type PigparsePrice struct {
 }
 
 // ItemMaster is the store-local input shape for one item_master row (the wiki
-// item-summary job's output). Only the columns the Sheet persisted are present
-// (D-8 parity guard); ac/weight/effect/classes/is_no_drop are intentionally not
-// surfaced here.
+// item-summary job's output). The historical D-8 Sheet-parity guard once limited
+// this to the columns the Sheet persisted; Phase 37 (00016) re-surfaces the
+// derived flag/effect fields the guard discarded as discrete columns.
 type ItemMaster struct {
 	ItemID        int
 	Name          string
@@ -66,6 +95,22 @@ type ItemMaster struct {
 	LastRefreshed string
 	IconID        int    // the P1999 wiki icon id (lucy_img_ID); 0 = none yet (INV-04, 00012)
 	Statsblock    string // the cleaned in-game stat block for the examine; "" when absent (INV-02, 00013)
+
+	// Phase 37 derived flags (ENRICH-12 / D-03, 00016) — the four queried booleans.
+	IsLore      bool
+	IsNoDrop    bool
+	IsMagic     bool
+	IsTemporary bool
+	// Phase 37 derived effects (ENRICH-13 / D-01 / D-02, 00016).
+	IsClicky     bool   // the Effect line is an ACTIVATABLE click (NOT (Worn)/(Combat))
+	ClickyEffect string // the clicky's effect/spell display name; "" unless IsClicky
+	HasHaste     bool   // a "Haste:" stat line is present
+	HastePct     int    // the integer haste % magnitude (0 when absent)
+	// FlagsJSON is the FULL detected flag SET marshaled to a JSON array (D-03). It
+	// is ALWAYS produced by store.MarshalFlags so the upsert, backfill, and the
+	// job's freshness compare byte-equal each other (D-06 idempotency): a flagless
+	// item is "[]", never NULL/null/"". The caller sets it via MarshalFlags(item.Flags).
+	FlagsJSON string
 }
 
 // WikiSpell is the store-local input shape for one wiki_spells row. NormalizedName
@@ -157,13 +202,18 @@ func UpsertPigparsePricesTx(ctx context.Context, tx *sql.Tx, rows []PigparsePric
 }
 
 const itemMasterUpsert = `INSERT INTO item_master
-	(item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed, icon_id, statsblock)
- VALUES (?,?,?,?,?,?,?,?,?,?)
+	(item_id, name, wiki_summary, wiki_url, slot, is_quest_item, wikitext_sha1, last_refreshed, icon_id, statsblock,
+	 is_lore, is_no_drop, is_magic, is_temporary, is_clicky, clicky_effect, has_haste, haste_pct, flags_json)
+ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
  ON CONFLICT(item_id) DO UPDATE SET
    name=excluded.name, wiki_summary=excluded.wiki_summary, wiki_url=excluded.wiki_url,
    slot=excluded.slot, is_quest_item=excluded.is_quest_item,
    wikitext_sha1=excluded.wikitext_sha1, last_refreshed=excluded.last_refreshed,
-   icon_id=excluded.icon_id, statsblock=excluded.statsblock`
+   icon_id=excluded.icon_id, statsblock=excluded.statsblock,
+   is_lore=excluded.is_lore, is_no_drop=excluded.is_no_drop, is_magic=excluded.is_magic,
+   is_temporary=excluded.is_temporary, is_clicky=excluded.is_clicky,
+   clicky_effect=excluded.clicky_effect, has_haste=excluded.has_haste,
+   haste_pct=excluded.haste_pct, flags_json=excluded.flags_json`
 
 // UpsertItemMaster upserts one item_master row (begins + commits its own tx).
 func (s *Store) UpsertItemMaster(ctx context.Context, item ItemMaster) error {
@@ -182,13 +232,14 @@ func (s *Store) UpsertItemMaster(ctx context.Context, item ItemMaster) error {
 // ON CONFLICT(item_id) DO UPDATE. The SHA-1 short-circuit is the JOB's concern
 // (it compares via GetItemMasterSHA1Tx and skips calling this when unchanged).
 func UpsertItemMasterTx(ctx context.Context, tx *sql.Tx, item ItemMaster) error {
-	quest := 0
-	if item.IsQuestItem {
-		quest = 1
-	}
+	// The booleans bind as 0/1 INTEGER (the same convention as quest); the parsed
+	// text values (ClickyEffect, FlagsJSON) bind through ? placeholders — UNTRUSTED
+	// wiki text is NEVER string-concatenated into SQL (V5 / T-37-04).
 	if _, err := tx.ExecContext(ctx, itemMasterUpsert,
 		item.ItemID, item.Name, item.WikiSummary, item.WikiURL, item.Slot,
-		quest, item.WikitextSHA1, item.LastRefreshed, item.IconID, item.Statsblock,
+		b2i(item.IsQuestItem), item.WikitextSHA1, item.LastRefreshed, item.IconID, item.Statsblock,
+		b2i(item.IsLore), b2i(item.IsNoDrop), b2i(item.IsMagic), b2i(item.IsTemporary),
+		b2i(item.IsClicky), item.ClickyEffect, b2i(item.HasHaste), item.HastePct, item.FlagsJSON,
 	); err != nil {
 		slog.Error("item_master upsert: insert", "item_id", item.ItemID, "err", err)
 		return fmt.Errorf("upsert item_master (item_id=%d): %w", item.ItemID, err)
@@ -213,26 +264,33 @@ func GetItemMasterSHA1Tx(ctx context.Context, tx *sql.Tx, itemID int64) (string,
 	return sha.String, nil // NullString.String is "" when NULL
 }
 
-// GetItemMasterFreshnessTx returns the stored wikitext_sha1, icon_id AND statsblock for
-// itemID (zero values when the row is absent or a column is NULL). The wiki job's
-// short-circuit compares ALL THREE: an unchanged wikitext alone is not enough to skip the
-// upsert, because a row written BEFORE the icon_id (00012) or statsblock (00013) columns has
-// the same SHA-1 yet a 0 icon / "" statsblock — skipping on SHA-1 alone would leave those
-// derived fields permanently unbackfilled. Writing whenever sha OR icon OR statsblock differs
-// backfills those rows and keeps changes propagating; a row whose sha+icon+statsblock all
+// GetItemMasterFreshnessTx returns the stored wikitext_sha1, icon_id, statsblock AND
+// flags_json for itemID (zero values when the row is absent or a column is NULL). The
+// wiki job's short-circuit compares ALL FOUR: an unchanged wikitext alone is not enough
+// to skip the upsert, because a row written BEFORE the icon_id (00012), statsblock (00013)
+// or flags_json (00016) columns has the same SHA-1 yet a 0 icon / "" statsblock / NULL
+// flags_json — skipping on SHA-1 alone would leave those derived fields permanently
+// unbackfilled. Writing whenever sha OR icon OR statsblock OR flags_json differs backfills
+// those rows and keeps changes propagating; a row whose sha+icon+statsblock+flags_json all
 // match is still skipped.
-func GetItemMasterFreshnessTx(ctx context.Context, tx *sql.Tx, itemID int64) (sha string, iconID int64, statsblock string, err error) {
-	var s, sb sql.NullString
+//
+// The caller MUST compute the "freshly-parsed" flags_json it compares against via
+// store.MarshalFlags (the SAME helper the upsert + backfill use), so a flagless row's
+// stored "[]" byte-equals the freshly-marshaled "[]" and is NOT mistaken for stale (a
+// pre-00016 row, however, has flags_json NULL → "" here, which differs from "[]" and so
+// correctly re-writes once to backfill — exactly the 00012-icon argument, one more field).
+func GetItemMasterFreshnessTx(ctx context.Context, tx *sql.Tx, itemID int64) (sha string, iconID int64, statsblock, flagsJSON string, err error) {
+	var s, sb, fj sql.NullString
 	var icon sql.NullInt64
 	qerr := tx.QueryRowContext(ctx,
-		`SELECT wikitext_sha1, icon_id, statsblock FROM item_master WHERE item_id = ?`, itemID).Scan(&s, &icon, &sb)
+		`SELECT wikitext_sha1, icon_id, statsblock, flags_json FROM item_master WHERE item_id = ?`, itemID).Scan(&s, &icon, &sb, &fj)
 	switch {
 	case qerr == sql.ErrNoRows:
-		return "", 0, "", nil
+		return "", 0, "", "", nil
 	case qerr != nil:
-		return "", 0, "", fmt.Errorf("read item_master freshness (item_id=%d): %w", itemID, qerr)
+		return "", 0, "", "", fmt.Errorf("read item_master freshness (item_id=%d): %w", itemID, qerr)
 	}
-	return s.String, icon.Int64, sb.String, nil // NullX zero-values when NULL
+	return s.String, icon.Int64, sb.String, fj.String, nil // NullX zero-values when NULL
 }
 
 // UpsertWikiSpellsForClass replaces all wiki_spells rows for class (begins +

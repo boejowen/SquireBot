@@ -179,8 +179,14 @@ type IconCoverage struct {
 // per-pass deltas, so the icon-less residue stays visible on EVERY weekly run even in
 // steady state when most pages 304-skip and a delta-based count would collapse toward
 // zero while hundreds of items still render the colored tile. A held name is NEVER in
-// catalog_enrichment (the union's held-name dedup at write time), so a plain UNION ALL
-// already yields one row per item — no precedence logic needed. sampleCap bounds the
+// catalog_enrichment (the union's held-name dedup at write time, keyed on ref.Name so the
+// dedup and the catalog PK are computed from ONE string — 38-REVIEW WR-01), so the plain
+// UNION ALL counts each item once ACROSS the held/catalog boundary. Within item_master,
+// two distinct held EQ ids that share a normalized name (the tested
+// TestDistinctEnrichmentRefs_HeldVsHeldSameName case) still count once each — i.e. this is
+// "one row per held EQ id ∪ one row per catalog norm_name", matching the held crawl's
+// per-id grouping (IN-01); that double-count is harmless for a coverage diagnostic and is
+// not "one row per distinct item." No precedence logic needed. sampleCap bounds the
 // residue name list (the slog self-DoS guard, T-38-04); only PUBLIC item names are read
 // (never statsblock/wikitext bodies, V7). Read side: a count query (fixed projection)
 // plus one bounded-LIMIT sample query (the limit is the sole ? parameter).

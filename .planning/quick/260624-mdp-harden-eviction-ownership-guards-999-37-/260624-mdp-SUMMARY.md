@@ -48,9 +48,15 @@ guild-sentinel) roster.
   `_RefusesGuildSentinel`, `_PeerCannotPreviewFloorData`.
 
 ## Deploy status
-**NOT deployed.** All three are defense-in-depth / cosmetic hardening with no live
-data impact — fold into the next prod deploy (backend binary swap; goose no-op, schema
-stays v15) rather than a standalone push.
+**✅ DEPLOYED LIVE 2026-06-24** (binary-swap only; no migration). Sequence: cross-compile
+linux/amd64 (`-trimpath -ldflags "-s -w"`, 13 MB) → R2 backup first (`squirebot-2026-06-25.db.gz`,
+box is UTC) → scp → hash-verify (`0a9f2658…`, differs from prior `01198c37…`) → `cp .bak` +
+`install -m0755` + `systemctl restart`. Boot log: `goose: no migrations to run. current
+version: 15`, `bot connected`, `listening 127.0.0.1:8090 pid=545312`, scheduler 4 jobs, no
+errors. External smoke (full TLS→Caddy→binary): `/api/v1/admin/eviction/preview`→**401**,
+`POST /api/v1/admin/evict`→**401** (fail-closed, route live), api-root→404, web apex→200.
+Rollback: `/usr/local/bin/squirebot-server.bak` (prior binary) kept on the box. No `v*` tag
+(watcher untouched).
 
 ## Remaining backlog
 - **999.40** (v2.4 MD-01) — dead wantlist client wrappers in `web/src/lib/api.ts` +

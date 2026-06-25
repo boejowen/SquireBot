@@ -627,6 +627,32 @@ func TestDeriveFlagsAndEffects_NewlineForm(t *testing.T) {
 			t.Errorf("newline form derived wrong: %+v", dn)
 		}
 	})
+
+	t.Run("[[link]]-rendered flag: raw form matches cleaned form (MD-01)", func(t *testing.T) {
+		// A flag the wiki renders as a link: the RAW statsblock keeps the [[ ]] brackets,
+		// the stored CLEANED statsblock (cleanStatsblock) has already stripped them. Both
+		// MUST detect the same flag — otherwise the live parse (raw) and the
+		// backfill/freshness (cleaned) disagree on flags_json and the row re-writes on every
+		// weekly pass forever (the D-06 idempotency the MarshalFlags-everywhere design exists
+		// to guarantee). renderWikiLinks in the flag branch makes the two forms converge.
+		rawForm := "[[No Drop]]<br>Slot: HEAD"
+		cleanedForm := "No Drop\nSlot: HEAD"
+		draw := DeriveFlagsAndEffects(rawForm)
+		dclean := DeriveFlagsAndEffects(cleanedForm)
+		if !draw.IsNoDrop {
+			t.Errorf("raw [[No Drop]] form: IsNoDrop = false, want true (the bracketed flag must render+classify)")
+		}
+		if !dclean.IsNoDrop {
+			t.Errorf("cleaned 'No Drop' form: IsNoDrop = false, want true")
+		}
+		if draw.IsNoDrop != dclean.IsNoDrop ||
+			strings.Join(draw.Flags, "|") != strings.Join(dclean.Flags, "|") {
+			t.Errorf("raw form %+v != cleaned form %+v ([[link]] flag must classify identically across both — MD-01)", draw.Flags, dclean.Flags)
+		}
+		if len(dclean.Flags) != 1 || dclean.Flags[0] != "NO DROP" {
+			t.Errorf("Flags = %v, want [\"NO DROP\"]", dclean.Flags)
+		}
+	})
 }
 
 // isHex40 reports whether s is exactly 40 lowercase hex chars.

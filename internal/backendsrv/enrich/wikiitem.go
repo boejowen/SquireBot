@@ -380,7 +380,13 @@ func parseStatsblock(raw string) (map[string]bool, map[string]string) {
 			continue
 		}
 		if !strings.Contains(line, ":") {
-			upper := strings.ToUpper(line)
+			// MD-01: render [[link]] flags (e.g. "[[No Drop]]") to their display text
+			// BEFORE classifying, so the RAW statsblock (brackets intact) and the stored
+			// CLEANED statsblock (cleanStatsblock already stripped the brackets) detect the
+			// SAME flag. Without this, a bracketed flag line is seen by the cleaned-form
+			// backfill/freshness but NOT the raw-form live parse → flags_json diverges and
+			// the row re-writes on every weekly pass (defeating the D-06 idempotency).
+			upper := strings.ToUpper(renderWikiLinks(line))
 			if flagRe.MatchString(upper) {
 				flags[upper] = true
 			}
@@ -518,13 +524,7 @@ func cleanStatsblock(raw string) string {
 		return ""
 	}
 	// [[target|display]] → display, [[target]] → target (same rendering as extractSummary).
-	text := summaryLinkRe.ReplaceAllStringFunc(raw, func(m string) string {
-		sub := summaryLinkRe.FindStringSubmatch(m)
-		if sub[2] != "" {
-			return sub[2]
-		}
-		return sub[1]
-	})
+	text := renderWikiLinks(raw)
 	text = brRe.ReplaceAllString(text, "\n") // the statsblock line separator → a real newline
 	text = htmlTagRe.ReplaceAllString(text, "")
 	text = templateRe.ReplaceAllString(text, "")
@@ -637,6 +637,23 @@ func parseHastePct(raw string) (bool, int) {
 	return true, n
 }
 
+// renderWikiLinks renders wiki links to their display text — [[target|display]] →
+// display, [[target]] → target — using the bounded summaryLinkRe (the only regex
+// involved; ReDoS-safe, T-37-01). It is the SINGLE shared rendering used by
+// cleanStatsblock, parseClicky, and the parseStatsblock flag branch, so the RAW
+// statsblock (brackets intact) and the stored CLEANED statsblock (brackets already
+// stripped by cleanStatsblock) classify a [[link]]-rendered line IDENTICALLY (MD-01).
+// Input with no links is returned unchanged.
+func renderWikiLinks(s string) string {
+	return summaryLinkRe.ReplaceAllStringFunc(s, func(m string) string {
+		sub := summaryLinkRe.FindStringSubmatch(m)
+		if sub[2] != "" {
+			return sub[2]
+		}
+		return sub[1]
+	})
+}
+
 // parseClicky classifies a statsblock "Effect:" value (e.g. "[[Shock of Frost]]
 // (Click from Inventory)" / "[[Fungal Regrowth]] (Worn)" / "... (Combat)") into
 // (isClicky, effectName). It is a CLICK iff the LAST parenthesized qualifier
@@ -666,12 +683,6 @@ func parseClicky(effectRaw string) (bool, string) {
 	}
 	// Clicky: render [[target|display]] → display, [[target]] → target (same as
 	// cleanStatsblock), then drop the trailing "(...)" qualifier and trim.
-	name := summaryLinkRe.ReplaceAllStringFunc(raw[:open], func(m string) string {
-		sub := summaryLinkRe.FindStringSubmatch(m)
-		if sub[2] != "" {
-			return sub[2]
-		}
-		return sub[1]
-	})
+	name := renderWikiLinks(raw[:open])
 	return true, strings.TrimSpace(name)
 }

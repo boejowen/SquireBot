@@ -301,6 +301,81 @@ func TestRunWiki_BackfillsStaleFlags(t *testing.T) {
 	}
 }
 
+// seedCatalogItem inserts one pigparse_price catalog row (the jobs package cannot
+// call the unexported store.seedPigparse, so it inserts the same columns directly).
+// The catalog id is in the PigParse namespace — pass an id that does NOT collide
+// with any held EQ id and is NOT already in item_master.
+func seedCatalogItem(t *testing.T, db *sql.DB, itemID int64, name string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO pigparse_price (item_id, name, current_avg, blue_volume, last_seen, direction, t30, a30, last_refreshed)
+		 VALUES (?,?,?,?,?,?,?,?,datetime('now'))`,
+		itemID, name, 1000.0, 5, "2026-06-25", "up", 5, 1000.0,
+	); err != nil {
+		t.Fatalf("seed pigparse_price (item_id=%d, name=%q): %v", itemID, name, err)
+	}
+}
+
+// TestRunWiki_EnrichesUnheldCatalogItem is the ENRICH-14/15 win condition (Phase
+// 38): the widened crawl iterates the held∪catalog union, so an UNHELD pigparse_price
+// catalog item whose wiki page carries a lucy_img_ID gets an item_master row with a
+// non-zero icon_id — even though no character holds it. A junk catalog name with no
+// wiki page must NOT abort the run (it lands in the icon-less residue, Pitfall 3).
+func TestRunWiki_EnrichesUnheldCatalogItem(t *testing.T) {
+	restore := setWikiSleepNoop()
+	defer restore()
+
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+
+	// Seed a HELD item so the held arm of the union is non-empty (and is byte-for-byte
+	// the prior behavior). Cloth Cap (1001) has a wiki fixture.
+	_, charID := seedOwnerChar(t, db, "owner-a", "Aragorn")
+	seedInvFor(t, db, charID, "Cloth Cap", 1001, 1)
+
+	// Seed an UNHELD catalog item whose name matches a fixture with a lucy_img_ID
+	// (Cloak of Flames). Its id 90950 is in the PigParse namespace — no collision
+	// with any held EQ id and not already in item_master.
+	const cofCatalogID = 90950
+	seedCatalogItem(t, db, cofCatalogID, "Cloak of Flames")
+
+	// Seed a junk catalog name with NO wiki fixture → the fixture server returns a
+	// MediaWiki missingtitle envelope → the page is logged-and-skipped (residue),
+	// and the run must still complete with status "ok".
+	seedCatalogItem(t, db, 90999, "Totally Not A Real Item 9000")
+
+	srv := newWikiFixtureServer(t, wikiServerOpts{})
+	if err := RunWiki(ctx, db, serverFetcher(srv)); err != nil {
+		t.Fatalf("RunWiki: %v", err)
+	}
+
+	// The unheld catalog item now has an item_master row. It is keyed by its PigParse
+	// id, so look it up by normalized name (the held∪catalog bridge), not by id.
+	var icon int64
+	var name string
+	if err := db.QueryRow(
+		`SELECT name, icon_id FROM item_master WHERE lower(trim(name)) = lower(trim(?))`,
+		"Cloak of Flames",
+	).Scan(&name, &icon); err != nil {
+		t.Fatalf("unheld catalog item Cloak of Flames has no item_master row after the widened crawl: %v", err)
+	}
+	if icon == 0 {
+		t.Errorf("Cloak of Flames icon_id = 0 after enrichment, want > 0 (ENRICH-15 icon backfill — its fixture carries a lucy_img_ID)")
+	}
+
+	// The held item is still enriched (the held arm is preserved).
+	var heldN int
+	if err := db.QueryRow(`SELECT count(*) FROM item_master WHERE item_id = ?`, 1001).Scan(&heldN); err != nil {
+		t.Fatalf("count held Cloth Cap: %v", err)
+	}
+	if heldN == 0 {
+		t.Errorf("held Cloth Cap (1001) absent from item_master — the held arm of the union was lost")
+	}
+
+	// The junk catalog name did NOT abort the run; the job completed "ok".
+	assertJobStatus(t, db, "wiki_weekly", "ok")
+}
+
 func TestRunWiki_304SkipsResource(t *testing.T) {
 	restore := setWikiSleepNoop()
 	defer restore()

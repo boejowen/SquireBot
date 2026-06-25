@@ -158,16 +158,27 @@ func RunWiki(ctx context.Context, db *sql.DB, fetch politefetch.Fetcher) error {
 // fetch+parse each item's wiki page, SHA-1 short-circuit, and upsert item_master
 // + quest_items in one tx per item. Returns (written, unchanged, failed) counts.
 func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politefetch.Fetcher, now time.Time) (written, unchanged, failed int, err error) {
-	refs, rerr := s.DistinctInventoryItemIDs(ctx)
+	// Phase 38 (ENRICH-14): widen from the held-only inventory gate to the held∪catalog
+	// union deduped by normalized name. The entire loop body below is unchanged; only
+	// the SET of refs grows to the full PigParse Blue catalog.
+	refs, rerr := s.DistinctEnrichmentRefs(ctx)
 	if rerr != nil {
 		return 0, 0, 0, rerr
 	}
 	nowStr := now.Format(time.RFC3339)
 
+	// D-03 coverage counters, accumulated IN the loop (no extra store read): an item
+	// whose freshly-parsed wiki page carries a lucy_img_ID (IconID > 0) is icon-covered;
+	// a parsed page with no icon (IconID == 0) and any fetch-skip / parse-fail name is
+	// icon-less residue (the colored-tile set + junk catalog names with no wiki item page).
+	iconCovered, iconLess := 0, 0
+	residueNames := make([]string, 0, 64)
+
 	for _, ref := range refs {
 		// Politeness: 1s ctx-aware sleep before every wiki fetch.
 		if serr := wikiSleepFn(ctx, interRequestSleep); serr != nil {
 			slog.Info(wikiJobName+": items pass interrupted", "err", serr)
+			logItemsCoverage(len(refs), written, unchanged, iconCovered, iconLess, residueNames)
 			return written, unchanged, failed, nil // ctx cancelled — stop cleanly, not an error
 		}
 
@@ -175,10 +186,15 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 		page, outcome := fetchWikiPage(ctx, s, fetch, url)
 		switch outcome {
 		case fetchUnchanged:
+			// Already enriched in a prior pass and unchanged — its icon is whatever it
+			// already is; not actionable residue, so it is not counted as icon-less here.
 			unchanged++
 			continue
 		case fetchSkip:
+			// No wiki page body (fetch error / error envelope / empty wikitext) → no icon.
 			failed++
+			iconLess++
+			residueNames = appendBoundedResidue(residueNames, ref.Name)
 			continue
 		}
 
@@ -186,7 +202,18 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 		if !ok {
 			slog.Warn(wikiJobName+": item parse skipped", "item_id", ref.ItemID, "reason", reason)
 			failed++
+			iconLess++
+			residueNames = appendBoundedResidue(residueNames, ref.Name)
 			continue
+		}
+
+		// Classify icon coverage from the freshly-parsed page (D-03). IconID == 0 is the
+		// "no lucy_img_ID" sentinel → the client renders the colored-tile fallback.
+		if item.IconID > 0 {
+			iconCovered++
+		} else {
+			iconLess++
+			residueNames = appendBoundedResidue(residueNames, ref.Name)
 		}
 
 		didWrite, werr := upsertItemAndQuests(ctx, db, ref, item, questLinks, nowStr)
@@ -210,7 +237,39 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 		}
 		written++
 	}
+
+	// D-03 (ENRICH-15): one structured coverage summary per pass so a maintainer can
+	// grep which items remain icon-less in the VPS logs.
+	logItemsCoverage(len(refs), written, unchanged, iconCovered, iconLess, residueNames)
 	return written, unchanged, failed, nil
+}
+
+// residueSampleCap bounds the icon-less name sample in the D-03 coverage line so a
+// hundreds-long residue never floods the log (T-38-04 self-DoS guard).
+const residueSampleCap = 50
+
+// appendBoundedResidue appends name to the residue sample only while it is under the
+// cap; the slog line additionally reports the full icon_less COUNT, so the bounded
+// sample loses no count information — it just trims the name list.
+func appendBoundedResidue(names []string, name string) []string {
+	if len(names) < residueSampleCap {
+		return append(names, name)
+	}
+	return names
+}
+
+// logItemsCoverage emits the D-03 coverage summary (ENRICH-15). It logs COUNTS, the
+// union size, and a BOUNDED sample of icon-less PUBLIC wiki page NAMES only — NEVER
+// statsblock/wikitext bodies (V7 / T-38-03). enriched = items that got an item_master
+// row this pass (written) plus those already fresh (unchanged).
+func logItemsCoverage(total, written, unchanged, iconCovered, iconLess int, residueSample []string) {
+	slog.Info(wikiJobName+": items coverage",
+		"total", total,
+		"enriched", written+unchanged,
+		"icon_covered", iconCovered,
+		"icon_less", iconLess,
+		"residue_sample", residueSample,
+	)
 }
 
 // upsertItemAndQuests applies the SHA-1 short-circuit then, if changed, writes

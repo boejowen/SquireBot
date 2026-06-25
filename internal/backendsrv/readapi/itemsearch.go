@@ -55,7 +55,11 @@ func (h *ItemSearch) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]store.CatalogItem{})
 		return
 	}
-	items, err := h.st.SearchCatalog(r.Context(), q, searchLimit)
+	// Phase 39 facets (SEARCH-04/05): "1" encoding (Assumption A1); absent/other → false.
+	// These are coerced to bool BEFORE the store call — no user string reaches SQL.
+	clicky := r.URL.Query().Get("clicky") == "1"
+	haste := r.URL.Query().Get("haste") == "1"
+	items, err := h.st.SearchCatalog(r.Context(), q, clicky, haste, searchLimit)
 	if err != nil {
 		// V7: no q in the log — only the op + err.
 		slog.Error("item search failed", "err", err)
@@ -65,8 +69,9 @@ func (h *ItemSearch) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []store.CatalogItem{} // nil → [] coercion (views.go:87)
 	}
-	// V7: count + qlen only, NEVER the q value.
-	slog.Info("item search ok", "rows", len(items), "qlen", utf8.RuneCountInString(q), "status", http.StatusOK)
+	// V7: count + qlen + the facet booleans (NOT PII) only, NEVER the q value.
+	slog.Info("item search ok", "rows", len(items), "qlen", utf8.RuneCountInString(q),
+		"clicky", clicky, "haste", haste, "status", http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(items); err != nil {

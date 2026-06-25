@@ -1,20 +1,22 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.5
-milestone_name: — Ownership Cleanup
-status: complete
-last_updated: "2026-06-22T23:40:00.000Z"
-last_activity: 2026-06-22
+milestone: v2.6
+milestone_name: — Item Detail & Polish
+status: planning
+last_updated: "2026-06-24T00:00:00.000Z"
+last_activity: 2026-06-24
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
-  note: "v2.5 SHIPPED + ARCHIVED 2026-06-22 (milestones/v2.5-*). 4/4 reqs (OWN-01..04); deployed live, prod schema v15; no v* tag. NEXT MILESTONE UNDEFINED → /gsd-new-milestone."
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+  note: "v2.6 OPENED 2026-06-24 (Future Features.txt — 1 bug, 4 tweaks, 1 feature). Defining requirements → roadmap. Phases continue at 37; backend + web, watcher untouched, no v* tag planned."
 ---
 
-> **v2.5 "Ownership Cleanup" — MILESTONE OPENED 2026-06-22 (Phases 35–36; OWN-01..04).** Promotes backlog 999.35 (owner-less / eviction-safe guild banks & bots → Phase 35: OWN-01/02/04) + 999.36 (shared-character-safe eviction → Phase 36: OWN-03), both deferred from quick `260621-u6j` (which dropped the single-owner write gate). Backend-only; ~1 schema migration (`character.owner_id` is NOT NULL today); watcher untouched → NO `v*` tag (consistent with v2.3/v2.4); research SKIPPED (well-understood internal mechanics). Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (OWN-01..04) + ROADMAP.md (phases 35–36). **Phase 35 (OWN-01/02/04) ✅ COMPLETE 2026-06-22 — sentinel-owner model shipped (schema v15); next `/gsd-plan-phase 36` for OWN-03.**
+> **v2.6 "Item Detail & Polish" — MILESTONE OPENED 2026-06-24 (Phases continue at 37).** Source spec `Future Features.txt` (2026-06-24): 1 bug (missing item images), 4 tweaks (wishlist compaction + sub-Velious tiers · paper-doll compaction + per-character photo · named quest links on modern tabs · flag-coded item outlines), 1 feature (faceted search by item type — Clicky/Haste, holdings↔catalog toggle). Shared backbone = re-enabling the dropped stat-block parse (`wikiitem.go` D-8 guard) for flags + effects; full-catalog search/icons require widening enrichment beyond held items. Backend + web; watcher UNTOUCHED → no `v*` tag (consistent with v2.3/v2.4/v2.5). Research SKIPPED (extends well-understood subsystems; codebase-mapped 2026-06-24). Locked: paper-doll both compact+photo · named quests (no epic model) · Clicky+Haste facets · flags No-Drop red/Lore gold/Magic blue · sub-Velious tiers included. **Requirements + roadmap next.**
+>
+> _Prior milestone:_ **v2.5 "Ownership Cleanup" — MILESTONE OPENED 2026-06-22 (Phases 35–36; OWN-01..04).** Promotes backlog 999.35 (owner-less / eviction-safe guild banks & bots → Phase 35: OWN-01/02/04) + 999.36 (shared-character-safe eviction → Phase 36: OWN-03), both deferred from quick `260621-u6j` (which dropped the single-owner write gate). Backend-only; ~1 schema migration (`character.owner_id` is NOT NULL today); watcher untouched → NO `v*` tag (consistent with v2.3/v2.4); research SKIPPED (well-understood internal mechanics). Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (OWN-01..04) + ROADMAP.md (phases 35–36). **Phase 35 (OWN-01/02/04) ✅ COMPLETE 2026-06-22 — sentinel-owner model shipped (schema v15); next `/gsd-plan-phase 36` for OWN-03.**
 >
 > _Prior milestone:_ **v2.4 "Web UI Revamp — 5-Tab Restructure" — ROADMAP CREATED 2026-06-17 (6 phases, 29–34; 27/27 requirements mapped).** Reorganize squirebot.quest around five tabs — **Characters · Inventory · Banks · Wishlist · Settings** (source spec: `Future Features.txt` on the user's desktop). **Spans backend/data architecture + web** (NOT web-only — corrected 2026-06-17 after reading the spec); reworks the just-shipped wantlist into a per-character per-slot wishlist; watcher untouched. **Consolidated-views lock RELAXED** — per-character master-detail drill-down now allowed (CLAUDE.md updated). **Approach = sketch-first:** currently mocking the 5-tab structure + in-game inventory window + per-slot wishlist via `/gsd-sketch` → user picks → requirements → roadmap. Backend/data work this implies: inventory `Location`→slot-layout parsing + container nesting, bank valuation aggregation, per-slot wishlist model + wiki-section suggestion engine. Phases continue from v2.3 (last = 28) → v2.4 starts at **29**.
 >
@@ -23,7 +25,7 @@ progress:
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-06-17 (v2.4 "Web UI Revamp" milestone opened — sketch-first)
+**Last updated:** 2026-06-24 (v2.6 "Item Detail & Polish" milestone opened)
 
 ## Project Reference
 

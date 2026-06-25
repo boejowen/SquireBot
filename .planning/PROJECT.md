@@ -8,6 +8,31 @@ SquireBot is a small Windows app that every member of a ~12-person Project 1999 
 
 **Every guildie can answer "what does my character still need, and where in the guild is it?" without leaving the spreadsheet.** Inventory and spell data lands in the sheet automatically; progression, gaps, and prices are computed for them. If everything else fails, this must work.
 
+## Current Milestone: v2.6 — Item Detail & Polish
+
+**Goal:** Turn the item data SquireBot already half-captures into usable intelligence — faceted item search (clickies / haste), flag-coded outlines, named quest links on the modern tabs, and broader icon/tier coverage — and tighten the Characters (paper-doll), Wishlist, and item-display surfaces. Backend (`internal/backendsrv`) + web (`web/`); the Go **watcher is UNTOUCHED** → **no `v*` tag** (consistent with v2.3/v2.4/v2.5).
+
+**Source spec:** `Future Features.txt` (user-authored, updated 2026-06-24, on the user's desktop) — 1 bug, 4 tweaks, 1 feature.
+
+**Target features (by category → REQ-IDs in REQUIREMENTS.md):**
+- **Item enrichment backbone (ENRICH)** — re-enable the dropped stat-block parse (the `wikiitem.go` D-8 scope guard) to capture Lore / No-Drop / Magic flags + click-effect + haste as discrete, queryable fields; widen enrichment beyond held items to the full PigParse catalog; backfill + diagnose items still missing an icon (the "not all items have images" bug). This is the shared backbone for the flag outlines and the search facets.
+- **Faceted search (SEARCH)** — search items by type (**Clicky**, **Haste**) with a **toggle** between guild holdings and the full catalog.
+- **Item display polish (ITEMUI)** — color-coded flag outlines (No-Drop = red, Lore = gold, Magic = blue) on inventory / bank / paper-doll tiles; surface named "used in quest X" links on the modern Characters / Inventory / Wishlist tabs (today only on the legacy guild-views tab).
+- **Character paper-doll (CHARUI)** — compact the layout to reclaim the portrait dead space (in-game-style) **and** add optional per-character portrait photo upload (new image field + migration + upload path).
+- **Wishlist polish (WISHUI)** — make it compact and visually consistent with the other tabs; add sub-Velious (Kunark / classic) gear tiers to the suggestions.
+
+**Locked decisions (2026-06-24):**
+- Paper-doll = **both** (compact layout + optional per-character photo).
+- Quest flag = **named quests on all modern tabs** (plumb the already-harvested `quest_links` into `InventorySlot`/`ItemRollup`; no epic-specific model).
+- Search facets = **Clicky + Haste only** (not slot / stat / weapon-type); scope toggles **holdings ↔ full catalog**.
+- Flag → color = No-Drop red, Lore gold, Magic blue, Temporary gray.
+- Sub-Velious gear tiers = **included** (new Kunark/classic wiki source pages + tier values; no migration — `wiki_gear_tier` already exists).
+- **Biggest piece / sequencing risk:** the full-catalog search toggle requires widening enrichment to all ~4,300 catalog wiki pages (today enrichment is gated to held items via `DistinctInventoryItemIDs`) — this also fixes most missing icons. Sequence the held-items faceting to ship first so it lands even if the catalog crawl runs long.
+
+**Phases:** continue from v2.5 (last = 36) → v2.6 starts at **Phase 37**.
+
+**Status:** Milestone OPENED 2026-06-24 — requirements + roadmap next.
+
 ## Shipped: v2.5 — Ownership Cleanup (2026-06-22)
 
 **Goal (MET):** Reconciled character-ownership semantics for a guild that shares P99 logins — guild banks/bots are now owner-less, and eviction no longer over-deletes shared characters. Both phases (35–36, 3 plans, OWN-01..04) shipped + deployed live to squirebot.quest + officer browser-smoke approved; **backend + web, watcher UNTOUCHED → NO `v*` tag**. Schema **v15** (migration `00015`, Phase 35; Phase 36 is compute-on-read, no migration). Prod schema went v14→v15 on the Phase-36 deploy boot (the first prod application of `00015`).
@@ -208,9 +233,7 @@ See `milestones/v1.0.1-REQUIREMENTS.md` for the full 8-REQ-ID reconciliation.
 
 ### Active
 
-<!-- v2.4 Web UI Revamp — requirements TBD (sketch-first; defined after the design direction is chosen). v2.2 Wantlist Track 2 still parked. -->
-
-**v2.4 — Web UI Revamp (in progress, opened 2026-06-17)** — web-only IA/navigation + component/interaction polish; requirements being defined via sketch-first design exploration (REQUIREMENTS.md filled once the direction is chosen). Phases start at 29.
+**v2.6 — Item Detail & Polish (opened 2026-06-24)** — full REQ-ID list in `REQUIREMENTS.md` (ENRICH-12.. / SEARCH-04.. / ITEMUI-01.. / CHARUI-01.. / WISHUI-01..). Item enrichment backbone (flag/effect parse + catalog-wide coverage + icon backfill), Clicky/Haste faceted search (holdings↔catalog toggle), flag-coded outlines + named quest links on modern tabs, paper-doll compaction + per-character photo, wishlist compaction + sub-Velious tiers. Backend + web; watcher untouched. Phases continue at 37.
 
 **v2.2 — Wantlist + Discord Pinger (Track 2 parked, started 2026-06-02)** — full REQ-ID list in `REQUIREMENTS.md` (WANT-01..08).
 
@@ -334,4 +357,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-*Last updated: 2026-06-22 — milestone **v2.5 "Ownership Cleanup"** SHIPPED + archived (Phases 35–36, 3 plans, OWN-01..04; owner-less guild banks/bots + shared-character-safe eviction; deployed live, schema v15, watcher untouched, no `v*` tag). Prior: **v2.4 "Web UI Revamp"** SHIPPED + archived (6 phases 29–34, 34 plans, 27 reqs; 5-tab restructure live; schema v14; audit PASSED). Prior: v2.3 (Phases 26–28) SHIPPED 2026-06-09 (schema v10). v2.2 Track-2 (Discord pinger WTS/raid monitors, Phases 22–23) still parked on the Raid Alliance bot invites. Next milestone undefined — `/gsd-new-milestone`.*
+*Last updated: 2026-06-24 — milestone **v2.6 "Item Detail & Polish"** OPENED (Phases continue at 37; source spec `Future Features.txt` 2026-06-24 — 1 bug, 4 tweaks, 1 feature; backend + web, watcher untouched, no `v*` tag planned). Requirements + roadmap next. Prior: **v2.5 "Ownership Cleanup"** SHIPPED + archived (Phases 35–36, 3 plans, OWN-01..04; owner-less guild banks/bots + shared-character-safe eviction; deployed live, schema v15). Prior: **v2.4 "Web UI Revamp"** SHIPPED + archived (6 phases 29–34, 34 plans, 27 reqs; 5-tab restructure live; schema v14; audit PASSED). Prior: v2.3 (Phases 26–28) SHIPPED 2026-06-09 (schema v10). v2.2 Track-2 (Discord pinger WTS/raid monitors, Phases 22–23) still parked on the Raid Alliance bot invites.*

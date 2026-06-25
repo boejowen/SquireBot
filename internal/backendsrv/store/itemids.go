@@ -27,6 +27,20 @@ type ItemRef struct {
 	Name   string
 }
 
+// EnrichmentRef is one item the weekly wiki pass enriches, carrying a Held flag so
+// the write path can branch by held-ness (Phase 38, D-04 name-keyed). It is a
+// SEPARATE shape from ItemRef on purpose: ItemRef is shared with
+// DistinctInventoryItemIDs and extending it with a Held field would ripple into
+// unrelated tests. For a HELD name Held is true and ItemID is its EQ inventory id
+// (the row is written to item_master by that id); for a CATALOG-ONLY name Held is
+// false and ItemID is its representative PigParse id (the row is written to
+// catalog_enrichment by norm_name = lower(trim(name)), NOT to item_master).
+type EnrichmentRef struct {
+	ItemID int64
+	Name   string
+	Held   bool
+}
+
 // DistinctInventoryItemIDs returns one (item_id, name) pair per distinct
 // item_id across all of inventory_item where item_id > 0, ordered by item_id.
 // Empty-slot rows (item_id = 0 or NULL) are excluded — the wiki has no page for
@@ -78,26 +92,31 @@ func (s *Store) DistinctInventoryItemIDs(ctx context.Context) ([]ItemRef, error)
 // the catalog arm is name-deduped against the held set; this is exercised by
 // TestDistinctEnrichmentRefs_HeldVsHeldSameName.
 //
-// For a held name ItemID is its EQ id (the MIN(name) representative, unchanged so
-// every held reader's item_master row keeps its EQ-id keying); for a catalog-only
-// name ItemID is its PigParse id, which the namespace-agnostic
-// UpsertItemMasterTx keys an item_master row by.
+// Each ref carries a Held flag so the write path can branch by held-ness (D-04
+// name-keyed): for a held name Held is true and ItemID is its EQ id (the MIN(name)
+// representative, unchanged so every held reader's item_master row keeps its EQ-id
+// keying); for a catalog-only name Held is false and ItemID is its PigParse id, and
+// the ref is written to catalog_enrichment by norm_name (NOT to item_master) — the
+// two id namespaces never collide because they live in different tables under
+// different keys.
 //
-// TWO non-negotiable exclusions guard the catalog arm (D-04 collision guard):
-//  1. lower(trim(name)) NOT IN held_names — a name that is BOTH held and in the
-//     catalog yields ONE ref (the held EQ id), never a duplicate page fetch and
-//     never a second item_master row for the same item (held wins).
-//  2. item_id NOT IN (SELECT item_id FROM item_master) — a PigParse id that
-//     numerically equals an existing item_master row id is dropped, so the
-//     upsert's ON CONFLICT(item_id) DO UPDATE can NEVER overwrite the wrong row.
+// ONE non-negotiable exclusion guards the catalog arm:
+//   - lower(trim(name)) NOT IN held_names — a name that is BOTH held and in the
+//     catalog yields ONE ref (the held EQ id), never a duplicate page fetch and never
+//     a second enrichment row for the same item (held wins).
+//
+// The Option-A id-collision guard (item_id NOT IN (SELECT item_id FROM item_master))
+// is DROPPED: under name-keyed Option B a PigParse id that numerically equals a held
+// EQ id is irrelevant — the catalog row is keyed by norm_name in catalog_enrichment,
+// not by item_id in item_master, so there is no collision to guard against. Dropping
+// it recovers the catalog items the guard formerly silently dropped (e.g. Cured Silk
+// Gi, Ancient Tarnished Breastplate, Etched Velium Brawl Stick).
 //
 // The catalog arm dedups by lower(trim(name)) (NOT by id): an id-keyed or
 // (id,name)-keyed dedup would refetch the same wiki page under multiple casings,
-// a politeness regression. Excluded rows simply stay icon-less and surface in the
-// items pass's coverage residue. Read side, so a plain (*Store) method; slog is
-// silent on the happy path. The job authors ZERO inline SQL (11-05) — this union
-// lives HERE.
-func (s *Store) DistinctEnrichmentRefs(ctx context.Context) ([]ItemRef, error) {
+// a politeness regression. Read side, so a plain (*Store) method; slog is silent on
+// the happy path. The job authors ZERO inline SQL (11-05) — this union lives HERE.
+func (s *Store) DistinctEnrichmentRefs(ctx context.Context) ([]EnrichmentRef, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`WITH held AS (
 		   SELECT item_id, MIN(name) AS name
@@ -115,24 +134,25 @@ func (s *Store) DistinctEnrichmentRefs(ctx context.Context) ([]ItemRef, error) {
 		   FROM pigparse_price
 		   WHERE name IS NOT NULL AND trim(name) <> ''
 		     AND lower(trim(name)) NOT IN (SELECT norm FROM held_names)
-		     AND item_id NOT IN (SELECT item_id FROM item_master)
 		   GROUP BY lower(trim(name))
 		 )
-		 SELECT item_id, name FROM held
+		 SELECT item_id, name, 1 AS held FROM held
 		 UNION ALL
-		 SELECT item_id, name FROM catalog
+		 SELECT item_id, name, 0 AS held FROM catalog
 		 ORDER BY item_id`)
 	if err != nil {
 		return nil, fmt.Errorf("query distinct enrichment refs: %w", err)
 	}
 	defer rows.Close()
 
-	var refs []ItemRef
+	var refs []EnrichmentRef
 	for rows.Next() {
-		var ref ItemRef
-		if err := rows.Scan(&ref.ItemID, &ref.Name); err != nil {
+		var ref EnrichmentRef
+		var held int
+		if err := rows.Scan(&ref.ItemID, &ref.Name, &held); err != nil {
 			return nil, fmt.Errorf("scan enrichment item ref: %w", err)
 		}
+		ref.Held = held == 1
 		refs = append(refs, ref)
 	}
 	if err := rows.Err(); err != nil {
@@ -141,11 +161,12 @@ func (s *Store) DistinctEnrichmentRefs(ctx context.Context) ([]ItemRef, error) {
 	return refs, nil
 }
 
-// IconCoverage is the CURRENT icon-coverage state of item_master for the D-03
-// maintainer diagnostic (ENRICH-15): Total enriched rows, how many carry a wiki
-// icon (IconCovered), how many are still icon-less (IconLess = icon_id NULL or 0 →
-// the client renders the colored-tile fallback), and a bounded, name-ordered sample
-// of those icon-less names so a maintainer can SEE which items still lack an icon.
+// IconCoverage is the CURRENT icon-coverage state across BOTH enrichment stores
+// (item_master held + catalog_enrichment unheld) for the D-03 maintainer diagnostic
+// (ENRICH-15): Total enriched rows, how many carry a wiki icon (IconCovered), how many
+// are still icon-less (IconLess = icon_id NULL or 0 → the client renders the
+// colored-tile fallback), and a bounded, name-ordered sample of those icon-less names
+// so a maintainer can SEE which items still lack an icon.
 type IconCoverage struct {
 	Total         int
 	IconCovered   int
@@ -153,21 +174,28 @@ type IconCoverage struct {
 	ResidueSample []string
 }
 
-// ItemMasterIconCoverage reads the WHOLE item_master table (not per-pass deltas) so
-// the icon-less residue stays visible on EVERY weekly run — even in steady state
-// when most pages 304-skip and a delta-based count would collapse toward zero while
-// hundreds of items still render the colored tile. sampleCap bounds the residue name
-// list (the slog self-DoS guard, T-38-04); only PUBLIC item names are read (never
-// statsblock/wikitext bodies, V7). Read side: a count query (fixed projection) plus
-// one bounded-LIMIT sample query (the limit is the sole ? parameter).
-func (s *Store) ItemMasterIconCoverage(ctx context.Context, sampleCap int) (IconCoverage, error) {
+// CatalogIconCoverage reads the WHOLE enrichment surface across BOTH stores — held
+// item_master AND name-keyed catalog_enrichment (Phase 38, D-04 name-keyed) — not
+// per-pass deltas, so the icon-less residue stays visible on EVERY weekly run even in
+// steady state when most pages 304-skip and a delta-based count would collapse toward
+// zero while hundreds of items still render the colored tile. A held name is NEVER in
+// catalog_enrichment (the union's held-name dedup at write time), so a plain UNION ALL
+// already yields one row per item — no precedence logic needed. sampleCap bounds the
+// residue name list (the slog self-DoS guard, T-38-04); only PUBLIC item names are read
+// (never statsblock/wikitext bodies, V7). Read side: a count query (fixed projection)
+// plus one bounded-LIMIT sample query (the limit is the sole ? parameter).
+func (s *Store) CatalogIconCoverage(ctx context.Context, sampleCap int) (IconCoverage, error) {
 	var cov IconCoverage
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT count(*),
 		        COALESCE(SUM(CASE WHEN icon_id IS NOT NULL AND icon_id > 0 THEN 1 ELSE 0 END), 0)
-		 FROM item_master`,
+		 FROM (
+		   SELECT lower(trim(name)) AS norm, icon_id FROM item_master
+		   UNION ALL
+		   SELECT norm_name AS norm, icon_id FROM catalog_enrichment
+		 )`,
 	).Scan(&cov.Total, &cov.IconCovered); err != nil {
-		return IconCoverage{}, fmt.Errorf("query item_master icon coverage: %w", err)
+		return IconCoverage{}, fmt.Errorf("query catalog icon coverage: %w", err)
 	}
 	cov.IconLess = cov.Total - cov.IconCovered
 
@@ -175,12 +203,16 @@ func (s *Store) ItemMasterIconCoverage(ctx context.Context, sampleCap int) (Icon
 		return cov, nil
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT name FROM item_master
-		 WHERE (icon_id IS NULL OR icon_id = 0) AND name IS NOT NULL AND trim(name) <> ''
+		`SELECT name FROM (
+		   SELECT name, icon_id FROM item_master WHERE name IS NOT NULL AND trim(name) <> ''
+		   UNION ALL
+		   SELECT name, icon_id FROM catalog_enrichment WHERE name IS NOT NULL AND trim(name) <> ''
+		 )
+		 WHERE icon_id IS NULL OR icon_id = 0
 		 ORDER BY name
 		 LIMIT ?`, sampleCap)
 	if err != nil {
-		return IconCoverage{}, fmt.Errorf("query item_master icon-less sample: %w", err)
+		return IconCoverage{}, fmt.Errorf("query catalog icon-less sample: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {

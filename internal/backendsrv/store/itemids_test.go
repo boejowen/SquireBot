@@ -88,15 +88,18 @@ func TestDistinctInventoryItemIDs(t *testing.T) {
 }
 
 // TestDistinctEnrichmentRefs verifies the WIDENED enrichment ref set (Phase 38,
-// ENRICH-14): the held EQ-id refs (DistinctInventoryItemIDs, unchanged) UNIONed
-// with the catalog-only PigParse refs, deduped by lower(trim(name)). It mirrors
-// TestDistinctInventoryItemIDs for the held arm and adds the four D-04 guard cases:
-//   - A: an unheld catalog item appears in the union keyed by its PigParse id.
+// ENRICH-14, D-04 name-keyed): the held EQ-id refs (DistinctInventoryItemIDs,
+// unchanged) UNIONed with the catalog-only PigParse refs, deduped by lower(trim(name)),
+// each carrying a Held flag. It mirrors TestDistinctInventoryItemIDs for the held arm
+// and adds the four name-keyed cases:
+//   - A: an unheld catalog item appears in the union keyed by its PigParse id, Held=false.
 //   - B: a catalog item whose name IS held appears EXACTLY ONCE, keyed by the held
-//     EQ id (held wins) — never duplicated under the PigParse id.
+//     EQ id (held wins, Held=true) — never duplicated under the PigParse id.
 //   - C: a catalog item_id numerically equal to an existing item_master row id (for
-//     a DIFFERENT, unheld name) is EXCLUDED (the NOT IN (SELECT item_id FROM
-//     item_master) collision guard), so ON CONFLICT(item_id) can never overwrite it.
+//     a DIFFERENT, unheld name) is NOW INCLUDED with Held=false — the Option-A
+//     collision guard is DROPPED under name-keying (the catalog row is written to
+//     catalog_enrichment by norm_name, not to item_master by item_id, so the numeric
+//     id overlap is harmless and the formerly-dropped item is recovered).
 //   - D: exactly one ref per normalized name after the full union (Pitfall 1).
 func TestDistinctEnrichmentRefs(t *testing.T) {
 	db := NewTestDB(t)
@@ -141,40 +144,57 @@ func TestDistinctEnrichmentRefs(t *testing.T) {
 		t.Fatalf("DistinctEnrichmentRefs: %v", err)
 	}
 
-	// Build a name→id lookup + a normalized-name multiset for the assertions.
+	// Build a name→id lookup, a name→Held lookup, + a normalized-name multiset.
 	idByName := make(map[string]int64)
+	heldByName := make(map[string]bool)
 	normCount := make(map[string]int)
 	for _, r := range refs {
 		idByName[r.Name] = r.ItemID
+		heldByName[r.Name] = r.Held
 		normCount[normEnrich(r.Name)] += 1
 		if r.ItemID == 0 {
 			t.Errorf("item_id 0 must never appear in the union, got %+v", r)
 		}
 	}
 
-	// Held arm preserved: 1001 (Cloth Cap), 11000 (Pearl), 13128 (Fungi Tunic).
+	// Held arm preserved: 1001 (Cloth Cap), 11000 (Pearl), 13128 (Fungi Tunic), all Held=true.
 	if got := idByName["Cloth Cap"]; got != 1001 {
 		t.Errorf("held Cloth Cap keyed by %d, want EQ id 1001 (held wins)", got)
+	}
+	if !heldByName["Cloth Cap"] {
+		t.Errorf("held Cloth Cap has Held=false, want true (Pitfall 2)")
 	}
 	if got := idByName["Pearl"]; got != 11000 {
 		t.Errorf("held Pearl keyed by %d, want EQ id 11000", got)
 	}
+	if !heldByName["Pearl"] {
+		t.Errorf("held Pearl has Held=false, want true (Pitfall 2)")
+	}
 	if got := idByName["Fungi Tunic"]; got != 13128 {
 		t.Errorf("held Fungi Tunic keyed by %d, want EQ id 13128", got)
 	}
+	if !heldByName["Fungi Tunic"] {
+		t.Errorf("held Fungi Tunic has Held=false, want true (Pitfall 2)")
+	}
 
-	// Case A: unheld "Cloak of Flames" appears keyed by its PigParse id 90001.
+	// Case A: unheld "Cloak of Flames" appears keyed by its PigParse id 90001, Held=false.
 	if got, ok := idByName["Cloak of Flames"]; !ok {
 		t.Errorf("unheld catalog item Cloak of Flames missing from the union")
 	} else if got != 90001 {
 		t.Errorf("Cloak of Flames keyed by %d, want PigParse id 90001", got)
 	}
+	if heldByName["Cloak of Flames"] {
+		t.Errorf("catalog-only Cloak of Flames has Held=true, want false (Pitfall 2)")
+	}
 
-	// Case A: a second unheld catalog item Manastone is present keyed by its id.
+	// Case A: a second unheld catalog item Manastone is present keyed by its id, Held=false.
 	if got, ok := idByName["Manastone"]; !ok {
 		t.Errorf("unheld catalog item Manastone missing from the union")
 	} else if got != 90004 {
 		t.Errorf("Manastone keyed by %d, want PigParse id 90004", got)
+	}
+	if heldByName["Manastone"] {
+		t.Errorf("catalog-only Manastone has Held=true, want false (Pitfall 2)")
 	}
 
 	// Case B: the held name "cloth cap"/"fungi tunic" appears EXACTLY ONCE and the
@@ -191,9 +211,18 @@ func TestDistinctEnrichmentRefs(t *testing.T) {
 		}
 	}
 
-	// Case C: the id-collision catalog row "Colliding Catalog Name" is EXCLUDED.
-	if _, ok := idByName["Colliding Catalog Name"]; ok {
-		t.Errorf("catalog row whose id (1001) collides with an item_master row leaked into the union — collision guard broken")
+	// Case C (the assertion that FLIPS under name-keying): the catalog row "Colliding
+	// Catalog Name" whose PigParse id (1001) numerically equals a held/item_master EQ id
+	// 1001 (for a DIFFERENT name) is NOW INCLUDED with Held=false — the Option-A
+	// collision guard is dropped because the catalog row is keyed by norm_name in
+	// catalog_enrichment, never by item_id in item_master, so the id overlap is harmless.
+	if got, ok := idByName["Colliding Catalog Name"]; !ok {
+		t.Errorf("catalog row whose id (1001) collides with an item_master row was DROPPED — the Option-A collision guard must be removed under name-keying (the formerly-dropped item must be recovered)")
+	} else if got != 1001 {
+		t.Errorf("Colliding Catalog Name keyed by %d, want its PigParse id 1001", got)
+	}
+	if heldByName["Colliding Catalog Name"] {
+		t.Errorf("catalog-only Colliding Catalog Name has Held=true, want false (it is unheld — name not in inventory)")
 	}
 
 	// The blank-name catalog row is excluded.
@@ -244,17 +273,36 @@ func TestDistinctEnrichmentRefs_HeldVsHeldSameName(t *testing.T) {
 	}
 }
 
-// TestItemMasterIconCoverage verifies the D-03 maintainer diagnostic reads the CURRENT
-// whole-table icon state (ENRICH-15) — total / icon-covered / icon-less + a bounded,
-// name-ordered residue sample with blank names excluded and the count independent of
-// the sample cap.
-func TestItemMasterIconCoverage(t *testing.T) {
+// seedCatalogEnrich inserts one catalog_enrichment row directly (raw INSERT, keyed by
+// norm_name) so the both-stores coverage test can control name + icon_id precisely.
+// Pass iconID nil for SQL NULL or a concrete value (including 0).
+func seedCatalogEnrich(t *testing.T, db *sql.DB, normName, name string, iconID *int64) {
+	t.Helper()
+	var iconArg interface{}
+	if iconID != nil {
+		iconArg = *iconID
+	} // else stays nil → SQL NULL
+	if _, err := db.Exec(
+		`INSERT INTO catalog_enrichment (norm_name, name, icon_id, flags_json, last_refreshed)
+		 VALUES (?,?,?,?,datetime('now'))`,
+		normName, name, iconArg, "[]",
+	); err != nil {
+		t.Fatalf("seed catalog_enrichment %q: %v", normName, err)
+	}
+}
+
+// TestCatalogIconCoverage verifies the D-03 maintainer diagnostic reads the CURRENT
+// whole-surface icon state across BOTH stores (ENRICH-15, D-04 name-keyed) — total /
+// icon-covered / icon-less + a bounded, name-ordered residue sample with blank names
+// excluded and the count independent of the sample cap. Seeds item_master (held) AND
+// catalog_enrichment (unheld) rows and asserts the counts/residue span both.
+func TestCatalogIconCoverage(t *testing.T) {
 	db := NewTestDB(t)
 	s := NewStore(db)
 	ctx := context.Background()
 
-	// 5 enriched rows: 2 icon-covered (102,103), 3 icon-less — NULL (101), 0 (104),
-	// and a blank-name NULL-icon row (105) that is counted but EXCLUDED from the sample.
+	// --- item_master (held): 5 rows — 2 covered (102,103), 3 icon-less (NULL 101, 0 104,
+	// blank-name NULL 105 — counted but EXCLUDED from the sample). ---
 	seedItemMaster(t, db, 101, "Alpha Cap", "s", "u", false)    // icon_id NULL → icon-less
 	seedItemMaster(t, db, 102, "Bravo Cloak", "s", "u", false)  // → covered below
 	seedItemMaster(t, db, 103, "Charlie Ring", "s", "u", false) // → covered below
@@ -263,7 +311,7 @@ func TestItemMasterIconCoverage(t *testing.T) {
 		`INSERT INTO item_master (item_id, name, is_quest_item, icon_id, last_refreshed) VALUES (?,?,?,?,datetime('now'))`,
 		105, "", 0, nil,
 	); err != nil {
-		t.Fatalf("seed blank-name icon-less row: %v", err)
+		t.Fatalf("seed blank-name icon-less item_master row: %v", err)
 	}
 	if _, err := db.Exec(`UPDATE item_master SET icon_id = 555 WHERE item_id IN (102, 103)`); err != nil {
 		t.Fatalf("set covered icons: %v", err)
@@ -272,39 +320,49 @@ func TestItemMasterIconCoverage(t *testing.T) {
 		t.Fatalf("zero an icon: %v", err)
 	}
 
-	cov, err := s.ItemMasterIconCoverage(ctx, 50)
+	// --- catalog_enrichment (unheld): 3 rows — 1 covered (Foxtrot Gem, icon 700), 2
+	// icon-less (Echo Wand icon 0, and a blank-name NULL-icon row counted but EXCLUDED
+	// from the sample). ---
+	seedCatalogEnrich(t, db, "echo wand", "Echo Wand", i64ptr(0))      // icon 0 → icon-less
+	seedCatalogEnrich(t, db, "foxtrot gem", "Foxtrot Gem", i64ptr(700)) // covered
+	seedCatalogEnrich(t, db, "blank catalog", "", nil)                  // blank name, NULL icon → icon-less, excluded from sample
+
+	cov, err := s.CatalogIconCoverage(ctx, 50)
 	if err != nil {
-		t.Fatalf("ItemMasterIconCoverage: %v", err)
+		t.Fatalf("CatalogIconCoverage: %v", err)
 	}
-	if cov.Total != 5 {
-		t.Errorf("Total = %d, want 5", cov.Total)
+	// Total spans BOTH stores: 5 item_master + 3 catalog_enrichment = 8.
+	if cov.Total != 8 {
+		t.Errorf("Total = %d, want 8 (5 item_master + 3 catalog_enrichment)", cov.Total)
 	}
-	if cov.IconCovered != 2 {
-		t.Errorf("IconCovered = %d, want 2 (102,103)", cov.IconCovered)
+	// Covered spans both: Bravo+Charlie (item_master) + Foxtrot (catalog) = 3.
+	if cov.IconCovered != 3 {
+		t.Errorf("IconCovered = %d, want 3 (102,103 + Foxtrot Gem)", cov.IconCovered)
 	}
-	if cov.IconLess != 3 {
-		t.Errorf("IconLess = %d, want 3 (NULL 101, 0 104, blank 105)", cov.IconLess)
+	// Icon-less spans both: Alpha+Delta+blank105 (item_master) + Echo+blank (catalog) = 5.
+	if cov.IconLess != 5 {
+		t.Errorf("IconLess = %d, want 5 (NULL 101, 0 104, blank 105 + Echo Wand, blank catalog)", cov.IconLess)
 	}
-	// Residue sample = icon-less PUBLIC names, ordered, blank-name (105) EXCLUDED.
-	want := []string{"Alpha Cap", "Delta Boots"}
+	// Residue sample = icon-less PUBLIC names from BOTH stores, name-ordered, blanks EXCLUDED.
+	want := []string{"Alpha Cap", "Delta Boots", "Echo Wand"}
 	if len(cov.ResidueSample) != len(want) {
 		t.Fatalf("ResidueSample = %v, want %v", cov.ResidueSample, want)
 	}
 	for i, w := range want {
 		if cov.ResidueSample[i] != w {
-			t.Errorf("ResidueSample[%d] = %q, want %q (name-ordered, blank excluded)", i, cov.ResidueSample[i], w)
+			t.Errorf("ResidueSample[%d] = %q, want %q (name-ordered across both stores, blanks excluded)", i, cov.ResidueSample[i], w)
 		}
 	}
 
 	// sampleCap honored: cap 1 trims the name list but NOT the counts.
-	capped, err := s.ItemMasterIconCoverage(ctx, 1)
+	capped, err := s.CatalogIconCoverage(ctx, 1)
 	if err != nil {
-		t.Fatalf("ItemMasterIconCoverage(cap=1): %v", err)
+		t.Fatalf("CatalogIconCoverage(cap=1): %v", err)
 	}
 	if len(capped.ResidueSample) != 1 || capped.ResidueSample[0] != "Alpha Cap" {
 		t.Errorf("cap=1 sample = %v, want [Alpha Cap]", capped.ResidueSample)
 	}
-	if capped.IconLess != 3 {
-		t.Errorf("cap=1 IconLess = %d, want 3 (count is independent of the sample cap)", capped.IconLess)
+	if capped.IconLess != 5 {
+		t.Errorf("cap=1 IconLess = %d, want 5 (count is independent of the sample cap)", capped.IconLess)
 	}
 }

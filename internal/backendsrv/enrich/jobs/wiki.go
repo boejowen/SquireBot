@@ -197,7 +197,12 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 			continue
 		}
 
-		didWrite, werr := upsertItemAndQuests(ctx, db, ref, item, questLinks, nowStr)
+		// Phase 38 (Plan 01): DistinctEnrichmentRefs now returns EnrichmentRef (with a
+		// Held flag). Plan 02 (Wave 2) branches the write on ref.Held (held → item_master,
+		// catalog-only → catalog_enrichment by norm_name). Until then this adapts the ref to
+		// the unchanged held-path upsertItemAndQuests (ItemRef), preserving the prior runtime
+		// behavior so the build + the held-path tests stay green.
+		didWrite, werr := upsertItemAndQuests(ctx, db, store.ItemRef{ItemID: ref.ItemID, Name: ref.Name}, item, questLinks, nowStr)
 		if werr != nil {
 			// A per-item DB error is logged + skipped (the run marches on).
 			slog.Warn(wikiJobName+": item write failed", "item_id", ref.ItemID, "err", werr)
@@ -224,7 +229,7 @@ func runWikiItems(ctx context.Context, db *sql.DB, s *store.Store, fetch politef
 	// icon-less every weekly run — even in steady state when most pages 304-skip and a
 	// delta count would collapse toward zero while hundreds of items still render the
 	// colored tile.
-	cov, cerr := s.ItemMasterIconCoverage(ctx, residueSampleCap)
+	cov, cerr := s.CatalogIconCoverage(ctx, residueSampleCap)
 	if cerr != nil {
 		slog.Warn(wikiJobName+": items coverage query failed", "err", cerr)
 	} else {

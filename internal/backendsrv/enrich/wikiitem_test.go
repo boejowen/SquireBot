@@ -569,6 +569,66 @@ func TestParseHastePct(t *testing.T) {
 	}
 }
 
+// TestDeriveFlagsAndEffects_NewlineForm proves the one-derivation contract (D-05):
+// DeriveFlagsAndEffects re-parses the STORED cleaned statsblock — newline-separated
+// (not <br>) and with the [[wiki-link]] brackets already stripped — and produces the
+// SAME flags/effects the live parser does. This is the exact input store.BackfillItemFlags
+// feeds it at boot, so a green test here is the no-network backfill's correctness proof.
+func TestDeriveFlagsAndEffects_NewlineForm(t *testing.T) {
+	t.Run("clicky from no-bracket cleaned Effect line", func(t *testing.T) {
+		// The stored 00013 form: newline-separated, links rendered to display text.
+		sb := "MAGIC ITEM\nSlot: PRIMARY\nEffect: Shock of Frost (Click from Inventory)\nClass: ALL"
+		d := DeriveFlagsAndEffects(sb)
+		if !d.IsMagic {
+			t.Errorf("IsMagic = false, want true (MAGIC ITEM flag on the newline form)")
+		}
+		if !d.IsClicky {
+			t.Errorf("IsClicky = false, want true (a no-bracket cleaned 'Effect: ... (Click ...)' must classify)")
+		}
+		if d.ClickyEffect != "Shock of Frost" {
+			t.Errorf("ClickyEffect = %q, want %q (the clicky name from the bracket-stripped Effect line)", d.ClickyEffect, "Shock of Frost")
+		}
+		if len(d.Flags) != 1 || d.Flags[0] != "MAGIC ITEM" {
+			t.Errorf("Flags = %v, want [\"MAGIC ITEM\"]", d.Flags)
+		}
+	})
+
+	t.Run("haste, no effect", func(t *testing.T) {
+		sb := "MAGIC ITEM\nSlot: BACK\nHaste: +36%\nClass: ALL"
+		d := DeriveFlagsAndEffects(sb)
+		if !d.HasHaste || d.HastePct != 36 {
+			t.Errorf("HasHaste/HastePct = (%v, %d), want (true, 36)", d.HasHaste, d.HastePct)
+		}
+		if d.IsClicky {
+			t.Errorf("IsClicky = true, want false (no Effect line ⇒ not a clicky)")
+		}
+	})
+
+	t.Run("empty block ⇒ zero value, no panic", func(t *testing.T) {
+		d := DeriveFlagsAndEffects("")
+		if d.IsMagic || d.IsClicky || d.HasHaste || d.HastePct != 0 || d.Flags != nil {
+			t.Errorf("DeriveFlagsAndEffects(\"\") = %+v, want the zero value", d)
+		}
+	})
+
+	t.Run("newline form matches the <br> form", func(t *testing.T) {
+		// The SAME logical block, separated by <br> vs '\n' (no brackets either way),
+		// must derive identically — proves the brOrNlRe union seam is sound.
+		brForm := "LORE ITEM<br>MAGIC ITEM<br>Slot: HEAD<br>Haste: +21%"
+		nlForm := "LORE ITEM\nMAGIC ITEM\nSlot: HEAD\nHaste: +21%"
+		db := DeriveFlagsAndEffects(brForm)
+		dn := DeriveFlagsAndEffects(nlForm)
+		if db.IsLore != dn.IsLore || db.IsMagic != dn.IsMagic ||
+			db.HasHaste != dn.HasHaste || db.HastePct != dn.HastePct ||
+			strings.Join(db.Flags, "|") != strings.Join(dn.Flags, "|") {
+			t.Errorf("br form %+v != newline form %+v (the separator union must be transparent)", db, dn)
+		}
+		if !dn.IsLore || !dn.IsMagic || dn.HastePct != 21 {
+			t.Errorf("newline form derived wrong: %+v", dn)
+		}
+	})
+}
+
 // isHex40 reports whether s is exactly 40 lowercase hex chars.
 func isHex40(s string) bool {
 	if len(s) != 40 {

@@ -225,6 +225,19 @@ func runServe(args []string) int {
 		return 1
 	}
 
+	// One-time no-network item-flags backfill (Phase 37 / D-05): re-derive the new
+	// flag/effect columns (00016) from each already-enriched row's STORED statsblock,
+	// so they light up at boot without waiting for the weekly wiki crawl. Idempotent
+	// (keyed on flags_json IS NULL — a no-op once populated), like RunMigrations.
+	// NON-FATAL: a backfill hiccup must never block serving — the weekly freshness
+	// pass heals any row this misses. Uses context.Background() (the signal-tied ctx
+	// is created below; the backfill is a fast local pass).
+	if scanned, updated, err := store.NewStore(db).BackfillItemFlags(context.Background()); err != nil {
+		slog.Error("serve: item flags backfill failed; continuing", "err", err) // NON-FATAL
+	} else if updated > 0 {
+		slog.Info("serve: item flags backfill complete", "scanned", scanned, "updated", updated)
+	}
+
 	// Root context cancelled on SIGINT/SIGTERM — triggers a clean shutdown of the
 	// scheduler goroutine and the HTTP server.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

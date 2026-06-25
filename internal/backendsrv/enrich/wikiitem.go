@@ -108,10 +108,13 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 	flags, kv := parseStatsblock(statsblockRaw)
 	summary := extractSummary(notesRaw)
 
-	// Phase 37: derive the flag booleans + effect fields from the maps
-	// parseStatsblock already built — no new scan of the raw wikitext (T-37-01).
-	isClicky, clickyEffect := parseClicky(kv["Effect"])
-	hasHaste, hastePct := parseHastePct(kv["Haste"])
+	// Phase 37: derive the flag booleans + effect fields via the SINGLE shared
+	// entrypoint DeriveFlagsAndEffects — the EXACT call the boot backfill makes on the
+	// stored statsblock (D-05), so the live parse and the backfill cannot drift. The
+	// derivation reads only the statsblock (T-37-01: no new scan of the raw wikitext);
+	// the separate parseStatsblock call above stands only for the two NON-derived fields
+	// this struct still needs directly (IsQuestItem, Slot).
+	d := DeriveFlagsAndEffects(statsblockRaw)
 
 	item := ParsedWikiItem{
 		ItemName:     itemname,
@@ -123,22 +126,78 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 		IconID:       parseIconID(getParam(params, "lucy_img_ID", "")), // INV-04: the wiki icon id; 0 when absent
 		Statsblock:   cleanStatsblock(statsblockRaw),                   // INV-02: the in-game stat block for the examine panel
 
+		// ENRICH-12 (D-03) + ENRICH-13 (D-01/D-02): the flag booleans + effect fields,
+		// all derived by deriveFromMaps (the single derivation, shared with the backfill).
+		IsLore:       d.IsLore,
+		IsNoDrop:     d.IsNoDrop,
+		IsMagic:      d.IsMagic,
+		IsTemporary:  d.IsTemporary,
+		Flags:        d.Flags,
+		IsClicky:     d.IsClicky,
+		ClickyEffect: d.ClickyEffect,
+		HasHaste:     d.HasHaste,
+		HastePct:     d.HastePct,
+	}
+
+	questLinks := harvestQuestLinks(notesRaw, item)
+	return item, questLinks, true, ""
+}
+
+// DerivedFlagsEffects is the result of DeriveFlagsAndEffects / deriveFromMaps — the
+// flag booleans + the full flag set + the Clicky/Haste effect values that the live
+// parser surfaces on ParsedWikiItem and the boot backfill reconstructs from the
+// stored statsblock. Field names mirror the matching ParsedWikiItem fields exactly.
+type DerivedFlagsEffects struct {
+	IsLore       bool
+	IsNoDrop     bool
+	IsMagic      bool
+	IsTemporary  bool
+	Flags        []string // full sorted detected all-caps flag set (D-03)
+	IsClicky     bool
+	ClickyEffect string
+	HasHaste     bool
+	HastePct     int
+}
+
+// DeriveFlagsAndEffects re-derives the Phase 37 flag/effect fields from a statsblock
+// STRING — the SINGLE derivation shared by the live parser (ParseItempage, on the raw
+// <br>-separated statsblock) and the boot backfill (store.BackfillItemFlags, on the
+// stored CLEANED, newline-separated, bracket-stripped statsblock from 00013). It runs
+// parseStatsblock (which splits on <br> OR newline, so both forms parse identically)
+// then deriveFromMaps. It is PURE: no network, no DB, no side effects (D-05) — re-parsing
+// the stored block is CPU only. A nil/empty/garbage block yields the zero value (every
+// bool false, Flags nil, HastePct 0) without panicking (T-37-05): parseStatsblock skips
+// blank lines and parseClicky/parseHastePct guard their inputs.
+//
+// Critically, parseClicky tolerates an Effect value with NO [[...]] brackets (the
+// stored cleaned form already had its links rendered to display text), so a cleaned
+// "Effect: Shock of Frost (Click from Inventory)" still classifies as a clicky AND
+// extracts "Shock of Frost" — the exact field SEARCH-04 needs.
+func DeriveFlagsAndEffects(statsblock string) DerivedFlagsEffects {
+	flags, kv := parseStatsblock(statsblock)
+	return deriveFromMaps(flags, kv)
+}
+
+// deriveFromMaps is the shared derivation over the already-parsed flags/kv maps. Both
+// ParseItempage (which already holds the maps from its own parseStatsblock call) and
+// DeriveFlagsAndEffects funnel through here, so the flag spellings + the Clicky/Haste
+// rules live in exactly ONE place.
+func deriveFromMaps(flags map[string]bool, kv map[string]string) DerivedFlagsEffects {
+	isClicky, clickyEffect := parseClicky(kv["Effect"])
+	hasHaste, hastePct := parseHastePct(kv["Haste"])
+	return DerivedFlagsEffects{
 		// ENRICH-12 (D-03): the four queried flags use the EXACT TS-oracle spellings.
 		IsLore:      flags["LORE ITEM"],
 		IsNoDrop:    flags["NO DROP"] || flags["NO-DROP"],
 		IsMagic:     flags["MAGIC ITEM"],
 		IsTemporary: flags["TEMPORARY"],
 		Flags:       flagSet(flags), // the FULL detected set, sorted (D-03)
-
 		// ENRICH-13 (D-01/D-02): activatable click only; haste % as an integer.
 		IsClicky:     isClicky,
 		ClickyEffect: clickyEffect,
 		HasHaste:     hasHaste,
 		HastePct:     hastePct,
 	}
-
-	questLinks := harvestQuestLinks(notesRaw, item)
-	return item, questLinks, true, ""
 }
 
 // pageNameToSlug converts a page title to a wiki URL path segment: spaces →
@@ -292,20 +351,30 @@ func splitAtDepthZero(input string, delim byte) []string {
 }
 
 var (
-	// <br>, <br/>, <br /> (case-insensitive) — statsblock line separator.
+	// <br>, <br/>, <br /> (case-insensitive) — the RAW statsblock line separator.
 	brRe = regexp.MustCompile(`(?i)<br\s*/?>`)
+	// <br> OR a real newline — the line separator for BOTH the raw HTML-in-wikitext
+	// statsblock (separated by <br>) AND the stored CLEANED statsblock (00013, where
+	// cleanStatsblock already turned every <br> into '\n'). DeriveFlagsAndEffects
+	// re-parses the stored cleaned block with the SAME line/flag/kv logic the live
+	// parser uses, so splitting on either separator is the single seam that makes one
+	// derivation serve both inputs (no <br> survives in the cleaned form, and no real
+	// newline appears between fields in the raw form, so the union is unambiguous).
+	brOrNlRe = regexp.MustCompile(`(?i)<br\s*/?>|\n`)
 	// A standalone flag line: all uppercase letters, spaces, hyphens.
 	flagRe = regexp.MustCompile(`^[A-Z][A-Z\s\-]+$`)
 )
 
-// parseStatsblock splits the statsblock (HTML-in-wikitext) on <br>, then
-// classifies each line as a standalone flag (no colon, all-uppercase) or a
-// key:value pair. Multi-stat lines ("STR: +2  DEX: -10") are split further.
-// Returns (flags set, kv map). Mirrors the TS parseStatsblock.
+// parseStatsblock splits the statsblock on <br> OR newline, then classifies each
+// line as a standalone flag (no colon, all-uppercase) or a key:value pair.
+// Multi-stat lines ("STR: +2  DEX: -10") are split further. Returns (flags set,
+// kv map). Mirrors the TS parseStatsblock; the newline arm of the separator lets
+// the SAME function parse the stored CLEANED statsblock (00013, \n-separated) so
+// DeriveFlagsAndEffects has one derivation shared with the live parser.
 func parseStatsblock(raw string) (map[string]bool, map[string]string) {
 	flags := map[string]bool{}
 	kv := map[string]string{}
-	for _, l := range brRe.Split(raw, -1) {
+	for _, l := range brOrNlRe.Split(raw, -1) {
 		line := strings.TrimSpace(l)
 		if line == "" {
 			continue

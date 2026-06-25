@@ -6,7 +6,7 @@
 
 **Source spec:** `Future Features.txt` (user-authored, 2026-06-24) — 1 bug, 4 tweaks, 1 feature. Codebase mapped 2026-06-24 (data-availability per item confirmed). Research skipped (extends well-understood subsystems).
 
-**Status:** Defining requirements → roadmap.
+**Status:** Roadmap created 2026-06-24 — Traceability filled; Phase 37 ready to plan.
 
 ---
 
@@ -49,20 +49,20 @@
 - **Watcher changes** — v2.6 is backend + web only; ingest already captures everything needed. No `v*` tag.
 
 ## Traceability
-*(REQ-ID → Phase — filled by the roadmapper.)*
+*(REQ-ID → Phase — filled by the roadmapper 2026-06-24.)*
 
 | REQ-ID | Phase |
 |--------|-------|
-| ENRICH-12 | — |
-| ENRICH-13 | — |
-| ENRICH-14 | — |
-| ENRICH-15 | — |
-| SEARCH-04 | — |
-| SEARCH-05 | — |
-| SEARCH-06 | — |
-| ITEMUI-01 | — |
-| ITEMUI-02 | — |
-| CHARUI-01 | — |
-| CHARUI-02 | — |
-| WISHUI-01 | — |
-| WISHUI-02 | — |
+| ENRICH-12 | Phase 37 |
+| ENRICH-13 | Phase 37 |
+| ENRICH-14 | Phase 38 |
+| ENRICH-15 | Phase 38 |
+| SEARCH-04 | Phase 39 |
+| SEARCH-05 | Phase 39 |
+| SEARCH-06 | Phase 39 |
+| ITEMUI-01 | Phase 40 |
+| ITEMUI-02 | Phase 40 |
+| CHARUI-01 | Phase 41 |
+| CHARUI-02 | Phase 41 |
+| WISHUI-01 | Phase 42 |
+| WISHUI-02 | Phase 42 |

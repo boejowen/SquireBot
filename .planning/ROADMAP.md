@@ -13,8 +13,30 @@
 - ✅ **v2.3** — Character Assignment & Per-Character Wantlists — Phases 26–28 (shipped 2026-06-09) — archive: [`milestones/v2.3-ROADMAP.md`](milestones/v2.3-ROADMAP.md)
 - ✅ **v2.4** — Web UI Revamp (5-Tab Restructure) — Phases 29–34 (shipped 2026-06-21; backend/data parse + web; watcher untouched; no tag) — reorganized squirebot.quest around five top tabs (Characters · Inventory · Banks · Wishlist · Settings)
 - ✅ **v2.5** — Ownership Cleanup — Phases 35–36 (shipped 2026-06-22; owner-less guild banks/bots + shared-character-safe eviction; backend+web, no `v*` tag) — OWN-01..04 — archive: [`milestones/v2.5-ROADMAP.md`](milestones/v2.5-ROADMAP.md)
+- 🔁 **v2.6** — Item Detail & Polish — Phases 37–42 (opened 2026-06-24; item enrichment backbone — flag/effect parse + catalog-wide coverage + icon backfill — faceted Clicky/Haste search w/ holdings↔catalog toggle, flag-coded outlines + named quest links on modern tabs, paper-doll compaction + per-character photo, wishlist compaction + sub-Velious tiers; backend + web, watcher untouched, no `v*` tag) — ENRICH-12..15 / SEARCH-04..06 / ITEMUI-01..02 / CHARUI-01..02 / WISHUI-01..02
 
 ## Phases
+
+### 🔁 v2.6 — Item Detail & Polish (Phases 37–42)
+
+**Milestone Goal:** Turn the item data SquireBot already half-captures into usable intelligence — faceted item search (Clicky / Haste), flag-coded outlines, named quest links on the modern tabs, broader icon/tier coverage — and tighten the Characters (paper-doll), Wishlist, and item-display surfaces. Source spec: `Future Features.txt` (2026-06-24) — 1 bug, 4 tweaks, 1 feature.
+
+**Scope:** backend (`internal/backendsrv`) + web (`web/`). The Go **watcher is UNTOUCHED** — ingest already captures everything needed; this milestone re-enables a dropped wiki parse, widens enrichment coverage, and surfaces the data. **No `v*` tag** (consistent with v2.3/v2.4/v2.5). Phases continue from v2.5 (last = 36) → v2.6 starts at **Phase 37**.
+
+**The load-bearing sequencing insight (the shared backbone first):** the wiki item-page parser (`internal/backendsrv/enrich/wikiitem.go`) ALREADY computes the LORE/NO-DROP/MAGIC/TEMPORARY flags + the click-effect/haste lines but the Go port deliberately DISCARDS them (the "D-8 scope guard"); only `is_quest_item` survives, and the full stat block is one TEXT blob (`item_master.statsblock`, migration 00013). **Phase 37 re-enables that parse into discrete, queryable columns** — the shared data layer the flag outlines (P40 ITEMUI-01) and the search facets (P39 SEARCH-04/05) both read. Enrichment is also INVENTORY-DRIVEN today (the weekly wiki job only fetches a page for items some character HOLDS, via `DistinctInventoryItemIDs`); **Phase 38 widens that to the full ~4,300-row PigParse Blue catalog** — the biggest/riskiest piece, which also fixes most missing icons and powers SEARCH-06's full-catalog scope. So: P37 backbone → P38 catalog coverage → P39 faceted search → then the independent display/character/wishlist polish phases (40–42). The held-items faceting (SEARCH-04/05) is sequenced to ship even if the catalog crawl (ENRICH-14) runs long.
+
+**Locked decisions (2026-06-24):** paper-doll = BOTH (compact layout + optional per-character photo) · named quests on ALL modern tabs (plumb the already-harvested `quest_links` into `InventorySlot`/`ItemRollup`; no epic-specific model) · search facets = Clicky + Haste ONLY (not slot/stat/weapon-type); scope toggles holdings ↔ full catalog · flag → color = No-Drop red, Lore gold, Magic blue, Temporary gray · sub-Velious gear tiers INCLUDED (new Kunark/classic wiki source pages + tier values; `wiki_gear_tier` already exists — no migration).
+
+**Phase checklist:**
+
+- [ ] **Phase 37: Item enrichment backbone — flags + effects** — re-enable the dropped wiki stat-block parse so LORE/NO-DROP/MAGIC/TEMPORARY flags + click-effect (Clicky) + Haste land in discrete, queryable columns (new migration + the enrich freshness short-circuit updated so existing rows backfill). ENRICH-12, ENRICH-13. **Foundational** — gates P39's facets + P40's outlines.
+- [ ] **Phase 38: Catalog-wide enrichment + icon coverage** — widen enrichment beyond held items to the full PigParse Blue catalog (politefetch-paced) and backfill icons for every item whose wiki page provides one, with a maintainer-visible coverage diagnostic for the residue. ENRICH-14, ENRICH-15. The "missing item images" bug + the full-catalog data the SEARCH-06 toggle reads.
+- [ ] **Phase 39: Faceted item search (Clicky / Haste + scope toggle)** — filter item search to Clicky-only or Haste-only, and toggle scope between guild holdings and the full P99 catalog. SEARCH-04, SEARCH-05, SEARCH-06. Depends on P37's parsed effects (facets) + P38's catalog coverage (full-catalog scope).
+- [ ] **Phase 40: Item display polish — flag outlines + named quest links** — color-coded flag outlines (No-Drop red / Lore gold / Magic blue) on inventory/bank/paper-doll tiles, and the named "used in quest X" links surfaced on the modern Characters/Inventory/Wishlist tabs (not just the yes/no QUEST-ITEM badge). ITEMUI-01 (depends on P37 flags), ITEMUI-02 (independent — plumbs the already-harvested `quest_links`).
+- [ ] **Phase 41: Character paper-doll — compaction + portrait photo** — compact the paper-doll layout toward the in-game inventory-window idiom (reclaiming the empty portrait dead space) AND add an optional per-character portrait photo upload shown in the portrait area. CHARUI-01, CHARUI-02 (new per-character image reference + migration + upload path + read-API).
+- [ ] **Phase 42: Wishlist polish — compaction + sub-Velious tiers** — compact the Wishlist tab for density/visual consistency with the other tabs, and extend suggestions to sub-Velious (Kunark / classic) gear tiers. WISHUI-01, WISHUI-02 (new wiki source pages + tier values; `wiki_gear_tier` already exists — no migration).
+
+**Execution order:** dependency chain **37 → 38 → 39**, then **40 · 41 · 42** (independent of each other once 37/38 land; 40's outlines need 37's flags, 40's quest links are independent). 37 (parse backbone) gates 39's facets + 40's outlines; 38 (catalog coverage) gates 39's full-catalog scope. Sequence the held-items faceting (SEARCH-04/05) to land even if the ENRICH-14 catalog crawl runs long.
 
 ### v2.5 — Ownership Cleanup (Phases 35–36) — ✅ SHIPPED + ARCHIVED 2026-06-22
 
@@ -365,7 +387,6 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   - [x] 34-02-PLAN.md — Backend matcher repoint (wantmatch -> wishlist_item) + owner-scoped write API (add/remove/ping) + GET /api/v1/wishlist/{char} read route + main.go (register 4 wishlist routes, remove 5 wantlist routes) ✅ EXECUTED 2026-06-19 (cbbc208/58587e1/03de8af; WISH-01/05/07; wantmatch+ECPollSet repointed [pinged gate, INNER JOIN, no note], DM-target-is-owner regression ported, owner-scoped webadmin/wishlist.go [in-tx IsCharAssignedToTx 403 / 409 dup / 21-slot 400 / silent IDOR no-op], readapi/wishlist.go, main.go 4-registered/5-removed; the full clean-break test repair → go test ./... GREEN, go vet clean, go build rc=0; 2 Rule-3 auto-fixes [ECPollSet, whyWanted]; NO web/watcher change, NO migration)
   - [x] 34-03-PLAN.md — Web /wishlist tab: viewer-first char list (banks/bots excluded) + WISH-07 search + per-slot accordion (equipped + targets + suggestions + ping toggle + EC badge + reused ExaminePanel) + api.ts/wishlist.ts; delete the old WantlistPanel + wantlist/* ✅ EXECUTED 2026-06-19 (ab4a2af/18fdd61/0e46d65; WISH-01..07 code-shipped; api.ts WishlistView interfaces+wrappers [mirror the Go contract] · pure node-tested wishlist.ts [banks/bots-excluded viewer-first + WISH-07 cross-wishlist search over the WHOLE lazy-fetched+cached corpus, no scope-down] · /wishlist per-character per-slot master-detail [server-ordered 21-slot accordion, target rows w/ price+Wiki+last-listed+Raid tag+ping Toggle+"Seen in EC" badge+ExaminePanel, cloned-debounce typed-entry add + suggestion picker, server-truth add/remove/ping, ConfirmDialog remove, read-only on non-owned chars] · KEPT the NAV-04 Notifications region · DELETED WantlistPanel+groupByChar, KEPT priority.ts/holders.ts; web check 0/0 [508 files] + npm test 380 [29 files, +15 wishlist] + build green; 0 deviations; NO backend/watcher change, NO deploy [that's 34-04 — node vitest is DOM-blind])
   - [x] 34-04-PLAN.md — Deploy (goose-run 00014 + web atomic swap; R2 backup BEFORE the restart; NO v* tag) + human browser-smoke across the 5 EQ themes
-**UI hint**: yes
 
 ### Phase 35: Owner-less guild banks & bots
 **Goal**: A designated guild bank/bot is GUILD-HELD, not tied to whoever uploaded it first. Designating a character as bank/bot must not require "claiming"/owning it, and a guild bank/bot must survive any individual member's eviction.
@@ -383,9 +404,93 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 **Plans**: 1 plan (complete)
   - [x] 35-01-PLAN.md — migration 00015 (sentinel-owner seed + bank/bot backfill) + store/owner.go GuildSentinelOwnerID + DesignateCharTx owner_id repoint + eviction-list sentinel exclusion + OWN-02 survives-eviction proof (OWN-01/02/04) — EXECUTED 2026-06-22 (7a238b8/c8305c2/4d38389)
 
+---
+
+### Phase 37: Item enrichment backbone — flags + effects
+**Goal**: SquireBot captures each item's attribute flags (LORE / NO DROP / MAGIC / TEMPORARY) and its click-effect (Clicky) + Haste as discrete, queryable fields — re-enabling the wiki stat-block parse the Go port deliberately discarded (the `wikiitem.go` D-8 scope guard) so the rest of the milestone (flag outlines, faceted search) has a clean data layer to read from.
+**Milestone**: v2.6
+**Depends on**: Nothing new (the parser already COMPUTES these values; this re-surfaces + persists them). **Watcher untouched.** **Foundational — gates Phase 39 (facets) + Phase 40 (flag outlines).**
+**Codebase facts**: `internal/backendsrv/enrich/wikiitem.go` already derives `is_no_drop/is_lore/is_magic/is_temporary` + the click-effect/haste lines but the D-8 scope guard drops them (only `is_quest_item` is kept; the full stat block is one TEXT blob in `item_master.statsblock`, migration 00013). This phase adds a goose migration for the discrete columns + updates the enrich freshness short-circuit (`GetItemMasterFreshnessTx` in `store/enrich.go`) so existing rows re-parse and backfill on the next weekly wiki pass.
+**Requirements**: ENRICH-12, ENRICH-13
+**Success Criteria** (what must be TRUE):
+  1. After the weekly wiki enrichment runs, an item's LORE / NO-DROP / MAGIC / TEMPORARY attribute flags are stored as discrete boolean fields (not buried in the free-text stat block), and an item known to carry each flag reads back correctly.
+  2. An item's click-effect (Clicky) and Haste are stored as discrete queryable fields — an item with a click effect is marked as a Clicky and a haste item is marked as Haste, both distinguishable in a query without re-parsing text.
+  3. Items already enriched under the old (flag-discarding) parse are backfilled with the new fields on the next enrichment pass — the migration + the freshness short-circuit re-trigger a re-parse rather than leaving existing rows blank forever.
+  4. The new columns ship as an extend-only goose migration (added at the right edge, no break to existing reads) and `go test ./...` + `go build ./...` are green; watcher untouched, no `v*` tag.
+**Plans**: TBD
+
+### Phase 38: Catalog-wide enrichment + icon coverage
+**Goal**: Item enrichment stops being limited to items some character currently holds — it covers the full PigParse Blue catalog (politefetch-paced) — which both fixes most of the "not all items have images" bug and provides the full-catalog data the faceted-search scope toggle (Phase 39) will read; a maintainer can also see exactly which items remain genuinely icon-less.
+**Milestone**: v2.6
+**Depends on**: Nothing hard new (extends the existing weekly wiki job + the `pigparse_price` catalog). Lands before Phase 39's full-catalog scope. **Watcher untouched.** **The biggest / riskiest piece of the milestone** — the held-items work in other phases is sequenced so it ships even if this crawl runs long.
+**Codebase facts**: enrichment is INVENTORY-DRIVEN today — the weekly wiki job iterates `store.DistinctInventoryItemIDs` (`store/itemids.go`), so only currently-held items get a wiki page fetched. This phase widens the source set to the full ~4,300-row `pigparse_price` Blue catalog, paced by the shared `politefetch` helper so the crawl stays a courteous wiki citizen. Icons come from the wiki `lucy_img_ID` param into `item_master.icon_id` (migration 00012); they go missing when the page lacks the param OR (more commonly) the item was never enriched under the held-items gate — so widening coverage fixes most of them. The colored-tile fallback (`PaperdollSlot.svelte`) stays for genuinely icon-less items.
+**Requirements**: ENRICH-14, ENRICH-15
+**Success Criteria** (what must be TRUE):
+  1. The weekly enrichment fetches and stores wiki data for items across the full PigParse Blue catalog, not only items currently held by a guild character — a catalog item nobody holds still gets enriched.
+  2. Items that previously showed only the colored-tile fallback because they were never enriched now render their real wiki icon (the "missing item images" bug is closed for every item whose wiki page actually provides an icon).
+  3. A maintainer can see a coverage diagnostic listing which items are still icon-less, distinguishing "genuinely has no wiki icon" (fallback is correct) from any remaining gap.
+  4. The catalog crawl is politefetch-paced (User-Agent, ETag/If-Modified-Since, backoff honoring Retry-After, the inter-request sleep) so the widened scope does not hammer the wiki; `go test ./...` green; watcher untouched, no `v*` tag.
+**Plans**: TBD
+
+### Phase 39: Faceted item search (Clicky / Haste + scope toggle)
+**Goal**: A guildie can narrow item search to just the item types they care about — Clicky items or Haste items — and flip the search scope between "who in the guild has one" (holdings) and "what exists in P99" (the full catalog), turning the flat name/id search into a useful discovery tool.
+**Milestone**: v2.6
+**Depends on**: Phase 37 (the parsed Clicky / Haste effect fields the facets filter on), Phase 38 (the full-catalog enrichment coverage the scope toggle's "full catalog" mode needs to be meaningful). **Watcher untouched.**
+**Codebase facts**: search today is `GET /api/v1/items/search` → `store.SearchCatalog` over `pigparse_price` (name/id LIKE only — no stat facets, no facet UI). This phase adds the Clicky / Haste facets (reading Phase 37's parsed effects) + the holdings↔catalog scope toggle (the full-catalog facet results depend on Phase 38's coverage). Facets are Clicky + Haste ONLY (locked — not slot / stat / weapon-type; those are deferred).
+**Requirements**: SEARCH-04, SEARCH-05, SEARCH-06
+**Success Criteria** (what must be TRUE):
+  1. A user can filter item search to show only Clicky items (items with a click effect), and the result set excludes non-clicky items.
+  2. A user can filter item search to show only Haste items, and the result set excludes non-haste items.
+  3. A user can toggle the search scope between guild holdings ("who has one") and the full P99 catalog ("what exists"); the holdings scope answers from items guildies hold and the catalog scope answers from the full enriched catalog.
+  4. The held-items faceting (Clicky/Haste over holdings) works on its own even if the full-catalog scope is still filling in — the holdings path does not block on the catalog crawl completing.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 40: Item display polish — flag outlines + named quest links
+**Goal**: Items become readable at a glance and traceable to their quests — every item tile carries a color-coded outline by its attribute flag (No-Drop red, Lore gold, Magic blue), and the modern Characters / Inventory / Wishlist tabs surface the named quests an item is used in ("used in quest X"), not just a yes/no QUEST-ITEM badge.
+**Milestone**: v2.6
+**Depends on**: Phase 37 (ITEMUI-01's flag outlines read the discrete flag fields). ITEMUI-02 is independent of Phase 37 — the named quest data already exists. **Watcher untouched.**
+**Codebase facts**: flag outlines (ITEMUI-01) attach to the grid/paperdoll tiles (`PaperdollSlot.svelte`, the inventory/bank list rows) and depend on Phase 37's discrete flags. Named quest links (ITEMUI-02): the `quest_items` table + `store.QuestLinksByItem` already exist and named `quest_links` already surface on the LEGACY `guild-views` tab, but the modern tabs' `InventorySlot` / `ItemRollup` models carry only a yes/no `is_quest_item` bool — so this is plumbing the existing named links into those models + the examine panel (compute + `web/src/lib/api.ts` + `examine.ts`), no new data pipeline.
+**Requirements**: ITEMUI-01, ITEMUI-02
+**Success Criteria** (what must be TRUE):
+  1. Items in the inventory, bank, and paper-doll views show a color-coded outline by flag — No-Drop = red, Lore = gold, Magic = blue — while an item with no special flag keeps the existing neutral border.
+  2. The flag-coded outline is consistent across the tile surfaces (paper-doll slots and the inventory/bank list rows) so the same item reads the same way wherever it appears.
+  3. On the modern Characters, Inventory, and Wishlist tabs, an item used in one or more quests shows the named quest(s) it's used in ("used in quest X"), not just the yes/no QUEST-ITEM badge.
+  4. The named quest links surface in the item examine panel as well as the list/grid views, drawing on the already-harvested `quest_links` (no new enrichment pipeline) — and `go test ./...` is green; watcher untouched.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 41: Character paper-doll — compaction + portrait photo
+**Goal**: The character paper-doll stops wasting its reserved portrait space — the layout is compacted toward the in-game inventory-window idiom — AND that portrait area becomes useful: a guildie can set an optional portrait photo per character that displays there.
+**Milestone**: v2.6
+**Depends on**: Nothing hard new for the compaction (web-only over the existing `InventoryWindow.svelte`); the photo (CHARUI-02) needs a new per-character image reference + migration + upload path + read-API. **Watcher untouched.**
+**Codebase facts**: `InventoryWindow.svelte` has a ~260px dashed placeholder `.doll` box (a `⚔` emoji) reserved for a portrait; NO per-character image support exists today. CHARUI-01 compacts that layout; CHARUI-02 adds the per-character photo (a new image column/table + migration + an upload path + read-API plumbing — the new persisted-data piece of this milestone alongside Phase 37's flags).
+**Requirements**: CHARUI-01, CHARUI-02
+**Success Criteria** (what must be TRUE):
+  1. The character paper-doll view is compacted — the empty portrait dead space is reclaimed and the layout reads tighter, closer to the in-game inventory-window arrangement.
+  2. A guildie can upload an optional portrait photo for a character they own, and it is stored and associated with that character.
+  3. A character with a portrait photo set shows it in the paper-doll's portrait area (replacing the placeholder); a character with none keeps the default placeholder.
+  4. The per-character image reference ships as an extend-only migration with a server-side upload path + read-API plumbing; `go test ./...` is green; watcher untouched, no `v*` tag.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 42: Wishlist polish — compaction + sub-Velious tiers
+**Goal**: The Wishlist tab matches the density and visual idiom of the other tabs, and its upgrade suggestions stop being Velious-only — sub-Velious (Kunark / classic) gear tiers are included so lower-progression characters get useful suggestions too.
+**Milestone**: v2.6
+**Depends on**: Nothing hard new — the Wishlist UI already uses the same two-pane pattern as the other tabs (so WISHUI-01 is density/visual-consistency work, not an architecture swap), and WISHUI-02 adds wiki source pages + tier values to the existing `wiki_gear_tier` table. **Watcher untouched.**
+**Codebase facts**: WISHUI-01 compacts the bespoke wishlist UI (`web/src/routes/wishlist/+page.svelte`) — it already shares the two-pane pattern, so this is density work. WISHUI-02: the `wiki_gear_tier` table exists but is populated ONLY from two Velious wiki pages (`wikiVeliousGearSources`); this adds Kunark/classic source pages + their tier values — no migration (`wiki_gear_tier` already exists).
+**Requirements**: WISHUI-01, WISHUI-02
+**Success Criteria** (what must be TRUE):
+  1. The Wishlist tab is visually consistent with the other tabs' density and layout idiom — tighter spacing, the shared two-pane pattern, no bespoke-looking density relative to Characters / Inventory / Banks.
+  2. Wishlist per-slot suggestions include sub-Velious (Kunark / classic) gear tiers, not only Velious tiers — a character below Velious-readiness gets suggestions from the lower tiers.
+  3. The sub-Velious tiers come from new wiki source pages + tier values added to the existing `wiki_gear_tier` data (no schema migration), enriched via the same weekly wiki job.
+  4. `go test ./...` is green; the wishlist compaction reuses the existing design system (no re-skin); watcher untouched, no `v*` tag.
+**Plans**: TBD
+**UI hint**: yes
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently). v2.3: 26 → 27 → 28 (complete). v2.4: 29 → 30 → 31 → 32 → 33 → 34 (29 data foundation first; 30 shell; then the four tab surfaces; 34 wishlist last).
+**Execution Order:** Phases execute in numeric order. v2.0: 11 → 12 → 13 → 14 → 15 → 16 (complete). v2.1: 17 → 18 (complete). v2.2: 19 → 20 → 21 (Track 1, unblocked) → 22 → 23 (Track 2, invite-gated; can slot earlier if invites land, but Track 1 ships independently). v2.3: 26 → 27 → 28 (complete). v2.4: 29 → 30 → 31 → 32 → 33 → 34 (29 data foundation first; 30 shell; then the four tab surfaces; 34 wishlist last). v2.5: 35 → 36 (complete). v2.6: 37 → 38 → 39, then 40 · 41 · 42 (37 parse backbone first, gates 39+40; 38 catalog coverage gates 39's full-catalog scope; 40/41/42 independent once 37/38 land).
 
 | Milestone | Phases | Plans Complete | Status | Completed |
 |-----------|--------|----------------|--------|-----------|
@@ -397,7 +502,8 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | v2.2 | 6 | 13/TBD | 🔄 **Track 1 SHIPPED LIVE** (Phases 19–21 deployed 2026-06-06 + Phase 24 quality done); Track 2 (22–23) invite-gated, parked | — |
 | v2.3 | 3 | 7/7 | ✅ Feature-complete — all 3 phases SHIPPED + deployed live (schema v10); pending milestone audit/close | 2026-06-09 |
 | v2.4 | 6 | 6/6 phases | ✅ **Feature-complete** — all 6 phases (29 Data Foundation · 30 App Shell · 31 Characters+Window · 32 Inventory · 33 Banks · 34 Wishlist) SHIPPED + DEPLOYED LIVE to squirebot.quest + browser-smoke PASS across 5 themes; schema v14 (migrations 00012/00013/00014). Each phase: verifier PASSED + code-review clean/fixed. Pending: milestone audit/close. | 2026-06-21 |
-| v2.5 | 2 | 2/3 plans (3rd code-complete, deploy pending) | 🔄 **In progress** — Phase 35 (owner-less guild banks/bots, OWN-01/02/04) COMPLETE (schema v15 via migration 00015); Phase 36 (shared-character-safe eviction, OWN-03) — 36-01 backend ✅ (cascade narrowed; `preserved_shared_count` contract shipped; no migration); 36-02 web ✅ CODE-COMPLETE (`b1aab94`/`8c77086`; gates green) — **the deploy (backend binary swap + web atomic-swap, no goose) + officer browser-smoke on prod is the OUTSTANDING blocking checkpoint; once it PASSES → milestone audit/close.** Backend + web, no `v*` tag | — |
+| v2.5 | 2 | 3/3 plans | ✅ **Shipped + archived** — Phase 35 (owner-less guild banks/bots, OWN-01/02/04, schema v15 via migration 00015) + Phase 36 (shared-character-safe eviction, OWN-03, no migration) both deployed live + officer browser-smoke approved; backend + web, no `v*` tag | 2026-06-22 |
+| v2.6 | 6 | 0/TBD | 🔁 **Planning** — Phases 37–42 (37 enrichment backbone flags/effects · 38 catalog-wide enrichment + icon coverage · 39 faceted Clicky/Haste search + scope toggle · 40 flag outlines + named quest links · 41 paper-doll compaction + portrait photo · 42 wishlist compaction + sub-Velious tiers); 13/13 requirements mapped; backend + web, watcher untouched, no `v*` tag | — |
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -421,11 +527,18 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | 28. Character-Tagged Wantlist | v2.3 | 3/3 | ✅ SHIPPED — deployed live v10 + browser-smoke PASS (CWANT-01..06) | 2026-06-09 |
 | 29. Data Foundation — Inventory Parse + Price/Value Aggregation | v2.4 | 2/2 | ✅ Complete (INV-05/DATA-01/DATA-02; verifier 4/4; compute-on-read, no migration; watcher untouched) | 2026-06-17 |
 | 30. App Shell + 5-Tab Navigation | v2.4 | 2/2 | ✅ Complete — DEPLOYED LIVE to squirebot.quest + browser-smoke 8/8 PASS; verifier 12/12 (NAV-01..04; web-only) | 2026-06-18 |
-| 31. Characters Tab + In-Game Inventory Window | v2.4 | 0/4 | 🔄 Planned (4 plans / 4 waves; CHAR-01..03, INV-01..04; backend icon enrich + 2 read-API routes + web window; migration 00012; ends in deploy+browser-smoke) | — |
+| 31. Characters Tab + In-Game Inventory Window | v2.4 | 4/4 | ✅ Complete — DEPLOYED LIVE + browser-smoke approved across 5 themes; verifier 4/4 + 7/7 req IDs; migrations 00012/00013 (CHAR-01..03, INV-01..04) | 2026-06-18 |
 | 32. Inventory Tab (Item-Centric) | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 33. Banks Tab + Valuation | v2.4 | 3/3 | Complete    | 2026-06-19 |
 | 34. Wishlist Rework — Per-Character Per-Slot Upgrades | v2.4 | 4/4 | Complete    | 2026-06-21 |
 | 35. Owner-less guild banks & bots | v2.5 | 1/1 | ✅ Complete (35-01 EXECUTED 2026-06-22 — 7a238b8/c8305c2/4d38389; OWN-01/02/04; schema v15 migration 00015 sentinel-owner seed + backfill, DesignateCharTx repoint, eviction-list exclusion, OWN-02 survives-eviction proof; build/vet/tests green; backend-only, no `v*` tag) | 2026-06-22 |
+| 36. Shared-character-safe eviction | v2.5 | 2/2 | ✅ Complete + DEPLOYED LIVE 2026-06-22 (OWN-03; narrowed cascade + `preserved_shared_count` contract + web EvictionForm fix; verifier 13/13; no migration) | 2026-06-22 |
+| 37. Item enrichment backbone — flags + effects | v2.6 | 0/TBD | Not started (ENRICH-12/13; re-enable the dropped flag/effect parse into discrete columns + migration; foundational) | — |
+| 38. Catalog-wide enrichment + icon coverage | v2.6 | 0/TBD | Not started (ENRICH-14/15; widen enrichment to the full PigParse catalog + icon backfill/diagnostic) | — |
+| 39. Faceted item search (Clicky / Haste + scope toggle) | v2.6 | 0/TBD | Not started (SEARCH-04/05/06; depends on P37 effects + P38 catalog coverage) | — |
+| 40. Item display polish — flag outlines + named quest links | v2.6 | 0/TBD | Not started (ITEMUI-01 depends on P37 flags; ITEMUI-02 independent) | — |
+| 41. Character paper-doll — compaction + portrait photo | v2.6 | 0/TBD | Not started (CHARUI-01/02; migration for the photo) | — |
+| 42. Wishlist polish — compaction + sub-Velious tiers | v2.6 | 0/TBD | Not started (WISHUI-01/02; no migration — `wiki_gear_tier` exists) | — |
 
 ## Backlog
 
@@ -463,4 +576,4 @@ Carried forward from v1.0 / v1.0.1 / v1.0.2 (candidates for a future Sheet-ortho
 
 ---
 
-*Roadmap created: 2026-04-30. v1.0 shipped: 2026-05-11. v1.0.1 shipped: 2026-05-12. v1.0.2 binary shipped: 2026-05-13. v2.0 "Off Google" shipped 2026-05-31, Phases 11–16; milestone archived (`milestones/v2.0-ROADMAP.md`). v2.1 "Self-Service Watcher Linking" shipped 2026-06-02 (Phases 17–18). Last reorganized: 2026-06-02 — appended v2.2 "Wantlist + Discord Pinger" milestone (Phases 19–23); 8/8 v2.2 requirements mapped (Track 1 unblocked: WANT-01/02/03/04/05/08 across Phases 19–21; Track 2 invite-gated: WANT-06/07 across Phases 22–23); Phase 19 ready to plan. **2026-06-09: v2.3 "Character Assignment & Per-Character Wantlists" (Phases 26–28) SHIPPED + deployed live (schema v10); milestone audit PASSED (14/14 requirements; ASSIGN-01..06 → P26 · MYVIEW-01/02 → P27 · CWANT-01..06 → P28); detail collapsed + archived to `milestones/v2.3-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. v2.2 Track 2 (Phases 22–23) remains PARKED/invite-gated. 2026-06-18: v2.4 Phase 31 PLANNED (4 plans / 4 waves; CHAR-01..03 + INV-01..04).***
+*Roadmap created: 2026-04-30. v1.0 shipped: 2026-05-11. v1.0.1 shipped: 2026-05-12. v1.0.2 binary shipped: 2026-05-13. v2.0 "Off Google" shipped 2026-05-31, Phases 11–16; milestone archived (`milestones/v2.0-ROADMAP.md`). v2.1 "Self-Service Watcher Linking" shipped 2026-06-02 (Phases 17–18). Last reorganized: 2026-06-02 — appended v2.2 "Wantlist + Discord Pinger" milestone (Phases 19–23); 8/8 v2.2 requirements mapped (Track 1 unblocked: WANT-01/02/03/04/05/08 across Phases 19–21; Track 2 invite-gated: WANT-06/07 across Phases 22–23); Phase 19 ready to plan. **2026-06-09: v2.3 "Character Assignment & Per-Character Wantlists" (Phases 26–28) SHIPPED + deployed live (schema v10); milestone audit PASSED (14/14 requirements; ASSIGN-01..06 → P26 · MYVIEW-01/02 → P27 · CWANT-01..06 → P28); detail collapsed + archived to `milestones/v2.3-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. v2.2 Track 2 (Phases 22–23) remains PARKED/invite-gated. 2026-06-18: v2.4 Phase 31 PLANNED (4 plans / 4 waves; CHAR-01..03 + INV-01..04). 2026-06-24: v2.6 "Item Detail & Polish" (Phases 37–42) ROADMAP APPENDED — 13/13 requirements mapped (ENRICH-12/13 → P37 · ENRICH-14/15 → P38 · SEARCH-04/05/06 → P39 · ITEMUI-01/02 → P40 · CHARUI-01/02 → P41 · WISHUI-01/02 → P42); backend + web, watcher untouched, no `v*` tag; Phase 37 ready to plan.***

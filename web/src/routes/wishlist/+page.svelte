@@ -35,6 +35,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import StateBlock from '$lib/components/StateBlock.svelte';
 	import ExaminePanel from '$lib/components/ExaminePanel.svelte';
+	import FacetBar from '$lib/components/FacetBar.svelte';
 	import LastSyncedCell from '$lib/components/cells/LastSyncedCell.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
@@ -401,18 +402,27 @@
 	let addSearching = $state(false);
 	let addSeq = 0;
 	let addTimer: ReturnType<typeof setTimeout> | null = null;
+	// Phase 39 (D-01): the Clicky/Haste facet chips narrow the catalog add-search.
+	// Catalog-only here — NO Holdings/Catalog scope control on the wishlist add-form.
+	let addClicky = $state(false);
+	let addHaste = $state(false);
 
 	function openAdd(slot: string) {
 		addSlot = slot;
 		addQuery = '';
 		addResults = [];
 		addSearching = false;
+		// Reset the facets per open so a new slot's add starts unfiltered.
+		addClicky = false;
+		addHaste = false;
 	}
 	function closeAdd() {
 		addSlot = null;
 		addQuery = '';
 		addResults = [];
 		addSearching = false;
+		addClicky = false;
+		addHaste = false;
 	}
 	function onAddInput() {
 		if (addTimer) clearTimeout(addTimer);
@@ -428,7 +438,7 @@
 	async function runAddSearch(q: string) {
 		const seq = ++addSeq;
 		try {
-			const items = await searchCatalog(q);
+			const items = await searchCatalog(q, { clicky: addClicky, haste: addHaste });
 			if (seq !== addSeq) return;
 			addResults = items;
 		} catch {
@@ -437,6 +447,20 @@
 		} finally {
 			if (seq === addSeq) addSearching = false;
 		}
+	}
+
+	// Re-run the (already-debounced) catalog add-search when a facet chip toggles, so the
+	// suggestions narrow immediately. Respects the existing addSeq seq-guard; honors the
+	// same 2-rune guard as onAddInput (a sub-2-rune query just stays empty).
+	function onFacetToggle() {
+		const q = addQuery.trim();
+		if (q.length < 2) {
+			addResults = [];
+			addSearching = false;
+			return;
+		}
+		addSearching = true;
+		void runAddSearch(q);
 	}
 	async function pickCatalog(slot: string, item: CatalogItem) {
 		await doAdd(slot, item.item_id, item.name);
@@ -706,6 +730,22 @@
 														oninput={onAddInput}
 													/>
 												</label>
+												<!-- Phase 39 (D-01): the Clicky/Haste facet chips narrow the
+												     catalog suggestions — catalog-only, NO scope toggle here. -->
+												<div class="add-facets">
+													<FacetBar
+														clicky={addClicky}
+														haste={addHaste}
+														onToggleClicky={() => {
+															addClicky = !addClicky;
+															onFacetToggle();
+														}}
+														onToggleHaste={() => {
+															addHaste = !addHaste;
+															onFacetToggle();
+														}}
+													/>
+												</div>
 												{#if addResults.length > 0}
 													<ul class="add-results">
 														{#each addResults as item (item.item_id)}
@@ -1333,6 +1373,11 @@
 		background: var(--panel);
 		color: var(--accent);
 		max-width: 480px;
+	}
+	/* Phase 39: the facet chips below the add-search input (spacing handled by the
+	   .add-control flex gap; this wrapper keeps them on their own row, left-aligned). */
+	.add-facets {
+		display: flex;
 	}
 	.add-field input {
 		flex: 1;

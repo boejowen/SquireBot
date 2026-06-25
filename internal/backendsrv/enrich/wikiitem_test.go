@@ -369,6 +369,59 @@ func TestParseItempage_IconID(t *testing.T) {
 	}
 }
 
+// TestParseItempage_NewFieldsSurfaced is the Phase 37 (ENRICH-12/13) RED→GREEN
+// gate for Task 1: ParseItempage must now SURFACE the flag booleans + the full
+// flag set + the clicky/haste effects it already computes internally (the D-8
+// scope guard previously discarded them). Driven by a synthetic inline
+// {{Itempage}} so it needs no fixture (the clicky-positive fixture + the full
+// table suite are Task 2). A MAGIC+LORE clicky (Click from Inventory) + Haste:
+// exercises every new field in one parse.
+func TestParseItempage_NewFieldsSurfaced(t *testing.T) {
+	wikitext := "{{Itempage\n|itemname=Synth Clicky\n|notes=A synthetic item used to prove the Phase 37 derived fields are surfaced.\n" +
+		"|statsblock=MAGIC ITEM<br>LORE ITEM<br>Slot: PRIMARY<br>Effect: [[Shock of Frost]] (Click from Inventory)<br>Haste: +21%  <br>Class: ALL<br>Race: ALL\n}}" +
+		strings.Repeat(" padding to clear the 200-byte minimum wikitext length guard.", 5)
+	item, _, ok, reason := ParseItempage(wikitext, "Synth Clicky")
+	if !ok {
+		t.Fatalf("ParseItempage ok=false reason=%q", reason)
+	}
+	if !item.IsMagic {
+		t.Errorf("IsMagic = false, want true")
+	}
+	if !item.IsLore {
+		t.Errorf("IsLore = false, want true")
+	}
+	if item.IsNoDrop {
+		t.Errorf("IsNoDrop = true, want false")
+	}
+	if item.IsTemporary {
+		t.Errorf("IsTemporary = true, want false")
+	}
+	if !item.IsClicky {
+		t.Errorf("IsClicky = false, want true (Click from Inventory effect)")
+	}
+	if item.ClickyEffect != "Shock of Frost" {
+		t.Errorf("ClickyEffect = %q, want Shock of Frost", item.ClickyEffect)
+	}
+	if !item.HasHaste {
+		t.Errorf("HasHaste = false, want true")
+	}
+	if item.HastePct != 21 {
+		t.Errorf("HastePct = %d, want 21", item.HastePct)
+	}
+	// Flags carries the FULL detected set (sorted) — every all-caps flag, not just
+	// the four queried ones.
+	wantFlags := map[string]bool{"MAGIC ITEM": true, "LORE ITEM": true}
+	got := map[string]bool{}
+	for _, f := range item.Flags {
+		got[f] = true
+	}
+	for f := range wantFlags {
+		if !got[f] {
+			t.Errorf("Flags missing %q (got %v)", f, item.Flags)
+		}
+	}
+}
+
 // isHex40 reports whether s is exactly 40 lowercase hex chars.
 func isHex40(s string) bool {
 	if len(s) != 40 {

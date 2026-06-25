@@ -8,13 +8,20 @@ package enrich
 // fixtures in testdata/ (Cloth Cap, Pearl, Cloak of Flames, Fungus Covered
 // Scale Tunic, Fungi Tunic redirect).
 //
-// SCOPE GUARD (D-8): ParsedWikiItem surfaces ONLY the fields the Sheet
-// persisted to _item_master (ItemName/Summary/WikiURL/Slot/IsQuestItem/
-// WikitextSHA1). The TS parser also derives ac/weight/effect/classes/is_no_drop/
-// is_lore/is_magic/is_temporary — those are NOT surfaced here (the Sheet's
-// trigger dropped them; adding them would break the D-7 byte-parity proof).
-// is_quest_item only needs the statsblock QUEST-ITEM flag, so we don't parse
-// the dropped stats at all.
+// SCOPE GUARD (D-8): historically ParsedWikiItem surfaced ONLY the fields the
+// Sheet persisted to _item_master (ItemName/Summary/WikiURL/Slot/IsQuestItem/
+// WikitextSHA1) — the TS parser also derives ac/weight/effect/classes/is_no_drop/
+// is_lore/is_magic/is_temporary, and the Sheet's trigger dropped them so adding
+// them would have broken the D-7 byte-parity proof.
+//
+// That byte-parity proof is DEAD since v2.0 went "off Google" (there is no Sheet
+// to be byte-identical to). Phase 37 (ENRICH-12/13) therefore SURFACES the
+// derived flag + effect fields the guard used to discard: IsLore/IsNoDrop/IsMagic/
+// IsTemporary + the full detected Flags set (ENRICH-12, D-03) and IsClicky/
+// ClickyEffect/HasHaste/HastePct (ENRICH-13, D-01/D-02). Each is read from the
+// flags/kv maps parseStatsblock already builds — no new statsblock scan. The
+// guard is no longer load-bearing; it is retained only as the history of why
+// these fields were absent before.
 //
 // SHA-1 (replaces Utilities.computeDigest): Go's crypto/sha1 returns UNSIGNED
 // bytes, so the signed-byte fix-up the TS computeSha1Hex needed (because Apps
@@ -27,6 +34,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -48,6 +56,23 @@ type ParsedWikiItem struct {
 	WikitextSHA1 string // lowercase hex SHA-1 of the UTF-8 wikitext (change detection)
 	IconID       int    // {{Itempage|lucy_img_ID=...}}; the P1999 wiki icon id; 0 = none yet (INV-04 D-01/D-02)
 	Statsblock   string // the cleaned in-game stat block (Slot/AC/STR.../WT/class/race + flags), newline-separated; "" when absent (INV-02 examine stats)
+
+	// Phase 37 derived flags (ENRICH-12 / D-03) — the four queried booleans, read
+	// from the statsblock all-caps flag lines with the EXACT TS-oracle spellings.
+	IsLore      bool // statsblock contains "LORE ITEM"
+	IsNoDrop    bool // statsblock contains "NO DROP" or "NO-DROP"
+	IsMagic     bool // statsblock contains "MAGIC ITEM"
+	IsTemporary bool // statsblock contains "TEMPORARY"
+	// Flags is the FULL detected all-caps flag SET (sorted, deduped) — every flag
+	// the parser saw, not just the four queried ones, so a future flag (Attunable,
+	// No Rent, Artifact, …) needs no parser/migration change (D-03).
+	Flags []string
+
+	// Phase 37 derived effects (ENRICH-13 / D-01 / D-02).
+	IsClicky     bool   // the Effect line is an ACTIVATABLE click (NOT a (Worn) passive or (Combat) proc)
+	ClickyEffect string // the clicky's effect/spell display name (links stripped, qualifier removed); "" unless IsClicky
+	HasHaste     bool   // the statsblock carries a "Haste:" stat line
+	HastePct     int    // the integer haste % from the Haste: line (the magnitude; 0 when absent/unparseable)
 }
 
 // WikiQuestItemLink is one quest reference harvested from an item's notes (the
@@ -83,6 +108,11 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 	flags, kv := parseStatsblock(statsblockRaw)
 	summary := extractSummary(notesRaw)
 
+	// Phase 37: derive the flag booleans + effect fields from the maps
+	// parseStatsblock already built — no new scan of the raw wikitext (T-37-01).
+	isClicky, clickyEffect := parseClicky(kv["Effect"])
+	hasHaste, hastePct := parseHastePct(kv["Haste"])
+
 	item := ParsedWikiItem{
 		ItemName:     itemname,
 		Summary:      summary,
@@ -92,6 +122,19 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 		WikitextSHA1: sha1Hex(wikitext),
 		IconID:       parseIconID(getParam(params, "lucy_img_ID", "")), // INV-04: the wiki icon id; 0 when absent
 		Statsblock:   cleanStatsblock(statsblockRaw),                   // INV-02: the in-game stat block for the examine panel
+
+		// ENRICH-12 (D-03): the four queried flags use the EXACT TS-oracle spellings.
+		IsLore:      flags["LORE ITEM"],
+		IsNoDrop:    flags["NO DROP"] || flags["NO-DROP"],
+		IsMagic:     flags["MAGIC ITEM"],
+		IsTemporary: flags["TEMPORARY"],
+		Flags:       flagSet(flags), // the FULL detected set, sorted (D-03)
+
+		// ENRICH-13 (D-01/D-02): activatable click only; haste % as an integer.
+		IsClicky:     isClicky,
+		ClickyEffect: clickyEffect,
+		HasHaste:     hasHaste,
+		HastePct:     hastePct,
 	}
 
 	questLinks := harvestQuestLinks(notesRaw, item)
@@ -486,4 +529,80 @@ func parseIconID(raw string) int {
 		return 0
 	}
 	return n
+}
+
+// flagSet returns the sorted keys of the parseStatsblock flags map — the FULL
+// detected all-caps flag set (ENRICH-12 / D-03), deterministic so two parses of
+// the same stat block produce an identical slice. nil flags → nil (no panic).
+func flagSet(flags map[string]bool) []string {
+	if len(flags) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(flags))
+	for f := range flags {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// parseHastePct pulls the integer haste % off a statsblock "Haste:" value like
+// "+36%" / "21%". It strips a leading +/- sign and the trailing '%', then atoi.
+// Returns (false, 0) for blank/non-numeric input (defensive like parseIconID,
+// T-37-02). The wiki always writes "+NN%"; a successful parse of N returns
+// (true, N). Negative haste is not a real item, so the magnitude is taken (the
+// '-' is simply trimmed) — there is no negative HastePct stored.
+func parseHastePct(raw string) (bool, int) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return false, 0
+	}
+	s = strings.TrimPrefix(s, "+")
+	s = strings.TrimPrefix(s, "-")
+	s = strings.TrimSuffix(s, "%")
+	s = strings.TrimSpace(s)
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return false, 0
+	}
+	return true, n
+}
+
+// parseClicky classifies a statsblock "Effect:" value (e.g. "[[Shock of Frost]]
+// (Click from Inventory)" / "[[Fungal Regrowth]] (Worn)" / "... (Combat)") into
+// (isClicky, effectName). It is a CLICK iff the LAST parenthesized qualifier
+// contains the word "click" (case-insensitive) — (Worn) passives and (Combat)
+// procs are NOT clickies (D-01). When it is a click, the effect NAME is the value
+// with the [[wiki-link]] brackets stripped (reusing the bounded summaryLinkRe,
+// the only regex involved — T-37-01) and the trailing "(...)" qualifier removed,
+// trimmed. Non-click / no-qualifier / "" → (false, ""). ClickyEffect is set ONLY
+// when isClicky is true.
+func parseClicky(effectRaw string) (bool, string) {
+	raw := strings.TrimSpace(effectRaw)
+	if raw == "" {
+		return false, ""
+	}
+	// Find the LAST "(...)" qualifier on the line.
+	open := strings.LastIndex(raw, "(")
+	if open == -1 {
+		return false, "" // no qualifier → not a recognizable click effect
+	}
+	close := strings.Index(raw[open:], ")")
+	if close == -1 {
+		return false, "" // unbalanced — treat as non-click (defensive)
+	}
+	qualifier := raw[open+1 : open+close]
+	if !strings.Contains(strings.ToLower(qualifier), "click") {
+		return false, "" // (Worn) / (Combat) / other → not a clicky (D-01)
+	}
+	// Clicky: render [[target|display]] → display, [[target]] → target (same as
+	// cleanStatsblock), then drop the trailing "(...)" qualifier and trim.
+	name := summaryLinkRe.ReplaceAllStringFunc(raw[:open], func(m string) string {
+		sub := summaryLinkRe.FindStringSubmatch(m)
+		if sub[2] != "" {
+			return sub[2]
+		}
+		return sub[1]
+	})
+	return true, strings.TrimSpace(name)
 }

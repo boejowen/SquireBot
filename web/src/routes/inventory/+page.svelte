@@ -22,22 +22,27 @@
 	// The holder deep-link encodeURIComponent's the guildie-controlled char name
 	// (T-32-08). The item-icon <img> uses a TRUSTED integer icon_id (T-32-09).
 
-	import { onMount, getContext } from 'svelte';
+	import { onMount, onDestroy, getContext } from 'svelte';
 	import Search from '@lucide/svelte/icons/search';
 	import StateBlock from '$lib/components/StateBlock.svelte';
 	import ExaminePanel from '$lib/components/ExaminePanel.svelte';
+	import FacetBar from '$lib/components/FacetBar.svelte';
 	import LastSyncedCell from '$lib/components/cells/LastSyncedCell.svelte';
 	import { AUTH_GUARD_KEY, type AuthGuard } from '$lib/components/AuthGate.svelte';
 	import {
 		Unauthenticated,
 		Forbidden,
 		fetchItems,
+		searchCatalog,
 		type ItemRollup,
+		type ItemHolder,
+		type CatalogItem,
 		type InventorySlot
 	} from '$lib/api';
-	import { filterItems, sortHolders } from '$lib/items';
+	import { filterItems, facetItems, sortHolders } from '$lib/items';
 
 	type Status = 'loading' | 'error' | 'ready';
+	type Scope = 'holdings' | 'catalog';
 
 	// The AuthGate guard from context (server-truth re-routing on a 401/403).
 	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
@@ -47,6 +52,17 @@
 	let query = $state('');
 	// The NORMALIZED name of the pinned item (replace-on-click, D-03a).
 	let selected = $state<string | null>(null);
+
+	// Phase 39 — the Holdings↔Catalog scope segmented control (D-03 default Holdings)
+	// + the AND-combined Clicky/Haste facet chips (D-02). The facets work in BOTH
+	// scopes; the scope only switches the DATA SOURCE (holdings = the already-loaded
+	// rollup filtered client-side; catalog = a debounced server search).
+	let scope = $state<Scope>('holdings');
+	let clicky = $state(false);
+	let haste = $state(false);
+	// Catalog-scope server results + their own load state (the debounced search).
+	let catalogRows = $state<CatalogItem[]>([]);
+	let catalogStatus = $state<'idle' | 'searching' | 'ready'>('idle');
 
 	async function load() {
 		status = 'loading';
@@ -84,34 +100,78 @@
 		void load();
 	});
 
-	// The filtered, viewer-first item list (ITEM-02 / D-02 — keeps is_mine-first then
-	// A-Z among matches). Pure helper from $lib/items (node-tested).
-	let shown = $derived(filterItems(items, query));
+	// The HOLDINGS facet+search list (ITEM-02 / D-02): name-filter (viewer-first) THEN
+	// the AND-combined Clicky/Haste facet, both pure node-tested helpers from $lib/items.
+	// Catalog scope NEVER uses this — it reads `catalogRows` from the server instead.
+	let shown = $derived(facetItems(filterItems(items, query), { clicky, haste }));
 
-	// Non-empty list after a ready load with zero matches AND a non-empty query → the
-	// no-results state (vs. the "No items yet" empty state when the list is empty).
-	let noResults = $derived(status === 'ready' && shown.length === 0 && query.trim() !== '');
+	// A normalized-name → rollup map over the already-loaded holdings (NO new endpoint,
+	// D-04): a catalog-scope row reuses this to show holders for a held item / detect
+	// an unheld one. Rebuilds only when `items` changes.
+	let holdingsByName = $derived(
+		new Map(items.map((r) => [r.name.toLowerCase().trim(), r]))
+	);
 
-	// The currently-pinned rollup (or null when nothing is selected / it's gone).
-	let selectedRollup = $derived(items.find((r) => r.name === selected) ?? null);
+	// ── The unified row view-model — both scopes render the SAME list/detail markup ──
+	// Holdings rows carry their own rollup; catalog rows carry the CatalogItem + the
+	// held rollup looked up by normalized name (held → holders; unheld → "not held in
+	// the guild"). `held` is the source of truth for the headline + the holders table.
+	type RowVM = {
+		name: string;
+		icon_id: number;
+		price: number | null;
+		wiki_url: string;
+		held: ItemRollup | null; // the holdings rollup when this item is held (any scope)
+	};
+
+	let rows = $derived<RowVM[]>(
+		scope === 'holdings'
+			? shown.map((r) => ({
+					name: r.name,
+					icon_id: r.icon_id,
+					price: r.price,
+					wiki_url: r.wiki_url,
+					held: r
+				}))
+			: catalogRows.map((c) => {
+					const held = holdingsByName.get(c.name.toLowerCase().trim()) ?? null;
+					return {
+						name: c.name,
+						// A held catalog row reuses the rollup's icon/price; an unheld one falls
+						// back to the catalog's id-less tile (icon_id 0 → colored fallback) +
+						// current_avg price (CatalogItem carries no wiki_url).
+						icon_id: held?.icon_id ?? 0,
+						price: held?.price ?? c.current_avg ?? null,
+						wiki_url: held?.wiki_url ?? '',
+						held
+					};
+				})
+	);
+
+	// The currently-pinned row VM (or null when nothing is selected / it's gone from the
+	// active scope's result set). Selection is keyed by the normalized item NAME so it
+	// survives a scope flip when the item exists in both (catalog ⊇ holdings).
+	let selectedRow = $derived(rows.find((r) => r.name === selected) ?? null);
 
 	// The examine reuse seam (load-bearing — UI-SPEC §C): a representative
-	// InventorySlot-shaped object so <ExaminePanel> renders UNCHANGED. The
-	// list-context-irrelevant fields (count/slots/children/canonical_slot/location)
-	// are zero/empty — examine ignores them. category MUST be the literal 'general'
-	// (the union member, not a bare string). charLastSeen="" omits the footer (the
-	// per-holder last-synced lives in the holders table, ITEM-03).
+	// InventorySlot-shaped object so <ExaminePanel> renders UNCHANGED. A HELD item
+	// surfaces its full rollup (statsblock/wiki/prices); an UNHELD catalog item only
+	// carries name + catalog price (no stored stats/wiki yet) — examine omits those
+	// lines (the "" / [] sentinels). The list-context-irrelevant fields
+	// (count/slots/children/canonical_slot/location) are zero/empty — examine ignores
+	// them. category MUST be the literal 'general' (the union member). charLastSeen=""
+	// omits the footer (per-holder last-synced lives in the holders table, ITEM-03).
 	let asSlot = $derived<InventorySlot | null>(
-		selectedRollup
+		selectedRow
 			? {
-					item: selectedRollup.name,
-					icon_id: selectedRollup.icon_id,
-					statsblock: selectedRollup.statsblock,
-					wiki_summary: selectedRollup.wiki_summary,
-					is_quest_item: selectedRollup.is_quest_item,
-					price: selectedRollup.price,
-					prices: selectedRollup.prices,
-					wiki_url: selectedRollup.wiki_url,
+					item: selectedRow.name,
+					icon_id: selectedRow.held?.icon_id ?? 0,
+					statsblock: selectedRow.held?.statsblock ?? '',
+					wiki_summary: selectedRow.held?.wiki_summary ?? '',
+					is_quest_item: selectedRow.held?.is_quest_item ?? false,
+					price: selectedRow.price,
+					prices: selectedRow.held?.prices ?? [],
+					wiki_url: selectedRow.wiki_url,
 					location: '',
 					category: 'general',
 					canonical_slot: '',
@@ -123,6 +183,99 @@
 				}
 			: null
 	);
+
+	// The selected item's holders (held → its rollup's holders; unheld → []). Drives the
+	// detail HOLDERS section in BOTH scopes (D-04: a held item shows its holders even in
+	// catalog scope; an unheld catalog item reads "not held in the guild").
+	let selectedHolders = $derived<ItemHolder[]>(selectedRow?.held?.holders ?? []);
+
+	// ── Catalog scope: the debounced server search (clone of the wishlist add-form
+	// idiom — DEBOUNCE_MS + a monotonic seq-guard). Fires on query/clicky/haste change
+	// while scope === 'catalog'. The 2-rune guard mirrors the server (Plan 01 Open-Q2):
+	// a query under 2 runes returns [] — no client-side "browse all clickies". ───────
+	const CATALOG_DEBOUNCE_MS = 250;
+	let catalogSeq = 0;
+	let catalogTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Params (NOT the reactive $state) carry the values captured by the debounce effect
+	// at fire time — the seq-guard then discards any stale resolution. Named query/clicky/
+	// haste so the call below reads with those identifiers (the catalog search-source seam).
+	async function runCatalogSearch(query: string, clicky: boolean, haste: boolean) {
+		const seq = ++catalogSeq;
+		catalogStatus = 'searching';
+		try {
+			const res = await searchCatalog(query, { clicky, haste });
+			if (seq !== catalogSeq) return; // a newer search superseded this one
+			catalogRows = res;
+			catalogStatus = 'ready';
+		} catch (err) {
+			if (seq !== catalogSeq) return;
+			// A 401/403 hands off to the AuthGate guard (server-truth); other failures
+			// surface the empty/no-results state rather than crashing (SC-4 graceful).
+			if (authGuard && (err instanceof Unauthenticated || err instanceof Forbidden)) {
+				authGuard(err);
+				return;
+			}
+			catalogRows = [];
+			catalogStatus = 'ready';
+		}
+	}
+
+	// The catalog-search effect: re-runs the debounced fetch whenever the inputs change
+	// in catalog scope. Reads `scope`/`query`/`clicky`/`haste` so Svelte tracks them.
+	$effect(() => {
+		if (scope !== 'catalog') return;
+		const q = query.trim();
+		const c = clicky;
+		const h = haste;
+		if (catalogTimer) clearTimeout(catalogTimer);
+		if (q.length < 2) {
+			// Mirror the server's 2-rune guard — no empty/short-q corpus dump.
+			++catalogSeq; // cancel any in-flight search
+			catalogRows = [];
+			catalogStatus = 'ready';
+			return;
+		}
+		catalogStatus = 'searching';
+		catalogTimer = setTimeout(() => void runCatalogSearch(q, c, h), CATALOG_DEBOUNCE_MS);
+	});
+
+	onDestroy(() => {
+		if (catalogTimer) clearTimeout(catalogTimer);
+	});
+
+	// Non-empty list after a ready load with zero matches AND a non-empty query → the
+	// no-results state (vs. the "No items yet" empty state when the list is empty). In
+	// catalog scope the "no matches" state also keys off the catalog search finishing.
+	let noResults = $derived(
+		scope === 'holdings'
+			? status === 'ready' && rows.length === 0 && query.trim() !== ''
+			: catalogStatus === 'ready' && rows.length === 0 && query.trim().length >= 2
+	);
+
+	/** Flip the Holdings↔Catalog scope. D-03 "a lens, not a reset": NEVER touch
+	 *  query / clicky / haste here — the toggle re-runs the SAME search+facets against
+	 *  the other data source. A selection absent in the new scope's result set clears
+	 *  via the stale-selection guard below (catalog ⊇ holdings, so Holdings→Catalog
+	 *  keeps a held selection; Catalog→Holdings drops a selection on an unheld item). */
+	function setScope(next: Scope) {
+		if (next === scope) return;
+		scope = next;
+	}
+
+	// Stale-selection guard on scope flip / list change (reuses the load()-time idiom):
+	// clear a selection that is absent in the active scope's current result set so the
+	// detail column doesn't stick on an item the new scope doesn't list.
+	$effect(() => {
+		const sel = selected;
+		if (sel === null) return;
+		// In catalog scope, hold the selection while the search is still resolving (the
+		// rows are transiently empty mid-fetch) — only clear once the results settle.
+		if (scope === 'catalog' && catalogStatus !== 'ready') return;
+		if (!rows.some((r) => r.name === sel)) {
+			selected = null;
+		}
+	});
 
 	function select(name: string) {
 		selected = name;
@@ -189,20 +342,67 @@
 					bind:value={query}
 				/>
 			</div>
-			<p class="search-hint">Items on your characters match first.</p>
+
+			<!-- Phase 39 control bar (UI-SPEC §1 layout `[ Holdings | Catalog ]  [Clicky]
+			     [Haste]`): the scope segmented control (Inventory-ONLY) on the LEFT, the
+			     facet chips on the right, gap:16px between the two clusters. -->
+			<div class="control-bar">
+				<div class="seg" role="group" aria-label="Search scope">
+					<button
+						type="button"
+						class="seg-btn"
+						class:active={scope === 'holdings'}
+						aria-pressed={scope === 'holdings'}
+						onclick={() => setScope('holdings')}>Holdings</button
+					>
+					<button
+						type="button"
+						class="seg-btn"
+						class:active={scope === 'catalog'}
+						aria-pressed={scope === 'catalog'}
+						onclick={() => setScope('catalog')}>Catalog</button
+					>
+				</div>
+				<FacetBar
+					{clicky}
+					{haste}
+					onToggleClicky={() => (clicky = !clicky)}
+					onToggleHaste={() => (haste = !haste)}
+				/>
+			</div>
+
+			<!-- Scope helper hint (UI-SPEC Copywriting): Holdings keeps the existing line;
+			     Catalog swaps to the "everything in the catalog" framing. -->
+			<p class="search-hint">
+				{#if scope === 'holdings'}
+					Items on your characters match first.
+				{:else}
+					Showing everything in the P99 catalog — held or not.
+				{/if}
+			</p>
 
 			{#if noResults}
 				<StateBlock kind="no-results" {query} />
+				{#if scope === 'catalog'}
+					<!-- A sparse catalog reads as "still loading", not "broken" (SC-4 graceful
+					     degradation): unheld-item facet coverage fills on the weekly sync. -->
+					<p class="catalog-hint">
+						The full catalog fills in after the weekly sync — held items are always searchable.
+					</p>
+				{/if}
 			{:else}
-				<!-- Single viewer-first-then-A-Z run — no band group-labels (§B). -->
+				<!-- Single run — Holdings is viewer-first-then-A-Z (§B); Catalog is the
+				     server's prefix-first order (Plan 01 Open-Q1). Both render via `rows`. -->
 				<div class="rows">
-					{#each shown as it (it.name)}
+					{#each rows as it (it.name)}
 						<button
 							type="button"
 							class="row"
 							class:selected={selected === it.name}
 							aria-pressed={selected === it.name}
-							aria-label={`${it.name}, ${it.summed_qty} guild-wide, ${it.holder_count} ${holderWord(it.holder_count)}`}
+							aria-label={it.held
+								? `${it.name}, ${it.held.summed_qty} guild-wide, ${it.held.holder_count} ${holderWord(it.held.holder_count)}`
+								: `${it.name}, not held in the guild`}
 							onclick={() => select(it.name)}
 						>
 							<span class="ico ico-sm" style={`--tile-hue: ${hueFor(it.name, it.icon_id)};`}>
@@ -220,14 +420,20 @@
 							<span class="row-body">
 								<span class="row-top">
 									<span class="row-name">{it.name}</span>
-									{#if it.is_mine}<span class="tag">you</span>{/if}
+									{#if it.held?.is_mine}<span class="tag">you</span>{/if}
 								</span>
-								<span class="row-headline">
-									<span class="num">{it.summed_qty}</span>
-									<span class="dot">·</span>
-									<span class="num">{it.holder_count}</span>
-									<span class="unit">{holderWord(it.holder_count)}</span>
-								</span>
+								{#if it.held}
+									<span class="row-headline">
+										<span class="num">{it.held.summed_qty}</span>
+										<span class="dot">·</span>
+										<span class="num">{it.held.holder_count}</span>
+										<span class="unit">{holderWord(it.held.holder_count)}</span>
+									</span>
+								{:else}
+									<!-- Catalog-only (unheld) row: the holder count slot reads the
+									     UI-SPEC "not held in the guild" line (Body prose, dimmed). -->
+									<span class="row-unheld">not held in the guild</span>
+								{/if}
 							</span>
 							<span class="row-trail">
 								{#if it.price != null}
@@ -254,7 +460,7 @@
 		     "Pick an item" prompt; then the detail header + reused ExaminePanel +
 		     holders table. Replace-on-click (D-03a). -->
 		<div class="detail-col">
-			{#if selectedRollup === null}
+			{#if selectedRow === null}
 				<div class="prompt">
 					<h2 class="prompt-heading">Pick an item</h2>
 					<p class="prompt-body">
@@ -265,21 +471,23 @@
 			{:else}
 				<div class="detail">
 					<!-- Detail header: 40px icon + item NAME (Heading 20px accent) + the
-					     qty/holder summary meta (price/wiki ship in the ExaminePanel below). -->
+					     qty/holder summary meta (price/wiki ship in the ExaminePanel below).
+					     A held item shows the guild-wide summary; an unheld catalog item shows
+					     the "not held in the guild" line (D-04). -->
 					<div class="detail-header">
 						<span
 							class="ico ico-lg"
-							style={`--tile-hue: ${hueFor(selectedRollup.name, selectedRollup.icon_id)};`}
+							style={`--tile-hue: ${hueFor(selectedRow.name, selectedRow.icon_id)};`}
 						>
 							<!-- {#key} the detail-header icon on the selected item so the shared <img>
 							     node is RECREATED on each selection: onImgError sets display:none
 							     imperatively and Svelte would otherwise keep that stale hide when the
 							     src updates to a NEXT item whose icon loads fine (CR-WR-01). The list
 							     rows are immune (keyed per-name → one <img> each). -->
-							{#key selectedRollup.name}
-								{#if selectedRollup.icon_id > 0}
+							{#key selectedRow.name}
+								{#if selectedRow.icon_id > 0}
 									<img
-										src={`https://wiki.project1999.com/images/Item_${selectedRollup.icon_id}.png`}
+										src={`https://wiki.project1999.com/images/Item_${selectedRow.icon_id}.png`}
 										alt=""
 										class="icon-img"
 										onerror={onImgError}
@@ -288,12 +496,16 @@
 							{/key}
 						</span>
 						<div class="detail-head-text">
-							<h2 class="detail-name">{selectedRollup.name}</h2>
-							<p class="detail-meta">
-								<span class="num">{selectedRollup.summed_qty}</span> guild-wide across
-								<span class="num">{selectedRollup.holder_count}</span>
-								{holderWord(selectedRollup.holder_count)}
-							</p>
+							<h2 class="detail-name">{selectedRow.name}</h2>
+							{#if selectedRow.held}
+								<p class="detail-meta">
+									<span class="num">{selectedRow.held.summed_qty}</span> guild-wide across
+									<span class="num">{selectedRow.held.holder_count}</span>
+									{holderWord(selectedRow.held.holder_count)}
+								</p>
+							{:else}
+								<p class="detail-meta detail-unheld">not held in the guild</p>
+							{/if}
 						</div>
 					</div>
 
@@ -309,10 +521,14 @@
 						<ExaminePanel slot={asSlot} charLastSeen="" />
 					</div>
 
-					<!-- HOLDERS (ITEM-03): one row per holding, deep-linking into /characters?c=. -->
+					<!-- HOLDERS (ITEM-03): one row per holding, deep-linking into /characters?c=.
+					     A held item shows its holders in BOTH scopes (D-04); an unheld catalog
+					     item reads "not held in the guild" in place of the table. -->
 					<p class="holders-eyebrow">HOLDERS</p>
-					{#if selectedRollup.holders.length === 0}
-						<p class="holders-empty">No holders</p>
+					{#if selectedHolders.length === 0}
+						<p class="holders-empty">
+							{selectedRow.held ? 'No holders' : 'not held in the guild'}
+						</p>
 					{:else}
 						<div class="holders" role="table" aria-label="Holders">
 							<div class="holders-head" role="row">
@@ -326,7 +542,7 @@
 							     two holders with an IDENTICAL {char, slot_label} — keying on that alone
 							     duplicate-keys and crashes the panel (each_key_duplicate, CR-01). The
 							     index disambiguates the two genuine holdings. -->
-							{#each sortHolders(selectedRollup.holders) as h, i (`${h.char} ${h.slot_label} ${i}`)}
+							{#each sortHolders(selectedHolders) as h, i (`${h.char} ${h.slot_label} ${i}`)}
 								<a
 									class="holder-row"
 									role="row"
@@ -414,6 +630,60 @@
 		color: var(--text);
 		opacity: 0.7;
 	}
+	/* The sparse-catalog "still filling in" reassurance under the no-results state
+	   (SC-4 graceful degradation — Body prose, dimmed). */
+	.catalog-hint {
+		margin: 8px 0 0;
+		font-family: var(--font-body);
+		font-size: 13px;
+		color: var(--text);
+		opacity: 0.7;
+		text-align: center;
+	}
+
+	/* --- Phase 39 control bar: scope segmented control + facet chips (UI-SPEC §1) --- */
+	.control-bar {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 16px; /* md — separates the scope cluster from the facet cluster */
+		margin: 8px 0 0;
+	}
+	/* The .seg/.seg-btn segmented control — DUPLICATED verbatim from
+	   guild-views/+page.svelte:459-494 (Svelte styles are component-scoped, so the
+	   classes must live here too; the sanctioned precedent). Token-only → 5-theme
+	   parity for free. The :disabled rule is DROPPED — scope/facets are never disabled
+	   here (UI-SPEC §1 states). */
+	.seg {
+		display: inline-flex;
+		border: 1px solid var(--border, var(--accent));
+		border-radius: 4px;
+		overflow: hidden;
+	}
+	.seg-btn {
+		min-height: 44px; /* touch target */
+		padding: 8px 16px;
+		background: var(--panel);
+		border: none;
+		color: var(--text);
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		cursor: pointer;
+	}
+	.seg-btn + .seg-btn {
+		border-left: 1px solid var(--border, var(--accent));
+	}
+	.seg-btn.active {
+		background: var(--accent);
+		color: var(--bg);
+	}
+	.seg-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
 
 	/* --- The bespoke viewer-first item list (§B) --- */
 	.rows {
@@ -474,6 +744,15 @@
 		gap: 4px; /* xs */
 		font-size: 13px; /* Label */
 		line-height: 1.2;
+	}
+	/* Catalog-only (unheld) row headline — the UI-SPEC "not held in the guild" line
+	   (Body prose, dimmed) in place of the holder count. */
+	.row-unheld {
+		font-family: var(--font-body);
+		font-size: 13px;
+		line-height: 1.2;
+		color: var(--text);
+		opacity: 0.7;
 	}
 	.num {
 		color: var(--accent);
@@ -585,6 +864,10 @@
 		line-height: 1.4;
 		color: var(--text);
 		opacity: 0.85;
+	}
+	/* The detail-header unheld line (catalog scope, D-04) — dimmer than the held meta. */
+	.detail-unheld {
+		opacity: 0.7;
 	}
 
 	/* Drop ExaminePanel's sticky positioning IN THIS TAB ONLY (scoped :global targets the

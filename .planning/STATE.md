@@ -4,14 +4,14 @@ milestone: v2.6
 milestone_name: — Item Detail & Polish
 status: in_progress
 last_updated: "2026-06-25T00:00:00.000Z"
-last_activity: 2026-06-24
+last_activity: 2026-06-25
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 2
   completed_plans: 2
   percent: 17
-  note: "v2.6 in progress (1/6 phases). PHASE 37 ✅ COMPLETE 2026-06-24 (item enrichment backbone — flags + effects): 2 plans EXECUTED, verifier PASSED 8/8 goal-backward, code-review 0 BLOCKER/0 HIGH (MD-01 raw/cleaned flag-divergence fixed-forward; 4 LOW/NIT → backlog 999.41). Migration 00016 (9 additive cols → schema bump), no-network statsblock backfill + freshness self-heal; go build/vet/test ./... green; watcher untouched, no v* tag. NOT yet deployed. NEXT: /gsd-discuss-phase 38 (or /gsd-plan-phase 38) — catalog-wide enrichment + icon coverage (the 'missing images' bug; the biggest/riskiest phase — widens enrichment beyond held items to the full ~4,300 PigParse catalog). Then 39 faceted search → 40 outlines+quest links → 41 paper-doll+photo → 42 wishlist+sub-Velious tiers."
+  note: "v2.6 in progress (1/6 phases). PHASE 37 ✅ COMPLETE + PUSHED 2026-06-25 (item enrichment backbone — flags + effects; 9 commits 3ab6463→1556361 now on origin/master): verifier PASSED 8/8, code-review 0 BLOCKER/0 HIGH; migration 00016 (9 additive cols → schema bump, NOT yet deployed); watcher untouched, no v* tag. PHASE 38 ⏳ CONTEXT GATHERED 2026-06-25 (catalog-wide enrichment + icon coverage — the 'missing images' bug; biggest/riskiest phase). Locked: D-01 seed-once-then-weekly-re-validate-all-via-ETag (capless background run) · D-02 scope = pigparse_price auction catalog ONLY (~4,341) · D-03 diagnostic = per-run slog summary line · D-04 storage/identity for unheld items (item_master keyed by EQ item_id vs pigparse different-namespace; name-dedup for SEARCH-06) DELEGATED to research+planning. NEXT: /gsd-plan-phase 38. Then 39 faceted search → 40 outlines+quest links → 41 paper-doll+photo → 42 wishlist+sub-Velious tiers."
 ---
 
 > **v2.6 "Item Detail & Polish" — ROADMAP CREATED 2026-06-24 (Phases 37–42; 13/13 requirements mapped).** Source spec `Future Features.txt` (2026-06-24): 1 bug (missing item images), 4 tweaks (wishlist compaction + sub-Velious tiers · paper-doll compaction + per-character photo · named quest links on modern tabs · flag-coded item outlines), 1 feature (faceted search by item type — Clicky/Haste, holdings↔catalog toggle). Shared backbone = re-enabling the dropped stat-block parse (`wikiitem.go` D-8 guard) for flags + effects (Phase 37); full-catalog search/icons require widening enrichment beyond held items (Phase 38). Phase map: **37** ENRICH-12/13 (flags+effects backbone) → **38** ENRICH-14/15 (catalog-wide enrichment + icon coverage/diagnostic) → **39** SEARCH-04/05/06 (Clicky/Haste facets + holdings↔catalog toggle) → **40** ITEMUI-01/02 (flag outlines + named quest links) → **41** CHARUI-01/02 (paper-doll compaction + portrait photo) → **42** WISHUI-01/02 (wishlist compaction + sub-Velious tiers). Dependency chain 37→38→39, then 40·41·42 independent. Backend + web; watcher UNTOUCHED → no `v*` tag (consistent with v2.3/v2.4/v2.5). Research SKIPPED (extends well-understood subsystems; codebase-mapped 2026-06-24). Locked: paper-doll both compact+photo · named quests (no epic model) · Clicky+Haste facets · flags No-Drop red/Lore gold/Magic blue · sub-Velious tiers included. Artifacts written: PROJECT.md Current Milestone + REQUIREMENTS.md (ENRICH-12.. / SEARCH-04.. / ITEMUI-01.. / CHARUI-01.. / WISHUI-01.. + Traceability) + ROADMAP.md (Phases 37–42 appended; all prior history + the 999.x backlog preserved). **Phase 37 ready to plan → `/gsd-plan-phase 37`.**
@@ -25,7 +25,7 @@ progress:
 # State: SquireBot
 
 **Initialized:** 2026-04-30
-**Last updated:** 2026-06-24 (v2.6 "Item Detail & Polish" roadmap created)
+**Last updated:** 2026-06-25 (Phase 37 pushed to origin; Phase 38 context gathered)
 
 ## Project Reference
 
@@ -38,7 +38,9 @@ See: `.planning/PROJECT.md` (updated 2026-06-24 with the v2.6 Current Milestone 
 
 ## Current Position
 
-Phase: **37 — Item enrichment backbone (flags + effects) — READY TO PLAN** (milestone v2.6 — Item Detail & Polish; 0/6 phases complete). Roadmap created 2026-06-24; no phase planned/executed yet. **Next: `/gsd-plan-phase 37`.**
+Phase: **38 — Catalog-wide enrichment + icon coverage — CONTEXT GATHERED, READY TO PLAN** (milestone v2.6 — Item Detail & Polish; 1/6 phases complete). Phase 37 ✅ COMPLETE + PUSHED to origin/master 2026-06-25 (9 commits `3ab6463`→`1556361`; migration 00016 NOT yet deployed — rides the next backend deploy). Phase 38 discuss-phase ran 2026-06-25 → `38-CONTEXT.md` written (4 decisions; see below). **Next: `/gsd-plan-phase 38`.**
+
+**Phase 38 locked context (2026-06-25):** widen enrichment from held-only (`store.DistinctInventoryItemIDs`) to the full PigParse Blue catalog + backfill wiki icons (ENRICH-14/15). **D-01:** seed the full ~4,341 catalog once (one ~70-min paced Sunday run), then the weekly job re-validates the WHOLE catalog via ETag (cheap 304s on unchanged) — justified by `wiki.go`'s "no execution cap" design; runs automatically in the existing weekly job, no new manual trigger. **D-02:** "full catalog" = `pigparse_price` auction catalog ONLY (~4,341 tradeable items); do NOT union never-auctioned no-drop/raid `wiki_gear_tier` items. **D-03:** the ENRICH-15 maintainer coverage diagnostic = a per-run structured `slog` summary line (total/enriched/icon-covered/icon-less + residue names), greppable on the VPS — no new UI surface. **D-04 (DELEGATED to research+planning):** the load-bearing storage/identity risk — `item_master` is keyed by EQ-inventory `item_id` but the PigParse catalog uses a DIFFERENT id namespace (join by normalized name only), so an unheld catalog item has no EQ id to key an `item_master` row by; researcher/planner must resolve the storage model (name-keyed store vs. synthetic id vs. separate table) + the name-dedup rule so SEARCH-06's full-catalog scope shows each item once. Migration footprint TBD (→ 00017 if needed, possibly none). Backend; watcher untouched, no `v*` tag.
 
 **v2.6 milestone opened + roadmapped 2026-06-24.** 13 requirements (ENRICH-12..15, SEARCH-04..06, ITEMUI-01..02, CHARUI-01..02, WISHUI-01..02) mapped 1:1 across Phases 37–42 (see the v2.6 Phase Plan below). The shared backbone is Phase 37 — re-enabling the wiki stat-block parse that `internal/backendsrv/enrich/wikiitem.go` already COMPUTES but the D-8 scope guard DISCARDS (only `is_quest_item` survives today; the full stat block is one TEXT blob in `item_master.statsblock`, migration 00013). P37 adds discrete flag/effect columns (new migration + the `GetItemMasterFreshnessTx` short-circuit updated so existing rows backfill); P38 widens the inventory-driven enrichment gate (`store.DistinctInventoryItemIDs`) to the full ~4,300-row `pigparse_price` Blue catalog (the biggest/riskiest piece — also fixes most missing icons). Dependency chain **37 → 38 → 39**, then **40 · 41 · 42** independent. Held-items faceting (SEARCH-04/05) is sequenced to ship even if the ENRICH-14 catalog crawl runs long. Backend + web; watcher untouched, no `v*` tag.
 

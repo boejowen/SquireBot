@@ -655,6 +655,59 @@ func TestDeriveFlagsAndEffects_NewlineForm(t *testing.T) {
 	})
 }
 
+// TestDeriveFlagsAndEffects_ClusteredFlagLine is the regression for the 2026-06-26
+// Phase-40 ring smoke bug: the P1999 wiki packs multiple flags onto ONE statsblock
+// line separated by SINGLE spaces ("MAGIC ITEM NO DROP", "MAGIC ITEM LORE ITEM",
+// "LORE ITEM NO DROP"), and parseStatsblock stores that whole line as a single
+// all-caps map key. The old exact-match lookups (flags["NO DROP"]) MISSED every
+// clustered line, zeroing is_no_drop/is_lore for ~95% of held flag-bearing items
+// (160/168 no-drop, 330/360 lore unset in prod). hasFlag's substring containment
+// must now resolve EACH flag out of the cluster. The statsblocks below are verbatim
+// prod item_master rows (Cryosilk Pantaloons / Mountain Death Belt / Cloak of Spiroc
+// Feathers / Savant's Cap).
+func TestDeriveFlagsAndEffects_ClusteredFlagLine(t *testing.T) {
+	cases := []struct {
+		name                       string
+		statsblock                 string
+		wantMagic, wantNoDrop, wantLore bool
+	}{
+		{
+			name:       "MAGIC ITEM NO DROP (single-space cluster) — both resolve, lore stays false",
+			statsblock: "MAGIC ITEM NO DROP\nSlot: LEGS\nAC: 5\nClass: NEC WIZ MAG ENC",
+			wantMagic:  true, wantNoDrop: true, wantLore: false,
+		},
+		{
+			name:       "MAGIC ITEM LORE ITEM — magic+lore resolve, no-drop stays false",
+			statsblock: "MAGIC ITEM LORE ITEM\nSlot: WAIST\nAC: 8\nClass: WAR CLR PAL ROG",
+			wantMagic:  true, wantNoDrop: false, wantLore: true,
+		},
+		{
+			name:       "LORE ITEM NO DROP — lore+no-drop resolve, magic stays false",
+			statsblock: "LORE ITEM NO DROP\nSlot: BACK\nAC: 6\nClass: NEC",
+			wantMagic:  false, wantNoDrop: true, wantLore: true,
+		},
+		{
+			name:       "MAGIC ITEM (standalone) — no regression, only magic",
+			statsblock: "MAGIC ITEM\nSlot: HEAD\nAC: 2\nClass: ALL",
+			wantMagic:  true, wantNoDrop: false, wantLore: false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d := DeriveFlagsAndEffects(c.statsblock)
+			if d.IsMagic != c.wantMagic {
+				t.Errorf("IsMagic = %v, want %v", d.IsMagic, c.wantMagic)
+			}
+			if d.IsNoDrop != c.wantNoDrop {
+				t.Errorf("IsNoDrop = %v, want %v", d.IsNoDrop, c.wantNoDrop)
+			}
+			if d.IsLore != c.wantLore {
+				t.Errorf("IsLore = %v, want %v", d.IsLore, c.wantLore)
+			}
+		})
+	}
+}
+
 // isHex40 reports whether s is exactly 40 lowercase hex chars.
 func isHex40(s string) bool {
 	if len(s) != 40 {

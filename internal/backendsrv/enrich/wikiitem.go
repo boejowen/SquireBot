@@ -121,7 +121,7 @@ func ParseItempage(wikitext, pageTitle string) (ParsedWikiItem, []WikiQuestItemL
 		Summary:      summary,
 		WikiURL:      wikiURLFor(pageTitle),
 		Slot:         kv["Slot"], // "" when absent (TS: ?? null)
-		IsQuestItem:  flags["QUEST ITEM"],
+		IsQuestItem:  hasFlag(flags, "QUEST ITEM"), // substring: resolves a clustered flag line (2026-06-26)
 		WikitextSHA1: sha1Hex(wikitext),
 		IconID:       parseIconID(getParam(params, "lucy_img_ID", "")), // INV-04: the wiki icon id; 0 when absent
 		Statsblock:   cleanStatsblock(statsblockRaw),                   // INV-02: the in-game stat block for the examine panel
@@ -178,6 +178,26 @@ func DeriveFlagsAndEffects(statsblock string) DerivedFlagsEffects {
 	return deriveFromMaps(flags, kv)
 }
 
+// hasFlag reports whether any detected flag-line key CONTAINS the given flag phrase.
+// The P1999 wiki packs multiple flags onto ONE statsblock line separated by single
+// spaces — e.g. "MAGIC ITEM NO DROP", "MAGIC ITEM LORE ITEM" — and parseStatsblock
+// stores that whole line as a SINGLE all-caps map key (the flag names themselves
+// contain spaces, so the line can't be split on whitespace without a vocabulary).
+// An exact-match lookup (flags["NO DROP"]) therefore MISSES every clustered line,
+// which silently zeroed is_no_drop/is_lore for ~95% of held flag-bearing items
+// (the 2026-06-26 Phase-40 ring smoke bug: 160/168 no-drop, 330/360 lore unset).
+// Substring containment of the FULL phrase ("NO DROP", "LORE ITEM", "MAGIC ITEM",
+// …) resolves each flag out of a clustered line with no false positives — every
+// queried phrase is specific enough that no OTHER EQ flag contains it.
+func hasFlag(flags map[string]bool, phrase string) bool {
+	for k := range flags {
+		if strings.Contains(k, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
 // deriveFromMaps is the shared derivation over the already-parsed flags/kv maps. Both
 // ParseItempage (which already holds the maps from its own parseStatsblock call) and
 // DeriveFlagsAndEffects funnel through here, so the flag spellings + the Clicky/Haste
@@ -186,11 +206,13 @@ func deriveFromMaps(flags map[string]bool, kv map[string]string) DerivedFlagsEff
 	isClicky, clickyEffect := parseClicky(kv["Effect"])
 	hasHaste, hastePct := parseHastePct(kv["Haste"])
 	return DerivedFlagsEffects{
-		// ENRICH-12 (D-03): the four queried flags use the EXACT TS-oracle spellings.
-		IsLore:      flags["LORE ITEM"],
-		IsNoDrop:    flags["NO DROP"] || flags["NO-DROP"],
-		IsMagic:     flags["MAGIC ITEM"],
-		IsTemporary: flags["TEMPORARY"],
+		// ENRICH-12 (D-03): the four queried flags use the EXACT TS-oracle spellings,
+		// matched as a SUBSTRING of each flag-line key so a clustered line like
+		// "MAGIC ITEM NO DROP" resolves all of its flags (hasFlag — the 2026-06-26 fix).
+		IsLore:      hasFlag(flags, "LORE ITEM"),
+		IsNoDrop:    hasFlag(flags, "NO DROP") || hasFlag(flags, "NO-DROP"),
+		IsMagic:     hasFlag(flags, "MAGIC ITEM"),
+		IsTemporary: hasFlag(flags, "TEMPORARY"),
 		Flags:       flagSet(flags), // the FULL detected set, sorted (D-03)
 		// ENRICH-13 (D-01/D-02): activatable click only; haste % as an integer.
 		IsClicky:     isClicky,

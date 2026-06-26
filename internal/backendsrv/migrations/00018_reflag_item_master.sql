@@ -1,0 +1,31 @@
+-- +goose Up
+-- Phase 40 fix-forward (2026-06-26): force a one-time re-derive of every item_master
+-- row's flag/effect columns. The 00016 boot backfill (store.BackfillItemFlags) keys its
+-- idempotency on `flags_json IS NULL`, so once a row is backfilled it is NEVER re-derived
+-- — even after a parser bug fix. The 2026-06-26 ring smoke revealed exactly such a bug:
+-- enrich.deriveFromMaps matched the four queried flags by EXACT map-key lookup, but the
+-- P1999 wiki packs multiple flags onto ONE statsblock line ("MAGIC ITEM NO DROP",
+-- "LORE ITEM NO DROP", …) which parseStatsblock stores as a SINGLE clustered key, so the
+-- exact lookups missed and is_no_drop/is_lore were silently zeroed for ~95% of held
+-- flag-bearing items (160/168 no-drop, 330/360 lore). The parser is now fixed (hasFlag
+-- substring containment); this migration NULLs flags_json so the SAME boot backfill
+-- re-derives every row with the corrected parser on the next restart.
+--
+-- goose.Up runs BEFORE store.BackfillItemFlags in main.go serve(), so the re-derive
+-- happens on the very same boot that applies this migration. Re-deriving is pure CPU
+-- over the STORED statsblock (D-05, no wiki refetch) and only the four boolean columns
+-- change value; flags_json repopulates to the SAME bytes (flagSet logic is unchanged),
+-- so the weekly freshness pass sees no diff and does not churn. catalog_enrichment (00017)
+-- is intentionally untouched: it is empty (0 rows pre-first-crawl) and its first wiki
+-- crawl will derive flags through the already-fixed parser.
+--
+-- Read-only additive data fix: the watcher is OFF the read path (untouched), so NO
+-- WatcherMaxSchemaVersion gate is touched and goose version() is the version of record.
+UPDATE item_master SET flags_json = NULL;
+
+-- +goose Down
+-- No-op: the re-derive is a forward-only data correction. Reversing it (restoring the
+-- pre-fix flags_json / leaving the booleans wrong) would only re-introduce the bug, and
+-- the original mis-derived values are not recoverable. The boot backfill repopulates
+-- flags_json regardless, so a down-migration would be immediately undone on next boot.
+SELECT 1;

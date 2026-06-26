@@ -14,23 +14,31 @@
 // PRICE last-listed date — 31-RESEARCH Pitfall 2). No DOM, no fetch — pure.
 
 import type { InventorySlot } from './api';
+import { flagChipLabel } from './flags';
 
 /** One ordered examine line. `kind` keys its visual treatment in ExaminePanel
- *  (name=accent heading, flags=status-other, stats=status-ok, price=tabular-nums,
- *  wiki=accent link with `href`, lastsynced=dimmed footer). `text` is the
- *  already-composed display string; `href` is set ONLY on the wiki line. */
+ *  (name=accent heading, flagchip=priority flag-color chip, flags=status-other,
+ *  stats=status-ok, price=tabular-nums, wiki=accent link with `href`,
+ *  quests=accent named-quest links, lastsynced=dimmed footer). `text` is the
+ *  already-composed display string; `href` is set ONLY on the wiki line; `quests`
+ *  is set ONLY on the quests line. */
 export interface ExamineField {
 	kind:
 		| 'name'
+		| 'flagchip' // the priority flag chip (NO-DROP/LORE/MAGIC), beside the name (ITEMUI-01)
 		| 'flags'
 		| 'stats' // the in-game stat block (Slot/AC/STR.../WT/class/race), from statsblock
 		| 'notes' // the wiki description/lore (the former wiki_summary)
 		| 'price'
 		| 'wiki'
+		| 'quests' // the named "Used in:" quest links (notes_link only, ITEMUI-02)
 		| 'lastsynced';
 	text: string;
 	/** Present only on the `wiki` line — the absolute http(s) page URL. */
 	href?: string;
+	/** Present only on the `quests` line — the notes_link named quests (each with its
+	 *  raw source_url; the render sink runs every href through safeHttpUrl, D-05). */
+	quests?: { quest_name: string; source_url: string }[];
 }
 
 /** Round + en-US comma-grouping for a pp price; "0" for a non-finite value.
@@ -48,12 +56,14 @@ function formatPp(n: number): string {
  *
  * Order (a field is OMITTED when its source is empty):
  *   1  name        (always)
+ *   1b flagchip    (the priority flag chip NO-DROP/LORE/MAGIC; omit when no flag — ITEMUI-01)
  *   2  flags       (the is_quest_item badge; omit when not a quest item)
  *   3  stats       (the stored in-game stat block — slot, AC, stat buffs, WT/size,
  *                   class/race, MAGIC/LORE/NO-DROP flags — from statsblock; omit when blank)
  *   4  notes       (the wiki description/lore — the former wiki_summary; omit when blank)
  *   5  PigParse price ("PigParse: {price}pp"; omit when price === null)
  *   6  wiki link   (wiki_url || wikiUrlFor(item); omit only when both are blank)
+ *   6b quests      (the "Used in:" notes_link named quests; omit when none — ITEMUI-02)
  *   7  last synced ("Last synced: {charLastSeen}"; omit when "")
  *
  * The D-08 discrete rows (slot/DMG/DLY/AC/wt-size/class-race) are NOT split out: the
@@ -67,6 +77,14 @@ export function examineFields(slot: InventorySlot, charLastSeen: string): Examin
 
 	// 1. Name — ALWAYS present, always first.
 	fields.push({ kind: 'name', text: slot.item });
+
+	// 1b. Flag chip — the priority flag (No-Drop > Lore > Magic, D-01) as a small
+	//     uppercase chip beside the name (ITEMUI-01). Additive: the full stat block
+	//     below still lists every flag. Omit when no flag (D-09).
+	const chip = flagChipLabel(slot);
+	if (chip) {
+		fields.push({ kind: 'flagchip', text: chip });
+	}
 
 	// 2. Flags — the is_quest_item badge (a quick top indicator). The MAGIC/LORE/NO-DROP
 	//    flags live inside the stat block below.
@@ -97,6 +115,18 @@ export function examineFields(slot: InventorySlot, charLastSeen: string): Examin
 	const href = wikiHref(slot);
 	if (href) {
 		fields.push({ kind: 'wiki', text: `Wiki: ${slot.item} ↗`, href });
+	}
+
+	// 6b. Named quests — the "Used in:" list (ITEMUI-02). notes_link ONLY (D-06; NEVER
+	//     the in_game_flag '[in-game QUEST flag]' pseudo-name). The render sink runs each
+	//     source_url through safeHttpUrl (D-05). Omit entirely when zero named quests (D-09).
+	const named = (slot.quest_links ?? []).filter((q) => q.source === 'notes_link');
+	if (named.length > 0) {
+		fields.push({
+			kind: 'quests',
+			text: 'Used in:',
+			quests: named.map((q) => ({ quest_name: q.quest_name, source_url: q.source_url }))
+		});
 	}
 
 	// 7. Last synced — the per-CHARACTER upload freshness (NOT slot.last_listed); omit

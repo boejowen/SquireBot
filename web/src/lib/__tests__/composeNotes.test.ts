@@ -30,8 +30,8 @@ describe('composeItemNote', () => {
         { direction: '1', a30: 3200, t30: 12 },
       ],
       [
-        { quest_name: 'Call of the Hero', source: 'notes_link' },
-        { quest_name: 'Death Pact', source: 'notes_link' },
+        { quest_name: 'Call of the Hero', source: 'notes_link', source_url: '' },
+        { quest_name: 'Death Pact', source: 'notes_link', source_url: '' },
       ],
     );
     expect(html).toContain('Words of the Spoken');
@@ -39,6 +39,7 @@ describe('composeItemNote', () => {
     expect(html).toContain('Recent ask: 4,500pp (30d avg, 75 transactions)');
     expect(html).toContain('Buy posts: 3,200pp (30d avg, 12 transactions)');
     expect(html).toContain('<p class="tooltip-quest-flag">Quest item</p>');
+    // no source_url on these → plain-text names (D-05 fallback)
     expect(html).toContain('Used in quests: Call of the Hero, Death Pact');
     // wiki anchor carries rel="noopener" + target="_blank"
     expect(html).toContain('href="https://wiki.project1999.com/Words_of_the_Spoken"');
@@ -77,8 +78,8 @@ describe('composeItemNote', () => {
       { summary: 'X', is_quest_item: false },
       [{ direction: '0', a30: 50, t30: 2 }],
       [
-        { quest_name: 'A', source: 'notes_link' },
-        { quest_name: 'B', source: 'notes_link' },
+        { quest_name: 'A', source: 'notes_link', source_url: '' },
+        { quest_name: 'B', source: 'notes_link', source_url: '' },
       ],
     );
     expect(html).toContain('Used in quests: A, B');
@@ -89,6 +90,7 @@ describe('composeItemNote', () => {
     const links = Array.from({ length: 12 }, (_, k) => ({
       quest_name: `Quest${k}`,
       source: 'notes_link' as const,
+      source_url: '',
     }));
     const html = composeItemNote('Item', '', null, [], links);
     expect(html).toContain('Quest0');
@@ -103,8 +105,8 @@ describe('composeItemNote', () => {
       { summary: 'X', is_quest_item: true },
       [],
       [
-        { quest_name: '[in-game QUEST flag]', source: 'in_game_flag' },
-        { quest_name: 'Some Quest', source: 'notes_link' },
+        { quest_name: '[in-game QUEST flag]', source: 'in_game_flag', source_url: '' },
+        { quest_name: 'Some Quest', source: 'notes_link', source_url: '' },
       ],
     );
     expect(html).not.toContain('Used in quests: [in-game QUEST flag]');
@@ -138,7 +140,7 @@ describe('composeItemNote', () => {
 
   it('escapes a malicious quest name with < and &', () => {
     const html = composeItemNote('Item', '', { summary: 'X', is_quest_item: false }, [], [
-      { quest_name: '<b>Tunare</b> & Co', source: 'notes_link' },
+      { quest_name: '<b>Tunare</b> & Co', source: 'notes_link', source_url: '' },
     ]);
     expect(html).not.toContain('<b>Tunare</b>');
     expect(html).toContain('&lt;b&gt;Tunare&lt;/b&gt; &amp; Co');
@@ -166,6 +168,52 @@ describe('composeItemNote', () => {
     expect(html).not.toContain('tooltip-wiki-link');
     expect(html).not.toContain('<a ');
     expect(html).toContain('Item'); // the name still renders, inert
+  });
+
+  // --- ITEMUI-02: clickable named quest links (D-05 safeHttpUrl + escaping) ---
+
+  it('renders a notes_link quest with a valid http(s) source_url as a clickable <a>', () => {
+    const html = composeItemNote('Item', '', null, [], [
+      { quest_name: 'Coldain Ring 8', source: 'notes_link', source_url: 'https://wiki.project1999.com/Coldain_Ring_8' },
+    ]);
+    expect(html).toContain('<a class="tooltip-quest-link" href="https://wiki.project1999.com/Coldain_Ring_8"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener"');
+    expect(html).toContain('>Coldain Ring 8</a>');
+  });
+
+  it('renders a notes_link quest with a blocked (javascript:) source_url as PLAIN text — no <a>', () => {
+    const html = composeItemNote('Item', '', null, [], [
+      { quest_name: 'Evil Quest', source: 'notes_link', source_url: 'javascript:alert(1)' },
+    ]);
+    expect(html).not.toContain('javascript:');
+    expect(html).not.toContain('tooltip-quest-link');
+    expect(html).toContain('Used in quests: Evil Quest'); // name still shows, inert
+  });
+
+  it('renders a notes_link quest with a blank source_url as PLAIN text — no <a>', () => {
+    const html = composeItemNote('Item', '', null, [], [
+      { quest_name: 'No URL Quest', source: 'notes_link', source_url: '' },
+    ]);
+    expect(html).not.toContain('tooltip-quest-link');
+    expect(html).toContain('Used in quests: No URL Quest');
+  });
+
+  it('escapes a malicious quest name INSIDE the clickable link (no live tag)', () => {
+    const html = composeItemNote('Item', '', null, [], [
+      { quest_name: '<img src=x onerror=alert(1)>', source: 'notes_link', source_url: 'https://wiki.project1999.com/Q' },
+    ]);
+    expect(html).toContain('<a class="tooltip-quest-link"');
+    expect(html).not.toContain('<img src=x'); // never a live tag inside the link
+    expect(html).toContain('&lt;img'); // rendered escaped
+  });
+
+  it('does not let a quoted http source_url break out of the quest href attribute', () => {
+    const html = composeItemNote('Item', '', null, [], [
+      { quest_name: 'Q', source: 'notes_link', source_url: 'https://x/"><script>alert(1)</script>' },
+    ]);
+    expect(html).not.toContain('"><script>');
+    expect(html).toContain('&quot;&gt;&lt;script&gt;');
   });
 });
 

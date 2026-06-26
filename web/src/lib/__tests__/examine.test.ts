@@ -28,6 +28,10 @@ function slot(over: Partial<InventorySlot> = {}): InventorySlot {
 		prices: [],
 		children: [],
 		icon_id: 658,
+		is_no_drop: false,
+		is_lore: false,
+		is_magic: false,
+		quest_links: [],
 		...over
 	};
 }
@@ -164,5 +168,92 @@ describe('examineFields — wiki link', () => {
 		const fields = examineFields(slot({ wiki_url: '', item: 'Ring of the Ancients' }), '');
 		const wiki = fields.find((f) => f.kind === 'wiki');
 		expect(wiki?.href).toBe('https://wiki.project1999.com/Ring_of_the_Ancients');
+	});
+});
+
+describe('examineFields — flag chip (ITEMUI-01, priority No-Drop>Lore>Magic)', () => {
+	it('a No-Drop item produces a flagchip field with text NO-DROP, right after name', () => {
+		const fields = examineFields(slot({ is_no_drop: true }), '');
+		const chip = fields.find((f) => f.kind === 'flagchip');
+		expect(chip?.text).toBe('NO-DROP');
+		// position: immediately after the name field
+		expect(fields[1].kind).toBe('flagchip');
+	});
+
+	it('a Lore+Magic (no No-Drop) item chips LORE (priority)', () => {
+		const fields = examineFields(slot({ is_lore: true, is_magic: true }), '');
+		expect(fields.find((f) => f.kind === 'flagchip')?.text).toBe('LORE');
+	});
+
+	it('a Magic-only item chips MAGIC', () => {
+		const fields = examineFields(slot({ is_magic: true }), '');
+		expect(fields.find((f) => f.kind === 'flagchip')?.text).toBe('MAGIC');
+	});
+
+	it('an unflagged item omits the flagchip field entirely (D-09)', () => {
+		const fields = examineFields(slot({ is_no_drop: false, is_lore: false, is_magic: false }), '');
+		expect(kinds(fields)).not.toContain('flagchip');
+	});
+
+	it('the flag chip is additive — the QUEST ITEM flags field still appears too', () => {
+		const fields = examineFields(slot({ is_lore: true, is_quest_item: true }), '');
+		expect(kinds(fields)).toContain('flagchip');
+		expect(kinds(fields)).toContain('flags');
+		// name → flagchip → flags order
+		expect(kinds(fields).slice(0, 3)).toEqual(['name', 'flagchip', 'flags']);
+	});
+});
+
+describe('examineFields — named quests (ITEMUI-02, notes_link only)', () => {
+	it('a notes_link quest produces a quests field after wiki and before lastsynced', () => {
+		const fields = examineFields(
+			slot({
+				quest_links: [
+					{ quest_name: 'Coldain Ring 8', source: 'notes_link', source_url: 'https://wiki.project1999.com/Coldain_Ring_8' }
+				]
+			}),
+			'2026-06-18T00:00:00Z'
+		);
+		const q = fields.find((f) => f.kind === 'quests');
+		expect(q?.text).toBe('Used in:');
+		expect(q?.quests).toEqual([
+			{ quest_name: 'Coldain Ring 8', source_url: 'https://wiki.project1999.com/Coldain_Ring_8' }
+		]);
+		// position: wiki → quests → lastsynced
+		const seq = kinds(fields);
+		expect(seq.indexOf('quests')).toBeGreaterThan(seq.indexOf('wiki'));
+		expect(seq.indexOf('quests')).toBeLessThan(seq.indexOf('lastsynced'));
+	});
+
+	it('multiple notes_link quests all carry through with their source_url', () => {
+		const fields = examineFields(
+			slot({
+				quest_links: [
+					{ quest_name: 'Quest A', source: 'notes_link', source_url: 'https://wiki.project1999.com/A' },
+					{ quest_name: 'Quest B', source: 'notes_link', source_url: 'https://wiki.project1999.com/B' }
+				]
+			}),
+			''
+		);
+		const q = fields.find((f) => f.kind === 'quests');
+		expect(q?.quests?.map((x) => x.quest_name)).toEqual(['Quest A', 'Quest B']);
+	});
+
+	it('a quest_links list that is ALL in_game_flag omits the quests field (D-06/D-09)', () => {
+		const fields = examineFields(
+			slot({
+				is_quest_item: true,
+				quest_links: [{ quest_name: '[in-game QUEST flag]', source: 'in_game_flag', source_url: '' }]
+			}),
+			''
+		);
+		expect(kinds(fields)).not.toContain('quests');
+		// the in_game_flag pseudo-name never reaches the output
+		expect(fields.some((f) => /in-game QUEST flag/.test(f.text))).toBe(false);
+	});
+
+	it('an empty quest_links omits the quests field', () => {
+		const fields = examineFields(slot({ quest_links: [] }), '');
+		expect(kinds(fields)).not.toContain('quests');
 	});
 });

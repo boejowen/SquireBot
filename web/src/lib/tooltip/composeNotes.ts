@@ -42,6 +42,9 @@ export interface WikiSummaryForNote {
 export interface QuestLinkForNote {
   quest_name: string;
   source: 'in_game_flag' | 'notes_link';
+  /** The P1999 wiki page for a notes_link quest (Phase 40 ITEMUI-02); "" for the
+   *  in_game_flag pseudo-entry. Run through safeHttpUrl before render (D-05). */
+  source_url: string;
 }
 
 const MAX_QUEST_LINKS_IN_NOTE = 5;
@@ -151,12 +154,23 @@ export function composeItemNote(
     parts.push('<p class="tooltip-quest-flag">Quest item</p>');
   }
 
-  // 5. Used-in-quests list (notes_link only, max 5; each name escaped).
+  // 5. Used-in-quests list (notes_link only, max 5). Each name renders as a clickable
+  //    <a> when its source_url passes the safeHttpUrl scheme allow-list (D-05), else the
+  //    escaped name as plain text (D-05 fallback). Names are escapeHtml'd either way;
+  //    the href passes safeHttpUrl FIRST, then escapeHtml for attribute-encoding (S-3).
   const noteLinks = questLinks
     .filter((l) => l.source === 'notes_link')
     .slice(0, MAX_QUEST_LINKS_IN_NOTE);
   if (noteLinks.length > 0) {
-    const names = noteLinks.map((l) => escapeHtml(l.quest_name)).join(', ');
+    const names = noteLinks
+      .map((l) => {
+        const url = safeHttpUrl(l.source_url);
+        const name = escapeHtml(l.quest_name);
+        return url
+          ? `<a class="tooltip-quest-link" href="${escapeHtml(url)}" target="_blank" rel="noopener">${name}</a>`
+          : name; // plain escaped text when no/blocked URL (D-05 fallback)
+      })
+      .join(', ');
     parts.push(`<p class="tooltip-quests">Used in quests: ${names}</p>`);
   }
 

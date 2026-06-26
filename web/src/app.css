@@ -26,8 +26,9 @@
  * Values mirror the THEMES registry in src/lib/theme/themes.ts, which sources
  * them from the 14-UI-SPEC Theme Catalog. A theme swap is a single attribute
  * write on the shell root (Plan 04). Token names: --bg --panel --text --accent
- * --status-ok --status-missing --status-other --font-display --font-body
- * --weight-display (+ --row-bg/--row-text for Heavy's inverting parchment rows).
+ * --status-ok --status-missing --status-other --flag-nodrop --flag-lore
+ * --flag-magic --font-display --font-body --weight-display (+ --row-bg/--row-text
+ * for Heavy's inverting parchment rows).
  */
 
 :root,
@@ -39,6 +40,10 @@
   --status-ok: #6fc8b0;
   --status-missing: #e88a8a;
   --status-other: #a8c5e0;
+  /* Phase 40 flag-outline tokens (UI-SPEC §Color; lockstep with themes.ts). */
+  --flag-nodrop: #e88a8a;
+  --flag-lore: #e3c46b;
+  --flag-magic: #6db3e0;
   --font-display: "Cinzel Decorative", serif;
   --font-body: "IM Fell English", serif;
   --weight-display: 600;
@@ -56,6 +61,9 @@
   --status-ok: #6fa86f;
   --status-missing: #c66666;
   --status-other: #d4af37;
+  --flag-nodrop: #d96b6b;
+  --flag-lore: #d4af37;
+  --flag-magic: #6fa0d4;
   --font-display: "Cinzel", serif;
   --font-body: "Crimson Text", serif;
   --weight-display: 600;
@@ -70,6 +78,9 @@
   --status-ok: #6fa86f;
   --status-missing: #c66666;
   --status-other: #d4a020;
+  --flag-nodrop: #d96b6b;
+  --flag-lore: #d4a020;
+  --flag-magic: #5f9fd4;
   --font-display: "Cinzel", serif;
   --font-body: "IM Fell English", serif;
   --weight-display: 600;
@@ -84,6 +95,9 @@
   --status-ok: #7fa87f;
   --status-missing: #c87878;
   --status-other: #b8915c;
+  --flag-nodrop: #d98a8a;
+  --flag-lore: #d4b15c;
+  --flag-magic: #7fa8d4;
   --font-display: "Cinzel", serif;
   --font-body: "Inter", system-ui, sans-serif;
   --weight-display: 400;
@@ -98,6 +112,11 @@
   --status-ok: #2d5a2d;
   --status-missing: #6b1a1a;
   --status-other: #5a3a1f;
+  /* Heavy tiles are the dark frame (--panel #1a0e05), NOT the parchment rows —
+     saturated/high-contrast flag colors (each ≥3:1 vs #1a0e05). */
+  --flag-nodrop: #c0392b;
+  --flag-lore: #d4a017;
+  --flag-magic: #3f78c0;
   --font-display: "MedievalSharp", cursive;
   --font-body: "IM Fell English", serif;
   --weight-display: 600;

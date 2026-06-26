@@ -21,6 +21,9 @@ const REQUIRED_TOKENS: (keyof ThemeTokens)[] = [
   'statusOk',
   'statusMissing',
   'statusOther',
+  'flagNodrop',
+  'flagLore',
+  'flagMagic',
   'fontDisplay',
   'fontBody',
   'weightDisplay',
@@ -49,7 +52,7 @@ describe('DEFAULT_THEME', () => {
 });
 
 describe('THEMES registry', () => {
-  it('defines all 10 required tokens for every theme', () => {
+  it('defines all required tokens for every theme', () => {
     for (const key of THEME_KEYS) {
       const tokens = THEMES[key];
       for (const field of REQUIRED_TOKENS) {
@@ -72,6 +75,12 @@ describe('THEMES registry', () => {
     expect(THEMES.velious.accent).toBe('#a8c5e0');
     expect(THEMES.velious.statusOk).toBe('#6fc8b0');
     expect(THEMES.velious.fontDisplay).toBe('Cinzel Decorative');
+  });
+
+  it('matches the Phase 40 flag-token UI-SPEC values (velious)', () => {
+    expect(THEMES.velious.flagNodrop).toBe('#e88a8a');
+    expect(THEMES.velious.flagLore).toBe('#e3c46b');
+    expect(THEMES.velious.flagMagic).toBe('#6db3e0');
   });
 
   it('carries the inverting parchment row tokens for heavy only', () => {

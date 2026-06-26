@@ -86,6 +86,8 @@ export interface PriceDetail {
 export interface QuestLink {
 	quest_name: string;
 	source: 'in_game_flag' | 'notes_link';
+	/** The P1999 wiki page for a notes_link quest (Phase 40 ITEMUI-02); "" for the in_game_flag pseudo-entry. */
+	source_url: string;
 }
 
 /** An inventory/bank view row (`/api/v1/views/view` element; bank `rows[]` element). */
@@ -194,6 +196,10 @@ export interface InventorySlot {
 	/** The in-game stat block (Slot/AC/STR.../WT/class/race + flags), newline-separated;
 	 *  "" when the item has no stored wiki stats — the examine omits the line (D-09). */
 	statsblock: string;
+	is_no_drop: boolean; // item_master flag (00016); ITEMUI-01 tile outline
+	is_lore: boolean; // item_master flag (00016); ITEMUI-01 tile outline
+	is_magic: boolean; // item_master flag (00016); ITEMUI-01 tile outline
+	quest_links: QuestLink[]; // notes_link named quests (ITEMUI-02)
 }
 
 /** One character's structured inventory (`GET /api/v1/inventory/{char}`). Empty
@@ -249,6 +255,10 @@ export interface ItemRollup {
 	statsblock: string;
 	is_clicky: boolean; // Phase 39 — mirrors compute.ItemRollup (item_master); client holdings facet
 	has_haste: boolean; // Phase 39
+	is_no_drop: boolean; // item_master flag (00016); ITEMUI-01 tile outline
+	is_lore: boolean; // item_master flag (00016); ITEMUI-01 tile outline
+	is_magic: boolean; // item_master flag (00016); ITEMUI-01 tile outline
+	quest_links: QuestLink[]; // notes_link named quests (ITEMUI-02)
 	holders: ItemHolder[];
 }
 

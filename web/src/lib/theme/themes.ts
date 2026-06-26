@@ -36,6 +36,10 @@ export interface ThemeTokens {
   statusOk: string;
   statusMissing: string;
   statusOther: string;
+  /** Phase 40 flag-outline tokens — No-Drop>Lore>Magic; WCAG ≥3:1 vs --panel. */
+  flagNodrop: string;
+  flagLore: string;
+  flagMagic: string;
   fontDisplay: string;
   fontBody: string;
   /** 400 for minimalist, 600 for the other four (UI-SPEC Typography note). */
@@ -59,6 +63,9 @@ export const THEMES: Record<ThemeKey, ThemeTokens> = {
     statusOk: '#6fc8b0',
     statusMissing: '#e88a8a',
     statusOther: '#a8c5e0',
+    flagNodrop: '#e88a8a',
+    flagLore: '#e3c46b',
+    flagMagic: '#6db3e0',
     fontDisplay: 'Cinzel Decorative',
     fontBody: 'IM Fell English',
     weightDisplay: 600,
@@ -71,6 +78,9 @@ export const THEMES: Record<ThemeKey, ThemeTokens> = {
     statusOk: '#6fa86f',
     statusMissing: '#c66666',
     statusOther: '#d4af37',
+    flagNodrop: '#d96b6b',
+    flagLore: '#d4af37',
+    flagMagic: '#6fa0d4',
     fontDisplay: 'Cinzel',
     fontBody: 'Crimson Text',
     weightDisplay: 600,
@@ -83,6 +93,9 @@ export const THEMES: Record<ThemeKey, ThemeTokens> = {
     statusOk: '#6fa86f',
     statusMissing: '#c66666',
     statusOther: '#d4a020',
+    flagNodrop: '#d96b6b',
+    flagLore: '#d4a020',
+    flagMagic: '#5f9fd4',
     fontDisplay: 'Cinzel',
     fontBody: 'IM Fell English',
     weightDisplay: 600,
@@ -95,6 +108,9 @@ export const THEMES: Record<ThemeKey, ThemeTokens> = {
     statusOk: '#7fa87f',
     statusMissing: '#c87878',
     statusOther: '#b8915c',
+    flagNodrop: '#d98a8a',
+    flagLore: '#d4b15c',
+    flagMagic: '#7fa8d4',
     fontDisplay: 'Cinzel',
     fontBody: 'Inter',
     weightDisplay: 400, // the one sanctioned weight-variance (UI-SPEC)
@@ -107,6 +123,9 @@ export const THEMES: Record<ThemeKey, ThemeTokens> = {
     statusOk: '#2d5a2d',
     statusMissing: '#6b1a1a',
     statusOther: '#5a3a1f',
+    flagNodrop: '#c0392b',
+    flagLore: '#d4a017',
+    flagMagic: '#3f78c0',
     fontDisplay: 'MedievalSharp',
     fontBody: 'IM Fell English',
     weightDisplay: 600,

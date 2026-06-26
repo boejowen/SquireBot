@@ -82,6 +82,9 @@ type InventoryRow struct {
 	IsQuestItem bool
 	IconID      int64   // item_master.icon_id — the P1999 wiki icon id (id-joined); 0 when NULL/no row (INV-04)
 	Statsblock  string  // item_master.statsblock — the in-game stat block (id-joined); "" when NULL/no row (INV-02)
+	IsNoDrop    bool    // item_master flag (00016); false when NULL/no row (ITEMUI-01 tile outline)
+	IsLore      bool    // item_master flag (00016); false when NULL/no row (ITEMUI-01 tile outline)
+	IsMagic     bool    // item_master flag (00016); false when NULL/no row (ITEMUI-01 tile outline)
 	Direction   string  // pigparse_price.direction (TEXT); "" when no price row
 	A30         float64 // 30-day average; 0 when no price row
 	T30         int64   // 30-day transaction count; 0 when no price row
@@ -96,6 +99,7 @@ type InventoryRow struct {
 type QuestLinkRow struct {
 	QuestName string
 	Source    string
+	SourceURL string // quest_items.source_url — the P1999 wiki page (nullable TEXT); "" for an in_game_flag row (ITEMUI-02 named quest links)
 }
 
 // WikiGearTierRow is one wiki_gear_tier recommendation (item_id is always NULL on
@@ -393,6 +397,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 	)
 	SELECT c.name, ii.location, ii.name, ii.item_id, ii.count, ii.slots,
 	       im.wiki_url, im.wiki_summary, im.is_quest_item, im.icon_id, im.statsblock,
+	       im.is_no_drop, im.is_lore, im.is_magic,
 	       pp.direction, pp.a30, pp.t30, pp.last_seen,
 	       c.last_seen, ii.row_ordinal
 	FROM inventory_item ii
@@ -418,6 +423,9 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 			isQuest      sql.NullInt64
 			iconID       sql.NullInt64  // item_master.icon_id — NULL until enrichment runs (INV-04)
 			statsblock   sql.NullString // item_master.statsblock — NULL until enrichment runs (INV-02)
+			isNoDrop     sql.NullInt64  // item_master flag (00016); NULL/0 → false
+			isLore       sql.NullInt64  // item_master flag (00016); NULL/0 → false
+			isMagic      sql.NullInt64  // item_master flag (00016); NULL/0 → false
 			direction    sql.NullString
 			a30          sql.NullFloat64
 			t30          sql.NullInt64
@@ -430,6 +438,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 		if err := rows.Scan(
 			&r.Char, &r.Location, &r.ItemName, &itemID, &count, &slots,
 			&wikiURL, &wikiSummary, &isQuest, &iconID, &statsblock,
+			&isNoDrop, &isLore, &isMagic,
 			&direction, &a30, &t30, &lastListed,
 			&charLastSeen, &r.RowOrdinal,
 		); err != nil {
@@ -443,6 +452,9 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 		r.IsQuestItem = isQuest.Int64 != 0
 		r.IconID = iconID.Int64          // 0 when NULL (no icon yet) or no item_master row joined
 		r.Statsblock = statsblock.String // "" when NULL (no stats yet) or no item_master row joined
+		r.IsNoDrop = isNoDrop.Int64 != 0 // false when NULL/0 or no item_master row joined (ITEMUI-01)
+		r.IsLore = isLore.Int64 != 0
+		r.IsMagic = isMagic.Int64 != 0
 		r.Direction = direction.String
 		r.HasPrice = direction.Valid
 		r.A30 = a30.Float64
@@ -462,7 +474,7 @@ func (s *Store) InventoryForChar(ctx context.Context, char string) ([]InventoryR
 // view join). Within each item_id the links keep (quest_name) order.
 func (s *Store) QuestLinksByItem(ctx context.Context) (map[int64][]QuestLinkRow, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT item_id, quest_name, source FROM quest_items ORDER BY item_id, quest_name`)
+		`SELECT item_id, quest_name, source, source_url FROM quest_items ORDER BY item_id, quest_name`)
 	if err != nil {
 		return nil, fmt.Errorf("query quest links: %w", err)
 	}
@@ -471,14 +483,16 @@ func (s *Store) QuestLinksByItem(ctx context.Context) (map[int64][]QuestLinkRow,
 	out := make(map[int64][]QuestLinkRow)
 	for rows.Next() {
 		var (
-			itemID int64
-			link   QuestLinkRow
-			source sql.NullString
+			itemID    int64
+			link      QuestLinkRow
+			source    sql.NullString
+			sourceURL sql.NullString // quest_items.source_url — nullable TEXT (00001); "" for an in_game_flag row
 		)
-		if err := rows.Scan(&itemID, &link.QuestName, &source); err != nil {
+		if err := rows.Scan(&itemID, &link.QuestName, &source, &sourceURL); err != nil {
 			return nil, fmt.Errorf("scan quest link row: %w", err)
 		}
 		link.Source = source.String
+		link.SourceURL = sourceURL.String
 		out[itemID] = append(out[itemID], link)
 	}
 	if err := rows.Err(); err != nil {
@@ -761,6 +775,9 @@ type IconStats struct {
 	Statsblock string
 	IsClicky   bool // Phase 39 — item_master.is_clicky (00016), EQ-namespace correct here
 	HasHaste   bool // Phase 39 — item_master.has_haste (00016)
+	IsNoDrop   bool // Phase 40 — item_master flag (00016)
+	IsLore     bool // Phase 40 — item_master flag (00016)
+	IsMagic    bool // Phase 40 — item_master flag (00016)
 }
 
 // ItemMasterIconStats returns icon_id + statsblock per item_id (P31 schema v13 columns
@@ -771,7 +788,7 @@ type IconStats struct {
 // nullable-scan idiom at InventoryForChar).
 func (s *Store) ItemMasterIconStats(ctx context.Context) (map[int64]IconStats, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT item_id, icon_id, statsblock, is_clicky, has_haste FROM item_master`)
+		`SELECT item_id, icon_id, statsblock, is_clicky, has_haste, is_no_drop, is_lore, is_magic FROM item_master`)
 	if err != nil {
 		return nil, fmt.Errorf("query item_master icon/stats: %w", err)
 	}
@@ -785,8 +802,11 @@ func (s *Store) ItemMasterIconStats(ctx context.Context) (map[int64]IconStats, e
 			stats sql.NullString
 			clk   sql.NullInt64 // Phase 39 — NULL/0 → false (a pre-00016 / un-flagged row)
 			hst   sql.NullInt64
+			nd    sql.NullInt64 // Phase 40 — NULL/0 → false
+			lr    sql.NullInt64
+			mg    sql.NullInt64
 		)
-		if err := rows.Scan(&id, &icon, &stats, &clk, &hst); err != nil {
+		if err := rows.Scan(&id, &icon, &stats, &clk, &hst, &nd, &lr, &mg); err != nil {
 			return nil, fmt.Errorf("scan item_master icon/stats row: %w", err)
 		}
 		out[id] = IconStats{ // NULL → 0 / "" / false
@@ -794,6 +814,9 @@ func (s *Store) ItemMasterIconStats(ctx context.Context) (map[int64]IconStats, e
 			Statsblock: stats.String,
 			IsClicky:   clk.Int64 != 0, // the established NullInt64 → bool idiom
 			HasHaste:   hst.Int64 != 0,
+			IsNoDrop:   nd.Int64 != 0,
+			IsLore:     lr.Int64 != 0,
+			IsMagic:    mg.Int64 != 0,
 		}
 	}
 	if err := rows.Err(); err != nil {

@@ -190,6 +190,10 @@ func TestReadViews_InventoryJoinAndGrouping(t *testing.T) {
 		if got[1234][0].QuestName != "Coldain Ring 1" || got[1234][1].QuestName != "Coldain Ring 2" {
 			t.Errorf("item 1234 links order = %+v, want Ring 1 then Ring 2", got[1234])
 		}
+		// source_url surfaces on QuestLinkRow (ITEMUI-02; seedQuestItem inserts "http://example/q").
+		if got[1234][0].SourceURL != "http://example/q" {
+			t.Errorf("item 1234 link[0].SourceURL = %q, want %q (named quest wiki URL)", got[1234][0].SourceURL, "http://example/q")
+		}
 		if len(got[9999]) != 1 || got[9999][0].Source != "in_game_flag" {
 			t.Errorf("item 9999 links = %+v, want one in_game_flag", got[9999])
 		}
@@ -582,8 +586,17 @@ func TestReadViews_InventoryForChar_NameJoinHitAndMiss(t *testing.T) {
 	// has a DIFFERENT id 19450 — the name bridge must attach the price.
 	seedRaw(t, db, charID, "General1", "10 Dose Ant's Potion", i64ptr(14536), 1)
 	seedPigparse(t, db, 19450, "10 Dose Ant's Potion", "0", 320, 12)
+	// item_master is id-joined (EQ namespace) — seed a flagged row for the HELD id 14536 so
+	// the ITEMUI-01 flags surface on the InventoryRow. seedItemMaster does NOT accept flag
+	// columns, so set is_no_drop/is_lore directly (is_magic left NULL → must resolve false).
+	seedItemMaster(t, db, 14536, "10 Dose Ant's Potion", "summary", "http://wiki/Ant", false)
+	if _, err := db.Exec(
+		`UPDATE item_master SET is_no_drop = 1, is_lore = 1 WHERE item_id = ?`, 14536,
+	); err != nil {
+		t.Fatalf("set flags on 14536: %v", err)
+	}
 
-	// MISS: an item with no matching pigparse_price row.
+	// MISS: an item with no matching pigparse_price row AND no item_master row (LEFT JOIN miss).
 	seedRaw(t, db, charID, "General2", "Worthless Trinket", i64ptr(9997), 2)
 
 	got, err := s.InventoryForChar(ctx, "Slampeach")
@@ -607,10 +620,20 @@ func TestReadViews_InventoryForChar_NameJoinHitAndMiss(t *testing.T) {
 	if pot.ItemID != 14536 {
 		t.Errorf("Ant's Potion ItemID = %d, want 14536 (the EQ inventory id, not the catalog 19450)", pot.ItemID)
 	}
+	// The held item's item_master flags surface (is_no_drop/is_lore=1, is_magic NULL→false).
+	if !pot.IsNoDrop || !pot.IsLore || pot.IsMagic {
+		t.Errorf("Ant's Potion flags = {noDrop:%t lore:%t magic:%t}, want true/true/false (item_master 00016 flags)",
+			pot.IsNoDrop, pot.IsLore, pot.IsMagic)
+	}
 
 	miss := byName["Worthless Trinket"]
 	if miss.HasPrice {
 		t.Errorf("Worthless Trinket HasPrice = true, want false (no matching pigparse row)")
+	}
+	// No item_master row → all three flags resolve false (the LEFT-JOIN-miss safe default).
+	if miss.IsNoDrop || miss.IsLore || miss.IsMagic {
+		t.Errorf("Worthless Trinket flags = {noDrop:%t lore:%t magic:%t}, want all false (no item_master row → no outline)",
+			miss.IsNoDrop, miss.IsLore, miss.IsMagic)
 	}
 }
 
@@ -848,17 +871,18 @@ func TestItemMasterIconStats(t *testing.T) {
 	s := NewStore(db)
 	ctx := context.Background()
 
-	// Row 1: fully populated icon + statsblock (the enriched case).
+	// Row 1: fully populated icon + statsblock + the three ITEMUI-01 flags (the enriched case).
+	// seedItemMaster does NOT accept flag columns, so set is_no_drop/is_lore/is_magic directly.
 	seedItemMaster(t, db, 1234, "Circlet of Vallon", "summary", "http://wiki/Circlet", false)
 	if _, err := db.Exec(
-		`UPDATE item_master SET icon_id = ?, statsblock = ? WHERE item_id = ?`,
+		`UPDATE item_master SET icon_id = ?, statsblock = ?, is_no_drop = 1, is_lore = 1, is_magic = 1 WHERE item_id = ?`,
 		560, "MAGIC ITEM\nAC: 5", 1234,
 	); err != nil {
-		t.Fatalf("set icon/stats on 1234: %v", err)
+		t.Fatalf("set icon/stats/flags on 1234: %v", err)
 	}
 
-	// Row 2: NULL icon_id + NULL statsblock (the un-enriched case — seedItemMaster
-	// leaves both columns NULL).
+	// Row 2: NULL icon_id + NULL statsblock + NULL flags (the un-enriched case — seedItemMaster
+	// leaves all of them NULL).
 	seedItemMaster(t, db, 5678, "Robe of the Lost Circle", "summary", "http://wiki/Robe", false)
 
 	got, err := s.ItemMasterIconStats(ctx)
@@ -872,9 +896,16 @@ func TestItemMasterIconStats(t *testing.T) {
 	if ic := got[1234]; ic.IconID != 560 || ic.Statsblock != "MAGIC ITEM\nAC: 5" {
 		t.Errorf("item 1234 = {icon:%d stats:%q}, want 560 / %q", ic.IconID, ic.Statsblock, "MAGIC ITEM\nAC: 5")
 	}
-	// NULL → zero-values (0 icon = colored-tile fallback; "" stats = examine omits the line).
+	// The three ITEMUI-01 flags resolve true on the flagged row (NullInt64 != 0 idiom).
+	if ic := got[1234]; !ic.IsNoDrop || !ic.IsLore || !ic.IsMagic {
+		t.Errorf("item 1234 flags = {noDrop:%t lore:%t magic:%t}, want all true (is_no_drop/is_lore/is_magic=1)", ic.IsNoDrop, ic.IsLore, ic.IsMagic)
+	}
+	// NULL → zero-values (0 icon = colored-tile fallback; "" stats = examine omits the line; false flags = no outline).
 	if ic := got[5678]; ic.IconID != 0 || ic.Statsblock != "" {
 		t.Errorf("item 5678 = {icon:%d stats:%q}, want 0 / \"\" (NULL → zero-values)", ic.IconID, ic.Statsblock)
+	}
+	if ic := got[5678]; ic.IsNoDrop || ic.IsLore || ic.IsMagic {
+		t.Errorf("item 5678 flags = {noDrop:%t lore:%t magic:%t}, want all false (NULL flags → false)", ic.IsNoDrop, ic.IsLore, ic.IsMagic)
 	}
 }
 

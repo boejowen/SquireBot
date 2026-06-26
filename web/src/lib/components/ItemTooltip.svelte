@@ -169,6 +169,13 @@
 		text-decoration: none;
 		margin-left: 6px;
 	}
+	/* Named quest links in the "Used in quests:" line (ITEMUI-02) — the same accent-
+	   link affordance as the wiki link, but inline in prose (no left margin). */
+	.tooltip-popover :global(.tooltip-quest-link) {
+		color: var(--accent);
+		border-bottom: 1px solid var(--accent);
+		text-decoration: none;
+	}
 	.tooltip-popover :global(p) {
 		margin: 4px 0;
 	}

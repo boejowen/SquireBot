@@ -18,6 +18,7 @@
 
 	import type { InventorySlot } from '$lib/api';
 	import { examineFields } from '$lib/examine';
+	import { flagColorVar } from '$lib/flags';
 	import { composeItemNote, safeHttpUrl, wikiUrlFor } from '$lib/tooltip/composeNotes';
 
 	let {
@@ -30,6 +31,12 @@
 
 	// The D-08-ordered, D-09-omitted rows (pure helper — node-tested).
 	let fields = $derived(slot ? examineFields(slot, charLastSeen) : []);
+
+	// The priority flag-chip color (No-Drop > Lore > Magic, D-01) — the SAME value the
+	// PaperdollSlot tile ring uses, so the examine chip echoes the tile outline. Only a
+	// fixed literal var(--flag-*) string (T-40-06); '' when unflagged (the chip field
+	// is omitted by examineFields in that case, so this is just the inline color).
+	let flagChipColor = $derived(slot ? flagColorVar(slot) : '');
 
 	// The wiki link body — the ONE sanctioned escaped {@html} sink (composeItemNote).
 	// The href passes the safeHttpUrl scheme allow-list FIRST (so javascript:/data:
@@ -54,12 +61,29 @@
 		{#each fields as f (f.kind)}
 			{#if f.kind === 'name'}
 				<h3 class="ex-name">{f.text}</h3>
+			{:else if f.kind === 'flagchip'}
+				<!-- The priority flag chip (NO-DROP/LORE/MAGIC), colored by the same
+				     --flag-color the tile ring uses (ITEMUI-01). Plain {} text. -->
+				<p class="ex-flagchip" style={`--flag-color: ${flagChipColor}`}>{f.text}</p>
 			{:else if f.kind === 'flags'}
 				<p class="ex-flags">{f.text}</p>
 			{:else if f.kind === 'wiki'}
 				<!-- The ONE sanctioned escaped {@html} sink (composeItemNote): the title
 				     line + the wiki <a>, fully escaped (T-31-14). -->
 				<p class="ex-wiki">{@html wikiBodyHtml}</p>
+			{:else if f.kind === 'quests'}
+				<!-- Named "Used in:" quest links (ITEMUI-02). NATIVE Svelte path (no
+				     {@html}): {q.quest_name} is auto-escaped (T-40-04); every href passes
+				     safeHttpUrl FIRST (D-05/T-40-05) so a blocked scheme → plain text. -->
+				<p class="ex-quests">
+					{f.text}
+					{#each f.quests ?? [] as q, i (q.quest_name + i)}{#if i > 0},
+						{/if}{#if safeHttpUrl(q.source_url)}<a
+								href={safeHttpUrl(q.source_url)}
+								target="_blank"
+								rel="noopener">{q.quest_name}</a
+							>{:else}{q.quest_name}{/if}{/each}
+				</p>
 			{:else if f.kind === 'price'}
 				<p class="ex-price">{f.text}</p>
 			{:else if f.kind === 'stats'}
@@ -118,12 +142,29 @@
 		color: var(--status-other);
 		margin: 0 0 8px;
 	}
+	/* The priority flag chip (ITEMUI-01) — a bordered, transparent-fill text chip in
+	   the flag color, beside the name. Mirrors .ex-flags type but bounds the flag
+	   color as a small swatch (easier to clear 3:1; doesn't recolor the heading). */
+	.ex-flagchip {
+		display: inline-block;
+		font-family: var(--font-display);
+		font-weight: var(--weight-display);
+		font-size: 13px; /* Label */
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--flag-color);
+		border: 1px solid var(--flag-color);
+		border-radius: 3px;
+		padding: 1px 6px;
+		margin: 0 0 8px;
+	}
 	.ex-name,
 	.ex-line,
 	.ex-stats,
 	.ex-notes,
 	.ex-price,
 	.ex-wiki,
+	.ex-quests,
 	.ex-footer {
 		/* Break long unbreakable tokens (URLs, run-on wiki text) so nothing overflows the
 		   290px panel width — pairs with .examine's overflow-y for the vertical case. */
@@ -135,6 +176,7 @@
 	.ex-notes,
 	.ex-price,
 	.ex-wiki,
+	.ex-quests,
 	.ex-footer {
 		font-family: var(--font-body);
 		font-size: 16px;
@@ -169,5 +211,13 @@
 		border-bottom: 1px solid var(--accent);
 		text-decoration: none;
 		margin-left: 6px;
+	}
+	/* Named quest links (ITEMUI-02) — the SAME accent-link affordance as the wiki
+	   link (a quest link and a wiki link are the same kind of thing: a jump to the
+	   P1999 wiki). These are NATIVE Svelte <a>s (not :global), so a direct rule. */
+	.ex-quests a {
+		color: var(--accent);
+		border-bottom: 1px solid var(--accent);
+		text-decoration: none;
 	}
 </style>

@@ -15,6 +15,7 @@
 	// (the one sanctioned escaped-HTML sink lives in ExaminePanel).
 
 	import type { InventorySlot } from '$lib/api';
+	import { flagColorVar } from '$lib/flags';
 
 	let {
 		slot = null,
@@ -58,6 +59,12 @@
 	// per-item gradient, intentionally not a theme token.
 	let hue = $derived(hueFor(slot));
 
+	// The priority flag-ring color (No-Drop > Lore > Magic, D-01), '' when unflagged.
+	// flagColorVar returns ONLY a fixed literal var(--flag-*) string — never a
+	// user/item value reaches the inline style= sink (T-40-06). Coexists with the
+	// accent hover/focus border via a separate ::before inset ring (D-03).
+	let flagColor = $derived(filled && slot ? flagColorVar(slot) : '');
+
 	function hueFor(s: InventorySlot | null): number {
 		if (!s) return 0;
 		const key = (s.item || '') + ':' + s.id;
@@ -92,6 +99,7 @@
 		type="button"
 		class="slot filled"
 		class:bag={isBag}
+		class:flagged={flagColor !== ''}
 		aria-label={ariaLabel}
 		aria-expanded={isBag ? expanded : undefined}
 		onclick={activate}
@@ -102,7 +110,7 @@
 			if (slot) onhover?.(slot, e);
 		}}
 		onmouseleave={() => onleave?.()}
-		style={`--tile-hue: ${hue};`}
+		style={`--tile-hue: ${hue};${flagColor ? ` --flag-color: ${flagColor};` : ''}`}
 	>
 		<span class="ico">
 			{#if iconId > 0}
@@ -155,6 +163,22 @@
 	.slot.filled:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
+	}
+	/* The flag ring (ITEMUI-01, D-01/D-03): a 2px inset box-shadow keyed off the
+	   priority --flag-color. It rides ::before so it NEVER touches border-color —
+	   the existing accent hover/focus (which flips border-color + adds an accent
+	   box-shadow) coexists with it as a concentric ring. pointer-events:none so it
+	   never steals the button's hover/click; z-index:1 puts it above the .ico
+	   gradient but below the inset-1px .count/.bag-marker corner glyphs. Only a
+	   FILLED + flagged tile emits it (unflagged tiles keep the neutral border). */
+	.slot.filled.flagged::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 3px; /* match .slot */
+		box-shadow: inset 0 0 0 2px var(--flag-color);
+		pointer-events: none;
+		z-index: 1;
 	}
 	.slot.empty {
 		display: flex;

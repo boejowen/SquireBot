@@ -464,7 +464,9 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
   2. The flag-coded outline is consistent across the tile surfaces (paper-doll slots and the inventory/bank list rows) so the same item reads the same way wherever it appears.
   3. On the modern Characters, Inventory, and Wishlist tabs, an item used in one or more quests shows the named quest(s) it's used in ("used in quest X"), not just the yes/no QUEST-ITEM badge.
   4. The named quest links surface in the item examine panel as well as the list/grid views, drawing on the already-harvested `quest_links` (no new enrichment pipeline) — and `go test ./...` is green; watcher untouched.
-**Plans**: TBD
+**Plans**: 2 plans (2 waves; backend contract first, web UI second)
+  - [ ] 40-01-PLAN.md (wave 1) — backend: carry item_master is_no_drop/is_lore/is_magic (P37 00016, the P39 is_clicky/has_haste precedent) + quest_items.source_url through compute -> InventorySlot/ItemRollup JSON; extend QuestLinksByItem SELECT + QuestLink.SourceURL; attach quest_links to the modern builders (the view.go/bank.go pattern). No migration; watcher untouched (ITEMUI-01/02)
+  - [ ] 40-02-PLAN.md (wave 2, depends_on 40-01) — web: api.ts mirror + 3 per-theme flag tokens --flag-nodrop/--flag-lore/--flag-magic (app.css+themes.ts lockstep, parity tests); pure priority resolver (No-Drop>Lore>Magic); PaperdollSlot ::before flag ring (D-03 survives hover); examine flag chip + clickable named quest links (notes_link via source_url through safeHttpUrl) on Characters/Inventory/Wishlist; composeNotes tooltip links; browser-smoke checkpoint (ITEMUI-01/02)
 **UI hint**: yes
 
 ### Phase 41: Character paper-doll — compaction + portrait photo
@@ -543,7 +545,7 @@ _v2.3 Phase Details (26 Character Assignment, 27 My-Characters Inventory Filter,
 | 37. Item enrichment backbone — flags + effects | v2.6 | 0/TBD | Not started (ENRICH-12/13; re-enable the dropped flag/effect parse into discrete columns + migration; foundational) | — |
 | 38. Catalog-wide enrichment + icon coverage | v2.6 | 0/TBD | Not started (ENRICH-14/15; widen enrichment to the full PigParse catalog + icon backfill/diagnostic) | — |
 | 39. Faceted item search (Clicky / Haste + scope toggle) | v2.6 | 2/2 | Complete    | 2026-06-26 |
-| 40. Item display polish — flag outlines + named quest links | v2.6 | 0/TBD | Not started (ITEMUI-01 depends on P37 flags; ITEMUI-02 independent) | — |
+| 40. Item display polish — flag outlines + named quest links | v2.6 | 0/2 | 🔁 Planned (2 plans, 2 waves; backend plumbing → web render; no migration, watcher untouched) | — |
 | 41. Character paper-doll — compaction + portrait photo | v2.6 | 0/TBD | Not started (CHARUI-01/02; migration for the photo) | — |
 | 42. Wishlist polish — compaction + sub-Velious tiers | v2.6 | 0/TBD | Not started (WISHUI-01/02; no migration — `wiki_gear_tier` exists) | — |
 

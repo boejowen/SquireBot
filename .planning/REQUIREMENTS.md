@@ -21,9 +21,9 @@
 - [ ] **ENRICH-15**: Icon coverage is backfilled for every item whose wiki page provides an icon, and a maintainer can see which items are still icon-less. *(The "not all items have images" bug; the colored-tile fallback remains for genuinely icon-less items — this closes the *fixable* gap and makes the residue visible.)*
 
 ### Faceted Item Search (SEARCH)
-- [ ] **SEARCH-04**: A user can filter item search to only Clicky items (items with a click effect).
-- [ ] **SEARCH-05**: A user can filter item search to only Haste items.
-- [ ] **SEARCH-06**: A user can toggle item-search scope between guild holdings ("who has one") and the full P99 catalog ("what exists").
+- [x] **SEARCH-04**: A user can filter item search to only Clicky items (items with a click effect).
+- [x] **SEARCH-05**: A user can filter item search to only Haste items.
+- [x] **SEARCH-06**: A user can toggle item-search scope between guild holdings ("who has one") and the full P99 catalog ("what exists").
 
 ### Item Display Polish (ITEMUI)
 - [ ] **ITEMUI-01**: Items in the inventory, bank, and paper-doll views show a color-coded outline by flag — No-Drop = red, Lore = gold, Magic = blue (default/no special flag stays the existing neutral border).

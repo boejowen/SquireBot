@@ -326,6 +326,33 @@ func TestSearchCatalog_CatalogOnlyFlag(t *testing.T) {
 	}
 }
 
+func TestSearchCatalog_SameNameHeldNoFanout(t *testing.T) {
+	db := NewTestDB(t)
+	ctx := context.Background()
+	st := NewStore(db)
+	// BL-01 regression: item_master is keyed by item_id, so two DISTINCT held EQ ids can
+	// share a normalized name (same-name spell scrolls / quest turn-ins). The name-keyed
+	// facet LEFT JOIN must NOT fan the single catalog row out to one row per same-name held
+	// row — duplicate rows crash the web {#each} (each_key_duplicate) and undercount LIMIT.
+	seedCatalogItem(t, db, 500, "Words of Dimension", true, 1.0)
+	seedHeldFlag(t, db, 10, "Words of Dimension", true, false) // EQ id 10, clicky
+	seedHeldFlag(t, db, 11, "Words of Dimension", true, false) // EQ id 11, SAME name, also clicky
+
+	got, err := st.SearchCatalog(ctx, "words", true, false, 25)
+	if err != nil {
+		t.Fatalf("SearchCatalog same-name held: %v", err)
+	}
+	n := 0
+	for _, it := range got {
+		if it.ItemID == 500 {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("same-name held fan-out: catalog row 500 returned %d times, want exactly 1 (duplicate rows crash the web {#each}); got %v", n, names(got))
+	}
+}
+
 func TestSearchCatalog_NoFacetRegression(t *testing.T) {
 	db := NewTestDB(t)
 	ctx := context.Background()

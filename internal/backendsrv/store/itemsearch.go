@@ -56,18 +56,27 @@ func escapeLike(s string) string {
 // item_master (held, EQ-id-keyed) ∪ catalog_enrichment (catalog-only, norm_name-keyed)
 // is_clicky/has_haste columns, joined to pigparse_price by lower(trim(name)). It mirrors
 // CatalogIconCoverage (store/itemids.go:193-205), swapping icon_id for the two flag columns.
-// A held name is NEVER in catalog_enrichment (the write-path dedup, itemids.go:177-191), so
-// the plain UNION ALL counts each name once — NO precedence/COALESCE-between-tables logic.
 // item_id is NEVER the join key (PigParse vs EQ namespace — Pitfall 1 / memory
 // pigparse-vs-ingame-item-id-namespaces). Added to the query ONLY when a facet is active so
 // the no-facet path stays byte-identical to the original single-table search (Pitfall 3 —
 // the join is LEFT and conditional, never an unconditional/always-on join that would drop
 // unenriched catalog rows when no facet is active).
+//
+// The inner union is GROUP BY norm with MAX(flag) so the subquery yields EXACTLY ONE row per
+// normalized name. item_master.name is NOT unique (the table is keyed by item_id), so N
+// distinct held EQ ids can share a normalized name (e.g. same-name spell scrolls / quest
+// turn-ins). Without the GROUP BY this LEFT JOIN would fan a single catalog row out to N
+// duplicate result rows (BL-01: duplicate Svelte {#each} keys → each_key_duplicate crash +
+// LIMIT 25 undercount). MAX(flag) = "the name carries the flag if ANY same-name item does" —
+// the correct name-keyed-facet semantics — and it also collapses any (invariant-violating)
+// cross-table norm overlap defensively (NULL flags sort below 1, so MAX prefers a real flag).
 const flagUnion = `
   LEFT JOIN (
-    SELECT lower(trim(name)) AS norm, is_clicky, has_haste FROM item_master
-    UNION ALL
-    SELECT norm_name          AS norm, is_clicky, has_haste FROM catalog_enrichment
+    SELECT norm, MAX(is_clicky) AS is_clicky, MAX(has_haste) AS has_haste FROM (
+      SELECT lower(trim(name)) AS norm, is_clicky, has_haste FROM item_master
+      UNION ALL
+      SELECT norm_name          AS norm, is_clicky, has_haste FROM catalog_enrichment
+    ) GROUP BY norm
   ) f ON f.norm = lower(trim(pigparse_price.name))`
 
 // SearchCatalog returns up to `limit` pigparse_price catalog items whose name

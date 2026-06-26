@@ -39,6 +39,7 @@
 //	QuestLink:
 //	  QuestName   → "quest_name"
 //	  Source      → "source"        ("in_game_flag" | "notes_link")
+//	  SourceURL   → "source_url"    (P1999 wiki page; "" for an in_game_flag row)
 //
 //	BankView:
 //	  Rows        → "rows"          ([]ViewRow / BankRow)
@@ -73,6 +74,7 @@ type PriceDetail struct {
 type QuestLink struct {
 	QuestName string `json:"quest_name"`
 	Source    string `json:"source"`
+	SourceURL string `json:"source_url"` // P1999 wiki page (quest_items.source_url); "" for an in_game_flag row (ITEMUI-02)
 }
 
 // ViewRow is one row of the consolidated `view` (and `bank`) grid: an inventory
@@ -169,9 +171,13 @@ type InventorySlot struct {
 	WikiSummary   string          `json:"wiki_summary"`
 	IsQuestItem   bool            `json:"is_quest_item"`
 	Prices        []PriceDetail   `json:"prices"`
-	Children      []InventorySlot `json:"children"`   // nested bag contents (one level deep); nil when not a container
-	IconID        int64           `json:"icon_id"`    // item_master.icon_id (id-joined); 0 = none yet → colored-tile fallback (INV-04, D-02)
-	Statsblock    string          `json:"statsblock"` // item_master.statsblock (id-joined); the in-game stat block for the examine; "" when none (INV-02)
+	Children      []InventorySlot `json:"children"`    // nested bag contents (one level deep); nil when not a container
+	IconID        int64           `json:"icon_id"`     // item_master.icon_id (id-joined); 0 = none yet → colored-tile fallback (INV-04, D-02)
+	Statsblock    string          `json:"statsblock"`  // item_master.statsblock (id-joined); the in-game stat block for the examine; "" when none (INV-02)
+	IsNoDrop      bool            `json:"is_no_drop"`  // item_master flag (00016); ITEMUI-01 tile outline (held source)
+	IsLore        bool            `json:"is_lore"`     // item_master flag (00016); ITEMUI-01 tile outline
+	IsMagic       bool            `json:"is_magic"`    // item_master flag (00016); ITEMUI-01 tile outline
+	QuestLinks    []QuestLink     `json:"quest_links"` // notes_link named quests (ITEMUI-02); same shape as ViewRow.QuestLinks
 }
 
 // CharacterInventory is the per-character structured slot model (INV-05).
@@ -232,11 +238,15 @@ type ItemRollup struct {
 	WikiURL     string        `json:"wiki_url"`
 	WikiSummary string        `json:"wiki_summary"`
 	IsQuestItem bool          `json:"is_quest_item"`
-	IconID      int64         `json:"icon_id"`    // 0 → colored-tile fallback (D-02)
-	Statsblock  string        `json:"statsblock"` // "" → examine omits the stats line (D-09)
-	IsClicky    bool          `json:"is_clicky"`  // Phase 39 — from item_master (00016); client holdings facet (SC-4)
-	HasHaste    bool          `json:"has_haste"`  // Phase 39 — from item_master (00016)
-	Holders     []ItemHolder  `json:"holders"`    // one per holding (ITEM-03)
+	IconID      int64         `json:"icon_id"`     // 0 → colored-tile fallback (D-02)
+	Statsblock  string        `json:"statsblock"`  // "" → examine omits the stats line (D-09)
+	IsClicky    bool          `json:"is_clicky"`   // Phase 39 — from item_master (00016); client holdings facet (SC-4)
+	HasHaste    bool          `json:"has_haste"`   // Phase 39 — from item_master (00016)
+	IsNoDrop    bool          `json:"is_no_drop"`  // Phase 40 — from item_master (00016); ITEMUI-01 examine flag
+	IsLore      bool          `json:"is_lore"`     // Phase 40 — from item_master (00016)
+	IsMagic     bool          `json:"is_magic"`    // Phase 40 — from item_master (00016)
+	QuestLinks  []QuestLink   `json:"quest_links"` // named quests (ITEMUI-02); copied from the representative ViewRow
+	Holders     []ItemHolder  `json:"holders"`     // one per holding (ITEM-03)
 }
 
 // ItemHolder is one holding of an item (ITEM-03 holders-table row): a character holding it,
@@ -309,7 +319,7 @@ type WishlistSlot struct {
 // WishlistTarget is one viewer-added upgrade target on a slot's wishlist (WISH-03).
 type WishlistTarget struct {
 	ID         int64    `json:"id"`
-	ItemID     *int64   `json:"item_id"`     // null ⇒ typed/custom (no EC match) or gear-tier item
+	ItemID     *int64   `json:"item_id"` // null ⇒ typed/custom (no EC match) or gear-tier item
 	ItemName   string   `json:"item_name"`
 	Pinged     bool     `json:"pinged"`      // WISH-05 ping toggle
 	PingedHit  bool     `json:"pinged_hit"`  // WISH-05 EC-hit badge (an alert_log row exists for this id)
@@ -322,8 +332,8 @@ type WishlistTarget struct {
 // "Raid" tag is the TIER, not a column: IsRaid = (tier == "Velious Raiding") (Pitfall 3).
 type WishlistSuggestion struct {
 	ItemName   string   `json:"item_name"`
-	IsRaid     bool     `json:"is_raid"`     // tier == "Velious Raiding" ⇒ "Raid" tag + not-for-sale (Pitfall 3)
-	Price      *float64 `json:"price"`       // null ⇒ "no price"/"Not for sale"
+	IsRaid     bool     `json:"is_raid"` // tier == "Velious Raiding" ⇒ "Raid" tag + not-for-sale (Pitfall 3)
+	Price      *float64 `json:"price"`   // null ⇒ "no price"/"Not for sale"
 	LastListed string   `json:"last_listed"`
 	WikiURL    string   `json:"wiki_url"` // "" when the gear-tier row carries no wiki url
 }

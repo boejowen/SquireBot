@@ -630,6 +630,87 @@ func TestStructuredInventory_HeldCursorExcluded(t *testing.T) {
 	}
 }
 
+// TestStructuredInventory_FlagsAndQuestLinks proves the Phase 40 plumbing end-to-end through
+// the store→compute seam: the three item_master flags (is_no_drop/is_lore/is_magic, 00016)
+// surface on the matching InventorySlot (ITEMUI-01, held source), and the named-quest links
+// (quest_items.source_url, ITEMUI-02) attach per slot by EQ item_id — INCLUDING a bag child.
+// An item with no flags/links carries all-false flags + nil QuestLinks.
+func TestStructuredInventory_FlagsAndQuestLinks(t *testing.T) {
+	db := newTestDB(t)
+	s := store.NewStore(db)
+	ctx := context.Background()
+
+	char := seedChar(t, db, "owner-a", "Slampeach", "SHM", 60, "TRL", false)
+
+	// A flagged + quest-linked WORN item (Head). seedItemMaster does NOT set the flag
+	// columns, so stamp is_no_drop/is_lore directly (is_magic left NULL → must be false).
+	seedInvFull(t, db, char, "Head", "Circlet of Vallon", 2050, 1, 0, 1)
+	seedItemMaster(t, db, 2050, "Circlet of Vallon", "A fine circlet.", "http://wiki/Circlet", true)
+	if _, err := db.Exec(`UPDATE item_master SET is_no_drop = 1, is_lore = 1 WHERE item_id = ?`, 2050); err != nil {
+		t.Fatalf("set flags on 2050: %v", err)
+	}
+	seedQuest(t, db, 2050, "Coldain Ring 1", "notes_link") // has source_url="http://example/q"
+	seedQuest(t, db, 2050, "[in-game QUEST flag]", "in_game_flag")
+
+	// A quest-linked BAG CHILD (proves links attach to nested slots too).
+	seedInvFull(t, db, char, "General4", "Large Bag", 1038, 1, 10, 2)
+	seedInvFull(t, db, char, "General4-Slot1", "Words of the Spoken", 7001, 1, 0, 3)
+	seedQuest(t, db, 7001, "Manastone Quest", "notes_link")
+
+	// An unflagged, non-quest item.
+	seedInvFull(t, db, char, "Chest", "Plain Robe", 9000, 1, 0, 4)
+
+	inv, err := compute.StructuredInventory(ctx, s, "Slampeach")
+	if err != nil {
+		t.Fatalf("StructuredInventory: %v", err)
+	}
+
+	// Head: flags surface (is_no_drop/is_lore true, is_magic NULL→false) + the notes_link
+	// quest link carries its source_url. NOTE: questLinksFor returns ALL links (both the
+	// notes_link and the in_game_flag) — the notes_link FILTER is a web-layer concern (D-06).
+	head := findSlot(inv, "Head")
+	if head == nil {
+		t.Fatalf("Head slot not found: %+v", inv.Equipment)
+	}
+	if !head.IsNoDrop || !head.IsLore || head.IsMagic {
+		t.Errorf("Head flags = {noDrop:%t lore:%t magic:%t}, want true/true/false (item_master 00016)", head.IsNoDrop, head.IsLore, head.IsMagic)
+	}
+	if len(head.QuestLinks) != 2 {
+		t.Fatalf("Head quest_links = %d, want 2 (notes_link + in_game_flag): %+v", len(head.QuestLinks), head.QuestLinks)
+	}
+	var named *compute.QuestLink
+	for i := range head.QuestLinks {
+		if head.QuestLinks[i].Source == "notes_link" {
+			named = &head.QuestLinks[i]
+		}
+	}
+	if named == nil || named.QuestName != "Coldain Ring 1" || named.SourceURL != "http://example/q" {
+		t.Errorf("Head notes_link quest = %+v, want Coldain Ring 1 / http://example/q (source_url plumbed)", named)
+	}
+
+	// The bag child carries its quest link too (attach walks Children).
+	bag := findSlot(inv, "General4")
+	if bag == nil || len(bag.Children) != 1 {
+		t.Fatalf("General4 + child not found: %+v", inv.General)
+	}
+	child := bag.Children[0]
+	if len(child.QuestLinks) != 1 || child.QuestLinks[0].QuestName != "Manastone Quest" || child.QuestLinks[0].SourceURL != "http://example/q" {
+		t.Errorf("bag child quest_links = %+v, want 1 (Manastone Quest / http://example/q)", child.QuestLinks)
+	}
+
+	// The plain item: all flags false, no quest links.
+	plain := findSlot(inv, "Chest")
+	if plain == nil {
+		t.Fatalf("Chest slot not found")
+	}
+	if plain.IsNoDrop || plain.IsLore || plain.IsMagic {
+		t.Errorf("Plain Robe flags = {noDrop:%t lore:%t magic:%t}, want all false", plain.IsNoDrop, plain.IsLore, plain.IsMagic)
+	}
+	if plain.QuestLinks != nil {
+		t.Errorf("Plain Robe quest_links = %+v, want nil (no links)", plain.QuestLinks)
+	}
+}
+
 // seedItemMasterIcon inserts one item_master row with an explicit icon_id (INV-04),
 // so the store→compute icon flow is seedable. The other item_master columns are
 // minimal — only the id-join (item_id) + icon_id matter here.

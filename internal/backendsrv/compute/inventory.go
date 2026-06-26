@@ -120,7 +120,13 @@ func StructuredInventory(ctx context.Context, s *store.Store, char string) (Char
 	if err != nil {
 		return CharacterInventory{}, err
 	}
-	return buildStructuredInventory(char, rows), nil
+	// The named-quest links (ITEMUI-02) are fetched HERE (the public fn does store access);
+	// buildStructuredInventory stays a pure transform with the map passed in.
+	links, err := s.QuestLinksByItem(ctx)
+	if err != nil {
+		return CharacterInventory{}, err
+	}
+	return buildStructuredInventory(char, rows, links), nil
 }
 
 // buildStructuredInventory is the pure transform: classify each row, build the
@@ -142,7 +148,7 @@ func StructuredInventory(ctx context.Context, s *store.Store, char string) (Char
 // flattened/ignored for the INV-05 paperdoll window. A grandchild / orphan (a *-Slot* whose
 // parent is itself a child or absent — A2) is slog.Warn'd (op + the two Locations only,
 // never item content — V7) and flattened to top-level rather than panicking (T-29-05).
-func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterInventory {
+func buildStructuredInventory(char string, rows []store.InventoryRow, links map[int64][]store.QuestLinkRow) CharacterInventory {
 	inv := CharacterInventory{Char: char}
 
 	// LastSeen (the examine "Last synced", D-08 #12) is the per-CHARACTER upload freshness
@@ -256,6 +262,18 @@ func buildStructuredInventory(char string, rows []store.InventoryRow) CharacterI
 	inv.General = append(inv.General, orphanGeneral...)
 	inv.Bank = append(inv.Bank, orphanBank...)
 
+	// Step 4: attach the named-quest links (ITEMUI-02) onto every FILLED slot by its EQ
+	// item_id, INCLUDING bag children. This runs after all mutations so the Children slices
+	// are final; questLinksFor (view.go, same package) is reused — nil for an item with none.
+	for _, group := range []*[]InventorySlot{&inv.Equipment, &inv.General, &inv.Bank} {
+		for i := range *group {
+			(*group)[i].QuestLinks = questLinksFor((*group)[i].ID, links)
+			for j := range (*group)[i].Children {
+				(*group)[i].Children[j].QuestLinks = questLinksFor((*group)[i].Children[j].ID, links)
+			}
+		}
+	}
+
 	return inv
 }
 
@@ -279,6 +297,9 @@ func slotFromRow(row store.InventoryRow, cat SlotCategory, canonical string) Inv
 		Prices:        prices,
 		IconID:        row.IconID,     // id-joined item_master.icon_id; 0 = no icon yet (INV-04, D-02)
 		Statsblock:    row.Statsblock, // id-joined item_master.statsblock; "" = no stats yet (INV-02)
+		IsNoDrop:      row.IsNoDrop,   // id-joined item_master flag (00016); ITEMUI-01 tile outline
+		IsLore:        row.IsLore,
+		IsMagic:       row.IsMagic,
 	}
 }
 

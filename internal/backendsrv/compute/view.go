@@ -106,7 +106,7 @@ func questLinksFor(itemID int64, links map[int64][]store.QuestLinkRow) []QuestLi
 	}
 	out := make([]QuestLink, 0, len(src))
 	for _, l := range src {
-		out = append(out, QuestLink{QuestName: l.QuestName, Source: l.Source})
+		out = append(out, QuestLink{QuestName: l.QuestName, Source: l.Source, SourceURL: l.SourceURL})
 	}
 	return out
 }

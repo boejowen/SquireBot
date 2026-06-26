@@ -71,7 +71,7 @@ func buildItemRollups(viewRows []ViewRow, roster []store.RosterRow, iconStats ma
 		if roll == nil {
 			ic := iconStats[vr.ID] // representative id-correct icon/stats (item_master EQ namespace)
 			roll = &ItemRollup{
-				Name:        vr.Item, // first-seen casing
+				Name:        vr.Item,  // first-seen casing
 				Price:       vr.Price, // representative price — already selected + name-bridged by View
 				Prices:      vr.Prices,
 				WikiURL:     vr.WikiURL,
@@ -81,6 +81,10 @@ func buildItemRollups(viewRows []ViewRow, roster []store.RosterRow, iconStats ma
 				Statsblock:  ic.Statsblock,
 				IsClicky:    ic.IsClicky, // Phase 39 — holdings facet (SC-4), id-correct from item_master
 				HasHaste:    ic.HasHaste, // Phase 39
+				IsNoDrop:    ic.IsNoDrop, // Phase 40 — id-correct from item_master (00016); ITEMUI-01
+				IsLore:      ic.IsLore,
+				IsMagic:     ic.IsMagic,
+				QuestLinks:  vr.QuestLinks, // representative ViewRow already carries them (View) — no re-fetch
 			}
 			byName[key] = roll
 			order = append(order, key)

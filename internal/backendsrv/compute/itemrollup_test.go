@@ -72,6 +72,25 @@ func setItemFlags(t *testing.T, db *sql.DB, itemID int64, clicky, haste bool) {
 	}
 }
 
+// setItemDisplayFlags stamps the Phase 40 (00016) is_no_drop/is_lore/is_magic booleans onto
+// an already-seeded item_master row (seedItemMaster leaves all three NULL). These are the
+// columns the ITEMUI-01 tile/examine outline reads through the ItemRollup (rollup source).
+func setItemDisplayFlags(t *testing.T, db *sql.DB, itemID int64, noDrop, lore, magic bool) {
+	t.Helper()
+	bit := func(b bool) int {
+		if b {
+			return 1
+		}
+		return 0
+	}
+	if _, err := db.Exec(
+		`UPDATE item_master SET is_no_drop = ?, is_lore = ?, is_magic = ? WHERE item_id = ?`,
+		bit(noDrop), bit(lore), bit(magic), itemID,
+	); err != nil {
+		t.Fatalf("set display flags on %d: %v", itemID, err)
+	}
+}
+
 // TestItems_GroupsByNameWithHoldersAndFlags is the end-to-end ITEM-01..03 proof over a
 // seeded DB: the SAME item held by two chars in different slots collapses to ONE rollup
 // (summed_qty = Σ, holder_count = distinct chars), an unpriced item has nil Price, a
@@ -95,8 +114,10 @@ func TestItems_GroupsByNameWithHoldersAndFlags(t *testing.T) {
 	// in Bank1) → ONE rollup, summed_qty = 2, holder_count = 2, is_mine = true (Apple).
 	seedItemMaster(t, db, 1001, "Jade Reaver", "A fine blade.", "https://wiki/Jade", false)
 	setItemIconStats(t, db, 1001, 560, "MAGIC ITEM\nDMG: 14")
-	setItemFlags(t, db, 1001, true, false) // Phase 39: is_clicky=1, has_haste=0 → rollup booleans propagate
-	seedPigparse(t, db, 9001, "Jade Reaver", "0", 1500, 7) // WTS, name-bridged (catalog id 9001 != EQ 1001)
+	setItemFlags(t, db, 1001, true, false)                      // Phase 39: is_clicky=1, has_haste=0 → rollup booleans propagate
+	setItemDisplayFlags(t, db, 1001, true, false, true)         // Phase 40: is_no_drop=1, is_lore=0, is_magic=1 → rollup booleans propagate
+	seedQuest(t, db, 1001, "Jade Reaver Turn-In", "notes_link") // ITEMUI-02: named quest with source_url="http://example/q"
+	seedPigparse(t, db, 9001, "Jade Reaver", "0", 1500, 7)      // WTS, name-bridged (catalog id 9001 != EQ 1001)
 	seedInv(t, db, apple, "Primary", "Jade Reaver", 1001, 1)
 	seedInv(t, db, bank, "Bank1", "Jade Reaver", 1001, 1)
 
@@ -148,6 +169,14 @@ func TestItems_GroupsByNameWithHoldersAndFlags(t *testing.T) {
 	// Phase 39: the holdings-facet booleans propagate from item_master (00016) through the rollup.
 	if !jade.IsClicky || jade.HasHaste {
 		t.Errorf("Jade Reaver flags = {clicky:%t haste:%t}, want clicky / not-haste (is_clicky=1, has_haste=0)", jade.IsClicky, jade.HasHaste)
+	}
+	// Phase 40: the display flags (is_no_drop=1, is_lore=0, is_magic=1) propagate id-correctly.
+	if !jade.IsNoDrop || jade.IsLore || !jade.IsMagic {
+		t.Errorf("Jade Reaver display flags = {noDrop:%t lore:%t magic:%t}, want true/false/true (item_master 00016)", jade.IsNoDrop, jade.IsLore, jade.IsMagic)
+	}
+	// Phase 40: the named quest link (copied from the representative ViewRow) carries source_url.
+	if len(jade.QuestLinks) != 1 || jade.QuestLinks[0].QuestName != "Jade Reaver Turn-In" || jade.QuestLinks[0].SourceURL != "http://example/q" {
+		t.Errorf("Jade Reaver quest_links = %+v, want 1 (Jade Reaver Turn-In / http://example/q)", jade.QuestLinks)
 	}
 	if len(jade.Holders) != 2 {
 		t.Fatalf("Jade Reaver holders = %d, want 2: %+v", len(jade.Holders), jade.Holders)
@@ -201,5 +230,12 @@ func TestItems_GroupsByNameWithHoldersAndFlags(t *testing.T) {
 	// Phase 39: a never-flagged (NULL is_clicky/has_haste) row scans to false, false.
 	if trinket.IsClicky || trinket.HasHaste {
 		t.Errorf("Worthless Trinket flags = {clicky:%t haste:%t}, want false/false (NULL flag columns)", trinket.IsClicky, trinket.HasHaste)
+	}
+	// Phase 40: a never-flagged, non-quest item carries all-false display flags + nil quest_links.
+	if trinket.IsNoDrop || trinket.IsLore || trinket.IsMagic {
+		t.Errorf("Worthless Trinket display flags = {noDrop:%t lore:%t magic:%t}, want all false (NULL flag columns)", trinket.IsNoDrop, trinket.IsLore, trinket.IsMagic)
+	}
+	if trinket.QuestLinks != nil {
+		t.Errorf("Worthless Trinket quest_links = %+v, want nil (no quest_items row)", trinket.QuestLinks)
 	}
 }

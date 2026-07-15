@@ -209,6 +209,11 @@ export interface InventorySlot {
 export interface CharacterInventory {
 	char: string;
 	last_seen: string;
+	/** Phase 41 / D-07 (41-01): true when this character has a stored portrait — render
+	 *  the portrait <img> in the compacted .doll frame; false → the silhouette fallback. */
+	has_portrait: boolean;
+	/** Phase 41 / D-07: the cache-bust key for the <img src> `?v=` (bumps on set/remove). */
+	portrait_updated_at: string;
 	equipment: InventorySlot[];
 	general: InventorySlot[];
 	bank: InventorySlot[];
@@ -444,6 +449,37 @@ async function postJSON<T>(path: string, body: unknown, fetchFn: typeof fetch = 
 	}
 }
 
+/**
+ * DELETE `${API_BASE}${path}` and decode the JSON reply. A bodyless sibling of
+ * postJSON with the SAME credential + typed-error contract (401 → Unauthenticated,
+ * 403 → Forbidden(code), other non-2xx → ApiError(status, code), transport failure
+ * → ApiError(0), malformed 2xx → branded ApiError). Added for the RESTful
+ * DELETE /api/v1/characters/{name}/portrait remove path (Phase 41 / D-08).
+ */
+async function deleteJSON<T>(path: string, fetchFn: typeof fetch = fetch): Promise<T> {
+	let res: Response;
+	try {
+		res = await fetchFn(`${API_BASE}${path}`, {
+			method: 'DELETE',
+			credentials: 'include',
+			headers: { Accept: 'application/json' }
+		});
+	} catch {
+		throw new ApiError(`network error deleting ${path}`, 0);
+	}
+	if (!res.ok) {
+		const code = await readErrorCode(res);
+		if (res.status === 401) throw new Unauthenticated(`unauthenticated deleting ${path}`, 401, code);
+		if (res.status === 403) throw new Forbidden(`forbidden deleting ${path}`, 403, code);
+		throw new ApiError(`unexpected ${res.status} deleting ${path}`, res.status, code);
+	}
+	try {
+		return (await res.json()) as T;
+	} catch {
+		throw new ApiError(`malformed JSON from ${path}`, res.status);
+	}
+}
+
 // --- Admin/coin response + row contract (snake_case, per 15-03 SUMMARY) ---
 
 /** A bank-toon row (`GET /api/v1/coin/bank-toons` element). Coin is null where unset. */
@@ -618,6 +654,47 @@ export function saveCharMeta(
 	fetchFn: typeof fetch = fetch
 ): Promise<SaveCharMetaResult> {
 	return postJSON<SaveCharMetaResult>('/api/v1/char/meta', body, fetchFn);
+}
+
+// --- Phase 41: per-character portrait (CHARUI-02) ------------------------
+// The 41-01 backend contract: has_portrait/portrait_updated_at ride the
+// CharacterInventory payload; the bytes stream from a dedicated login-gated GET.
+// The upload is base64-in-JSON over postJSON (no multipart, the charmeta shape);
+// remove is a RESTful DELETE (D-08). The assignee-OR-officer gate is enforced
+// server-side (403 not_authorized) — the routes are login-only (RequireSession).
+
+/** The `POST …/portrait` / `DELETE …/portrait` reply (the char name + the new updated_at). */
+export interface PortraitResult {
+	character: string;
+	updated_at?: string;
+}
+
+/** POST /api/v1/characters/{name}/portrait — base64-in-JSON upload (D-03). Login-only
+ *  at the route; the assignee-OR-officer gate is enforced server-side (403 not_authorized). */
+export function setPortrait(
+	name: string,
+	body: { image_base64: string },
+	fetchFn: typeof fetch = fetch
+): Promise<PortraitResult> {
+	return postJSON<PortraitResult>(
+		`/api/v1/characters/${encodeURIComponent(name)}/portrait`,
+		body,
+		fetchFn
+	);
+}
+
+/** DELETE /api/v1/characters/{name}/portrait (D-08), same assignee-OR-officer gate. */
+export function removePortrait(name: string, fetchFn: typeof fetch = fetch): Promise<PortraitResult> {
+	return deleteJSON<PortraitResult>(
+		`/api/v1/characters/${encodeURIComponent(name)}/portrait`,
+		fetchFn
+	);
+}
+
+/** The credentialed <img src> for a character's portrait, cache-busted by ?v=updated_at.
+ *  The browser sends the session cookie credentialed (same-registrable-domain). */
+export function portraitUrl(name: string, updatedAt: string): string {
+	return `${API_BASE}/api/v1/characters/${encodeURIComponent(name)}/portrait?v=${encodeURIComponent(updatedAt)}`;
 }
 
 /** GET /api/v1/admin/officers → { officers, promotable }. Officer-only (403 not_authorized for a member). */

@@ -378,6 +378,14 @@ func runServe(args []string) int {
 	mux.Handle("GET /api/v1/inventory/{char}", webauth.RequireSession(db, readapi.NewInventory(st)))
 	mux.Handle("GET /api/v1/characters", webauth.RequireSession(db, readapi.NewCharacters(st)))
 
+	// Character portrait (Phase 41 / CHARUI-02) — LOGIN-ONLY at the route (RequireSession);
+	// the assignee-OR-officer gate (D-05/D-06) is enforced IN the store tx (IsCharAssignedToTx
+	// OR isOfficerTx), the wishlist/assignment IDOR precedent. NEVER RequireOfficer at the route
+	// (a regular assignee is a legitimate writer). The serve GET is a guild-wide member read.
+	mux.Handle("GET /api/v1/characters/{name}/portrait", webauth.RequireSession(db, readapi.NewPortrait(st)))
+	mux.Handle("POST /api/v1/characters/{name}/portrait", webauth.RequireSession(db, webadmin.PortraitSetHandler(db)))
+	mux.Handle("DELETE /api/v1/characters/{name}/portrait", webauth.RequireSession(db, webadmin.PortraitDeleteHandler(db)))
+
 	// Inventory tab (Phase 32 / ITEM-01..03) — LOGIN-ONLY (RequireSession, NEVER
 	// public, NEVER RequireOfficer): a guild-wide item rollup (one row per normalized
 	// name) with per-holder detail; the viewer id from the RequireSession context flags

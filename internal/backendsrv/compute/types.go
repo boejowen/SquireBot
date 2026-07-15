@@ -192,6 +192,14 @@ type CharacterInventory struct {
 	// "Last synced" footer (D-08 #12) — DISTINCT from per-slot LastListed (the price
 	// last-listed date). Same value on every row; "" when never synced.
 	LastSeen string `json:"last_seen"`
+	// HasPortrait / PortraitUpdatedAt are the additive Phase 41 portrait flag (CHARUI-02,
+	// D-07): the FLAG only, NEVER the bytes (which stream from GET …/{name}/portrait). The
+	// web renders the portrait in the compacted paper-doll frame and uses PortraitUpdatedAt
+	// as the ?v= cache-bust; both are "" / false when the char has no portrait (the existing
+	// silhouette placeholder stays the fallback). Set at the StructuredInventory store-access
+	// site (a PK↔PK PortraitMeta read), not inside the pure buildStructuredInventory.
+	HasPortrait       bool   `json:"has_portrait"`
+	PortraitUpdatedAt string `json:"portrait_updated_at"`
 }
 
 // Valuation is a bank valuation result (DATA-02/D-03): the summed pickPrice×count value

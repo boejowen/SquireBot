@@ -126,7 +126,21 @@ func StructuredInventory(ctx context.Context, s *store.Store, char string) (Char
 	if err != nil {
 		return CharacterInventory{}, err
 	}
-	return buildStructuredInventory(char, rows, links), nil
+	inv := buildStructuredInventory(char, rows, links)
+
+	// Portrait flag (Phase 41 / CHARUI-02, D-07): a PK↔PK 1:1 PortraitMeta read attached to
+	// the assembled inventory at THIS store-access site (not inside the pure builder). A read
+	// error is NON-FATAL to the inventory — the paper-doll frame simply falls back to the
+	// silhouette (has_portrait stays false, matching D-07 "the existing placeholder stays the
+	// fallback"); log op+err only (V7), never the char name.
+	if hasPortrait, updatedAt, perr := s.PortraitMeta(ctx, char); perr != nil {
+		slog.Warn("compute.structured_inventory.portrait_meta", "op", "StructuredInventory", "err", perr)
+	} else {
+		inv.HasPortrait = hasPortrait
+		inv.PortraitUpdatedAt = updatedAt
+	}
+
+	return inv, nil
 }
 
 // buildStructuredInventory is the pure transform: classify each row, build the

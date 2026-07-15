@@ -24,7 +24,12 @@
 	import Search from '@lucide/svelte/icons/search';
 	import StateBlock from '$lib/components/StateBlock.svelte';
 	import InventoryWindow from '$lib/components/InventoryWindow.svelte';
-	import { AUTH_GUARD_KEY, type AuthGuard } from '$lib/components/AuthGate.svelte';
+	import {
+		AUTH_GUARD_KEY,
+		type AuthGuard,
+		SESSION_KEY,
+		type SessionGetter
+	} from '$lib/components/AuthGate.svelte';
 	import {
 		Unauthenticated,
 		Forbidden,
@@ -40,6 +45,13 @@
 
 	// The AuthGate guard from context (server-truth re-routing on a 401/403, B-2).
 	const authGuard = getContext<AuthGuard>(AUTH_GUARD_KEY);
+
+	// Officer read (the verbatim settings-page idiom) for the Phase 41 portrait-edit gate.
+	// Layer-1 UX ONLY — the Go store re-checks assignee-or-officer on every portrait write
+	// (41-01), so the hidden control is never the boundary; a forged request still 403s.
+	const getSession = getContext<SessionGetter>(SESSION_KEY);
+	let session = $derived(getSession ? getSession() : null);
+	let isOfficer = $derived(!!session?.isOfficer);
 
 	let status = $state<Status>('loading');
 	let roster = $state<RosterCharacter[]>([]);
@@ -188,6 +200,18 @@
 			inv.general.length === 0 &&
 			inv.bank.length === 0
 	);
+
+	// Phase 41 / D-05/D-06: the portrait-edit visibility gate for the SELECTED character.
+	// Show the upload/remove controls when the viewer is the character's assignee (is_mine)
+	// OR an officer; a bank/bot toon (is_bank_toon || is_guild_bot) has no assignee → officer
+	// ONLY (D-06). The server re-checks under the tx (41-01), so this is Layer-1 UX.
+	let selectedRow = $derived(roster.find((c) => c.name === selected) ?? null);
+	let canEdit = $derived.by(() => {
+		if (!selectedRow) return false;
+		const isBankOrBot = selectedRow.is_bank_toon || selectedRow.is_guild_bot;
+		if (isBankOrBot) return isOfficer; // no assignee → officer-only (D-06)
+		return selectedRow.is_mine || isOfficer; // assignee OR officer (D-05)
+	});
 </script>
 
 <svelte:head>
@@ -274,7 +298,7 @@
 					</p>
 				</div>
 			{:else if inv !== null}
-				<InventoryWindow inventory={inv} />
+				<InventoryWindow inventory={inv} {canEdit} />
 			{/if}
 		</div>
 	</div>

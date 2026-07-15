@@ -18,14 +18,58 @@
 	// SECURITY: this file adds NO raw-HTML directive — the only escaped-HTML sink is
 	// inside ExaminePanel (composeItemNote). Item names reach the DOM only via
 	// PaperdollSlot's aria-label and the examine preview's plain {} interpolation
-	// (Svelte auto-escapes).
+	// (Svelte auto-escapes). The portrait <img alt> + the char name likewise render via
+	// plain {} (auto-escaped), NEVER the raw-HTML directive (Phase 41 / T-41W-01).
 
 	import type { CharacterInventory, InventorySlot } from '$lib/api';
+	import { portraitUrl } from '$lib/api';
 	import PaperdollSlot from '$lib/components/PaperdollSlot.svelte';
 	import ExaminePanel from '$lib/components/ExaminePanel.svelte';
+	import PortraitControl from '$lib/components/PortraitControl.svelte';
 	import { examineFields } from '$lib/examine';
 
-	let { inventory }: { inventory: CharacterInventory } = $props();
+	// `canEdit` (Phase 41 / D-05/D-06) is the assignee-OR-officer visibility gate result,
+	// derived in characters/+page.svelte and passed in; it decides whether the portrait
+	// upload/remove control renders. The server re-checks on every write (41-01), so the
+	// gate is Layer-1 UX only — a forged request still 403s.
+	let { inventory, canEdit = false }: { inventory: CharacterInventory; canEdit?: boolean } = $props();
+
+	// Optimistic local override for the portrait flag/cache-bust key so a set/remove
+	// re-renders the frame WITHOUT mutating the `inventory` prop directly. `null` = follow
+	// the prop; onPortraitChanged sets it (keyed by char so it self-clears when the user
+	// selects a different character and a fresh `inventory` flows in). The $derived reads the
+	// reactive prop, so switching characters shows the new char's server flag immediately.
+	let portraitOverride = $state<{ char: string; has: boolean; version: string } | null>(null);
+	let hasPortrait = $derived(
+		portraitOverride && portraitOverride.char === inventory.char
+			? portraitOverride.has
+			: inventory.has_portrait
+	);
+	let portraitVersion = $derived(
+		portraitOverride && portraitOverride.char === inventory.char
+			? portraitOverride.version
+			: inventory.portrait_updated_at
+	);
+
+	function onPortraitChanged(detail: { has_portrait: boolean; updated_at: string }) {
+		portraitOverride = { char: inventory.char, has: detail.has_portrait, version: detail.updated_at };
+		// Re-show the <img> if a prior error had hidden it (a fresh upload replaces a broken one).
+		imgHidden = false;
+	}
+
+	// Mirror the PaperdollSlot onImgError hide-and-fall-through: hide the <img> so the
+	// silhouette under-layer paints through (a broken/expired blob degrades gracefully).
+	// Reset the hide when the selected character changes (a new inventory flows in).
+	let imgHidden = $state(false);
+	let imgHiddenFor = $derived(inventory.char);
+	$effect(() => {
+		// Referencing imgHiddenFor makes this re-run on a char change; reset the hide.
+		void imgHiddenFor;
+		imgHidden = false;
+	});
+	function onImgError() {
+		imgHidden = true;
+	}
 
 	// The single pinned examine slot (D-07 — replace-on-click).
 	let pinned = $state<InventorySlot | null>(null);
@@ -156,9 +200,32 @@
 				{/each}
 			</div>
 
-			<div class="doll" aria-hidden="true">
-				<span class="silhouette">⚔</span>
-				<p class="doll-line">{inventory.char}</p>
+			<div class="figure">
+				<div class="doll" class:filled={hasPortrait && !imgHidden}>
+					{#if hasPortrait && !imgHidden}
+						<!-- The portrait overlays the silhouette; on img error it hides (imgHidden)
+						     and the silhouette under-layer paints through. alt={char} via plain {}
+						     (Svelte auto-escapes) — NEVER the raw-HTML directive (T-41W-01). ?v= cache-busts. -->
+						<img
+							class="portrait-img"
+							src={portraitUrl(inventory.char, portraitVersion)}
+							alt={inventory.char}
+							onerror={onImgError}
+						/>
+					{/if}
+					<!-- Silhouette + name under-layer: the fallback that paints through on img-error
+					     or when no portrait is set. aria-hidden — the name is already in the char-head. -->
+					<span class="silhouette" aria-hidden="true">⚔</span>
+					<p class="doll-line" aria-hidden="true">{inventory.char}</p>
+				</div>
+
+				{#if canEdit}
+					<PortraitControl
+						char={inventory.char}
+						hasPortrait={hasPortrait && !imgHidden}
+						onchanged={onPortraitChanged}
+					/>
+				{/if}
 			</div>
 
 			<div class="equip-col">
@@ -335,11 +402,11 @@
 		margin: 0;
 	}
 
-	/* --- paperdoll (§E) --- */
+	/* --- paperdoll (§E) — CHARUI-01 compaction (Phase 41 / D-01) --- */
 	.paperdoll {
 		display: grid;
 		grid-template-columns: auto 1fr auto;
-		gap: 24px; /* lg — on-grid */
+		gap: 16px; /* md — tightened from 24px to reclaim the loose center gap (CHARUI-01) */
 		align-items: start;
 	}
 	.equip-col {
@@ -347,16 +414,46 @@
 		grid-template-columns: repeat(2, 62px);
 		gap: 8px; /* sm */
 	}
+	/* The center figure column: the square portrait frame + (for an editor) the control
+	   beneath it, at 8px (sm) below the frame. */
+	.figure {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px; /* sm — frame → control */
+		min-width: 0;
+	}
+	/* The portrait frame: a square min(190px,100%) (190px = 3 tiles + 2 gaps) — replaces the
+	   260px dead-space floor (CHARUI-01). EMPTY = dashed; FILLED = solid, both on the SAME
+	   --border token (dashed→solid switch, no new color). position:relative so the <img>
+	   overlays the silhouette under-layer. */
 	.doll {
+		position: relative;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		min-height: 260px;
+		width: min(190px, 100%);
+		aspect-ratio: 1 / 1;
+		padding: 8px; /* sm — centers the fallback glyph without dead height */
 		border: 1px dashed var(--border, var(--accent));
 		border-radius: 4px;
 		opacity: 0.8;
+	}
+	.doll.filled {
+		border-style: solid; /* a real, framed photo — solid on the SAME token as the dashed empty */
+		opacity: 1;
+	}
+	/* The portrait <img> overlays the silhouette; on error it is removed from the DOM and the
+	   silhouette paints through (the onImgError hide-and-fall-through). */
+	.portrait-img {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		border-radius: 4px;
 	}
 	.silhouette {
 		font-size: 64px;
@@ -369,6 +466,11 @@
 		font-size: 16px;
 		opacity: 0.7;
 		margin: 0;
+		/* Keep a long name inside the square frame rather than overflowing it. */
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* --- section eyebrows + grids (§F) --- */
@@ -478,7 +580,7 @@
 	}
 	@media (max-width: 640px) {
 		.paperdoll {
-			gap: 16px;
+			gap: 8px; /* sm — tighter on mobile where horizontal room is scarce (CHARUI-01) */
 		}
 	}
 </style>

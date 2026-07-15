@@ -26,8 +26,8 @@
 - [x] **SEARCH-06**: A user can toggle item-search scope between guild holdings ("who has one") and the full P99 catalog ("what exists").
 
 ### Item Display Polish (ITEMUI)
-- [ ] **ITEMUI-01**: Items in the inventory, bank, and paper-doll views show a color-coded outline by flag — No-Drop = red, Lore = gold, Magic = blue (default/no special flag stays the existing neutral border).
-- [ ] **ITEMUI-02**: The modern Characters / Inventory / Wishlist tabs show the named quests an item is used in ("used in quest X"), not just the yes/no QUEST-ITEM badge. *(Plumb the already-harvested `quest_links` into `InventorySlot`/`ItemRollup` + the examine panel.)*
+- [x] **ITEMUI-01**: Items in the inventory, bank, and paper-doll views show a color-coded outline by flag — No-Drop = red, Lore = gold, Magic = blue (default/no special flag stays the existing neutral border).
+- [x] **ITEMUI-02**: The modern Characters / Inventory / Wishlist tabs show the named quests an item is used in ("used in quest X"), not just the yes/no QUEST-ITEM badge. *(Plumb the already-harvested `quest_links` into `InventorySlot`/`ItemRollup` + the examine panel.)*
 
 ### Character Paper-Doll (CHARUI)
 - [ ] **CHARUI-01**: The character paper-doll view is compacted to reclaim the empty portrait space, tightening toward the in-game inventory-window layout.

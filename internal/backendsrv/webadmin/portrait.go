@@ -38,6 +38,14 @@ import (
 // the store write (reject-early, anti-DB-bloat / anti-decode-bomb).
 const maxPortraitBytes = 256 * 1024
 
+// maxPortraitReqBytes bounds the RAW request body (WR-01) so an oversized base64 payload is
+// rejected AS IT IS READ (http.MaxBytesReader) rather than after being fully buffered + decoded
+// — the reject-early/anti-DoS the decoded-cap comment promised. 384KB comfortably fits a 256KB
+// image's base64 (~342KB) plus the tiny {"image_base64":"…"} JSON envelope; anything larger
+// trips before the decode allocates. The decoded-byte cap (maxPortraitBytes) remains the
+// authoritative image-size limit.
+const maxPortraitReqBytes = 384 * 1024
+
 // portraitReq is the base64 upload body. There is NO client content_type field (D-04) — the
 // server sniffs the actual magic bytes and sets the stored type from the sniff.
 type portraitReq struct {
@@ -76,8 +84,24 @@ func PortraitSetHandler(db *sql.DB) http.HandlerFunc {
 		ctx := r.Context()
 		name := r.PathValue("name")
 
+		// WR-01: bound the raw body BEFORE decode so an oversized payload can't force a large
+		// buffer/allocation ahead of the decoded-byte cap — an over-limit body trips here as
+		// it is read, not after being fully buffered.
+		r.Body = http.MaxBytesReader(w, r.Body, maxPortraitReqBytes)
+
 		var req portraitReq
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ImageBase64 == "" {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			// An over-limit body surfaces as *http.MaxBytesError → the too_large client copy;
+			// any other decode failure is malformed input.
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				writeJSONError(w, http.StatusBadRequest, "too_large")
+				return
+			}
+			writeJSONError(w, http.StatusBadRequest, "invalid_input")
+			return
+		}
+		if req.ImageBase64 == "" {
 			writeJSONError(w, http.StatusBadRequest, "invalid_input")
 			return
 		}

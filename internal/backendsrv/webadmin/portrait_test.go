@@ -217,6 +217,26 @@ func TestPortraitSet_RejectsOversize(t *testing.T) {
 	}
 }
 
+// WR-01: a RAW request body past maxPortraitReqBytes is rejected DURING read (http.MaxBytesReader),
+// before the decoded-byte cap — proving the anti-DoS bound trips ahead of full buffering, not after.
+func TestPortraitSet_RejectsOversizeRawBody(t *testing.T) {
+	db := store.NewTestDB(t)
+	ctx := context.Background()
+	assignee := "555555555555555555"
+	portraitSeedChar(t, ctx, db, "Slampeach", assignee)
+
+	h := withCaller(assignee, PortraitSetHandler(db))
+	// A raw JSON body well past the 384KB request cap → MaxBytesReader trips mid-decode.
+	big := `{"image_base64":"` + strings.Repeat("A", maxPortraitReqBytes+2048) + `"}`
+	rec := postPortrait(t, h, "Slampeach", big)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (oversize raw body)", rec.Code)
+	}
+	if got := decodeErr(t, rec); got != "too_large" {
+		t.Errorf("error = %q, want too_large", got)
+	}
+}
+
 func TestPortraitSet_RejectsMalformedBase64(t *testing.T) {
 	db := store.NewTestDB(t)
 	ctx := context.Background()

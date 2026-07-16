@@ -52,8 +52,12 @@ func CORS(allowOrigin string, next http.Handler) http.Handler {
 		// Accept-Encoding from a compressor) is not clobbered. Nothing upstream sets
 		// Vary today, so this is behavior-neutral now but future-proof.
 		w.Header().Add("Vary", "Origin")
-		// POST added for the P15 write forms (bank-coin / eviction / admin-mgmt).
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		// POST for the P15 write forms (bank-coin / eviction / admin-mgmt); DELETE for
+		// the P41 portrait remove (DELETE /api/v1/characters/{name}/portrait). A cross-
+		// origin DELETE is NOT a CORS-safelisted method, so the browser preflights it and
+		// blocks the actual request unless DELETE is advertised here — omitting it is what
+		// made the portrait Remove fail in the browser while the Go handler tests passed.
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		// Sessions ride the httpOnly cookie, NOT an Authorization header, so the
 		// allowed request headers stay Content-Type only (no custom auth header).
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")

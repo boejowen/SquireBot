@@ -381,6 +381,11 @@ func TestCORS_Credentials_OnGETandPreflight(t *testing.T) {
 	if got := getRec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "POST") {
 		t.Errorf("GET Access-Control-Allow-Methods = %q, want it to include POST", got)
 	}
+	// DELETE must be advertised or the browser blocks the cross-origin P41 portrait
+	// remove preflight (the Go handler tests can't see this — it's browser-only).
+	if got := getRec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "DELETE") {
+		t.Errorf("GET Access-Control-Allow-Methods = %q, want it to include DELETE (P41 portrait remove)", got)
+	}
 
 	// Preflight OPTIONS — credentials header REQUIRED here too.
 	optRec := httptest.NewRecorder()

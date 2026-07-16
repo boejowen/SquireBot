@@ -30,8 +30,8 @@
 - [x] **ITEMUI-02**: The modern Characters / Inventory / Wishlist tabs show the named quests an item is used in ("used in quest X"), not just the yes/no QUEST-ITEM badge. *(Plumb the already-harvested `quest_links` into `InventorySlot`/`ItemRollup` + the examine panel.)*
 
 ### Character Paper-Doll (CHARUI)
-- [ ] **CHARUI-01**: The character paper-doll view is compacted to reclaim the empty portrait space, tightening toward the in-game inventory-window layout.
-- [ ] **CHARUI-02**: A user can set an optional portrait photo for each of their characters, shown in the paper-doll's portrait area. *(New per-character image reference + migration + upload path + read-API plumbing.)*
+- [x] **CHARUI-01**: The character paper-doll view is compacted to reclaim the empty portrait space, tightening toward the in-game inventory-window layout.
+- [x] **CHARUI-02**: A user can set an optional portrait photo for each of their characters, shown in the paper-doll's portrait area. *(New per-character image reference + migration + upload path + read-API plumbing.)*
 
 ### Wishlist Polish (WISHUI)
 - [ ] **WISHUI-01**: The Wishlist tab is compacted and made visually consistent with the other tabs' density and layout idiom.
